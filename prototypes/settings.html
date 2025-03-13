@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipSync - 设置</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            950: '#0a0a14',
+                            900: '#101018', 
+                            800: '#1a1a28',
+                            700: '#242435',
+                            600: '#2a2a40',
+                            500: '#313145',
+                        },
+                        accent: {
+                            500: '#7e57c2',
+                            400: '#9575cd',
+                            300: '#b39ddb',
+                        }
+                    },
+                    backdropBlur: {
+                        xs: '2px',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 额外样式 */
+        body {
+            background-color: #0a0a14; /* 纯色深色背景 */
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* 隐藏滚动条但允许滚动 */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* 设置列表项悬停效果 */
+        .settings-item:hover {
+            background-color: rgba(42, 42, 64, 0.4);
+        }
+        
+        /* 开关按钮样式 */
+        .toggle-bg:after {
+            content: '';
+            position: absolute;
+            top: 0.15rem;
+            left: 0.15rem;
+            background: white;
+            border-radius: 9999px;
+            height: 1.2rem;
+            width: 1.2rem;
+            transition: all 0.2s;
+        }
+        
+        input:checked + .toggle-bg:after {
+            transform: translateX(1.5rem);
+        }
+        
+        input:checked + .toggle-bg {
+            background-color: #7e57c2;
+        }
+    </style>
+</head>
+<body class="bg-dark-950 text-gray-200">
+    <div class="h-screen flex overflow-hidden">
+        <!-- 侧边栏导航 -->
+        <div class="w-20 md:w-64 bg-dark-900 border-r border-gray-800/50">
+            <div class="flex flex-col h-full">
+                <div class="p-4 flex items-center justify-center md:justify-start">
+                    <div class="h-10 w-10 rounded-lg bg-gradient-to-br from-accent-400 to-accent-300 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                    </div>
+                    <span class="ml-3 text-xl font-semibold text-white hidden md:block">ClipSync</span>
+                </div>
+                
+                <nav class="mt-8 flex-1">
+                    <div class="px-3 space-y-1">
+                        <a href="#" class="group flex items-center px-2 py-3 text-sm font-medium rounded-lg text-gray-300 hover:bg-dark-600 hover:bg-opacity-60 hover:text-white transition duration-150">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-400 group-hover:text-accent-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                            <span class="hidden md:block">仪表板</span>
+                        </a>
+                        
+                        <a href="#" class="group flex items-center px-2 py-3 text-sm font-medium rounded-lg text-gray-300 hover:bg-dark-600 hover:bg-opacity-60 hover:text-white transition duration-150">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-400 group-hover:text-accent-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="hidden md:block">历史记录</span>
+                        </a>
+                        
+                        <a href="#" class="group flex items-center px-2 py-3 text-sm font-medium rounded-lg text-gray-300 hover:bg-dark-600 hover:bg-opacity-60 hover:text-white transition duration-150">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-400 group-hover:text-accent-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                            </svg>
+                            <span class="hidden md:block">设备管理</span>
+                        </a>
+                        
+                        <a href="#" class="group flex items-center px-2 py-3 text-sm font-medium rounded-lg bg-dark-600 bg-opacity-80 text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-accent-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span class="hidden md:block">设置</span>
+                        </a>
+                    </div>
+                </nav>
+                
+                <div class="p-4">
+                    <div class="flex items-center">
+                        <img class="h-8 w-8 rounded-full object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=crop&w=256&q=80" alt="用户头像">
+                        <div class="ml-3 hidden md:block">
+                            <p class="text-sm font-medium text-white">张小明</p>
+                            <p class="text-xs text-gray-400">高级账户</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 主内容区域 -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- 顶部标题栏 -->
+            <header class="bg-dark-900 border-b border-gray-800/50">
+                <div class="px-4 py-4 flex items-center justify-between">
+                    <h1 class="text-xl font-semibold text-white">设置</h1>
+                    
+                    <div class="flex items-center space-x-3">
+                        <button class="bg-dark-800 hover:bg-dark-700 text-gray-300 px-3 py-1.5 rounded-lg text-sm font-medium transition duration-150 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            重置为默认
+                        </button>
+                        <button class="bg-accent-500 hover:bg-accent-400 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition duration-150 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            保存设置
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 设置类别标签 -->
+                <div class="px-4 pb-2 flex space-x-4 text-sm overflow-x-auto hide-scrollbar">
+                    <button class="text-white border-b-2 border-accent-400 pb-2 font-medium whitespace-nowrap">通用设置</button>
+                    <button class="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent whitespace-nowrap">同步设置</button>
+                    <button class="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent whitespace-nowrap">安全与隐私</button>
+                    <button class="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent whitespace-nowrap">通知设置</button>
+                    <button class="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent whitespace-nowrap">网络设置</button>
+                    <button class="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent whitespace-nowrap">存储管理</button>
+                    <button class="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent whitespace-nowrap">快捷键</button>
+                    <button class="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent whitespace-nowrap">外观设置</button>
+                </div>
+            </header>
+            
+            <!-- 设置内容区域 -->
+            <div class="flex-1 overflow-hidden">
+                <div class="h-full px-4 py-3 overflow-auto hide-scrollbar">
+                    
+                    <!-- 同步设置 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-400">同步设置</h3>
+                            <div class="flex-grow ml-3 border-t border-gray-800/50"></div>
+                        </div>
+                        
+                        <!-- 同步选项卡片 -->
+                        <div class="bg-dark-800 rounded-lg p-4 mb-4">
+                            <div class="space-y-4">
+                                <!-- 自动同步选项 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">自动同步</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">启用后，ClipSync将自动同步您复制的内容到所有设备</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 同步频率选项 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-white">同步频率</h4>
+                                            <p class="text-xs text-gray-400 mt-0.5">控制ClipSync检查新内容的频率</p>
+                                        </div>
+                                        <div class="w-36">
+                                            <select class="w-full bg-dark-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-accent-400">
+                                                <option>实时同步</option>
+                                                <option>每30秒</option>
+                                                <option>每分钟</option>
+                                                <option>每5分钟</option>
+                                                <option>每15分钟</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 同步内容类型 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <h4 class="text-sm font-medium text-white mb-2">同步内容类型</h4>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <label class="flex items-center">
+                                            <input type="checkbox" class="form-checkbox h-4 w-4 text-accent-500 rounded focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700" checked>
+                                            <span class="ml-2 text-sm text-gray-300">文本</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="checkbox" class="form-checkbox h-4 w-4 text-accent-500 rounded focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700" checked>
+                                            <span class="ml-2 text-sm text-gray-300">图片</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="checkbox" class="form-checkbox h-4 w-4 text-accent-500 rounded focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700" checked>
+                                            <span class="ml-2 text-sm text-gray-300">链接</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="checkbox" class="form-checkbox h-4 w-4 text-accent-500 rounded focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700">
+                                            <span class="ml-2 text-sm text-gray-300">文件</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="checkbox" class="form-checkbox h-4 w-4 text-accent-500 rounded focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700" checked>
+                                            <span class="ml-2 text-sm text-gray-300">代码片段</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="checkbox" class="form-checkbox h-4 w-4 text-accent-500 rounded focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700" checked>
+                                            <span class="ml-2 text-sm text-gray-300">富文本</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <!-- 最大同步文件大小 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="mb-2">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="text-sm font-medium text-white">最大同步文件大小</h4>
+                                            <span class="text-xs text-accent-300">10MB</span>
+                                        </div>
+                                        <p class="text-xs text-gray-400 mt-0.5">限制单个文件的最大同步大小</p>
+                                    </div>
+                                    <div class="w-full">
+                                        <input type="range" min="1" max="50" value="10" class="w-full h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-accent-500">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 安全与隐私设置 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-400">安全与隐私设置</h3>
+                            <div class="flex-grow ml-3 border-t border-gray-800/50"></div>
+                        </div>
+                        
+                        <!-- 安全设置卡片 -->
+                        <div class="bg-dark-800 rounded-lg p-4 mb-4">
+                            <div class="space-y-4">
+                                <!-- 加密选项 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">端到端加密</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">启用后，所有同步内容将使用端到端加密传输</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 密码保护 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">应用密码保护</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">使用密码或生物识别保护访问ClipSync应用</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only">
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 敏感内容过滤 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">敏感内容过滤</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">自动检测并阻止同步可能包含敏感信息的内容</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 敏感关键词设置 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <h4 class="text-sm font-medium text-white mb-2">敏感关键词</h4>
+                                    <p class="text-xs text-gray-400 mb-2">包含以下关键词的内容将不会被同步</p>
+                                    <div class="flex flex-wrap gap-2 mb-2">
+                                        <div class="bg-dark-700 rounded-full px-3 py-1 text-xs text-gray-300 flex items-center">
+                                            密码
+                                            <button class="ml-1.5 text-gray-400 hover:text-white">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div class="bg-dark-700 rounded-full px-3 py-1 text-xs text-gray-300 flex items-center">
+                                            信用卡
+                                            <button class="ml-1.5 text-gray-400 hover:text-white">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div class="bg-dark-700 rounded-full px-3 py-1 text-xs text-gray-300 flex items-center">
+                                            身份证
+                                            <button class="ml-1.5 text-gray-400 hover:text-white">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input type="text" class="flex-1 bg-dark-700 border border-gray-700 rounded-l-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-accent-400" placeholder="添加新关键词...">
+                                        <button class="bg-accent-500 hover:bg-accent-400 text-white px-3 py-1.5 rounded-r-lg text-sm transition duration-150">添加</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- 自动清除规则 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-white">自动清除历史记录</h4>
+                                            <p class="text-xs text-gray-400 mt-0.5">定期自动清除剪贴板历史记录</p>
+                                        </div>
+                                        <div class="w-36">
+                                            <select class="w-full bg-dark-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-accent-400">
+                                                <option>从不</option>
+                                                <option>每天</option>
+                                                <option>每周</option>
+                                                <option>每月</option>
+                                                <option>每次退出</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 通知设置 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-400">通知设置</h3>
+                            <div class="flex-grow ml-3 border-t border-gray-800/50"></div>
+                        </div>
+                        
+                        <!-- 通知设置卡片 -->
+                        <div class="bg-dark-800 rounded-lg p-4 mb-4">
+                            <div class="space-y-4">
+                                <!-- 新内容通知 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">新内容通知</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">当其他设备有新复制内容时接收通知</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 同步状态通知 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">同步状态通知</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">显示同步成功或失败的通知</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 设备连接通知 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">设备连接通知</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">当设备连接或断开时接收通知</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only">
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 通知声音 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">通知声音</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">接收通知时播放声音提示</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only">
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 网络设置 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-400">网络设置</h3>
+                            <div class="flex-grow ml-3 border-t border-gray-800/50"></div>
+                        </div>
+                        
+                        <!-- 网络设置卡片 -->
+                        <div class="bg-dark-800 rounded-lg p-4 mb-4">
+                            <div class="space-y-4">
+                                <!-- 同步方式 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <h4 class="text-sm font-medium text-white mb-2">同步方式</h4>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center">
+                                            <input type="radio" name="sync-method" class="form-radio h-4 w-4 text-accent-500 focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700" checked>
+                                            <span class="ml-2 text-sm text-gray-300">优先使用局域网同步 (推荐)</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="radio" name="sync-method" class="form-radio h-4 w-4 text-accent-500 focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700">
+                                            <span class="ml-2 text-sm text-gray-300">仅使用云端同步</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="radio" name="sync-method" class="form-radio h-4 w-4 text-accent-500 focus:ring-0 focus:ring-offset-0 border-gray-600 bg-dark-700">
+                                            <span class="ml-2 text-sm text-gray-300">仅使用局域网同步</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <!-- 仅在WIFI下同步 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">仅在WIFI下同步</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">在移动设备上仅使用WIFI网络同步内容</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 后台同步 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">后台同步</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">即使应用未运行也保持同步(可能增加电池消耗)</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 云服务器配置 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h4 class="text-sm font-medium text-white">云服务器配置</h4>
+                                        <button class="px-2 py-1 bg-dark-700 hover:bg-dark-600 text-xs text-gray-300 rounded">高级选项</button>
+                                    </div>
+                                    <div class="flex">
+                                        <div class="px-2 py-1 bg-dark-700 rounded-lg text-sm text-gray-300 flex-1">
+                                            使用默认云服务器 (api.clipsync.com)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 存储管理 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-400">存储管理</h3>
+                            <div class="flex-grow ml-3 border-t border-gray-800/50"></div>
+                        </div>
+                        
+                        <!-- 存储管理卡片 -->
+                        <div class="bg-dark-800 rounded-lg p-4 mb-4">
+                            <!-- 存储使用情况 -->
+                            <div class="mb-4">
+                                <div class="flex items-center justify-between mb-1">
+                                    <h4 class="text-sm font-medium text-white">存储使用情况</h4>
+                                    <span class="text-xs text-gray-400">128MB / 1GB</span>
+                                </div>
+                                <div class="w-full bg-dark-700 rounded-full h-2.5">
+                                    <div class="bg-accent-500 h-2.5 rounded-full" style="width: 12.8%"></div>
+                                </div>
+                                <div class="flex justify-between mt-1 text-xs text-gray-400">
+                                    <span>已使用 12.8%</span>
+                                    <button class="text-accent-400 hover:text-accent-300">升级存储空间</button>
+                                </div>
+                            </div>
+                            
+                            <div class="space-y-4">
+                                <!-- 存储限制 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="mb-2">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="text-sm font-medium text-white">历史记录保留时间</h4>
+                                            <span class="text-xs text-accent-300">30天</span>
+                                        </div>
+                                        <p class="text-xs text-gray-400 mt-0.5">设置剪贴板历史记录的最长保留时间</p>
+                                    </div>
+                                    <div class="w-full">
+                                        <input type="range" min="1" max="90" value="30" class="w-full h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-accent-500">
+                                    </div>
+                                    <div class="flex justify-between mt-1 text-xs text-gray-400">
+                                        <span>1天</span>
+                                        <span>90天</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 最大历史记录数 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-white">最大历史记录数</h4>
+                                            <p class="text-xs text-gray-400 mt-0.5">限制保存的剪贴板历史记录数量</p>
+                                        </div>
+                                        <div class="w-36">
+                                            <select class="w-full bg-dark-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-accent-400">
+                                                <option>100条</option>
+                                                <option>500条</option>
+                                                <option selected>1000条</option>
+                                                <option>5000条</option>
+                                                <option>无限制</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 清理缓存 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-white">缓存大小</h4>
+                                            <p class="text-xs text-gray-400 mt-0.5">当前应用缓存占用空间</p>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <span class="text-sm text-gray-300 mr-3">45.2MB</span>
+                                            <button class="px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-sm text-gray-300 rounded-lg transition duration-150">
+                                                清理缓存
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 清空历史记录 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-white">历史记录</h4>
+                                            <p class="text-xs text-gray-400 mt-0.5">清空所有剪贴板历史记录</p>
+                                        </div>
+                                        <button class="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-sm text-red-400 rounded-lg transition duration-150">
+                                            清空历史记录
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 快捷键配置 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-400">快捷键配置</h3>
+                            <div class="flex-grow ml-3 border-t border-gray-800/50"></div>
+                        </div>
+                        
+                        <!-- 快捷键配置卡片 -->
+                        <div class="bg-dark-800 rounded-lg p-4 mb-4">
+                            <div class="space-y-4">
+                                <!-- 启用快捷键 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">启用快捷键</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">允许使用键盘快捷键控制ClipSync</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 快捷键列表 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <h4 class="text-sm font-medium text-white mb-3">自定义快捷键</h4>
+                                    
+                                    <div class="space-y-3">
+                                        <!-- 打开剪贴板历史 -->
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-sm text-gray-300">打开剪贴板历史</span>
+                                            <div class="flex items-center">
+                                                <div class="bg-dark-700 px-2 py-1 rounded text-xs text-gray-300 font-mono">
+                                                    Ctrl + Shift + V
+                                                </div>
+                                                <button class="ml-2 text-gray-400 hover:text-white">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- 快速粘贴 -->
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-sm text-gray-300">快速粘贴</span>
+                                            <div class="flex items-center">
+                                                <div class="bg-dark-700 px-2 py-1 rounded text-xs text-gray-300 font-mono">
+                                                    Alt + V
+                                                </div>
+                                                <button class="ml-2 text-gray-400 hover:text-white">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- 强制同步 -->
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-sm text-gray-300">强制同步</span>
+                                            <div class="flex items-center">
+                                                <div class="bg-dark-700 px-2 py-1 rounded text-xs text-gray-300 font-mono">
+                                                    Ctrl + Alt + S
+                                                </div>
+                                                <button class="ml-2 text-gray-400 hover:text-white">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- 暂停/恢复同步 -->
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-sm text-gray-300">暂停/恢复同步</span>
+                                            <div class="flex items-center">
+                                                <div class="bg-dark-700 px-2 py-1 rounded text-xs text-gray-300 font-mono">
+                                                    Ctrl + Alt + P
+                                                </div>
+                                                <button class="ml-2 text-gray-400 hover:text-white">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <button class="mt-4 px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-sm text-gray-300 rounded-lg transition duration-150 flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                        </svg>
+                                        添加新快捷键
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 外观设置 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-400">外观设置</h3>
+                            <div class="flex-grow ml-3 border-t border-gray-800/50"></div>
+                        </div>
+                        
+                        <!-- 外观设置卡片 -->
+                        <div class="bg-dark-800 rounded-lg p-4 mb-4">
+                            <div class="space-y-4">
+                                <!-- 主题选择 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <h4 class="text-sm font-medium text-white mb-3">主题</h4>
+                                    <div class="grid grid-cols-3 gap-3">
+                                        <div class="relative">
+                                            <input type="radio" name="theme" id="theme-dark" class="sr-only" checked>
+                                            <label for="theme-dark" class="block cursor-pointer">
+                                                <div class="h-20 bg-dark-900 rounded-lg border-2 border-accent-500 flex flex-col items-center justify-center">
+                                                    <div class="w-12 h-3 bg-dark-700 rounded-sm mb-2"></div>
+                                                    <div class="w-10 h-2 bg-dark-700 rounded-sm"></div>
+                                                </div>
+                                                <div class="mt-1 text-center text-xs text-gray-300">深色主题</div>
+                                            </label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="theme" id="theme-light" class="sr-only">
+                                            <label for="theme-light" class="block cursor-pointer">
+                                                <div class="h-20 bg-gray-100 rounded-lg border-2 border-gray-700/30 flex flex-col items-center justify-center">
+                                                    <div class="w-12 h-3 bg-gray-300 rounded-sm mb-2"></div>
+                                                    <div class="w-10 h-2 bg-gray-300 rounded-sm"></div>
+                                                </div>
+                                                <div class="mt-1 text-center text-xs text-gray-300">浅色主题</div>
+                                            </label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="theme" id="theme-system" class="sr-only">
+                                            <label for="theme-system" class="block cursor-pointer">
+                                                <div class="h-20 bg-gradient-to-r from-dark-900 to-gray-100 rounded-lg border-2 border-gray-700/30 flex flex-col items-center justify-center">
+                                                    <div class="w-12 h-3 bg-gray-500/50 rounded-sm mb-2"></div>
+                                                    <div class="w-10 h-2 bg-gray-500/50 rounded-sm"></div>
+                                                </div>
+                                                <div class="mt-1 text-center text-xs text-gray-300">跟随系统</div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 强调色 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <h4 class="text-sm font-medium text-white mb-3">强调色</h4>
+                                    <div class="flex space-x-3">
+                                        <div class="relative">
+                                            <input type="radio" name="accent" id="accent-purple" class="sr-only" checked>
+                                            <label for="accent-purple" class="block h-8 w-8 rounded-full bg-purple-500 cursor-pointer border-2 border-white"></label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="accent" id="accent-blue" class="sr-only">
+                                            <label for="accent-blue" class="block h-8 w-8 rounded-full bg-blue-500 cursor-pointer border-2 border-transparent"></label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="accent" id="accent-green" class="sr-only">
+                                            <label for="accent-green" class="block h-8 w-8 rounded-full bg-green-500 cursor-pointer border-2 border-transparent"></label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="accent" id="accent-red" class="sr-only">
+                                            <label for="accent-red" class="block h-8 w-8 rounded-full bg-red-500 cursor-pointer border-2 border-transparent"></label>
+                                        </div>
+                                        <div class="relative">
+                                            <input type="radio" name="accent" id="accent-orange" class="sr-only">
+                                            <label for="accent-orange" class="block h-8 w-8 rounded-full bg-orange-500 cursor-pointer border-2 border-transparent"></label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 字体大小 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="mb-2">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="text-sm font-medium text-white">字体大小</h4>
+                                            <span class="text-xs text-accent-300">中</span>
+                                        </div>
+                                    </div>
+                                    <div class="w-full">
+                                        <input type="range" min="1" max="5" value="3" class="w-full h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-accent-500">
+                                    </div>
+                                    <div class="flex justify-between mt-1 text-xs text-gray-400">
+                                        <span>小</span>
+                                        <span>大</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 紧凑模式 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">紧凑模式</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">减少界面间距，显示更多内容</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only">
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                <!-- 启动设置 -->
+                                <div class="settings-item py-2 rounded-lg px-2">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-white">启动时</h4>
+                                            <p class="text-xs text-gray-400 mt-0.5">设置应用启动行为</p>
+                                        </div>
+                                        <div class="w-48">
+                                            <select class="w-full bg-dark-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-accent-400">
+                                                <option>显示主窗口</option>
+                                                <option selected>最小化到系统托盘</option>
+                                                <option>恢复上次状态</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 开机自启动 -->
+                                <div class="flex items-center justify-between settings-item py-2 rounded-lg px-2">
+                                    <div>
+                                        <h4 class="text-sm font-medium text-white">开机自启动</h4>
+                                        <p class="text-xs text-gray-400 mt-0.5">系统启动时自动运行ClipSync</p>
+                                    </div>
+                                    <label class="flex items-center cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" class="sr-only" checked>
+                                            <div class="toggle-bg w-11 h-6 bg-gray-600 rounded-full"></div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 关于 -->
+                    <div class="mb-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-medium text-gray-400">关于</h3>
+                            <div class="flex-grow ml-3 border-t border-gray-800/50"></div>
+                        </div>
+                        
+                        <div class="bg-dark-800 rounded-lg p-4 mb-4">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center">
+                                    <div class="h-10 w-10 rounded-lg bg-gradient-to-br from-accent-400 to-accent-300 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                        </svg>
+                                    </div>
+                                    <div class="ml-3">
+                                        <h4 class="text-white font-medium">ClipSync</h4>
+                                        <p class="text-xs text-gray-400">版本 2.4.1</p>
+                                    </div>
+                                </div>
+                                <button class="px-3 py-1.5 bg-dark-700 hover:bg-dark-600 text-sm text-gray-300 rounded-lg transition duration-150">
+                                    检查更新
+                                </button>
+                            </div>
+                            
+                            <div class="space-y-2 text-sm text-gray-400">
+                                <p>© 2023 ClipSync Team. 保留所有权利。</p>
+                                <div class="flex space-x-4">
+                                    <a href="#" class="text-accent-400 hover:text-accent-300">隐私政策</a>
+                                    <a href="#" class="text-accent-400 hover:text-accent-300">使用条款</a>
+                                    <a href="#" class="text-accent-400 hover:text-accent-300">帮助中心</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 底部操作栏 -->
+            <footer class="bg-dark-900 border-t border-gray-800/50 px-4 py-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <button class="px-3 py-2 bg-dark-800 rounded text-sm text-gray-300 hover:bg-dark-700 transition-colors flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span>重置所有设置</span>
+                        </button>
+                        <button class="px-3 py-2 bg-dark-800 rounded text-sm text-gray-300 hover:bg-dark-700 transition-colors flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>帮助</span>
+                        </button>
+                    </div>
+                    
+                    <div class="flex space-x-2">
+                        <button class="px-3 py-2 bg-dark-800 rounded text-sm text-gray-300 hover:bg-dark-700 transition-colors">
+                            取消
+                        </button>
+                        <button class="px-3 py-2 bg-accent-500 rounded text-sm text-white hover:bg-accent-400 transition-colors flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span>应用设置</span>
+                        </button>
+                    </div>
+                </div>
+            </footer>
+        </div>
+    </div>
+</body>
+</html>
