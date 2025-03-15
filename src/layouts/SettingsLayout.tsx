@@ -1,6 +1,6 @@
 import React, { ReactNode } from "react";
 import { MainLayout } from "./index";
-import { SettingHeader, SettingFooter } from "../components";
+import { SettingHeader } from "../components";
 import { CategoryItem } from "../components/setting/SettingHeader";
 
 interface SettingsLayoutProps {
@@ -19,9 +19,9 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
   return (
     <MainLayout>
       {/* 顶部标题栏 */}
-      <SettingHeader 
-        onCategoryClick={onCategoryClick} 
-        activeCategory={activeCategory} 
+      <SettingHeader
+        onCategoryClick={onCategoryClick}
+        activeCategory={activeCategory}
         categories={categories}
       />
 
@@ -33,7 +33,7 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
       </div>
 
       {/* 底部操作栏 */}
-      <SettingFooter />
+      {/* <SettingFooter /> */}
     </MainLayout>
   );
 };
