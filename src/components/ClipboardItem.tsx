@@ -122,10 +122,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
 
   // 获取卡片背景样式
   const getCardStyle = () => {
-    if (type === "text") {
-      return "bg-gray-900 border border-gray-800";
-    }
-    return "bg-gray-700 bg-opacity-60 backdrop-blur-sm border border-gray-700/40";
+    return "bg-gray-800/50 bg-opacity-60 backdrop-blur-sm border border-gray-700/40";
   };
 
   // 渲染操作按钮
