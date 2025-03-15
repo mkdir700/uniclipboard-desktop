@@ -8,6 +8,7 @@ interface ClipboardItemProps {
   device?: string;
   imageUrl?: string;
   isDownloaded?: boolean; // 新增：标记文件是否已下载
+  onDelete?: () => void; // 新增：删除回调函数
 }
 
 const ClipboardItem: React.FC<ClipboardItemProps> = ({
@@ -18,10 +19,12 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   device = "",
   imageUrl,
   isDownloaded = false, // 默认未下载
+  onDelete, // 删除回调函数
 }) => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [deleteConfirm, setDeleteConfirm] = useState(false); // 添加删除确认状态
 
   // 根据类型返回不同的图标和背景色
   const getTypeIcon = () => {
@@ -171,6 +174,23 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
       });
   };
 
+  // 处理删除操作
+  const handleDelete = () => {
+    if (deleteConfirm) {
+      // 已经确认，执行删除操作
+      console.log("删除项目:", title);
+      onDelete && onDelete(); // 调用删除回调函数
+    } else {
+      // 首次点击，设置确认状态
+      setDeleteConfirm(true);
+
+      // 2秒后自动重置确认状态
+      setTimeout(() => {
+        setDeleteConfirm(false);
+      }, 2000);
+    }
+  };
+
   // 渲染操作按钮
   const renderActionButtons = () => {
     return (
@@ -277,21 +297,42 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
             />
           </svg>
         </button>
-        <button className="p-1 rounded-full hover:bg-gray-700/50">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
-          </svg>
+        <button
+          className="p-1 rounded-full hover:bg-gray-700/50"
+          onClick={handleDelete}
+          title={deleteConfirm ? "再次点击确认删除" : "删除"}
+        >
+          {deleteConfirm ? (
+            // 确认删除状态 - 红色X图标
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-red-500"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
+              />
+            </svg>
+          ) : (
+            // 默认删除图标
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+          )}
         </button>
       </div>
     );

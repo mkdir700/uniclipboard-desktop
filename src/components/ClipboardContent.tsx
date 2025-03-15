@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import ClipboardItem from "./ClipboardItem";
 
 const ClipboardContent: React.FC = () => {
   // 模拟剪贴板数据
-  const clipboardItems = [
+  const initialClipboardItems = [
     {
       id: 1,
       type: "text" as const,
@@ -56,6 +56,18 @@ const ClipboardContent: React.FC = () => {
     },
   ];
 
+  // 使用状态来管理剪贴板项
+  const [clipboardItems, setClipboardItems] = useState(initialClipboardItems);
+
+  // 处理删除剪贴板项
+  const handleDeleteItem = (id: number) => {
+    setClipboardItems(prevItems => prevItems.filter(item => item.id !== id));
+  };
+
+  // 获取今天和昨天的项目
+  const todayItems = clipboardItems.slice(0, 3);
+  const yesterdayItems = clipboardItems.slice(3);
+
   return (
     <div className="flex-1 overflow-hidden">
       <div className="h-full overflow-y-auto hide-scrollbar px-4 py-4">
@@ -70,17 +82,22 @@ const ClipboardContent: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {clipboardItems.slice(0, 3).map((item) => (
-                <ClipboardItem
-                  key={item.id}
-                  type={item.type}
-                  title={item.title}
-                  content={item.content}
-                  time={item.time}
-                  device={item.device}
-                  imageUrl={item.type === "image" ? item.imageUrl : undefined}
-                />
-              ))}
+              {todayItems.length > 0 ? (
+                todayItems.map((item) => (
+                  <ClipboardItem
+                    key={item.id}
+                    type={item.type}
+                    title={item.title}
+                    content={item.content}
+                    time={item.time}
+                    device={item.device}
+                    imageUrl={item.type === "image" ? item.imageUrl : undefined}
+                    onDelete={() => handleDeleteItem(item.id)}
+                  />
+                ))
+              ) : (
+                <div className="text-gray-500 text-center py-4">今天没有剪贴板项</div>
+              )}
             </div>
           </div>
 
@@ -94,17 +111,22 @@ const ClipboardContent: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {clipboardItems.slice(3).map((item) => (
-                <ClipboardItem
-                  key={item.id}
-                  type={item.type}
-                  title={item.title}
-                  content={item.content}
-                  time={item.time}
-                  device={item.device}
-                  imageUrl={item.type === "image" ? item.imageUrl : undefined}
-                />
-              ))}
+              {yesterdayItems.length > 0 ? (
+                yesterdayItems.map((item) => (
+                  <ClipboardItem
+                    key={item.id}
+                    type={item.type}
+                    title={item.title}
+                    content={item.content}
+                    time={item.time}
+                    device={item.device}
+                    imageUrl={item.type === "image" ? item.imageUrl : undefined}
+                    onDelete={() => handleDeleteItem(item.id)}
+                  />
+                ))
+              ) : (
+                <div className="text-gray-500 text-center py-4">昨天没有剪贴板项</div>
+              )}
             </div>
           </div>
         </div>
