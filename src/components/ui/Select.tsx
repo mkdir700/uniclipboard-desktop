@@ -13,6 +13,7 @@ interface SelectProps {
   description?: string;
   className?: string;
   width?: string;
+  disabled?: boolean;
 }
 
 const Select: React.FC<SelectProps> = ({
@@ -23,9 +24,10 @@ const Select: React.FC<SelectProps> = ({
   description,
   className = "",
   width = "w-full",
+  disabled = false,
 }) => {
   return (
-    <div className={`flex items-center justify-between ${className}`}>
+    <div className={`flex items-center justify-between ${className} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
       {(label || description) && (
         <div>
           {label && <h4 className="text-sm font-medium text-white">{label}</h4>}
@@ -36,9 +38,12 @@ const Select: React.FC<SelectProps> = ({
       )}
       <div className={width}>
         <select
-          className="w-full bg-gray-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-400"
+          className={`w-full bg-gray-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none ${
+            disabled ? '' : 'focus:ring-1 focus:ring-violet-400'
+          }`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>

@@ -8,8 +8,11 @@ importers:
 
   .:
     dependencies:
+      '@ltd/j-toml':
+        specifier: ^1.38.0
+        version: 1.38.0
       '@tauri-apps/api':
-        specifier: ^2
+        specifier: ^2.3.0
         version: 2.3.0
       '@tauri-apps/plugin-opener':
         specifier: ^2
@@ -314,6 +317,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.25':
     resolution: {integrity: sha512-vNk6aEwybGtawWmy/PzwnGDOjCkLWSD2wqvjGGAgOAwCGWySYXfYoxt00IJkTF+8Lb57DwOb3Aa0o9CApepiYQ==}
+
+  '@ltd/j-toml@1.38.0':
+    resolution: {integrity: sha512-lYtBcmvHustHQtg4X7TXUu1Xa/tbLC3p2wLvgQI+fWVySguVZJF60Snxijw5EiohumxZbR10kWYFFebh1zotiw==}
 
   '@rollup/rollup-android-arm-eabi@4.35.0':
     resolution: {integrity: sha512-uYQ2WfPaqz5QtVgMxfN6NpLD+no0MYHDBywl7itPYd3K5TjjSghNKmX8ic9S8NU8w81NVhJv/XojcHptRly7qQ==}
@@ -1106,6 +1112,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.0
+
+  '@ltd/j-toml@1.38.0': {}
 
   '@rollup/rollup-android-arm-eabi@4.35.0':
     optional: true

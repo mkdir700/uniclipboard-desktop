@@ -79,6 +79,7 @@ diesel = { version = "2.2.0", features = [
 libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 dotenvy = "0.15"
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
+tauri-plugin-devtools = "2.0.0"
 
 
 [profile.release]

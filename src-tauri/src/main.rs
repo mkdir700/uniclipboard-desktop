@@ -11,6 +11,7 @@ mod device;
 mod encrypt;
 mod errors;
 mod file_metadata;
+mod setting;
 mod key_mouse_monitor;
 mod logger;
 mod message;
@@ -133,7 +134,7 @@ fn main() {
 fn run_app(uniclipboard_app: Arc<UniClipboard>) {
     use tauri::{Builder, Manager};
     use std::sync::Mutex;
-    use crate::commands::{greet, save_config, get_config};
+    use crate::commands::{greet, save_setting, get_setting};
 
     Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -159,7 +160,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, save_config, get_config])
+        .invoke_handler(tauri::generate_handler![greet, save_setting, get_setting])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

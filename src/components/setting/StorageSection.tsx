@@ -1,11 +1,67 @@
-import React from "react";
-import { SettingContentLayout } from "../../layouts";
+import React, { useEffect, useState } from "react";
+import Slider from "../ui/Slider";
+import { useSetting } from "../../contexts/SettingContext";
 
 const StorageSection: React.FC = () => {
+  const { setting, loading, error, updateStorageSetting } = useSetting();
+
+  // 本地状态
+  const [historyRetentionDays, setHistoryRetentionDays] = useState(30);
+  const [maxHistoryItems, setMaxHistoryItems] = useState(1000);
+
+  // 最大历史记录数选项
+  const maxHistoryOptions = [
+    { value: 100, label: "100条" },
+    { value: 500, label: "500条" },
+    { value: 1000, label: "1000条" },
+    { value: 5000, label: "5000条" },
+    { value: 0, label: "无限制" },
+  ];
+
+  // 当设置加载完成后，更新本地状态
+  useEffect(() => {
+    if (setting) {
+      setHistoryRetentionDays(setting.storage.history_retention_days);
+      setMaxHistoryItems(setting.storage.max_history_items);
+    }
+  }, [setting]);
+
+  // 处理历史记录保留时间变化
+  const handleHistoryRetentionChange = (value: number) => {
+    setHistoryRetentionDays(value);
+    updateStorageSetting({ history_retention_days: value });
+  };
+
+  // 处理最大历史记录数变化
+  const handleMaxHistoryItemsChange = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const value = parseInt(event.target.value, 10);
+    setMaxHistoryItems(value);
+    updateStorageSetting({ max_history_items: value });
+  };
+
+  // 处理清空历史记录
+  const handleClearHistory = () => {
+    // 这里可以添加清空历史记录的逻辑
+    // 例如调用后端API来清空历史记录
+    alert("历史记录已清空");
+  };
+
+  // 如果正在加载，显示加载状态
+  //   if (loading) {
+  //     return <div className="text-center py-4">正在加载设置...</div>;
+  //   }
+
+  // 如果有错误，显示错误信息
+  if (error) {
+    return <div className="text-red-500 py-4">加载设置失败: {error}</div>;
+  }
+
   return (
-    <SettingContentLayout title="存储管理">
+    <>
       {/* 存储使用情况 */}
-      <div className="mb-4">
+      <div className="settings-item py-2 rounded-lg px-2">
         <div className="flex items-center justify-between mb-1">
           <h4 className="text-sm font-medium text-white">存储使用情况</h4>
           <span className="text-xs text-gray-400">128MB / 1GB</span>
@@ -18,96 +74,73 @@ const StorageSection: React.FC = () => {
         </div>
         <div className="flex justify-between mt-1 text-xs text-gray-400">
           <span>已使用 12.8%</span>
-          <button className="text-violet-400 hover:text-violet-300">
-            升级存储空间
+        </div>
+      </div>
+
+      {/* 存储限制 */}
+      <div className="settings-item py-2 rounded-lg px-2">
+        <div className="w-full">
+          <Slider
+            min={1}
+            max={90}
+            value={historyRetentionDays}
+            onChange={handleHistoryRetentionChange}
+            label="历史记录保留时间"
+            description="设置剪贴板历史记录的最长保留时间"
+            unit="天"
+            keyPoints={[
+              { value: 7, label: "7D" },
+              { value: 30, label: "30D" },
+              { value: 60, label: "60D" },
+              { value: 90, label: "90D" },
+            ]}
+          />
+        </div>
+      </div>
+
+      {/* 最大历史记录数 */}
+      <div className="settings-item py-2 rounded-lg px-2">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h4 className="text-sm font-medium text-white">最大历史记录数</h4>
+            <p className="text-xs text-gray-400 mt-0.5">
+              限制保存的剪贴板历史记录数量
+            </p>
+          </div>
+          <div className="w-36">
+            <select
+              className="w-full bg-gray-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-400"
+              value={maxHistoryItems}
+              onChange={handleMaxHistoryItemsChange}
+            >
+              {maxHistoryOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 清空历史记录 */}
+      <div className="settings-item py-2 rounded-lg px-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-white">历史记录</h4>
+            <p className="text-xs text-gray-400 mt-0.5">
+              清空所有剪贴板历史记录并释放存储空间
+            </p>
+          </div>
+          <button
+            className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-sm text-red-400 rounded-lg transition duration-150"
+            onClick={handleClearHistory}
+          >
+            清空历史记录
           </button>
         </div>
       </div>
-
-      <div className="space-y-4">
-        {/* 存储限制 */}
-        <div className="settings-item py-2 rounded-lg px-2">
-          <div className="mb-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-white">
-                历史记录保留时间
-              </h4>
-              <span className="text-xs text-violet-300">30天</span>
-            </div>
-            <p className="text-xs text-gray-400 mt-0.5">
-              设置剪贴板历史记录的最长保留时间
-            </p>
-          </div>
-          <div className="w-full">
-            <input
-              type="range"
-              min="1"
-              max="90"
-              value="30"
-              className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-accent-500"
-            />
-          </div>
-          <div className="flex justify-between mt-1 text-xs text-gray-400">
-            <span>1天</span>
-            <span>90天</span>
-          </div>
-        </div>
-
-        {/* <!-- 最大历史记录数 --> */}
-        <div className="settings-item py-2 rounded-lg px-2">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h4 className="text-sm font-medium text-white">最大历史记录数</h4>
-              <p className="text-xs text-gray-400 mt-0.5">
-                限制保存的剪贴板历史记录数量
-              </p>
-            </div>
-            <div className="w-36">
-              <select className="w-full bg-gray-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-400">
-                <option>100条</option>
-                <option>500条</option>
-                <option selected>1000条</option>
-                <option>5000条</option>
-                <option>无限制</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* <!-- 清理缓存 --> */}
-        <div className="settings-item py-2 rounded-lg px-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-white">缓存大小</h4>
-              <p className="text-xs text-gray-400 mt-0.5">
-                当前应用缓存占用空间
-              </p>
-            </div>
-            <div className="flex items-center">
-              <span className="text-sm text-gray-300 mr-3">45.2MB</span>
-              <button className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 rounded-lg transition duration-150">
-                清理缓存
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 清空历史记录 */}
-        <div className="settings-item py-2 rounded-lg px-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-white">历史记录</h4>
-              <p className="text-xs text-gray-400 mt-0.5">
-                清空所有剪贴板历史记录
-              </p>
-            </div>
-            <button className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-sm text-red-400 rounded-lg transition duration-150">
-              清空历史记录
-            </button>
-          </div>
-        </div>
-      </div>
-    </SettingContentLayout>
+    </>
   );
 };
 
