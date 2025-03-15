@@ -1,6 +1,27 @@
-import React from "react";
+import React, { useState } from "react";
 
 const Header: React.FC = () => {
+  // 定义筛选类型
+  const filterTypes = [
+    { id: "all", label: "全部", icon: "📋" },
+    { id: "favorite", label: "收藏", icon: "⭐" },
+    { id: "text", label: "文本", icon: "📝" },
+    { id: "image", label: "图片", icon: "🖼️" },
+    { id: "link", label: "链接", icon: "🔗" },
+    { id: "file", label: "文件", icon: "📁" },
+    { id: "code", label: "代码", icon: "💻" },
+  ];
+
+  // 当前选中的筛选类型
+  const [activeFilter, setActiveFilter] = useState("all");
+
+  // 处理筛选器点击
+  const handleFilterClick = (filterId: string) => {
+    setActiveFilter(filterId);
+    // 这里可以添加筛选逻辑，例如触发父组件的回调函数
+    // onFilterChange(filterId);
+  };
+
   return (
     <header className="bg-gray-900 border-b border-gray-800/50">
       <div className="px-4 py-3 flex items-center justify-between">
@@ -36,47 +57,34 @@ const Header: React.FC = () => {
             <div className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
             <span className="text-xs text-green-300">已同步</span>
           </div>
-
-          {/* 通知图标 */}
-          <button className="text-gray-400 hover:text-white focus:outline-none">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-              />
-            </svg>
-          </button>
         </div>
       </div>
 
       {/* 内容类型筛选器 */}
-      <div className="px-4 pb-3 flex space-x-1 text-sm">
-        <button className="px-3 py-1 bg-violet-500/90 rounded-md text-white">
-          全部
-        </button>
-        <button className="px-3 py-1 bg-gray-700/70 hover:bg-gray-700/90 rounded-md text-gray-300">
-          文本
-        </button>
-        <button className="px-3 py-1 bg-gray-700/70 hover:bg-gray-700/90 rounded-md text-gray-300">
-          图片
-        </button>
-        <button className="px-3 py-1 bg-gray-700/70 hover:bg-gray-700/90 rounded-md text-gray-300">
-          链接
-        </button>
-        <button className="px-3 py-1 bg-gray-700/70 hover:bg-gray-700/90 rounded-md text-gray-300">
-          文件
-        </button>
-        <button className="px-3 py-1 bg-gray-700/70 hover:bg-gray-700/90 rounded-md text-gray-300">
-          代码
-        </button>
+      <div className="px-4 pb-3 overflow-x-auto">
+        <div className="flex space-x-2 text-sm">
+          {filterTypes.map((filter) => (
+            <button
+              key={filter.id}
+              className={`px-3 py-1.5 rounded-md transition-all duration-200 flex items-center ${
+                activeFilter === filter.id
+                  ? filter.id === "favorite"
+                    ? "bg-yellow-500 text-white shadow-lg shadow-yellow-500/20 transform scale-105"
+                    : "bg-violet-500 text-white shadow-lg shadow-violet-500/20 transform scale-105"
+                  : "bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white"
+              }`}
+              onClick={() => handleFilterClick(filter.id)}
+            >
+              <span className="mr-1.5">{filter.icon}</span>
+              <span>{filter.label}</span>
+              {activeFilter === filter.id && (
+                <span className="ml-1.5 flex items-center justify-center h-4 w-4 bg-white bg-opacity-30 rounded-full text-xs">
+                  ✓
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
     </header>
   );
