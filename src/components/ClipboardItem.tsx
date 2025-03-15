@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 interface ClipboardItemProps {
   type: "text" | "image" | "link" | "code" | "file";
@@ -7,6 +7,7 @@ interface ClipboardItemProps {
   time: string;
   device?: string;
   imageUrl?: string;
+  isDownloaded?: boolean; // 新增：标记文件是否已下载
 }
 
 const ClipboardItem: React.FC<ClipboardItemProps> = ({
@@ -16,7 +17,12 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   time,
   device = "",
   imageUrl,
+  isDownloaded = false, // 默认未下载
 }) => {
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
   // 根据类型返回不同的图标和背景色
   const getTypeIcon = () => {
     switch (type) {
@@ -125,10 +131,120 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     return "bg-gray-800/50 bg-opacity-60 backdrop-blur-sm border border-gray-700/40";
   };
 
+  // 复制内容到剪贴板
+  const handleCopy = () => {
+    // 如果是文件类型且未下载，先模拟下载过程
+    if (type === "file" && !isDownloaded) {
+      setDownloading(true);
+      setDownloadProgress(0);
+
+      // 模拟下载进度
+      const downloadInterval = setInterval(() => {
+        setDownloadProgress((prev) => {
+          const newProgress = prev + 10;
+          if (newProgress >= 100) {
+            clearInterval(downloadInterval);
+            setDownloading(false);
+            // 下载完成后复制
+            performCopy();
+            return 100;
+          }
+          return newProgress;
+        });
+      }, 200);
+    } else {
+      // 文本、图片或已下载的文件直接复制
+      performCopy();
+    }
+  };
+
+  // 执行复制操作
+  const performCopy = () => {
+    navigator.clipboard
+      .writeText(content)
+      .then(() => {
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+      })
+      .catch((err) => {
+        console.error("复制失败:", err);
+      });
+  };
+
   // 渲染操作按钮
   const renderActionButtons = () => {
     return (
       <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          className="p-1 rounded-full hover:bg-gray-700/50 relative"
+          onClick={handleCopy}
+          title="复制到剪贴板"
+          disabled={downloading}
+        >
+          {copySuccess ? (
+            // 成功图标 - 绿色对勾
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-green-500"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
+            </svg>
+          ) : downloading ? (
+            // 圆形进度条
+            <div className="relative h-4 w-4">
+              <svg className="h-4 w-4" viewBox="0 0 36 36">
+                {/* 背景圆 */}
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="16"
+                  fill="none"
+                  stroke="#4B5563"
+                  strokeWidth="2"
+                  strokeOpacity="0.3"
+                />
+                {/* 进度圆 - 使用strokeDasharray和strokeDashoffset实现进度效果 */}
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="16"
+                  fill="none"
+                  stroke="#3B82F6"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  transform="rotate(-90 18 18)"
+                  strokeDasharray="100"
+                  strokeDashoffset={100 - downloadProgress}
+                  style={{
+                    transition: "stroke-dashoffset 0.2s ease",
+                  }}
+                />
+              </svg>
+            </div>
+          ) : (
+            // 默认复制图标
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+              />
+            </svg>
+          )}
+        </button>
         <button className="p-1 rounded-full hover:bg-gray-700/50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -194,7 +310,10 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         return (
           <div className="mt-2">
             <img
-              src={imageUrl || "https://images.unsplash.com/photo-1493723843671-1d655e66ac1c?ixlib=rb-1.2.1&auto=format&fit=crop&w=1050&q=80"}
+              src={
+                imageUrl ||
+                "https://images.unsplash.com/photo-1493723843671-1d655e66ac1c?ixlib=rb-1.2.1&auto=format&fit=crop&w=1050&q=80"
+              }
               className="rounded-md w-full h-36 object-cover"
               alt="风景图片"
             />
@@ -260,16 +379,21 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   };
 
   const deviceInfo = device ? `来自 ${device} · ` : "";
-  
+
   return (
-    <div className={`${getCardStyle()} rounded-lg overflow-hidden hover:ring-1 hover:ring-violet-400/40 transition duration-150 group`}>
+    <div
+      className={`${getCardStyle()} rounded-lg overflow-hidden hover:ring-1 hover:ring-violet-400/40 transition duration-150 group`}
+    >
       <div className="px-4 py-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-2">
             {getTypeIcon()}
             <div>
               <p className="text-sm font-medium text-white">{title}</p>
-              <p className="text-xs text-gray-400">{deviceInfo}{time}</p>
+              <p className="text-xs text-gray-400">
+                {deviceInfo}
+                {time}
+              </p>
             </div>
           </div>
           {renderActionButtons()}
