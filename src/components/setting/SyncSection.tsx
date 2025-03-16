@@ -7,7 +7,7 @@ import { useSetting } from "../../contexts/SettingContext";
 
 const SyncSection: React.FC = () => {
   // 使用设置上下文
-  const { setting, loading, error, updateSyncSetting } = useSetting();
+  const { setting, error, updateSyncSetting } = useSetting();
 
   // 本地状态，用于UI展示
   const [autoSync, setAutoSync] = useState(true);

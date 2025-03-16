@@ -3,7 +3,7 @@ import Select from "../ui/Select";
 import { useSetting } from "../../contexts/SettingContext";
 
 const NetworkSection: React.FC = () => {
-  const { setting, loading, error, updateNetworkSetting } = useSetting();
+  const { setting, error, updateNetworkSetting } = useSetting();
 
   // 本地状态
   const [syncMethod, setSyncMethod] = useState("lan_first");

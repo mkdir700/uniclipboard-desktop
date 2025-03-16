@@ -4,7 +4,7 @@ import Select from "../ui/Select";
 import { useSetting } from "../../contexts/SettingContext";
 
 const SecuritySection: React.FC = () => {
-  const { setting, loading, error, updateSecuritySetting } = useSetting();
+  const { setting, error, updateSecuritySetting } = useSetting();
 
   // 本地状态
   const [endToEndEncryption, setEndToEndEncryption] = useState(true);

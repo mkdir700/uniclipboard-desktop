@@ -3,7 +3,7 @@ import Slider from "../ui/Slider";
 import { useSetting } from "../../contexts/SettingContext";
 
 const StorageSection: React.FC = () => {
-  const { setting, loading, error, updateStorageSetting } = useSetting();
+  const { setting, error, updateStorageSetting } = useSetting();
 
   // 本地状态
   const [historyRetentionDays, setHistoryRetentionDays] = useState(30);
