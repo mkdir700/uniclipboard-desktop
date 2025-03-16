@@ -17,6 +17,12 @@ interface ContentTypes {
   rich_text: boolean;
 }
 
+// 通用设置接口
+interface GeneralSetting {
+  auto_start: boolean;
+  auto_check_update: boolean;
+}
+
 // 同步设置接口
 interface SyncSetting {
   auto_sync: boolean;
@@ -50,6 +56,7 @@ interface AboutSetting {
 
 // 设置接口
 export interface Setting {
+  general: GeneralSetting;
   sync: SyncSetting;
   security: SecuritySetting;
   network: NetworkSetting;
@@ -63,6 +70,9 @@ interface SettingContextType {
   loading: boolean;
   error: string | null;
   updateSetting: (newSetting: Setting) => Promise<void>;
+  updateGeneralSetting: (
+    newGeneralSetting: Partial<GeneralSetting>
+  ) => Promise<void>;
   updateSyncSetting: (newSyncSetting: Partial<SyncSetting>) => Promise<void>;
   updateSecuritySetting: (
     newSecuritySetting: Partial<SecuritySetting>
@@ -127,6 +137,21 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
   // 更新整个设置
   const updateSetting = async (newSetting: Setting) => {
     await saveSetting(newSetting);
+  };
+
+  // 更新通用设置
+  const updateGeneralSetting = async (
+    newGeneralSetting: Partial<GeneralSetting>
+  ) => {
+    if (!setting) return;
+    const updatedSetting = {
+      ...setting,
+      general: {
+        ...setting.general,
+        ...newGeneralSetting,
+      },
+    };
+    await saveSetting(updatedSetting);
   };
 
   // 更新同步设置
@@ -199,6 +224,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
         loading,
         error,
         updateSetting,
+        updateGeneralSetting,
         updateSyncSetting,
         updateSecuritySetting,
         updateNetworkSetting,

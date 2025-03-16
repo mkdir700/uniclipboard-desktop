@@ -134,10 +134,15 @@ fn main() {
 fn run_app(uniclipboard_app: Arc<UniClipboard>) {
     use tauri::{Builder, Manager};
     use std::sync::Mutex;
-    use crate::commands::{greet, save_setting, get_setting};
+    use tauri_plugin_autostart::MacosLauncher;
+    use tauri_plugin_autostart::ManagerExt;
 
     Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .manage(Arc::new(Mutex::new(Some(uniclipboard_app.clone()))))
         .setup(move |app| {
             // 获取应用句柄并克隆以便在异步任务中使用
@@ -160,7 +165,14 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, save_setting, get_setting])
+        .invoke_handler(tauri::generate_handler![
+            commands::greet, 
+            commands::save_setting, 
+            commands::get_setting, 
+            commands::enable_autostart, 
+            commands::disable_autostart, 
+            commands::is_autostart_enabled
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

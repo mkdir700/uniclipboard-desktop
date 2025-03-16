@@ -6,6 +6,7 @@ interface ToggleProps {
   label?: string;
   description?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 const Toggle: React.FC<ToggleProps> = ({
@@ -14,6 +15,7 @@ const Toggle: React.FC<ToggleProps> = ({
   label,
   description,
   className = "",
+  disabled = false,
 }) => {
   return (
     <div className={`flex items-center justify-between ${className}`}>
@@ -25,13 +27,18 @@ const Toggle: React.FC<ToggleProps> = ({
           )}
         </div>
       )}
-      <label className="flex items-center cursor-pointer">
+      <label
+        className={`flex items-center ${
+          disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+        }`}
+      >
         <div className="relative">
           <input
             type="checkbox"
             className="sr-only"
             checked={checked}
             onChange={onChange}
+            disabled={disabled}
           />
           <div
             className={`toggle-bg w-11 h-6 rounded-full transition-colors duration-200 ease-in-out ${

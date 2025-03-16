@@ -105,6 +105,9 @@ winapi = { version = "0.3.9", features = [
   "winbase",
 ] }
 
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-autostart = "2"
+
 [dependencies.uuid]
 version = "1.10.0"
 features = [
