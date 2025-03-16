@@ -73,59 +73,44 @@ const ClipboardContent: React.FC = () => {
       <div className="h-full overflow-y-auto hide-scrollbar px-4 py-4">
         <div className="space-y-4">
           {/* 今天 */}
-          <div>
-            <div className="sticky top-0 z-10 flex items-center pt-2 pb-3">
-              <h3 className="bg-gray-800 text-sm font-semibold text-white px-3 py-1 rounded-full">
-                今天
-              </h3>
-              <div className="flex-grow ml-3 border-t border-gray-800/50"></div>
-            </div>
-
-            <div className="space-y-3">
-              {todayItems.length > 0 ? (
-                todayItems.map((item) => (
-                  <ClipboardItem
-                    key={item.id}
-                    type={item.type}
-                    content={item.content}
-                    time={item.time}
-                    device={item.device}
-                    imageUrl={item.type === "image" ? item.imageUrl : undefined}
-                    onDelete={() => handleDeleteItem(item.id)}
-                  />
-                ))
-              ) : (
-                <div className="text-gray-500 text-center py-4">今天没有剪贴板项</div>
-              )}
-            </div>
+          <div className="space-y-3">
+            {todayItems.length > 0 ? (
+              todayItems.map((item) => (
+                <ClipboardItem
+                  key={item.id}
+                  type={item.type}
+                  content={item.content}
+                  time={item.time}
+                  device={item.device}
+                  imageUrl={item.type === "image" ? item.imageUrl : undefined}
+                  onDelete={() => handleDeleteItem(item.id)}
+                />
+              ))
+            ) : (
+              <div className="text-gray-500 text-center py-4">
+                今天没有剪贴板项
+              </div>
+            )}
           </div>
 
-          {/* 昨天 */}
-          <div className="mt-6">
-            <div className="sticky top-0 z-10 flex items-center pt-6 pb-3">
-              <h3 className="bg-gray-800 text-sm font-semibold text-white px-3 py-1 rounded-full">
-                昨天
-              </h3>
-              <div className="flex-grow ml-3 border-t border-gray-800/50"></div>
-            </div>
-
-            <div className="space-y-3">
-              {yesterdayItems.length > 0 ? (
-                yesterdayItems.map((item) => (
-                  <ClipboardItem
-                    key={item.id}
-                    type={item.type}
-                    content={item.content}
-                    time={item.time}
-                    device={item.device}
-                    imageUrl={item.type === "image" ? item.imageUrl : undefined}
-                    onDelete={() => handleDeleteItem(item.id)}
-                  />
-                ))
-              ) : (
-                <div className="text-gray-500 text-center py-4">昨天没有剪贴板项</div>
-              )}
-            </div>
+          <div className="space-y-3">
+            {yesterdayItems.length > 0 ? (
+              yesterdayItems.map((item) => (
+                <ClipboardItem
+                  key={item.id}
+                  type={item.type}
+                  content={item.content}
+                  time={item.time}
+                  device={item.device}
+                  imageUrl={item.type === "image" ? item.imageUrl : undefined}
+                  onDelete={() => handleDeleteItem(item.id)}
+                />
+              ))
+            ) : (
+              <div className="text-gray-500 text-center py-4">
+                昨天没有剪贴板项
+              </div>
+            )}
           </div>
         </div>
       </div>
