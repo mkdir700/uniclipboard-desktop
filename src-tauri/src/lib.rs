@@ -1,5 +1,6 @@
 mod cli;
 pub mod clipboard;
+pub mod record_manager;
 pub mod config;
 pub mod connection;
 pub mod context;
@@ -21,6 +22,7 @@ pub mod web;
 pub mod logger;
 pub use clipboard::LocalClipboard;
 pub use clipboard::LocalClipboardTrait;
+pub use record_manager::ClipboardRecordManager;
 pub use config::{get_config_path, Config, CONFIG};
 pub use context::AppContext;
 pub use device::get_device_manager;

@@ -9,6 +9,7 @@ use tokio::sync::{mpsc, RwLock};
 use tokio::time::sleep;
 
 use crate::clipboard::LocalClipboardTrait;
+use crate::record_manager::ClipboardRecordManager;
 use crate::config::get_config_dir;
 use crate::connection::ConnectionManager;
 use crate::db::DB_POOL;
@@ -26,6 +27,7 @@ pub struct UniClipboard {
     last_payload: Arc<RwLock<Option<Payload>>>,
     webserver: Arc<WebServer>,
     connection_manager: Arc<ConnectionManager>,
+    record_manager: Arc<ClipboardRecordManager>,
 }
 
 impl UniClipboard {
@@ -35,6 +37,7 @@ impl UniClipboard {
         remote_sync: Arc<dyn RemoteSyncManagerTrait>,
         key_mouse_monitor: Option<Arc<dyn KeyMouseMonitorTrait>>,
         connection_manager: Arc<ConnectionManager>,
+        clipboard_record_manager: Arc<ClipboardRecordManager>,
     ) -> Self {
         Self {
             clipboard,
@@ -45,6 +48,7 @@ impl UniClipboard {
             last_payload: Arc::new(RwLock::new(None)),
             webserver,
             connection_manager,
+            record_manager: clipboard_record_manager,
         }
     }
 
@@ -56,6 +60,10 @@ impl UniClipboard {
     #[cfg_attr(not(feature = "integration_tests"), ignore)]
     pub fn get_remote_sync(&self) -> Arc<dyn RemoteSyncManagerTrait> {
         self.remote_sync.clone()
+    }
+
+    pub fn get_record_manager(&self) -> Arc<ClipboardRecordManager> {
+        self.record_manager.clone()
     }
 
     pub async fn start(&self) -> Result<()> {
@@ -113,6 +121,7 @@ impl UniClipboard {
         let remote_sync = self.remote_sync.clone();
         let is_running = self.is_running.clone();
         let last_payload = self.last_payload.clone();
+        let record_manager = self.record_manager.clone();
 
         tokio::spawn(async move {
             while *is_running.read().await {
@@ -132,6 +141,11 @@ impl UniClipboard {
 
                     {
                         *last_payload.write().await = Some(payload.clone());
+                    }
+
+                    // 添加到剪贴板记录
+                    if let Err(e) = record_manager.add_record(&payload).await {
+                        error!("Failed to add clipboard record: {:?}", e);
                     }
 
                     info!("Push to remote: {}", payload);
@@ -157,6 +171,7 @@ impl UniClipboard {
         let remote_sync = self.remote_sync.clone();
         let is_running = self.is_running.clone();
         let last_payload = self.last_payload.clone();
+        let record_manager = self.record_manager.clone();
 
         tokio::spawn(async move {
             while *is_running.read().await {
@@ -169,6 +184,12 @@ impl UniClipboard {
                             {
                                 *last_payload.write().await = Some(payload.clone());
                             }
+
+                            // 添加到剪贴板记录
+                            if let Err(e) = record_manager.add_record(&payload).await {
+                                error!("Failed to add clipboard record: {:?}", e);
+                            }
+
                             if let Err(e) = clipboard.set_clipboard_content(payload).await {
                                 // 恢复到之前的值
                                 *last_payload.write().await = tmp;
@@ -289,6 +310,7 @@ pub struct UniClipboardBuilder {
     remote_sync: Option<Arc<dyn RemoteSyncManagerTrait>>,
     key_mouse_monitor: Option<Arc<dyn KeyMouseMonitorTrait>>,
     connection_manager: Option<Arc<ConnectionManager>>,
+    record_manager: Option<Arc<ClipboardRecordManager>>,
 }
 
 impl UniClipboardBuilder {
@@ -299,6 +321,7 @@ impl UniClipboardBuilder {
             remote_sync: None,
             key_mouse_monitor: None,
             connection_manager: None,
+            record_manager: None,
         }
     }
 
@@ -322,6 +345,11 @@ impl UniClipboardBuilder {
         self
     }
 
+    pub fn set_record_manager(mut self, record_manager: Arc<ClipboardRecordManager>) -> Self {
+        self.record_manager = Some(record_manager);
+        self
+    }
+
     #[allow(dead_code)]
     pub fn set_key_mouse_monitor(
         mut self,
@@ -332,25 +360,28 @@ impl UniClipboardBuilder {
     }
 
     pub fn build(self) -> Result<UniClipboard> {
+        let webserver = self
+            .webserver
+            .ok_or_else(|| anyhow::anyhow!("No webserver set"))?;
         let clipboard = self
             .clipboard
-            .ok_or_else(|| anyhow::anyhow!("No local clipboard set"))?;
+            .ok_or_else(|| anyhow::anyhow!("No clipboard set"))?;
         let remote_sync = self
             .remote_sync
             .ok_or_else(|| anyhow::anyhow!("No remote sync set"))?;
-
-        let webserver = self
-            .webserver
-            .ok_or_else(|| anyhow::anyhow!("No web server set"))?;
         let connection_manager = self
             .connection_manager
             .ok_or_else(|| anyhow::anyhow!("No connection manager set"))?;
+        let record_manager = self
+            .record_manager
+            .ok_or_else(|| anyhow::anyhow!("No record manager set"))?;
         Ok(UniClipboard::new(
             Arc::new(webserver),
             clipboard,
             remote_sync,
             self.key_mouse_monitor,
             connection_manager,
+            record_manager,
         ))
     }
 }

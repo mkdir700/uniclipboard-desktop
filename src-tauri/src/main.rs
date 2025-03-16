@@ -3,6 +3,7 @@
 
 mod cli;
 mod clipboard;
+mod record_manager;
 mod config;
 mod connection;
 mod context;
@@ -79,6 +80,7 @@ fn init_uniclipboard(config: Config) -> Arc<UniClipboard> {
             .set_local_clipboard(app_context.local_clipboard)
             .set_remote_sync(app_context.remote_sync_manager)
             .set_connection_manager(app_context.connection_manager)
+            .set_record_manager(app_context.record_manager)
             .build()
         {
             Ok(app) => app,
@@ -135,7 +137,6 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
     use tauri::{Builder, Manager};
     use std::sync::Mutex;
     use tauri_plugin_autostart::MacosLauncher;
-    use tauri_plugin_autostart::ManagerExt;
 
     Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -171,7 +172,11 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             commands::get_setting, 
             commands::enable_autostart, 
             commands::disable_autostart, 
-            commands::is_autostart_enabled
+            commands::is_autostart_enabled,
+            commands::get_clipboard_records,
+            commands::get_clipboard_record_by_id,
+            commands::delete_clipboard_record,
+            commands::clear_clipboard_records,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

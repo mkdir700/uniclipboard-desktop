@@ -192,6 +192,13 @@ impl Payload {
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap()
     }
+
+    pub fn get_content_type(&self) -> &str {
+        match self {
+            Payload::Text(_) => "text",
+            Payload::Image(_) => "image",
+        }
+    }
 }
 
 // 友好的展示大小

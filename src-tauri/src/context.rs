@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::clipboard::LocalClipboard;
+use crate::record_manager::ClipboardRecordManager;
 use crate::config::Config;
 use crate::connection::ConnectionManager;
 use crate::remote_sync::{RemoteSyncManager, RemoteSyncManagerTrait, WebSocketSync};
@@ -21,15 +22,25 @@ pub struct AppContext {
     #[allow(unused)]
     pub websocket_sync: Arc<WebSocketSync>,
     pub webserver: WebServer,
+    pub record_manager: Arc<ClipboardRecordManager>,
 }
 
 pub struct AppContextBuilder {
     config: Config,
+    max_records: usize,
 }
 
 impl AppContextBuilder {
     pub fn new(config: Config) -> Self {
-        Self { config }
+        Self { 
+            config,
+            max_records: 1000, // 默认保存1000条历史记录
+        }
+    }
+
+    pub fn with_max_records(mut self, max_records: usize) -> Self {
+        self.max_records = max_records;
+        self
     }
 
     pub async fn build(self) -> Result<AppContext> {
@@ -54,6 +65,7 @@ impl AppContextBuilder {
             ),
             websocket_handler.clone(),
         );
+        let clipboard_history = Arc::new(ClipboardRecordManager::new(self.max_records));
 
         remote_sync_manager.set_sync_handler(websocket_sync.clone()).await;
 
@@ -66,6 +78,7 @@ impl AppContextBuilder {
             websocket_handler,
             websocket_sync,
             webserver,
+            record_manager: clipboard_history,
         })
     }
 }
