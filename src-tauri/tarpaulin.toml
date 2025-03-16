@@ -1,0 +1,10 @@
+[all]
+features = "integration_tests"
+out = ["Html"]
+output-dir = "./tarpaulin-report"
+exclude-files = [
+    "src/main.rs",
+    "src/cli.rs",
+    "src/key_mouse_monitor.rs",
+]
+jobs = 4
