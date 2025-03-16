@@ -7,7 +7,7 @@ const ClipboardContent: React.FC = () => {
     {
       id: 1,
       type: "text" as const,
-      title: "会议笔记",
+      title: "会议笔记", 
       content: "下周一上午10点产品评审会议，准备第三季度功能规划演示文稿。",
       time: "10分钟前",
       device: "MacBook",
@@ -87,7 +87,6 @@ const ClipboardContent: React.FC = () => {
                   <ClipboardItem
                     key={item.id}
                     type={item.type}
-                    title={item.title}
                     content={item.content}
                     time={item.time}
                     device={item.device}
@@ -116,7 +115,6 @@ const ClipboardContent: React.FC = () => {
                   <ClipboardItem
                     key={item.id}
                     type={item.type}
-                    title={item.title}
                     content={item.content}
                     time={item.time}
                     device={item.device}

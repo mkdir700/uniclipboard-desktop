@@ -2,136 +2,31 @@ import React, { useState } from "react";
 
 interface ClipboardItemProps {
   type: "text" | "image" | "link" | "code" | "file";
-  title: string;
   content: string;
   time: string;
   device?: string;
   imageUrl?: string;
-  isDownloaded?: boolean; // 新增：标记文件是否已下载
-  onDelete?: () => void; // 新增：删除回调函数
+  isDownloaded?: boolean;
+  onDelete?: () => void;
 }
 
 const ClipboardItem: React.FC<ClipboardItemProps> = ({
   type,
-  title,
   content,
   time,
   device = "",
   imageUrl,
-  isDownloaded = false, // 默认未下载
-  onDelete, // 删除回调函数
+  isDownloaded = false,
+  onDelete,
 }) => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [deleteConfirm, setDeleteConfirm] = useState(false); // 添加删除确认状态
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  // 根据类型返回不同的图标和背景色
-  const getTypeIcon = () => {
-    switch (type) {
-      case "text":
-        return (
-          <div className="flex-shrink-0 h-8 w-8 bg-blue-500/20 rounded-md flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-blue-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-          </div>
-        );
-      case "image":
-        return (
-          <div className="flex-shrink-0 h-8 w-8 bg-purple-500/20 rounded-md flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-purple-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
-        );
-      case "link":
-        return (
-          <div className="flex-shrink-0 h-8 w-8 bg-green-500/20 rounded-md flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-green-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-              />
-            </svg>
-          </div>
-        );
-      case "code":
-        return (
-          <div className="flex-shrink-0 h-8 w-8 bg-yellow-500/20 rounded-md flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-yellow-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-              />
-            </svg>
-          </div>
-        );
-      case "file":
-        return (
-          <div className="flex-shrink-0 h-8 w-8 bg-blue-500/20 rounded-md flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-blue-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
-  // 获取卡片背景样式
+  // 获取卡片样式
   const getCardStyle = () => {
-    return "bg-gray-800/50 bg-opacity-60 backdrop-blur-sm border border-gray-700/40";
+    return "bg-gray-800/60";
   };
 
   // 复制内容到剪贴板
@@ -177,8 +72,6 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   // 处理删除操作
   const handleDelete = () => {
     if (deleteConfirm) {
-      // 已经确认，执行删除操作
-      console.log("删除项目:", title);
       onDelete && onDelete(); // 调用删除回调函数
     } else {
       // 首次点击，设置确认状态
@@ -194,7 +87,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   // 渲染操作按钮
   const renderActionButtons = () => {
     return (
-      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center space-x-1">
         <button
           className="p-1 rounded-full hover:bg-gray-700/50 relative"
           onClick={handleCopy}
@@ -343,75 +236,71 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     switch (type) {
       case "text":
         return (
-          <div className="mt-2 text-sm text-gray-300 line-clamp-3">
-            {content}
-          </div>
+          <div className="text-sm text-gray-300 line-clamp-2">{content}</div>
         );
       case "image":
         return (
-          <div className="mt-2">
+          <div>
             <img
               src={
                 imageUrl ||
                 "https://images.unsplash.com/photo-1493723843671-1d655e66ac1c?ixlib=rb-1.2.1&auto=format&fit=crop&w=1050&q=80"
               }
-              className="rounded-md w-full h-36 object-cover"
-              alt="风景图片"
+              className="rounded-md w-full h-24 object-cover"
+              alt="图片"
             />
           </div>
         );
       case "link":
         return (
-          <div className="mt-2 p-3 bg-gray-800/50 rounded border border-gray-700/30">
-            <div className="flex items-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-blue-400 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span className="text-sm text-blue-400 hover:underline cursor-pointer truncate">
-                {content}
-              </span>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">{title}</p>
+          <div className="flex items-center p-2 bg-gray-800/50 rounded border border-gray-700/30">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-blue-400 mr-2 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 10-5.656-5.656l-1.102 1.101"
+              />
+            </svg>
+            <span className="text-sm text-gray-200 truncate">{content}</span>
           </div>
         );
       case "code":
         return (
-          <div className="mt-2 bg-gray-800/70 rounded p-3 font-mono text-xs text-gray-300 overflow-x-auto">
-            <pre>{content}</pre>
+          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto">
+            <pre className="whitespace-pre-wrap line-clamp-2">{content}</pre>
           </div>
         );
       case "file":
         return (
-          <div className="mt-2 p-3 bg-gray-800/50 rounded border border-gray-700/30">
-            <div className="flex items-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-blue-400 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <span className="text-sm text-gray-200 truncate">{title}</span>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">{content}</p>
+          <div className="flex items-center p-2 bg-gray-800/50 rounded border border-gray-700/30">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <span className="text-sm text-gray-200 truncate">{content}</span>
           </div>
         );
       default:
@@ -419,25 +308,21 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     }
   };
 
-  const deviceInfo = device ? `来自 ${device} · ` : "";
+  const deviceInfo = device ? `${device} · ` : "";
 
   return (
     <div
       className={`${getCardStyle()} rounded-lg overflow-hidden hover:ring-1 hover:ring-violet-400/40 transition duration-150 group`}
     >
-      <div className="px-4 py-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center space-x-2">
-            {getTypeIcon()}
-            <div>
-              <p className="text-sm font-medium text-white">{title}</p>
-              <p className="text-xs text-gray-400">
-                {deviceInfo}
-                {time}
-              </p>
-            </div>
+      <div className="p-2">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center text-xs text-gray-400">
+            <span className="truncate max-w-[120px]">{deviceInfo}</span>
+            <span>{time}</span>
           </div>
-          {renderActionButtons()}
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+            {renderActionButtons()}
+          </div>
         </div>
         {renderContent()}
       </div>
