@@ -1,62 +1,48 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
-mod cli;
-mod clipboard;
-mod record_manager;
+mod api;
+mod application;
 mod config;
-mod connection;
-mod context;
-mod db;
-mod device;
-mod encrypt;
-mod errors;
-mod file_metadata;
-mod setting;
-mod key_mouse_monitor;
-mod logger;
+mod core;
+mod domain;
+mod infrastructure;
+mod interface;
 mod message;
-mod migrations;
-mod models;
-mod network;
-mod remote_sync;
-mod schema;
-mod uni_clipboard;
 mod utils;
-mod web;
-mod commands;
-use crate::config::Config;
-use crate::uni_clipboard::UniClipboard;
-use crate::uni_clipboard::UniClipboardBuilder;
-use config::CONFIG;
-use context::AppContextBuilder;
-use device::{get_device_manager, Device};
+
+use application::device_service::get_device_manager;
+use config::setting::{Setting, SETTING};
+use core::{context::AppContextBuilder, uniclipboard::UniClipboard, UniClipboardBuilder};
 use log::error;
 use std::sync::Arc;
-use utils::get_local_ip;
+use utils::logging;
 
 // 初始化UniClipboard
-fn init_uniclipboard(config: Config) -> Arc<UniClipboard> {
-    // 获取本地IP地址
-    let local_ip = get_local_ip();
-
-    // 设置设备管理器
+fn init_uniclipboard(user_setting: Setting) -> Arc<UniClipboard> {
+    // 注册当前设备
     {
         let manager = get_device_manager();
-        let device = Device::new(
-            config.device_id.clone(),
-            Some(local_ip.clone()),
-            None,
-            Some(config.webserver_port.unwrap()),
-        );
-        if let Err(e) = manager.add(device.clone()) {
-            error!("添加设备失败: {}", e);
-        }
-        if let Err(e) = manager.set_self_device(&device) {
-            error!("设置自身设备失败: {}", e);
-        }
-        if let Err(e) = manager.set_online(&config.device_id) {
-            error!("设置设备在线状态失败: {}", e);
+        match manager.get_self_device() {
+            Ok(Some(device)) => {
+                SETTING.write().unwrap().set_device_id(device.id.clone());
+                log::info!("Self device already exists: {}", device.id);
+            }
+            Ok(None) => {
+                // TODO: 获取本地IP地址
+                // 目前只支持一个 ip ，后续可能同时支持多个 ip
+                let local_ip = utils::helpers::get_local_ip();
+                let result =
+                    manager.register_self_device(local_ip, user_setting.network.webserver_port);
+                if let Err(e) = result {
+                    panic!("Failed to register self device: {}", e);
+                }
+                let device_id = result.unwrap();
+                log::info!("Registered self device with ID: {}", device_id);
+                SETTING.write().unwrap().set_device_id(device_id);
+            }
+            Err(e) => {
+                panic!("Failed to get self device: {}", e);
+            }
         }
     }
 
@@ -66,7 +52,7 @@ fn init_uniclipboard(config: Config) -> Arc<UniClipboard> {
     // 在运行时中执行异步初始化
     let app = runtime.block_on(async {
         // 创建AppContext，传递配置
-        let app_context = match AppContextBuilder::new(config.clone()).build().await {
+        let app_context = match AppContextBuilder::new(user_setting.clone()).build().await {
             Ok(context) => context,
             Err(e) => {
                 error!("创建AppContext失败: {}", e);
@@ -98,15 +84,15 @@ fn init_uniclipboard(config: Config) -> Arc<UniClipboard> {
 
 fn main() {
     // 初始化日志系统
-    logger::init();
+    logging::init();
 
-    // 加载或创建配置
-    let config = match Config::load(None) {
+    // 加载用户设置
+    let user_setting = match Setting::load(None) {
         Ok(config) => config,
         Err(e) => {
             error!("加载配置失败: {}", e);
             // 如果加载失败，使用默认配置
-            let default_config = Config::default();
+            let default_config = Setting::default();
             // 尝试保存默认配置
             if let Err(e) = default_config.save(None) {
                 error!("保存默认配置失败: {}", e);
@@ -118,15 +104,15 @@ fn main() {
 
     // 确保配置已保存到全局 CONFIG 变量中
     {
-        let mut global_config = CONFIG.write().unwrap();
-        *global_config = config.clone();
+        let mut global_setting = SETTING.write().unwrap();
+        *global_setting = user_setting.clone();
     }
 
     // 创建一个配置的克隆，用于初始化
-    let config_for_init = config.clone();
+    let user_setting_for_init = user_setting.clone();
 
     // 初始化 UniClipboard
-    let uniclipboard_app = init_uniclipboard(config_for_init);
+    let uniclipboard_app = init_uniclipboard(user_setting_for_init);
 
     // 运行应用
     run_app(uniclipboard_app);
@@ -134,8 +120,8 @@ fn main() {
 
 // 运行应用程序
 fn run_app(uniclipboard_app: Arc<UniClipboard>) {
-    use tauri::{Builder, Manager};
     use std::sync::Mutex;
+    use tauri::Builder;
     use tauri_plugin_autostart::MacosLauncher;
 
     Builder::default()
@@ -148,7 +134,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
         .setup(move |app| {
             // 获取应用句柄并克隆以便在异步任务中使用
             let app_handle = app.handle().clone();
-            
+
             // 启动异步任务
             tauri::async_runtime::spawn(async move {
                 // 启动UniClipboard
@@ -163,20 +149,18 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
                     Err(e) => log::error!("Failed to start UniClipboard: {}", e),
                 }
             });
-            
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::greet, 
-            commands::save_setting, 
-            commands::get_setting, 
-            commands::enable_autostart, 
-            commands::disable_autostart, 
-            commands::is_autostart_enabled,
-            commands::get_clipboard_records,
-            commands::get_clipboard_record_by_id,
-            commands::delete_clipboard_record,
-            commands::clear_clipboard_records,
+            api::setting::save_setting,
+            api::setting::get_setting,
+            api::autostart::enable_autostart,
+            api::autostart::disable_autostart,
+            api::autostart::is_autostart_enabled,
+            api::clipboard_record::get_clipboard_records,
+            api::clipboard_record::delete_clipboard_record,
+            api::clipboard_record::clear_clipboard_records,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,8 +8,8 @@ use std::fmt;
 use tokio_tungstenite::tungstenite::Message;
 use twox_hash::xxh3::hash64;
 
-use crate::device::Device;
-use crate::device::DeviceStatus;
+use crate::domain::device::{Device, DeviceStatus};
+
 // pub enum FileType {
 //     Text,
 //     RichText,
