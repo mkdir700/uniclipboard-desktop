@@ -41,6 +41,10 @@ interface SecuritySetting {
 interface NetworkSetting {
   sync_method: string;
   cloud_server: string;
+  webserver_port: number;
+  custom_peer_device: boolean;
+  peer_device_addr: string | null;
+  peer_device_port: number | null;
 }
 
 // 存储设置接口
