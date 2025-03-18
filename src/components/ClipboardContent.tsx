@@ -7,6 +7,8 @@ import {
   isImageType,
   ClipboardItemResponse,
 } from "../api/clipboardItems";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 interface DisplayClipboardItem {
   id: string;
@@ -19,6 +21,17 @@ interface DisplayClipboardItem {
   isFavorited?: boolean;
 }
 
+// 全局监听器状态管理
+interface ListenerState {
+  isActive: boolean;
+  unlisten?: () => void;
+  cleanupPromise?: Promise<() => void>;
+}
+
+const globalListenerState: ListenerState = {
+  isActive: false
+};
+
 const ClipboardContent: React.FC = () => {
   // 剪贴板项目状态
   const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(
@@ -29,11 +42,61 @@ const ClipboardContent: React.FC = () => {
 
   // 加载剪贴板记录
   useEffect(() => {
+    // 先立即加载一次数据
     loadClipboardRecords();
+
+    // 设置监听器的函数
+    const setupListener = async () => {
+      // 只有在还没有活跃的监听器时才设置
+      if (!globalListenerState.isActive) {
+        console.log("设置全局监听器...");
+        globalListenerState.isActive = true;
+        
+        try {
+          console.log("启动后端剪贴板新内容监听...");
+          await invoke("listen_clipboard_new_content");
+          console.log("后端剪贴板新内容监听已启动");
+          
+          console.log("开始监听剪贴板新内容事件...");
+          // 使用listen函数监听全局事件
+          const unlisten = await listen<{
+            record_id: string;
+            timestamp: number;
+          }>("clipboard-new-content", (event) => {
+            console.log("收到新剪贴板内容事件:", event);
+            // 重新加载剪贴板记录
+            loadClipboardRecords();
+          });
+          
+          // 保存解除监听的函数到全局状态
+          globalListenerState.unlisten = unlisten;
+          
+        } catch (err) {
+          console.error("设置监听器失败:", err);
+          globalListenerState.isActive = false;
+        }
+      } else {
+        console.log("监听器已经处于活跃状态，跳过设置");
+      }
+    };
+    
+    // 如果还没有设置监听器，则设置
+    if (!globalListenerState.isActive) {
+      setupListener();
+    } else {
+      console.log("全局监听器已存在，无需再次设置");
+    }
+    
+    // 组件卸载时的清理函数
+    return () => {
+      // 不在这里清理全局监听器，让它持续存在
+      console.log("组件卸载，但保持全局监听器活跃");
+    };
   }, []);
 
   // 从后端加载剪贴板记录
   const loadClipboardRecords = async () => {
+    console.log("开始加载剪贴板记录...");
     setLoading(true);
     try {
       // 使用 clipboardItems.ts 中的 API 获取剪贴板记录
