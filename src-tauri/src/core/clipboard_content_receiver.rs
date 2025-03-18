@@ -6,6 +6,7 @@ use crate::{
 };
 
 use super::transfer::ClipboardTransferMessage;
+use super::event_bus::publish_clipboard_new_content;
 use crate::application::device_service::get_device_manager;
 use crate::message::Payload;
 use anyhow::Result;
@@ -77,11 +78,14 @@ impl ClipboardContentReceiver {
                 let file_path = self.file_storage.store(&payload).await?;
                 let metadata = ClipboardMetadata::from_payload(&payload, &file_path);
                 // 新增记录
-                self.record_manager
+                let record_id = self.record_manager
                     .add_record_with_metadata(&metadata)
                     .await?;
 
                 info!("Downloaded content stored at: {:?}", file_path);
+                
+                // 发布剪贴板新内容事件
+                publish_clipboard_new_content(record_id);
 
                 Ok(payload)
             }

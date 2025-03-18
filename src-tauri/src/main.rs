@@ -142,6 +142,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             Some(vec![]),
         ))
         .manage(Arc::new(Mutex::new(Some(uniclipboard_app.clone()))))
+        .manage(Arc::new(Mutex::new(api::event::EventListenerState::default())))
         .setup(move |app| {
             // 获取应用句柄并克隆以便在异步任务中使用
             let app_handle = app.handle().clone();
@@ -173,6 +174,8 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             api::clipboard_items::delete_clipboard_item,
             api::clipboard_items::clear_clipboard_items,
             api::clipboard_items::get_clipboard_item,
+            api::event::listen_clipboard_new_content,
+            api::event::stop_listen_clipboard_new_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

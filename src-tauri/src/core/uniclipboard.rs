@@ -10,6 +10,7 @@ use tokio::sync::{mpsc, RwLock};
 use crate::config::get_config_dir;
 use crate::core::clipboard_content_receiver::ClipboardContentReceiver;
 use crate::core::download_decision::DownloadDecisionMaker;
+use crate::core::event_bus::publish_clipboard_new_content;
 use crate::core::metadata::MetadataGenerator;
 use crate::core::transfer::ClipboardTransferMessage;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
@@ -117,6 +118,8 @@ impl LocalClipboardManager {
 
                     match result {
                         Ok(record_id) => {
+                            // 发布剪贴板新内容事件
+                            publish_clipboard_new_content(record_id.clone());
                             // 步骤3: 将 metadata 发送至远程
                             let sync_message = ClipboardTransferMessage::from_metadata(
                                 metadata,
@@ -253,6 +256,13 @@ impl RemoteClipboardManager {
                                     error!("Failed to set clipboard content: {:?}", e);
                                     // 恢复到之前的值
                                     *last_payload.write().await = tmp;
+                                } else {
+                                    // 获取最新添加的记录ID，发布剪贴板新内容事件
+                                    if let Ok(records) = record_manager.get_records(Some(1), Some(0)).await {
+                                        if let Some(latest_record) = records.first() {
+                                            publish_clipboard_new_content(latest_record.id.clone());
+                                        }
+                                    }
                                 }
                             }
                             Err(e) => {
