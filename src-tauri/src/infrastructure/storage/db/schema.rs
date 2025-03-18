@@ -4,8 +4,8 @@ diesel::table! {
     clipboard_records (id) {
         id -> Text,
         device_id -> Text,
-        remote_file_url -> Nullable<Text>,
-        local_file_url -> Nullable<Text>,
+        local_file_path -> Nullable<Text>,
+        remote_record_id -> Nullable<Text>,
         content_type -> Text,
         is_favorited -> Bool,
         created_at -> Integer,

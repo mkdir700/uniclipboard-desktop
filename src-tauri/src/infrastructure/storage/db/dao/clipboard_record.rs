@@ -9,8 +9,8 @@ pub fn insert_clipboard_record(conn: &mut SqliteConnection, record: &DbClipboard
     let new_record = NewClipboardRecord {
         id: record.id.clone(),
         device_id: record.device_id.clone(),
-        remote_file_url: record.remote_file_url.clone(),
-        local_file_url: record.local_file_url.clone(),
+        local_file_path: record.local_file_path.clone(),
+        remote_record_id: record.remote_record_id.clone(),
         content_type: record.content_type.clone(),
         is_favorited: record.is_favorited,
         created_at: record.created_at,
@@ -62,4 +62,14 @@ pub fn query_clipboard_records(conn: &mut SqliteConnection, limit: Option<i64>, 
         .context("Failed to query clipboard records")?;
 
     Ok(records)
+}
+
+/// 查询指定ID的剪贴板记录
+pub fn get_clipboard_record_by_id(conn: &mut SqliteConnection, id: &str) -> Result<Option<DbClipboardRecord>> {
+    let record = clipboard_records::table
+        .find(id)
+        .first::<DbClipboardRecord>(conn)
+        .optional()
+        .context("Failed to get clipboard record by id")?;
+    Ok(record)
 }

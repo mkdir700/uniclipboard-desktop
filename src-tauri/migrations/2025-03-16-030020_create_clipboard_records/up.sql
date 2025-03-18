@@ -1,8 +1,8 @@
 CREATE TABLE clipboard_records (
     id TEXT PRIMARY KEY NOT NULL,
     device_id TEXT NOT NULL,
-    local_file_url TEXT NULL,
-    remote_file_url TEXT NULL,
+    local_file_path TEXT NULL,
+    remote_record_id TEXT NULL,
     content_type TEXT NOT NULL,
     is_favorited BOOLEAN NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),

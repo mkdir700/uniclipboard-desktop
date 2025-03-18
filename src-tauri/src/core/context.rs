@@ -8,6 +8,7 @@ use crate::infrastructure::connection::connection_manager::ConnectionManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
 use crate::infrastructure::sync::RemoteSyncManager;
 use crate::infrastructure::sync::WebSocketSync;
+use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::web::WebServer;
 use crate::infrastructure::web::WebSocketHandler;
 use crate::infrastructure::web::WebSocketMessageHandler;
@@ -26,6 +27,7 @@ pub struct AppContext {
     pub websocket_sync: Arc<WebSocketSync>,
     pub webserver: WebServer,
     pub record_manager: Arc<ClipboardRecordManager>,
+    pub file_storage: Arc<FileStorageManager>,
 }
 
 pub struct AppContextBuilder {
@@ -66,13 +68,15 @@ impl AppContextBuilder {
             ),
             websocket_handler.clone(),
         );
-        let clipboard_history = Arc::new(ClipboardRecordManager::new(
-            self.user_setting.storage.max_history_items as usize,
-        ));
 
         remote_sync_manager
             .set_sync_handler(websocket_sync.clone())
             .await;
+
+        let clipboard_history = Arc::new(ClipboardRecordManager::new(
+            self.user_setting.storage.max_history_items as usize,
+        ));
+        let file_storage = Arc::new(FileStorageManager::new().expect("Failed to create FileStorageManager"));
 
         // 返回 AppContext 实例
         Ok(AppContext {
@@ -84,6 +88,7 @@ impl AppContextBuilder {
             websocket_sync,
             webserver,
             record_manager: clipboard_history,
+            file_storage,
         })
     }
 }

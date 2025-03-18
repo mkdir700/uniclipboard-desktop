@@ -8,6 +8,7 @@ use std::fmt;
 use tokio_tungstenite::tungstenite::Message;
 use twox_hash::xxh3::hash64;
 
+use crate::core::transfer::ClipboardTransferMessage;
 use crate::domain::device::{Device, DeviceStatus};
 
 // pub enum FileType {
@@ -266,21 +267,29 @@ impl RegisterDeviceMessage {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", content = "data")]
 pub enum WebSocketMessage {
-    ClipboardSync(ClipboardSyncMessage),
+    ClipboardSync(ClipboardTransferMessage),
     DeviceListSync(DevicesSyncMessage),
     Register(RegisterDeviceMessage),
     Unregister(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ClipboardSyncMessage {
-    pub device_id: String,
-    pub file_code: String,
-    pub file_type: String,
-    pub file_size: u64,
-    pub payload: Option<Payload>,
-    pub timestamp: u64,
-}
+// #[derive(Debug, Serialize, Deserialize, Clone)]
+// pub struct ClipboardSyncMessage {
+//     /// 设备ID
+//     pub device_id: String,
+//     /// 文件代码（用于标识文件）
+//     pub file_code: String,
+//     /// 文件类型
+//     pub file_type: String,
+//     /// 文件大小
+//     pub file_size: u64,
+//     /// 元数据
+//     pub metadata: ClipboardMetadata,
+//     /// 完整内容（可选，大文件可能不包含）
+//     pub payload: Option<Payload>,
+//     /// 时间戳
+//     pub timestamp: u64,
+// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceSyncInfo {
@@ -339,42 +348,5 @@ impl WebSocketMessage {
                 anyhow::bail!("Failed to serialize WebSocketMessage: {}", e)
             }
         }
-    }
-}
-
-impl ClipboardSyncMessage {
-    pub fn from_payload(payload: Payload) -> Self {
-        // !这个方法只是暂时的，后续需要引入一个存储器来生成 file_code
-        let device_id = payload.get_device_id().to_string();
-        let timestamp = payload.get_timestamp().timestamp_millis() as u64;
-        let size = payload.get_content().len();
-        Self {
-            device_id,
-            file_code: "".to_string(),
-            file_type: "".to_string(),
-            file_size: size as u64,
-            payload: Some(payload),
-            timestamp,
-        }
-    }
-    /// 判断消息是否包含有效负载
-    ///
-    /// 内容较大时，可能不包含有效负载，只会有内容的元信息
-    pub fn contains_payload(&self) -> bool {
-        self.payload.is_some()
-    }
-
-    pub fn payload(&self) -> Option<Payload> {
-        self.payload.clone()
-    }
-}
-
-impl fmt::Display for ClipboardSyncMessage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "ClipboardSyncData: {} {} {} {} {}",
-            self.device_id, self.file_code, self.file_type, self.file_size, self.timestamp
-        )
     }
 }

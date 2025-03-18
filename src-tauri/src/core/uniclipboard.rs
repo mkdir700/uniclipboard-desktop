@@ -7,115 +7,83 @@ use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::sync::{mpsc, RwLock};
 
+use crate::config::get_config_dir;
+use crate::core::clipboard_content_receiver::ClipboardContentReceiver;
+use crate::core::download_decision::DownloadDecisionMaker;
+use crate::core::metadata::MetadataGenerator;
+use crate::core::transfer::ClipboardTransferMessage;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
 use crate::infrastructure::storage::db::pool::DB_POOL;
+use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
 use crate::infrastructure::web::WebServer;
 use crate::interface::local_clipboard_trait::LocalClipboardTrait;
-use crate::config::get_config_dir;
 use crate::interface::RemoteSyncManagerTrait;
-use crate::message::{ClipboardSyncMessage, Payload};
+use crate::message::Payload;
 
-pub struct UniClipboard {
+// 本地剪贴板管理器 - 负责监听本地剪贴板变化并推送到远程
+pub struct LocalClipboardManager {
+    device_id: String,
     clipboard: Arc<dyn LocalClipboardTrait>,
     remote_sync: Arc<dyn RemoteSyncManagerTrait>,
     is_running: Arc<RwLock<bool>>,
     is_paused: Arc<RwLock<bool>>,
     last_payload: Arc<RwLock<Option<Payload>>>,
-    webserver: Arc<WebServer>,
-    connection_manager: Arc<ConnectionManager>,
     record_manager: Arc<ClipboardRecordManager>,
+    file_storage: Arc<FileStorageManager>,
+    metadata_generator: Arc<MetadataGenerator>,
 }
 
-impl UniClipboard {
+impl LocalClipboardManager {
     pub fn new(
-        webserver: Arc<WebServer>,
         clipboard: Arc<dyn LocalClipboardTrait>,
         remote_sync: Arc<dyn RemoteSyncManagerTrait>,
-        connection_manager: Arc<ConnectionManager>,
-        clipboard_record_manager: Arc<ClipboardRecordManager>,
-    ) -> Self {
-        Self {
+        record_manager: Arc<ClipboardRecordManager>,
+        device_id: String,
+    ) -> Result<Self> {
+        let file_storage = Arc::new(FileStorageManager::new()?);
+        let metadata_generator = Arc::new(MetadataGenerator::new(device_id.clone()));
+
+        Ok(Self {
+            device_id,
             clipboard,
             remote_sync,
             is_running: Arc::new(RwLock::new(false)),
             is_paused: Arc::new(RwLock::new(false)),
             last_payload: Arc::new(RwLock::new(None)),
-            webserver,
-            connection_manager,
-            record_manager: clipboard_record_manager,
+            record_manager,
+            file_storage,
+            metadata_generator,
+        })
+    }
+
+    pub async fn start(&self, clipboard_receiver: mpsc::Receiver<Payload>) -> Result<()> {
+        {
+            let mut is_running = self.is_running.write().await;
+            *is_running = true;
         }
-    }
-
-    #[cfg_attr(not(feature = "integration_tests"), ignore)]
-    pub fn get_clipboard(&self) -> Arc<dyn LocalClipboardTrait> {
-        self.clipboard.clone()
-    }
-
-    #[cfg_attr(not(feature = "integration_tests"), ignore)]
-    pub fn get_remote_sync(&self) -> Arc<dyn RemoteSyncManagerTrait> {
-        self.remote_sync.clone()
-    }
-
-    pub fn get_record_manager(&self) -> Arc<ClipboardRecordManager> {
-        self.record_manager.clone()
-    }
-
-    pub async fn start(&self) -> Result<()> {
-        let mut is_running = self.is_running.write().await;
-        if *is_running {
-            anyhow::bail!("Already running");
-        }
-        *is_running = true;
-
-        // 初始化数据库
-        // 如果环境变量中没有设置 DATABASE_URL，则设置默认的配置目录
-        if env::var("DATABASE_URL").is_err() {
-            let config_dir = get_config_dir()?;
-            env::set_var(
-                "DATABASE_URL",
-                config_dir.join("uniclipboard.db").to_str().unwrap(),
-            );
-        }
-        DB_POOL.init()?;
-
-        // 与其他设备建立连接
-        self.connection_manager.start().await?;
-
-        // 启动本地剪切板监听
-        let clipboard_receiver = self.clipboard.start_monitoring().await?;
-
-        // 启动远程同步
-        self.remote_sync.start().await?;
-
-        // 启动本地到远程的同步任务
-        self.start_local_to_remote_sync(clipboard_receiver).await?;
-
-        self.start_remote_to_local_sync().await?;
-
-        let webserver = self.webserver.clone();
-        // 启动 Web 服务器
-        tokio::spawn(async move {
-            if let Err(e) = webserver.run().await {
-                error!("Web server error: {:?}", e);
-            }
-        });
-
-        Ok(())
+        let result = self.start_local_to_remote_sync(clipboard_receiver).await;
+        info!("启动本地到远程同步完成");
+        result
     }
 
     async fn start_local_to_remote_sync(
         &self,
         mut clipboard_receiver: mpsc::Receiver<Payload>,
     ) -> Result<()> {
+        let device_id = self.device_id.clone();
         let remote_sync = self.remote_sync.clone();
         let is_running = self.is_running.clone();
         let last_payload = self.last_payload.clone();
         let record_manager = self.record_manager.clone();
+        let file_storage = self.file_storage.clone();
+        let metadata_generator = self.metadata_generator.clone();
+        info!("Local to remote sync is running");
 
         tokio::spawn(async move {
             while *is_running.read().await {
                 if let Some(payload) = clipboard_receiver.recv().await {
+                    info!("Handle new clipboard content: {}", payload);
                     let last_content = last_payload.read().await;
                     if let Some(last_payload) = last_content.as_ref() {
                         if last_payload.is_duplicate(&payload) {
@@ -133,27 +101,109 @@ impl UniClipboard {
                         *last_payload.write().await = Some(payload.clone());
                     }
 
-                    // 添加到剪贴板记录
-                    if let Err(e) = record_manager.add_record(&payload).await {
-                        error!("Failed to add clipboard record: {:?}", e);
-                    }
+                    // 步骤1: 将 Payload 持久化存储并获取存储路径
+                    let storage_path = match file_storage.store(&payload).await {
+                        Ok(path) => path,
+                        Err(e) => {
+                            error!("Failed to store payload: {:?}", e);
+                            continue;
+                        }
+                    };
 
-                    info!("Push to remote: {}", payload);
-                    // ! 这里暂时使用 from_payload 方法，后续需要修改, 后续会引入存储器，由存储器生成 ClipboardSyncMessage
-                    if let Err(e) = remote_sync
-                        .push(ClipboardSyncMessage::from_payload(payload.clone()))
-                        .await
-                    {
-                        // 恢复到之前的值
-                        *last_payload.write().await = tmp;
-                        // 处理错误，可能需要重试或记录日志
-                        error!("Failed to push to remote: {:?}", e);
+                    // 步骤2: 使用 payload + 本地存储路径，构建 metadata
+                    let metadata = metadata_generator.generate_metadata(&payload, &storage_path);
+                    info!("Push to remote: {}", metadata);
+                    let result = record_manager.add_record_with_metadata(&metadata).await;
+
+                    match result {
+                        Ok(record_id) => {
+                            // 步骤3: 将 metadata 发送至远程
+                            let sync_message = ClipboardTransferMessage::from_metadata(
+                                metadata,
+                                device_id.clone(),
+                                record_id,
+                            );
+                            if let Err(e) = remote_sync.push(sync_message).await {
+                                // 恢复到之前的值
+                                *last_payload.write().await = tmp;
+                                // 处理错误，可能需要重试或记录日志
+                                error!("Failed to push to remote: {:?}", e);
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to add record: {:?}", e);
+                            continue;
+                        }
                     }
                 }
             }
         });
 
+        // 确保立即返回，不要阻塞
         Ok(())
+    }
+
+    pub async fn stop(&self) -> Result<()> {
+        let mut is_running = self.is_running.write().await;
+        *is_running = false;
+        Ok(())
+    }
+
+    pub async fn pause(&self) -> Result<()> {
+        let mut is_paused = self.is_paused.write().await;
+        *is_paused = true;
+        self.clipboard.pause().await;
+        Ok(())
+    }
+
+    pub async fn resume(&self) -> Result<()> {
+        let mut is_paused = self.is_paused.write().await;
+        *is_paused = false;
+        self.clipboard.resume().await;
+        Ok(())
+    }
+}
+
+// 远程剪贴板管理器 - 负责从远程获取内容并写入本地剪贴板
+pub struct RemoteClipboardManager {
+    clipboard: Arc<dyn LocalClipboardTrait>,
+    remote_sync: Arc<dyn RemoteSyncManagerTrait>,
+    record_manager: Arc<ClipboardRecordManager>,
+    is_running: Arc<RwLock<bool>>,
+    is_paused: Arc<RwLock<bool>>,
+    last_payload: Arc<RwLock<Option<Payload>>>,
+    download_decision_maker: Arc<DownloadDecisionMaker>,
+    content_receiver: Arc<ClipboardContentReceiver>,
+}
+
+impl RemoteClipboardManager {
+    pub fn new(
+        clipboard: Arc<dyn LocalClipboardTrait>,
+        remote_sync: Arc<dyn RemoteSyncManagerTrait>,
+        record_manager: Arc<ClipboardRecordManager>,
+        file_storage: Arc<FileStorageManager>,
+    ) -> Self {
+        Self {
+            clipboard,
+            remote_sync,
+            record_manager: record_manager.clone(),
+            is_running: Arc::new(RwLock::new(false)),
+            is_paused: Arc::new(RwLock::new(false)),
+            last_payload: Arc::new(RwLock::new(None)),
+            download_decision_maker: Arc::new(DownloadDecisionMaker::new()),
+            content_receiver: Arc::new(ClipboardContentReceiver::new(file_storage, record_manager)),
+        }
+    }
+
+    pub async fn start(&self) -> Result<()> {
+        {
+            let mut is_running = self.is_running.write().await;
+            *is_running = true;
+        }
+        info!("开始启动远程同步服务");
+        self.remote_sync.start().await?;
+        info!("远程同步服务已启动，开始处理远程到本地同步");
+        self.start_remote_to_local_sync().await
     }
 
     async fn start_remote_to_local_sync(&self) -> Result<()> {
@@ -162,39 +212,58 @@ impl UniClipboard {
         let is_running = self.is_running.clone();
         let last_payload = self.last_payload.clone();
         let record_manager = self.record_manager.clone();
+        let download_decision_maker = self.download_decision_maker.clone();
+        let content_receiver = self.content_receiver.clone();
 
         tokio::spawn(async move {
             while *is_running.read().await {
                 match remote_sync.pull(Some(Duration::from_secs(10))).await {
-                    Ok(content) => {
-                        if content.contains_payload() {
-                            let payload = content.payload().unwrap();
-                            info!("Set local clipboard: {}", payload);
-                            let tmp = last_payload.read().await.clone();
-                            {
-                                *last_payload.write().await = Some(payload.clone());
-                            }
+                    Ok(message) => {
+                        // 经过下载决策层，决定是否下载
+                        if !download_decision_maker.should_download(&message).await {
+                            info!("内容类型不在下载范围内，跳过: {}", message);
+                            continue;
+                        }
 
-                            // 添加到剪贴板记录
-                            if let Err(e) = record_manager.add_record(&payload).await {
-                                error!("Failed to add clipboard record: {:?}", e);
-                            }
+                        // 检查是否超过最大允许大小
+                        if download_decision_maker.exceeds_max_size(&message) {
+                            info!("内容超过最大允许大小，跳过: {}", message);
+                            continue;
+                        }
 
-                            if let Err(e) = clipboard.set_clipboard_content(payload).await {
-                                // 恢复到之前的值
-                                *last_payload.write().await = tmp;
-                                error!("Failed to set clipboard content: {:?}", e);
+                        // 添加到剪贴板记录
+                        if let Err(e) = record_manager
+                            .add_record_with_transfer_message(&message)
+                            .await
+                        {
+                            error!("Failed to add clipboard record: {:?}", e);
+                        }
+
+                        // 接收内容
+                        match content_receiver.receive(message).await {
+                            Ok(payload) => {
+                                info!("Set local clipboard: {}", payload);
+                                let tmp = last_payload.read().await.clone();
+                                {
+                                    *last_payload.write().await = Some(payload.clone());
+                                }
+
+                                // 设置本地剪贴板
+                                if let Err(e) = clipboard.set_clipboard_content(payload).await {
+                                    error!("Failed to set clipboard content: {:?}", e);
+                                    // 恢复到之前的值
+                                    *last_payload.write().await = tmp;
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to receive clipboard content: {:?}", e);
                             }
                         }
-                        // ! 其他情况，等待用户主动下载
                     }
                     Err(e) => {
-                        // 处理错误，可能需要重试或记录日志
                         error!("Failed to pull from remote: {:?}", e);
                     }
                 }
-                // 添加适当的延迟，避免过于频繁的同步
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         });
 
@@ -203,6 +272,128 @@ impl UniClipboard {
 
     pub async fn stop(&self) -> Result<()> {
         let mut is_running = self.is_running.write().await;
+        *is_running = false;
+        Ok(())
+    }
+
+    pub async fn pause(&self) -> Result<()> {
+        let mut is_paused = self.is_paused.write().await;
+        *is_paused = true;
+        Ok(())
+    }
+
+    pub async fn resume(&self) -> Result<()> {
+        let mut is_paused = self.is_paused.write().await;
+        *is_paused = false;
+        Ok(())
+    }
+}
+
+// 主协调器 - 保持对外接口不变
+pub struct UniClipboard {
+    local_manager: Arc<LocalClipboardManager>,
+    remote_manager: Arc<RemoteClipboardManager>,
+    webserver: Arc<WebServer>,
+    connection_manager: Arc<ConnectionManager>,
+    clipboard_receiver: Option<mpsc::Receiver<Payload>>,
+}
+
+impl UniClipboard {
+    pub fn new(
+        device_id: String,
+        webserver: Arc<WebServer>,
+        clipboard: Arc<dyn LocalClipboardTrait>,
+        remote_sync: Arc<dyn RemoteSyncManagerTrait>,
+        connection_manager: Arc<ConnectionManager>,
+        clipboard_record_manager: Arc<ClipboardRecordManager>,
+        file_storage: Arc<FileStorageManager>,
+    ) -> Self {
+        // 创建本地剪贴板管理器
+        let local_manager = Arc::new(
+            LocalClipboardManager::new(
+                clipboard.clone(),
+                remote_sync.clone(),
+                clipboard_record_manager.clone(),
+                device_id.clone(),
+            )
+            .expect("Failed to create LocalClipboardManager"),
+        );
+
+        let remote_manager = Arc::new(RemoteClipboardManager::new(
+            clipboard.clone(),
+            remote_sync.clone(),
+            clipboard_record_manager.clone(),
+            file_storage.clone(),
+        ));
+
+        Self {
+            local_manager,
+            remote_manager,
+            webserver,
+            connection_manager,
+            clipboard_receiver: None,
+        }
+    }
+
+    pub fn get_record_manager(&self) -> Arc<ClipboardRecordManager> {
+        self.local_manager.record_manager.clone()
+    }
+
+    pub fn get_file_storage_manager(&self) -> Arc<FileStorageManager> {
+        self.local_manager.file_storage.clone()
+    }
+
+    pub async fn start(&self) -> Result<()> {
+        // 使用作用域来确保锁被及时释放
+        {
+            let mut is_running = self.local_manager.is_running.write().await;
+            if *is_running {
+                anyhow::bail!("Already running");
+            }
+            *is_running = true;
+        } // 锁在这里被释放
+
+        // 初始化数据库
+        // 如果环境变量中没有设置 DATABASE_URL，则设置默认的配置目录
+        if env::var("DATABASE_URL").is_err() {
+            let config_dir = get_config_dir()?;
+            env::set_var(
+                "DATABASE_URL",
+                config_dir.join("uniclipboard.db").to_str().unwrap(),
+            );
+        }
+        DB_POOL.init()?;
+
+        // 与其他设备建立连接
+        info!("Starting connection manager");
+        self.connection_manager.start().await?;
+
+        // 启动本地剪切板监听
+        info!("Starting local clipboard monitoring");
+        let clipboard_receiver = self.local_manager.clipboard.start_monitoring().await?;
+
+        // 启动本地到远程的同步任务
+        info!("Starting local to remote sync");
+        self.local_manager.start(clipboard_receiver).await?;
+
+        // 启动远程到本地的同步任务
+        info!("Starting remote to local sync");
+        self.remote_manager.start().await?;
+
+        let webserver = self.webserver.clone();
+        // 启动 Web 服务器
+        tokio::spawn(async move {
+            if let Err(e) = webserver.run().await {
+                error!("Web server error: {:?}", e);
+            }
+        });
+
+        info!("UniClipboard 全部启动完成");
+        Ok(())
+    }
+
+    pub async fn stop(&self) -> Result<()> {
+        let mut is_running = self.local_manager.is_running.write().await;
         if !*is_running {
             anyhow::bail!("Not running");
         }
@@ -212,10 +403,16 @@ impl UniClipboard {
         self.connection_manager.stop().await;
 
         // 停止本地剪切板监听
-        self.clipboard.stop_monitoring().await?;
+        self.local_manager.clipboard.stop_monitoring().await?;
 
         // 停止远程同步
-        self.remote_sync.stop().await?;
+        self.remote_manager.remote_sync.stop().await?;
+
+        // 停止本地管理器
+        self.local_manager.stop().await?;
+
+        // 停止远程管理器
+        self.remote_manager.stop().await?;
 
         // 停止 Web 服务器
         self.webserver.shutdown().await?;
@@ -224,14 +421,17 @@ impl UniClipboard {
     }
 
     pub async fn pause(&self) -> Result<()> {
-        let mut is_paused = self.is_paused.write().await;
+        let mut is_paused = self.local_manager.is_paused.write().await;
         *is_paused = true;
 
-        // 暂停本地剪切板监听
-        self.clipboard.pause().await;
+        // 暂停本地剪切板管理器
+        self.local_manager.pause().await?;
+
+        // 暂停远程剪切板管理器
+        self.remote_manager.pause().await?;
 
         // 暂停远程同步
-        if let Err(e) = self.remote_sync.pause().await {
+        if let Err(e) = self.remote_manager.remote_sync.pause().await {
             error!("Failed to pause remote sync: {:?}", e);
         }
 
@@ -239,14 +439,17 @@ impl UniClipboard {
     }
 
     pub async fn resume(&self) -> Result<()> {
-        let mut is_paused = self.is_paused.write().await;
+        let mut is_paused = self.local_manager.is_paused.write().await;
         *is_paused = false;
 
-        // 恢复本地剪切板监听
-        self.clipboard.resume().await;
+        // 恢复本地剪切板管理器
+        self.local_manager.resume().await?;
+
+        // 恢复远程剪切板管理器
+        self.remote_manager.resume().await?;
 
         // 恢复远程同步
-        if let Err(e) = self.remote_sync.resume().await {
+        if let Err(e) = self.remote_manager.remote_sync.resume().await {
             error!("Failed to resume remote sync: {:?}", e);
         }
 
@@ -254,8 +457,6 @@ impl UniClipboard {
     }
 
     pub async fn wait_for_stop(&self) -> Result<()> {
-        let mut last_is_sleep = false;
-
         loop {
             select! {
                 _ = ctrl_c() => {
@@ -271,257 +472,3 @@ impl UniClipboard {
         Ok(())
     }
 }
-
-
-// #[cfg(test)]
-// mod tests {
-//     use crate::{
-//         connection::ConnectionManager, message::ClipboardSyncMessage,
-//         remote_sync::RemoteClipboardSync, web::WebSocketHandler, web::WebSocketMessageHandler,
-//     };
-
-//     use super::*;
-//     use anyhow::Result;
-//     use async_trait::async_trait;
-//     use bytes::Bytes;
-//     use serial_test::serial;
-//     use std::fs;
-//     use std::{env, net::SocketAddr, sync::Arc};
-//     use tokio::sync::Mutex;
-
-//     fn setup_test_env() {
-//         env::set_var("DATABASE_URL", "uniclipboard_tests.db");
-//     }
-
-//     #[ctor::ctor]
-//     fn setup() {
-//         setup_test_env();
-//     }
-
-//     // 这个函数会在模块中的所有测试运行之后执行
-//     #[ctor::dtor]
-//     fn teardown() {
-//         // 删除测试数据库文件
-//         if let Err(e) = fs::remove_file("uniclipboard_tests.db") {
-//             println!("清理测试数据库时出错: {}", e);
-//         }
-//     }
-
-//     // 模拟本地剪贴板
-//     struct MockLocalClipboard {
-//         content: Arc<Mutex<Option<Payload>>>,
-//     }
-
-//     #[async_trait::async_trait]
-//     impl LocalClipboardTrait for MockLocalClipboard {
-//         async fn start_monitoring(&self) -> Result<tokio::sync::mpsc::Receiver<Payload>> {
-//             // 简化实现，返回一个空的接收器
-//             let (_, rx) = tokio::sync::mpsc::channel(10);
-//             Ok(rx)
-//         }
-
-//         async fn read(&self) -> Result<Payload> {
-//             Ok(self.content.lock().await.clone().unwrap())
-//         }
-
-//         async fn write(&self, content: Payload) -> Result<()> {
-//             *self.content.lock().await = Some(content);
-//             Ok(())
-//         }
-
-//         async fn stop_monitoring(&self) -> Result<()> {
-//             Ok(())
-//         }
-
-//         async fn set_clipboard_content(&self, content: Payload) -> Result<()> {
-//             *self.content.lock().await = Some(content);
-//             Ok(())
-//         }
-
-//         async fn pause(&self) {}
-
-//         async fn resume(&self) {}
-//     }
-
-//     // 模拟远程同步管理器
-//     struct MockRemoteSync {
-//         content: Arc<Mutex<Option<Payload>>>,
-//     }
-
-//     #[async_trait]
-//     impl RemoteSyncManagerTrait for MockRemoteSync {
-//         async fn sync(&self) -> Result<()> {
-//             Ok(())
-//         }
-
-//         async fn set_sync_handler(&self, _handler: Arc<dyn RemoteClipboardSync>) {}
-
-//         async fn start(&self) -> Result<()> {
-//             Ok(())
-//         }
-
-//         async fn stop(&self) -> Result<()> {
-//             Ok(())
-//         }
-
-//         async fn push(&self, message: ClipboardSyncMessage) -> Result<()> {
-//             *self.content.lock().await = Some(message.payload.unwrap());
-//             Ok(())
-//         }
-
-//         async fn pull(
-//             &self,
-//             _timeout: Option<std::time::Duration>,
-//         ) -> Result<ClipboardSyncMessage> {
-//             Ok(ClipboardSyncMessage::from_payload(
-//                 self.content.lock().await.clone().unwrap(),
-//             ))
-//         }
-
-//         async fn pause(&self) -> Result<()> {
-//             Ok(())
-//         }
-
-//         async fn resume(&self) -> Result<()> {
-//             Ok(())
-//         }
-//     }
-
-//     // 模拟键鼠监控器
-//     struct MockKeyMouseMonitor {
-//         is_sleep: Arc<Mutex<bool>>,
-//     }
-
-//     #[async_trait::async_trait]
-//     impl KeyMouseMonitorTrait for MockKeyMouseMonitor {
-//         async fn start(&self) {}
-
-//         async fn is_sleep(&self) -> bool {
-//             *self.is_sleep.lock().await
-//         }
-//     }
-
-//     #[tokio::test]
-//     #[serial]
-//     async fn test_uni_clipboard_creation() {
-//         let clipboard = Arc::new(MockLocalClipboard {
-//             content: Arc::new(Mutex::new(None)),
-//         });
-//         let remote_sync = Arc::new(MockRemoteSync {
-//             content: Arc::new(Mutex::new(None)),
-//         });
-//         let key_mouse_monitor = Arc::new(MockKeyMouseMonitor {
-//             is_sleep: Arc::new(Mutex::new(false)),
-//         });
-//         let connection_manager = Arc::new(ConnectionManager::new());
-//         let websocket_message_handler =
-//             Arc::new(WebSocketMessageHandler::new(connection_manager.clone()));
-//         let websocket_handler = Arc::new(WebSocketHandler::new(
-//             websocket_message_handler.clone(),
-//             connection_manager.clone(),
-//         ));
-//         let webserver = WebServer::new(
-//             SocketAddr::new("0.0.0.0".parse().unwrap(), 8114),
-//             websocket_handler,
-//         );
-
-//         let uni_clipboard = UniClipboardBuilder::new()
-//             .set_local_clipboard(clipboard)
-//             .set_remote_sync(remote_sync)
-//             .set_key_mouse_monitor(key_mouse_monitor)
-//             .set_webserver(webserver)
-//             .set_connection_manager(connection_manager)
-//             .build()
-//             .expect("Failed to build UniClipboard");
-
-//         assert!(uni_clipboard.start().await.is_ok());
-//         assert!(uni_clipboard.stop().await.is_ok());
-//     }
-
-//     #[tokio::test]
-//     #[serial]
-//     async fn test_uni_clipboard_sync() {
-//         let clipboard = Arc::new(MockLocalClipboard {
-//             content: Arc::new(Mutex::new(None)),
-//         });
-//         let remote_sync = Arc::new(MockRemoteSync {
-//             content: Arc::new(Mutex::new(None)),
-//         });
-//         let connection_manager = Arc::new(ConnectionManager::new());
-//         let websocket_message_handler =
-//             Arc::new(WebSocketMessageHandler::new(connection_manager.clone()));
-//         let websocket_handler = Arc::new(WebSocketHandler::new(
-//             websocket_message_handler.clone(),
-//             connection_manager.clone(),
-//         ));
-//         let webserver = WebServer::new(
-//             SocketAddr::new("0.0.0.0".parse().unwrap(), 8114),
-//             websocket_handler,
-//         );
-
-//         let uni_clipboard = UniClipboardBuilder::new()
-//             .set_local_clipboard(clipboard.clone())
-//             .set_remote_sync(remote_sync.clone())
-//             .set_webserver(webserver)
-//             .set_connection_manager(connection_manager)
-//             .build()
-//             .expect("Failed to build UniClipboard");
-
-//         assert!(uni_clipboard.start().await.is_ok());
-
-//         // 模拟远程同步
-//         let test_payload = Payload::new_text(
-//             Bytes::from("Test content".to_string()),
-//             "device_id".to_string(),
-//             chrono::Utc::now(),
-//         );
-//         assert!(remote_sync
-//             .push(ClipboardSyncMessage::from_payload(test_payload.clone()))
-//             .await
-//             .is_ok());
-
-//         // 等待同步
-//         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-//         // 检查本地剪贴板是否已更新
-//         let local_content = clipboard.content.lock().await;
-//         assert_eq!(*local_content, Some(test_payload));
-
-//         assert!(uni_clipboard.stop().await.is_ok());
-//     }
-
-//     #[tokio::test]
-//     #[serial]
-//     async fn test_uni_clipboard_pause_resume() {
-//         let clipboard = Arc::new(MockLocalClipboard {
-//             content: Arc::new(Mutex::new(None)),
-//         });
-//         let remote_sync = Arc::new(MockRemoteSync {
-//             content: Arc::new(Mutex::new(None)),
-//         });
-//         let connection_manager = Arc::new(ConnectionManager::new());
-//         let websocket_message_handler =
-//             Arc::new(WebSocketMessageHandler::new(connection_manager.clone()));
-//         let websocket_handler = Arc::new(WebSocketHandler::new(
-//             websocket_message_handler.clone(),
-//             connection_manager.clone(),
-//         ));
-//         let webserver = WebServer::new(
-//             SocketAddr::new("0.0.0.0".parse().unwrap(), 8114),
-//             websocket_handler,
-//         );
-
-//         let uni_clipboard = UniClipboardBuilder::new()
-//             .set_local_clipboard(clipboard)
-//             .set_remote_sync(remote_sync)
-//             .set_webserver(webserver)
-//             .set_connection_manager(connection_manager)
-//             .build()
-//             .expect("Failed to build UniClipboard");
-
-//         assert!(uni_clipboard.start().await.is_ok());
-//         assert!(uni_clipboard.pause().await.is_ok());
-//         assert!(uni_clipboard.resume().await.is_ok());
-//         assert!(uni_clipboard.stop().await.is_ok());
-//     }
-// }

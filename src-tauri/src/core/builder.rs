@@ -3,11 +3,10 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::{
-    infrastructure::{
+    config::Setting, infrastructure::{
         connection::connection_manager::ConnectionManager,
-        storage::record_manager::ClipboardRecordManager, web::WebServer,
-    },
-    interface::{LocalClipboardTrait, RemoteSyncManagerTrait},
+        storage::{file_storage::FileStorageManager, record_manager::ClipboardRecordManager}, web::WebServer,
+    }, interface::{LocalClipboardTrait, RemoteSyncManagerTrait}
 };
 
 use super::UniClipboard;
@@ -18,6 +17,7 @@ pub struct UniClipboardBuilder {
     remote_sync: Option<Arc<dyn RemoteSyncManagerTrait>>,
     connection_manager: Option<Arc<ConnectionManager>>,
     record_manager: Option<Arc<ClipboardRecordManager>>,
+    file_storage: Option<Arc<FileStorageManager>>,
 }
 
 impl UniClipboardBuilder {
@@ -28,6 +28,7 @@ impl UniClipboardBuilder {
             remote_sync: None,
             connection_manager: None,
             record_manager: None,
+            file_storage: None,
         }
     }
 
@@ -56,6 +57,11 @@ impl UniClipboardBuilder {
         self
     }
 
+    pub fn set_file_storage(mut self, file_storage: Arc<FileStorageManager>) -> Self {
+        self.file_storage = Some(file_storage);
+        self
+    }
+
     pub fn build(self) -> Result<UniClipboard> {
         let webserver = self
             .webserver
@@ -72,12 +78,20 @@ impl UniClipboardBuilder {
         let record_manager = self
             .record_manager
             .ok_or_else(|| anyhow::anyhow!("No record manager set"))?;
+        let file_storage = self
+            .file_storage
+            .ok_or_else(|| anyhow::anyhow!("No file storage set"))?;
+
+        let device_id = Setting::get_instance().get_device_id();
+
         Ok(UniClipboard::new(
+            device_id,
             Arc::new(webserver),
             clipboard,
             remote_sync,
             connection_manager,
             record_manager,
+            file_storage,
         ))
     }
 }

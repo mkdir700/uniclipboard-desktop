@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use crate::config::Setting;
 use crate::interface::{RemoteClipboardSync as RemoteClipboardSyncTrait, RemoteSyncManagerTrait};
-use crate::message::ClipboardSyncMessage;
+use crate::core::transfer::ClipboardTransferMessage;
 use anyhow::Result;
 use tokio::sync::RwLock;
 use async_trait::async_trait;
@@ -36,7 +36,7 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
         *sync_handler = Some(handler);
     }
 
-    async fn push(&self, message: ClipboardSyncMessage) -> Result<()> {
+    async fn push(&self, message: ClipboardTransferMessage) -> Result<()> {
         let sync_handler = self.sync_handler.read().await;
         if let Some(handler) = sync_handler.as_ref() {
             handler.push(message).await
@@ -45,7 +45,7 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
         }
     }
 
-    async fn pull(&self, timeout: Option<Duration>) -> Result<ClipboardSyncMessage> {
+    async fn pull(&self, timeout: Option<Duration>) -> Result<ClipboardTransferMessage> {
         let sync_handler = self.sync_handler.read().await;
         if let Some(handler) = sync_handler.as_ref() {
             handler.pull(timeout).await

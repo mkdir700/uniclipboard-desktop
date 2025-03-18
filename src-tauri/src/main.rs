@@ -12,6 +12,7 @@ mod utils;
 
 use application::device_service::get_device_manager;
 use config::setting::{Setting, SETTING};
+use infrastructure::storage::db::pool::DB_POOL;
 use core::{context::AppContextBuilder, uniclipboard::UniClipboard, UniClipboardBuilder};
 use log::error;
 use std::sync::Arc;
@@ -67,6 +68,7 @@ fn init_uniclipboard(user_setting: Setting) -> Arc<UniClipboard> {
             .set_remote_sync(app_context.remote_sync_manager)
             .set_connection_manager(app_context.connection_manager)
             .set_record_manager(app_context.record_manager)
+            .set_file_storage(app_context.file_storage)
             .build()
         {
             Ok(app) => app,
@@ -110,6 +112,15 @@ fn main() {
 
     // 创建一个配置的克隆，用于初始化
     let user_setting_for_init = user_setting.clone();
+
+    // 初始化数据库
+    match DB_POOL.init() {
+        Ok(_) => log::info!("Database initialized successfully"),
+        Err(e) => {
+            error!("Failed to initialize database: {}", e);
+            panic!("Failed to initialize database: {}", e);
+        }
+    };
 
     // 初始化 UniClipboard
     let uniclipboard_app = init_uniclipboard(user_setting_for_init);

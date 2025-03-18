@@ -2,9 +2,10 @@ use crate::application::device_service::{
     get_device_manager, subscribe_new_devices, GLOBAL_DEVICE_MANAGER,
 };
 use crate::config::Setting;
+use crate::core::transfer::ClipboardTransferMessage;
 use crate::domain::device::Device;
 use crate::infrastructure::web::handlers::message_handler::MessageSource;
-use crate::message::{ClipboardSyncMessage, WebSocketMessage};
+use crate::message::WebSocketMessage;
 use anyhow::Result;
 use futures::future::join_all;
 use log::{error, info, warn};
@@ -26,7 +27,7 @@ pub struct ConnectionManager {
     pub outgoing: OutgoingConnectionManager,
     addr_device_id_map: Arc<RwLock<HashMap<IpPort, DeviceId>>>,
     // TODO: 需要解耦 clipboard_message_sync_sender
-    clipboard_message_sync_sender: Arc<broadcast::Sender<ClipboardSyncMessage>>,
+    clipboard_message_sync_sender: Arc<broadcast::Sender<ClipboardTransferMessage>>,
     listen_new_devices_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     try_connect_offline_devices_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     user_setting: Setting,
@@ -276,12 +277,12 @@ impl ConnectionManager {
     }
 
     // TODO: 需要解耦
-    pub async fn send_clipboard_sync(&self, message: ClipboardSyncMessage) {
+    pub async fn send_clipboard_sync(&self, message: ClipboardTransferMessage) {
         let _ = self.clipboard_message_sync_sender.send(message);
     }
 
     // TODO: 需要解耦
-    pub async fn subscribe_clipboard_sync(&self) -> broadcast::Receiver<ClipboardSyncMessage> {
+    pub async fn subscribe_clipboard_sync(&self) -> broadcast::Receiver<ClipboardTransferMessage> {
         self.clipboard_message_sync_sender.subscribe()
     }
 

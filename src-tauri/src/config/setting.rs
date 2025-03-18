@@ -6,10 +6,19 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use super::utils::get_setting_path;
-use crate::domain::content_type::ContentTypes;
 
 // 全局设置实例
 pub static SETTING: Lazy<RwLock<Setting>> = Lazy::new(|| RwLock::new(Setting::default()));
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AllowSyncContentTypes {
+    pub text: bool,
+    pub image: bool,
+    pub link: bool,
+    pub file: bool,
+    pub code_snippet: bool,
+    pub rich_text: bool,
+}
 
 // 同步设置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,7 +28,7 @@ pub struct SyncSetting {
     // 同步频率: "realtime", "30s", "1m", "5m", "15m"
     pub sync_frequency: String,
     // 同步内容类型
-    pub content_types: ContentTypes,
+    pub content_types: AllowSyncContentTypes,
     // 最大同步文件大小 (MB)
     pub max_file_size: u32,
 }
@@ -91,7 +100,7 @@ impl Setting {
             sync: SyncSetting {
                 auto_sync: true,
                 sync_frequency: "realtime".to_string(),
-                content_types: ContentTypes {
+                content_types: AllowSyncContentTypes {
                     text: true,
                     image: true,
                     link: true,
@@ -99,7 +108,7 @@ impl Setting {
                     code_snippet: true,
                     rich_text: true,
                 },
-                max_file_size: 10,
+                max_file_size: 10, // MB
             },
             security: SecuritySetting {
                 end_to_end_encryption: true,

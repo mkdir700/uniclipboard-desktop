@@ -4,9 +4,10 @@ use crate::domain::device::Device;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
 use crate::infrastructure::connection::DeviceId;
 use crate::message::{
-    ClipboardSyncMessage, DeviceSyncInfo, DevicesSyncMessage, RegisterDeviceMessage,
+    DeviceSyncInfo, DevicesSyncMessage, RegisterDeviceMessage,
     WebSocketMessage,
 };
+use crate::core::transfer::ClipboardTransferMessage;
 use log::{debug, error, info};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -24,7 +25,7 @@ impl MessageHandler {
     /// 将消息集中到一个 channel 中, 然后由上层获取
     pub async fn handle_clipboard_sync(
         &self,
-        data: ClipboardSyncMessage,
+        data: ClipboardTransferMessage,
         message_source: MessageSource,
     ) {
         info!("Received clipboard sync message from {:?}", message_source);

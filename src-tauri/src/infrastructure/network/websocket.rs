@@ -1,7 +1,7 @@
 use crate::application::device_service::get_device_manager;
 use crate::config::Setting;
 use crate::domain::device::Device;
-use crate::message::ClipboardSyncMessage;
+use crate::core::transfer::ClipboardTransferMessage;
 use crate::message::DeviceSyncInfo;
 use crate::message::DevicesSyncMessage;
 use crate::message::RegisterDeviceMessage;
@@ -201,7 +201,7 @@ impl WebSocketClient {
 
     /// 接收剪贴板同步消息
     #[allow(dead_code)]
-    pub async fn receive_clipboard_sync(&self) -> Result<Option<ClipboardSyncMessage>> {
+    pub async fn receive_clipboard_sync(&self) -> Result<Option<ClipboardTransferMessage>> {
         let message = self.subscribe().recv().await?;
         match message {
             Message::Text(text) => {

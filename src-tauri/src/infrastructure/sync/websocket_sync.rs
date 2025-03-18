@@ -1,7 +1,8 @@
 use crate::config::Setting as Config;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
 use crate::interface::RemoteClipboardSync;
-use crate::message::{ClipboardSyncMessage, WebSocketMessage};
+use crate::message::WebSocketMessage;
+use crate::core::transfer::ClipboardTransferMessage;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::info;
@@ -55,14 +56,14 @@ impl RemoteClipboardSync for WebSocketSync {
     }
 
     /// 向所有已连接的客户端广播消息
-    async fn push(&self, message: ClipboardSyncMessage) -> Result<()> {
+    async fn push(&self, message: ClipboardTransferMessage) -> Result<()> {
         let message = WebSocketMessage::ClipboardSync(message);
         self.connection_manager.broadcast(&message, &None).await?;
         Ok(())
     }
 
     /// 从任意已连接的客户端接收剪贴板同步消息
-    async fn pull(&self, timeout: Option<Duration>) -> Result<ClipboardSyncMessage> {
+    async fn pull(&self, timeout: Option<Duration>) -> Result<ClipboardTransferMessage> {
         let _ = timeout;
         // TODO: 从连接管理器中获取到消息，这个逻辑不太合理，需要优化
         let mut rx = self.connection_manager.subscribe_clipboard_sync().await;

@@ -1,7 +1,7 @@
 use crate::config::Setting as Config;
 use crate::infrastructure::network::WebDAVClient;
 use crate::interface::RemoteClipboardSync;
-use crate::message::ClipboardSyncMessage;
+use crate::core::transfer::ClipboardTransferMessage;
 use crate::message::Payload;
 use anyhow::Result;
 use async_trait::async_trait;
@@ -120,7 +120,7 @@ impl RemoteClipboardSync for WebDavSync {
     /// # Errors
     ///
     /// This function will return an error if the upload to the WebDAV server fails.
-    async fn push(&self, message: ClipboardSyncMessage) -> Result<()> {
+    async fn push(&self, message: ClipboardTransferMessage) -> Result<()> {
         let _path = self
             .client
             .upload(self.base_path.clone(), message.payload.unwrap())
@@ -160,7 +160,7 @@ impl RemoteClipboardSync for WebDavSync {
     /// This function will return an error if:
     /// - There's a failure in communicating with the WebDAV server
     /// - The latest file cannot be retrieved or parsed into a Payload
-    async fn pull(&self, timeout: Option<Duration>) -> Result<ClipboardSyncMessage> {
+    async fn pull(&self, timeout: Option<Duration>) -> Result<ClipboardTransferMessage> {
         // FIXME: 当前的逻辑，如果是在程序首次启动后，就会从云端拉取最新的
         // 应该给出选项，在程序启动后，是否立即从云端拉取最近的一个内容
         let start_time = Instant::now();

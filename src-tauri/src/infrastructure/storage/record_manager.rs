@@ -1,3 +1,4 @@
+use crate::core::transfer::{ClipboardMetadata, ClipboardTransferMessage};
 use crate::infrastructure::storage::db::schema::clipboard_records;
 use anyhow::Result;
 use chrono::Utc;
@@ -5,13 +6,12 @@ use diesel::prelude::*;
 use log::{error, info};
 use uuid::Uuid;
 
-use crate::message::Payload;
-
 use super::db::dao::clipboard_record;
 use super::db::models::clipboard_record::DbClipboardRecord;
 use super::db::pool::DB_POOL;
 
 /// 剪贴板历史记录管理器
+#[derive(Clone)]
 pub struct ClipboardRecordManager {
     max_records: usize,
 }
@@ -23,19 +23,22 @@ impl ClipboardRecordManager {
     }
 
     /// 添加一条剪贴板记录
-    pub async fn add_record(&self, payload: &Payload) -> Result<()> {
-        let device_id = payload.get_device_id().to_string();
-        let file_url = self.generate_file_url(payload);
-        let content_type = payload.get_content_type().to_string();
+    ///
+    /// # Arguments
+    /// * `metadata` - 剪贴板内容元数据
+    ///
+    /// # Returns
+    /// * `Result<String>` - 返回记录ID
+    pub async fn add_record_with_metadata(&self, metadata: &ClipboardMetadata) -> Result<String> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp() as i32;
 
         let record = DbClipboardRecord {
-            id,
-            device_id,
-            remote_file_url: None,
-            local_file_url: None,
-            content_type,
+            id: id.clone(),
+            device_id: metadata.get_device_id().to_string(),
+            local_file_path: Some(metadata.get_storage_path().to_string()),
+            remote_record_id: None,
+            content_type: metadata.get_content_type().to_string(),
             is_favorited: false,
             created_at: now,
             updated_at: now,
@@ -47,23 +50,32 @@ impl ClipboardRecordManager {
         // 清理旧记录
         self.cleanup_old_records().await;
 
-        Ok(())
+        Ok(id)
     }
 
-    /// 生成文件URL
-    fn generate_file_url(&self, payload: &Payload) -> String {
-        match payload {
-            Payload::Text(_) => format!(
-                "uniclipboard://{}/text/{}",
-                payload.get_device_id(),
-                payload.get_key()
-            ),
-            Payload::Image(_) => format!(
-                "uniclipboard://{}/image/{}",
-                payload.get_device_id(),
-                payload.get_key()
-            ),
-        }
+    pub async fn add_record_with_transfer_message(
+        &self,
+        message: &ClipboardTransferMessage,
+    ) -> Result<String> {
+        let content_type = message.metadata.get_content_type().to_string();
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().timestamp() as i32;
+
+        let record = DbClipboardRecord {
+            id: id.clone(),
+            device_id: message.sender_id.clone(),
+            local_file_path: None,
+            remote_record_id: Some(message.record_id.clone()),
+            content_type,
+            is_favorited: false,
+            created_at: now,
+            updated_at: now,
+        };
+
+        let mut conn = DB_POOL.get_connection()?;
+        clipboard_record::insert_clipboard_record(&mut conn, &record)?;
+
+        Ok(id)
     }
 
     /// 获取历史记录列表
@@ -78,6 +90,22 @@ impl ClipboardRecordManager {
         let records =
             clipboard_record::query_clipboard_records(&mut conn, Some(limit), Some(offset))?;
         Ok(records)
+    }
+
+    /// 获取所有的记录
+    pub async fn get_all_records(
+        &self
+    ) -> Result<Vec<DbClipboardRecord>> {
+        let mut conn = DB_POOL.get_connection()?;
+        let records = clipboard_record::query_clipboard_records(&mut conn, None, None)?;
+        Ok(records)
+    }
+
+    /// 获取指定ID的历史记录
+    pub async fn get_record_by_id(&self, id: &str) -> Result<Option<DbClipboardRecord>> {
+        let mut conn = DB_POOL.get_connection()?;
+        let record = clipboard_record::get_clipboard_record_by_id(&mut conn, id)?;
+        Ok(record)
     }
 
     /// 删除指定ID的历史记录
@@ -131,39 +159,5 @@ impl ClipboardRecordManager {
         info!("Cleaned up {} old clipboard records", deleted);
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bytes::Bytes;
-    use chrono::Utc;
-
-    #[tokio::test]
-    async fn test_add_and_get_records() {
-        // 初始化数据库
-        DB_POOL.init().unwrap();
-
-        let manager = ClipboardRecordManager::new(100);
-
-        // 清空所有记录
-        manager.clear_all_records().await.unwrap();
-
-        // 创建测试数据
-        let payload = Payload::new_text(
-            Bytes::from("Test content"),
-            "test-device".to_string(),
-            Utc::now(),
-        );
-
-        // 添加记录
-        manager.add_record(&payload).await.unwrap();
-
-        // 获取记录
-        let records = manager.get_records(Some(10), Some(0)).await.unwrap();
-
-        assert!(!records.is_empty());
-        assert_eq!(records[0].device_id, "test-device");
     }
 }
