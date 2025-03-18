@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface ClipboardItemProps {
   type: "text" | "image" | "link" | "code" | "file";
@@ -7,7 +7,9 @@ interface ClipboardItemProps {
   device?: string;
   imageUrl?: string;
   isDownloaded?: boolean;
+  isFavorited?: boolean;
   onDelete?: () => void;
+  onCopy?: () => Promise<boolean>;
 }
 
 const ClipboardItem: React.FC<ClipboardItemProps> = ({
@@ -17,12 +19,24 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   device = "",
   imageUrl,
   isDownloaded = false,
+  isFavorited = false,
   onDelete,
+  onCopy,
 }) => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(false);
+  const [deleteTimer, setDeleteTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  // 组件卸载时清除计时器
+  useEffect(() => {
+    return () => {
+      if (deleteTimer) {
+        clearTimeout(deleteTimer);
+      }
+    };
+  }, [deleteTimer]);
 
   // 获取卡片样式
   const getCardStyle = () => {
@@ -30,7 +44,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   };
 
   // 复制内容到剪贴板
-  const handleCopy = () => {
+  const handleCopy = async () => {
     // 如果是文件类型且未下载，先模拟下载过程
     if (type === "file" && !isDownloaded) {
       setDownloading(true);
@@ -57,30 +71,44 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   };
 
   // 执行复制操作
-  const performCopy = () => {
-    navigator.clipboard
-      .writeText(content)
-      .then(() => {
+  const performCopy = async () => {
+    try {
+      // 如果提供了onCopy回调则使用它
+      if (onCopy) {
+        const success = await onCopy();
+        if (success) {
+          setCopySuccess(true);
+          setTimeout(() => setCopySuccess(false), 2000);
+        }
+      } else {
+        // 否则使用浏览器API
+        await navigator.clipboard.writeText(content);
         setCopySuccess(true);
         setTimeout(() => setCopySuccess(false), 2000);
-      })
-      .catch((err) => {
-        console.error("复制失败:", err);
-      });
+      }
+    } catch (err) {
+      console.error("复制失败:", err);
+    }
   };
 
   // 处理删除操作
-  const handleDelete = () => {
-    if (deleteConfirm) {
+  const handleDeleteClick = () => {
+    if (deleteConfirmation) {
+      if (deleteTimer) {
+        clearTimeout(deleteTimer);
+        setDeleteTimer(null);
+      }
       onDelete && onDelete(); // 调用删除回调函数
+      setDeleteConfirmation(false);
     } else {
       // 首次点击，设置确认状态
-      setDeleteConfirm(true);
+      setDeleteConfirmation(true);
 
       // 2秒后自动重置确认状态
-      setTimeout(() => {
-        setDeleteConfirm(false);
+      const timer = setTimeout(() => {
+        setDeleteConfirmation(false);
       }, 2000);
+      setDeleteTimer(timer);
     }
   };
 
@@ -158,10 +186,12 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
             </svg>
           )}
         </button>
+
+        {/* 收藏按钮 */}
         <button className="p-1 rounded-full hover:bg-gray-700/50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4 text-gray-400"
+            className={`h-4 w-4 ${isFavorited ? "text-yellow-400 fill-yellow-400" : "text-gray-400"}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -174,6 +204,8 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
             />
           </svg>
         </button>
+
+        {/* 分享按钮 */}
         <button className="p-1 rounded-full hover:bg-gray-700/50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -190,12 +222,14 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
             />
           </svg>
         </button>
+
+        {/* 删除按钮 */}
         <button
           className="p-1 rounded-full hover:bg-gray-700/50"
-          onClick={handleDelete}
-          title={deleteConfirm ? "再次点击确认删除" : "删除"}
+          onClick={handleDeleteClick}
+          title={deleteConfirmation ? "再次点击确认删除" : "删除"}
         >
-          {deleteConfirm ? (
+          {deleteConfirmation ? (
             // 确认删除状态 - 红色X图标
             <svg
               xmlns="http://www.w3.org/2000/svg"

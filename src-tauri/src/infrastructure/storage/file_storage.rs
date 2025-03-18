@@ -1,12 +1,11 @@
 use anyhow::Result;
 use bytes::Bytes;
-use log::{error, info};
+use log::info;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use uuid::Uuid;
 use tokio::fs::File as TokioFile;
-use tokio::io::{AsyncReadExt, BufReader};
+use tokio::io::BufReader;
 use tokio_util::io::ReaderStream;
 
 use crate::message::Payload;

@@ -1,115 +1,174 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import ClipboardItem from "./ClipboardItem";
+import {
+  getClipboardItems,
+  deleteClipboardItem,
+  getDisplayType,
+  isImageType,
+  ClipboardItemResponse,
+} from "../api/clipboardItems";
+
+interface DisplayClipboardItem {
+  id: string;
+  type: "text" | "image" | "link" | "code" | "file";
+  content: string;
+  time: string;
+  device?: string;
+  imageUrl?: string;
+  isDownloaded?: boolean;
+  isFavorited?: boolean;
+}
 
 const ClipboardContent: React.FC = () => {
-  // 模拟剪贴板数据
-  const initialClipboardItems = [
-    {
-      id: 1,
-      type: "text" as const,
-      title: "会议笔记", 
-      content: "下周一上午10点产品评审会议，准备第三季度功能规划演示文稿。",
-      time: "10分钟前",
-      device: "MacBook",
-    },
-    {
-      id: 2,
-      type: "link" as const,
-      title: "GitHub 仓库",
-      content: "https://github.com/tauri-apps/tauri",
-      time: "30分钟前",
-      device: "iPhone",
-    },
-    {
-      id: 3,
-      type: "code" as const,
-      title: "React 动画效果",
-      content: `function animateElement(selector) {
-  const element = document.querySelector(selector);
-  if (!element) return;
-  
-  element.classList.add('animate-pulse');
-  setTimeout(() => {
-    element.classList.remove('animate-pulse');
-  }, 1000);
-}`,
-      time: "1小时前",
-      device: "Chrome",
-    },
-    {
-      id: 4,
-      type: "file" as const,
-      title: "项目预算.xlsx",
-      content: "2.4 MB · Excel 文件",
-      time: "3小时前",
-      device: "MacBook",
-    },
-    {
-      id: 5,
-      type: "image" as const,
-      title: "产品设计稿",
-      content: "设计图片",
-      imageUrl:
-        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-      time: "昨天",
-      device: "Figma",
-    },
-  ];
+  // 剪贴板项目状态
+  const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(
+    []
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // 使用状态来管理剪贴板项
-  const [clipboardItems, setClipboardItems] = useState(initialClipboardItems);
+  // 加载剪贴板记录
+  useEffect(() => {
+    loadClipboardRecords();
+  }, []);
 
-  // 处理删除剪贴板项
-  const handleDeleteItem = (id: number) => {
-    setClipboardItems(prevItems => prevItems.filter(item => item.id !== id));
+  // 从后端加载剪贴板记录
+  const loadClipboardRecords = async () => {
+    setLoading(true);
+    try {
+      // 使用 clipboardItems.ts 中的 API 获取剪贴板记录
+      const records = await getClipboardItems(20, 0);
+
+      // 转换记录为显示项目
+      const items: DisplayClipboardItem[] = records.map(convertToDisplayItem);
+
+      setClipboardItems(items);
+    } catch (err) {
+      console.error("加载剪贴板记录失败", err);
+      setError("加载剪贴板记录失败");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // 获取今天和昨天的项目
-  const todayItems = clipboardItems.slice(0, 3);
-  const yesterdayItems = clipboardItems.slice(3);
+  // 将剪贴板项目转换为显示项目
+  const convertToDisplayItem = (
+    item: ClipboardItemResponse
+  ): DisplayClipboardItem => {
+    // 获取适合UI显示的类型
+    const type = getDisplayType(item.content_type);
+
+    // 格式化时间
+    const createdAt = new Date(item.created_at * 1000); // 转换为毫秒
+    const now = new Date();
+    const diffMs = now.getTime() - createdAt.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+
+    let timeString: string;
+    if (diffMins < 1) {
+      timeString = "刚刚";
+    } else if (diffMins < 60) {
+      timeString = `${diffMins}分钟前`;
+    } else if (diffMins < 1440) {
+      timeString = `${Math.floor(diffMins / 60)}小时前`;
+    } else {
+      timeString = `${Math.floor(diffMins / 1440)}天前`;
+    }
+
+    // 处理图片URL
+    let imageUrl = undefined;
+    if (isImageType(item.content_type)) {
+      imageUrl = item.display_content.startsWith("data:")
+        ? item.display_content
+        : `data:image/png;base64,${item.display_content}`;
+    }
+
+    // 创建显示项目
+    return {
+      id: item.id,
+      type,
+      content: item.display_content,
+      time: timeString,
+      device: item.device_id,
+      imageUrl,
+      isDownloaded: item.is_downloaded,
+      isFavorited: item.is_favorited,
+    };
+  };
+
+  // 处理删除剪贴板项
+  const handleDeleteItem = async (id: string) => {
+    try {
+      // 使用 clipboardItems.ts 中的 API 删除记录
+      const success = await deleteClipboardItem(id);
+
+      if (success) {
+        // 更新状态
+        setClipboardItems((prevItems) =>
+          prevItems.filter((item) => item.id !== id)
+        );
+      } else {
+        setError("删除剪贴板项目失败");
+      }
+    } catch (err) {
+      console.error("删除剪贴板项目失败", err);
+      setError("删除剪贴板项目失败");
+    }
+  };
+
+  // 处理复制到剪贴板（这个功能暂未在API中实现，可以后续添加）
+  const handleCopyItem = async (itemId: string) => {
+    try {
+      // 这里可以实现调用复制到剪贴板的API
+      // 可以使用 itemId 查找项目并复制
+      console.log(`复制项目 ID: ${itemId}`);
+      // 暂时返回成功
+      return true;
+    } catch (err) {
+      console.error("复制到剪贴板失败", err);
+      setError("复制到剪贴板失败");
+      return false;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-hidden flex items-center justify-center">
+        <div className="text-gray-500">加载中...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 overflow-hidden flex items-center justify-center">
+        <div className="text-red-500">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-hidden">
       <div className="h-full overflow-y-auto hide-scrollbar px-4 py-4">
         <div className="space-y-4">
-          {/* 今天 */}
           <div className="space-y-3">
-            {todayItems.length > 0 ? (
-              todayItems.map((item) => (
+            {clipboardItems.length > 0 ? (
+              clipboardItems.map((item) => (
                 <ClipboardItem
                   key={item.id}
                   type={item.type}
                   content={item.content}
                   time={item.time}
                   device={item.device}
-                  imageUrl={item.type === "image" ? item.imageUrl : undefined}
+                  imageUrl={item.imageUrl}
+                  isDownloaded={item.isDownloaded}
+                  isFavorited={item.isFavorited}
                   onDelete={() => handleDeleteItem(item.id)}
+                  onCopy={() => handleCopyItem(item.id)}
                 />
               ))
             ) : (
-              <div className="text-gray-500 text-center py-4">
-                今天没有剪贴板项
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            {yesterdayItems.length > 0 ? (
-              yesterdayItems.map((item) => (
-                <ClipboardItem
-                  key={item.id}
-                  type={item.type}
-                  content={item.content}
-                  time={item.time}
-                  device={item.device}
-                  imageUrl={item.type === "image" ? item.imageUrl : undefined}
-                  onDelete={() => handleDeleteItem(item.id)}
-                />
-              ))
-            ) : (
-              <div className="text-gray-500 text-center py-4">
-                昨天没有剪贴板项
-              </div>
+              <div className="text-gray-500 text-center py-4">没有剪贴板项</div>
             )}
           </div>
         </div>

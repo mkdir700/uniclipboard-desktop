@@ -1,3 +1,3 @@
 pub mod autostart;
-pub mod clipboard_record;
+pub mod clipboard_items;
 pub mod setting;

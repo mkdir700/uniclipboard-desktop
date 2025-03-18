@@ -169,9 +169,10 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             api::autostart::enable_autostart,
             api::autostart::disable_autostart,
             api::autostart::is_autostart_enabled,
-            api::clipboard_record::get_clipboard_records,
-            api::clipboard_record::delete_clipboard_record,
-            api::clipboard_record::clear_clipboard_records,
+            api::clipboard_items::get_clipboard_items,
+            api::clipboard_items::delete_clipboard_item,
+            api::clipboard_items::clear_clipboard_items,
+            api::clipboard_items::get_clipboard_item,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

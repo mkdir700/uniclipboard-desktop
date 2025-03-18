@@ -1,4 +1,4 @@
-use crate::core::transfer::{ClipboardMetadata, ClipboardTransferMessage};
+use crate::core::transfer::{ClipboardMetadata, ClipboardTransferMessage, ContentType};
 use crate::infrastructure::storage::db::schema::clipboard_records;
 use anyhow::Result;
 use chrono::Utc;
@@ -38,7 +38,7 @@ impl ClipboardRecordManager {
             device_id: metadata.get_device_id().to_string(),
             local_file_path: Some(metadata.get_storage_path().to_string()),
             remote_record_id: None,
-            content_type: metadata.get_content_type().to_string(),
+            content_type: metadata.get_content_type().as_str().to_string(),
             is_favorited: false,
             created_at: now,
             updated_at: now,
@@ -57,7 +57,7 @@ impl ClipboardRecordManager {
         &self,
         message: &ClipboardTransferMessage,
     ) -> Result<String> {
-        let content_type = message.metadata.get_content_type().to_string();
+        let content_type = message.metadata.get_content_type().as_str().to_string();
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp() as i32;
 

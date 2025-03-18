@@ -6,13 +6,59 @@ use twox_hash::xxh3::hash64;
 
 use crate::message::Payload;
 
+/// 剪贴板内容类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ContentType {
+    Text,
+    Image,
+    Link,
+    File,
+    CodeSnippet,
+    RichText,
+}
+
+impl ContentType {
+    /// 获取内容类型的字符串表示
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ContentType::Text => "text",
+            ContentType::Image => "image",
+            ContentType::Link => "link",
+            ContentType::File => "file",
+            ContentType::CodeSnippet => "code_snippet",
+            ContentType::RichText => "rich_text",
+        }
+    }
+    
+    /// 从字符串解析内容类型
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "text" => Some(ContentType::Text),
+            "image" => Some(ContentType::Image),
+            "link" => Some(ContentType::Link),
+            "file" => Some(ContentType::File),
+            "code_snippet" => Some(ContentType::CodeSnippet),
+            "rich_text" => Some(ContentType::RichText),
+            _ => None,
+        }
+    }
+}
+
+impl Display for ContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// 剪贴板内容元数据
-/// 
-/// 用于网络传输，不包含实际内容
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClipboardMetadata {
     Text(TextMetadata),
     Image(ImageMetadata),
+    Link(TextMetadata),
+    File(TextMetadata),
+    CodeSnippet(TextMetadata),
+    RichText(TextMetadata),
 }
 
 /// 文本内容元数据
@@ -76,6 +122,42 @@ impl ClipboardMetadata {
                     storage_path: storage_path.to_string_lossy().to_string(),
                 })
             }
+            // Payload::Link(link) => {
+            //     ClipboardMetadata::Link(TextMetadata {
+            //         content_hash: hash64(&link.content),
+            //         device_id: link.device_id.clone(),
+            //         timestamp: link.timestamp,
+            //         length: link.content.len(),
+            //         storage_path: storage_path.to_string_lossy().to_string(),
+            //     })
+            // }
+            // Payload::File(file) => {
+            //     ClipboardMetadata::File(TextMetadata {
+            //         content_hash: hash64(&file.content),
+            //         device_id: file.device_id.clone(),
+            //         timestamp: file.timestamp,
+            //         length: file.content.len(),
+            //         storage_path: storage_path.to_string_lossy().to_string(),
+            //     })
+            // }
+            // Payload::CodeSnippet(code) => {
+            //     ClipboardMetadata::CodeSnippet(TextMetadata {
+            //         content_hash: hash64(&code.content),
+            //         device_id: code.device_id.clone(),
+            //         timestamp: code.timestamp,
+            //         length: code.content.len(),
+            //         storage_path: storage_path.to_string_lossy().to_string(),
+            //     })
+            // }
+            // Payload::RichText(rich_text) => {
+            //     ClipboardMetadata::RichText(TextMetadata {
+            //         content_hash: hash64(&rich_text.content),
+            //         device_id: rich_text.device_id.clone(),
+            //         timestamp: rich_text.timestamp,
+            //         length: rich_text.content.len(),
+            //         storage_path: storage_path.to_string_lossy().to_string(),
+            //     })
+            // }
         }
     }
 
@@ -84,6 +166,10 @@ impl ClipboardMetadata {
         match self {
             ClipboardMetadata::Text(text) => &text.device_id,
             ClipboardMetadata::Image(image) => &image.device_id,
+            ClipboardMetadata::Link(link) => &link.device_id,
+            ClipboardMetadata::File(file) => &file.device_id,
+            ClipboardMetadata::CodeSnippet(code) => &code.device_id,
+            ClipboardMetadata::RichText(rich_text) => &rich_text.device_id,
         }
     }
 
@@ -92,14 +178,22 @@ impl ClipboardMetadata {
         match self {
             ClipboardMetadata::Text(text) => text.timestamp,
             ClipboardMetadata::Image(image) => image.timestamp,
+            ClipboardMetadata::Link(link) => link.timestamp,
+            ClipboardMetadata::File(file) => file.timestamp,
+            ClipboardMetadata::CodeSnippet(code) => code.timestamp,
+            ClipboardMetadata::RichText(rich_text) => rich_text.timestamp,
         }
     }
 
     /// 获取内容类型
-    pub fn get_content_type(&self) -> &str {
+    pub fn get_content_type(&self) -> ContentType {
         match self {
-            ClipboardMetadata::Text(_) => "text",
-            ClipboardMetadata::Image(_) => "image",
+            ClipboardMetadata::Text(_) => ContentType::Text,
+            ClipboardMetadata::Image(_) => ContentType::Image,
+            ClipboardMetadata::Link(_) => ContentType::Link,
+            ClipboardMetadata::File(_) => ContentType::File,
+            ClipboardMetadata::CodeSnippet(_) => ContentType::CodeSnippet,
+            ClipboardMetadata::RichText(_) => ContentType::RichText,
         }
     }
 
@@ -108,6 +202,10 @@ impl ClipboardMetadata {
         match self {
             ClipboardMetadata::Text(text) => text.content_hash,
             ClipboardMetadata::Image(image) => image.content_hash,
+            ClipboardMetadata::Link(link) => link.content_hash,
+            ClipboardMetadata::File(file) => file.content_hash,
+            ClipboardMetadata::CodeSnippet(code) => code.content_hash,
+            ClipboardMetadata::RichText(rich_text) => rich_text.content_hash,
         }
     }
 
@@ -122,6 +220,18 @@ impl ClipboardMetadata {
                 let size_info = format!("{}x{}", image.width, image.height);
                 format!("img_{:016x}_{}", image.content_hash, size_info)
             }
+            ClipboardMetadata::Link(link) => {
+                format!("{:016x}", link.content_hash)
+            }
+            ClipboardMetadata::File(file) => {
+                format!("{:016x}", file.content_hash)
+            }
+            ClipboardMetadata::CodeSnippet(code) => {
+                format!("{:016x}", code.content_hash)
+            }
+            ClipboardMetadata::RichText(rich_text) => {
+                format!("{:016x}", rich_text.content_hash)
+            }
         }
     }
 
@@ -130,6 +240,10 @@ impl ClipboardMetadata {
         match self {
             ClipboardMetadata::Text(text) => &text.storage_path,
             ClipboardMetadata::Image(image) => &image.storage_path,
+            ClipboardMetadata::Link(link) => &link.storage_path,
+            ClipboardMetadata::File(file) => &file.storage_path,
+            ClipboardMetadata::CodeSnippet(code) => &code.storage_path,
+            ClipboardMetadata::RichText(rich_text) => &rich_text.storage_path,
         }
     }
 
@@ -145,6 +259,18 @@ impl ClipboardMetadata {
                 i1.height == i2.height &&
                 // 文件大小相差不超过10%
                 (i1.size as f64 - i2.size as f64).abs() / (i1.size as f64) <= 0.1
+            }
+            (ClipboardMetadata::Link(l1), ClipboardMetadata::Link(l2)) => {
+                l1.content_hash == l2.content_hash
+            }
+            (ClipboardMetadata::File(f1), ClipboardMetadata::File(f2)) => {
+                f1.content_hash == f2.content_hash
+            }
+            (ClipboardMetadata::CodeSnippet(c1), ClipboardMetadata::CodeSnippet(c2)) => {
+                c1.content_hash == c2.content_hash
+            }
+            (ClipboardMetadata::RichText(r1), ClipboardMetadata::RichText(r2)) => {
+                r1.content_hash == r2.content_hash
             }
             _ => false,
         }
@@ -221,6 +347,37 @@ impl ClipboardTransferMessage {
                     image.size,
                 )
             }
+            _ => {
+                unimplemented!()
+            }
+            // ClipboardMetadata::Link(link) => {
+            //     Payload::new_link(
+            //         bytes,
+            //         self.sender_id.clone(),
+            //         self.metadata.get_timestamp(),
+            //     )
+            // }
+            // ClipboardMetadata::File(file) => {
+            //     Payload::new_file(
+            //         bytes,
+            //         self.sender_id.clone(),
+            //         self.metadata.get_timestamp(),
+            //     )
+            // }
+            // ClipboardMetadata::CodeSnippet(code) => {
+            //     Payload::new_code_snippet(
+            //         bytes,
+            //         self.sender_id.clone(),
+            //         self.metadata.get_timestamp(),
+            //     )
+            // }
+            // ClipboardMetadata::RichText(rich_text) => {
+            //     Payload::new_rich_text(
+            //         bytes,
+            //         self.sender_id.clone(),
+            //         self.metadata.get_timestamp(),
+            //     )
+            // }
         }
     }
 }
@@ -228,7 +385,6 @@ impl ClipboardTransferMessage {
 impl Display for ClipboardTransferMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let content_type = self.metadata.get_content_type();
-        let timestamp = self.metadata.get_timestamp().format("%Y-%m-%d %H:%M:%S");
         
         write!(
             f, 
@@ -236,7 +392,7 @@ impl Display for ClipboardTransferMessage {
             self.message_id, 
             content_type, 
             self.sender_id, 
-            timestamp
+            self.metadata.get_timestamp().format("%Y-%m-%d %H:%M:%S")
         )
     }
 }

@@ -1,10 +1,7 @@
-use anyhow::Result;
-use std::sync::Arc;
-
 use crate::core::transfer::ClipboardMetadata;
 use crate::config::Setting;
 
-use super::transfer::ClipboardTransferMessage;
+use super::transfer::{ClipboardTransferMessage, ContentType};
 
 /// 下载决策器
 /// 
@@ -26,12 +23,12 @@ impl DownloadDecisionMaker {
         
         // 根据内容类型检查用户设置
         match content_type {
-            "text" => self.setting.sync.content_types.text,
-            "image" => self.setting.sync.content_types.image,
-            "link" => self.setting.sync.content_types.link,
-            "file" => self.setting.sync.content_types.file,
-            "code_snippet" => self.setting.sync.content_types.code_snippet,
-            "rich_text" => self.setting.sync.content_types.rich_text,
+            ContentType::Text => self.setting.sync.content_types.text,
+            ContentType::Image => self.setting.sync.content_types.image,
+            ContentType::Link => self.setting.sync.content_types.link,
+            ContentType::File => self.setting.sync.content_types.file,
+            ContentType::CodeSnippet => self.setting.sync.content_types.code_snippet,
+            ContentType::RichText => self.setting.sync.content_types.rich_text,
             _ => false, // 未知类型默认不下载
         }
     }
@@ -44,18 +41,18 @@ impl DownloadDecisionMaker {
         
         // 根据内容类型设置基础优先级
         let base_priority = match content_type {
-            "text" => 1,  // 文本优先级最高
-            "link" => 2,  // 链接次之
-            "code_snippet" => 3,
-            "rich_text" => 4,
-            "image" => 5,  // 图片优先级较低
-            "file" => 10,  // 文件优先级最低
+            ContentType::Text => 1,  // 文本优先级最高
+            ContentType::Link => 2,  // 链接次之
+            ContentType::CodeSnippet => 3,
+            ContentType::RichText => 4,
+            ContentType::Image => 5,  // 图片优先级较低
+            ContentType::File => 10,  // 文件优先级最低
             _ => 100,      // 未知类型最低优先级
         };
         
         // 根据文件大小调整优先级
         // 大文件优先级降低
-        let size_adjustment = if message.metadata.get_content_type() == "image" {
+        let size_adjustment = if content_type == ContentType::Image {
             match &message.metadata {
                 ClipboardMetadata::Image(img) => {
                     if img.size > 10 * 1024 * 1024 {  // 大于10MB
@@ -83,6 +80,10 @@ impl DownloadDecisionMaker {
         match &message.metadata {
             ClipboardMetadata::Text(text) => (text.length as u64) > max_size_bytes,
             ClipboardMetadata::Image(img) => (img.size as u64) > max_size_bytes,
+            ClipboardMetadata::Link(link) => (link.length as u64) > max_size_bytes,
+            ClipboardMetadata::File(file) => (file.length as u64) > max_size_bytes,
+            ClipboardMetadata::CodeSnippet(code) => (code.length as u64) > max_size_bytes,
+            ClipboardMetadata::RichText(rich_text) => (rich_text.length as u64) > max_size_bytes,
         }
     }
 }
