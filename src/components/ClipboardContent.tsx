@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from "react";
 import ClipboardItem from "./ClipboardItem";
 import {
-  getClipboardItems,
-  deleteClipboardItem,
   getDisplayType,
   isImageType,
   ClipboardItemResponse,
-  copyClipboardItem,
 } from "../api/clipboardItems";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { 
+  fetchClipboardItems, 
+  removeClipboardItem, 
+  copyToClipboard,
+  clearError as clearReduxError
+} from "../store/slices/clipboardSlice";
 
 interface DisplayClipboardItem {
   id: string;
@@ -34,12 +38,12 @@ const globalListenerState: ListenerState = {
 };
 
 const ClipboardContent: React.FC = () => {
-  // 剪贴板项目状态
-  const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // 使用 Redux 状态和 dispatch
+  const dispatch = useAppDispatch();
+  const { items: reduxItems, loading, error } = useAppSelector(state => state.clipboard);
+  
+  // 本地状态用于转换后的显示项目
+  const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>([]);
 
   // 加载剪贴板记录
   useEffect(() => {
@@ -94,25 +98,21 @@ const ClipboardContent: React.FC = () => {
     };
   }, []);
 
-  // 从后端加载剪贴板记录
+  // 从 Redux 加载剪贴板记录
   const loadClipboardRecords = async () => {
     console.log("开始加载剪贴板记录...");
-    setLoading(true);
-    try {
-      // 使用 clipboardItems.ts 中的 API 获取剪贴板记录
-      const records = await getClipboardItems(20, 0);
-
-      // 转换记录为显示项目
-      const items: DisplayClipboardItem[] = records.map(convertToDisplayItem);
-
-      setClipboardItems(items);
-    } catch (err) {
-      console.error("加载剪贴板记录失败", err);
-      setError("加载剪贴板记录失败");
-    } finally {
-      setLoading(false);
-    }
+    dispatch(fetchClipboardItems());
   };
+
+  // 监听 Redux 中的 items 变化，转换为显示项目
+  useEffect(() => {
+    if (reduxItems && reduxItems.length > 0) {
+      const items: DisplayClipboardItem[] = reduxItems.map(convertToDisplayItem);
+      setClipboardItems(items);
+    } else {
+      setClipboardItems([]);
+    }
+  }, [reduxItems]);
 
   // 将剪贴板项目转换为显示项目
   const convertToDisplayItem = (
@@ -161,37 +161,32 @@ const ClipboardContent: React.FC = () => {
 
   // 处理删除剪贴板项
   const handleDeleteItem = async (id: string) => {
-    try {
-      // 使用 clipboardItems.ts 中的 API 删除记录
-      const success = await deleteClipboardItem(id);
-
-      if (success) {
-        // 更新状态
-        setClipboardItems((prevItems) =>
-          prevItems.filter((item) => item.id !== id)
-        );
-      } else {
-        setError("删除剪贴板项目失败");
-      }
-    } catch (err) {
-      console.error("删除剪贴板项目失败", err);
-      setError("删除剪贴板项目失败");
-    }
+    dispatch(removeClipboardItem(id));
   };
 
-  // 处理复制到剪贴板（这个功能暂未在API中实现，可以后续添加）
+  // 处理复制到剪贴板
   const handleCopyItem = async (itemId: string) => {
     try {
       console.log(`复制项目 ID: ${itemId}`);
-      return await copyClipboardItem(itemId);
+      const result = await dispatch(copyToClipboard(itemId)).unwrap();
+      return result.success;
     } catch (err) {
       console.error("复制到剪贴板失败", err);
-      setError("复制到剪贴板失败");
       return false;
     }
   };
 
-  if (loading) {
+  // 清除错误信息
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        dispatch(clearReduxError());
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, dispatch]);
+
+  if (loading && clipboardItems.length === 0) {
     return (
       <div className="flex-1 overflow-hidden flex items-center justify-center">
         <div className="text-gray-500">加载中...</div>
@@ -199,16 +194,13 @@ const ClipboardContent: React.FC = () => {
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex-1 overflow-hidden flex items-center justify-center">
-        <div className="text-red-500">{error}</div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 overflow-hidden">
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mx-4 mt-2">
+          {error}
+        </div>
+      )}
       <div className="h-full overflow-y-auto hide-scrollbar px-4 py-4">
         <div className="space-y-4">
           <div className="space-y-3">
