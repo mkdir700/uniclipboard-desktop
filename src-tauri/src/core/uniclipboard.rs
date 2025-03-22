@@ -481,4 +481,8 @@ impl UniClipboard {
         info!("剪贴板同步已停止");
         Ok(())
     }
+    
+    pub fn get_local_clipboard(&self) -> Arc<dyn LocalClipboardTrait> {
+        self.local_manager.clipboard.clone()
+    }
 }

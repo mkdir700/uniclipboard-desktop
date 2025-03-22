@@ -71,6 +71,20 @@ export async function clearClipboardItems(): Promise<number> {
 }
 
 /**
+ * 复制剪贴板内容
+ * @param id 剪贴板条目ID
+ * @returns Promise，成功返回true
+ */
+export async function copyClipboardItem(id: string): Promise<boolean> {
+  try {
+    return await invoke('copy_clipboard_item', { id });
+  } catch (error) {
+    console.error('复制剪贴板记录失败:', error);
+    throw error;
+  }
+}
+
+/**
  * 根据内容类型获取符合前端显示的类型
  * @param contentType 内容类型字符串
  * @returns 适合UI显示的类型

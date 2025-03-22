@@ -6,6 +6,7 @@ import {
   getDisplayType,
   isImageType,
   ClipboardItemResponse,
+  copyClipboardItem,
 } from "../api/clipboardItems";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -29,7 +30,7 @@ interface ListenerState {
 }
 
 const globalListenerState: ListenerState = {
-  isActive: false
+  isActive: false,
 };
 
 const ClipboardContent: React.FC = () => {
@@ -51,12 +52,12 @@ const ClipboardContent: React.FC = () => {
       if (!globalListenerState.isActive) {
         console.log("设置全局监听器...");
         globalListenerState.isActive = true;
-        
+
         try {
           console.log("启动后端剪贴板新内容监听...");
           await invoke("listen_clipboard_new_content");
           console.log("后端剪贴板新内容监听已启动");
-          
+
           console.log("开始监听剪贴板新内容事件...");
           // 使用listen函数监听全局事件
           const unlisten = await listen<{
@@ -67,10 +68,9 @@ const ClipboardContent: React.FC = () => {
             // 重新加载剪贴板记录
             loadClipboardRecords();
           });
-          
+
           // 保存解除监听的函数到全局状态
           globalListenerState.unlisten = unlisten;
-          
         } catch (err) {
           console.error("设置监听器失败:", err);
           globalListenerState.isActive = false;
@@ -79,14 +79,14 @@ const ClipboardContent: React.FC = () => {
         console.log("监听器已经处于活跃状态，跳过设置");
       }
     };
-    
+
     // 如果还没有设置监听器，则设置
     if (!globalListenerState.isActive) {
       setupListener();
     } else {
       console.log("全局监听器已存在，无需再次设置");
     }
-    
+
     // 组件卸载时的清理函数
     return () => {
       // 不在这里清理全局监听器，让它持续存在
@@ -182,11 +182,8 @@ const ClipboardContent: React.FC = () => {
   // 处理复制到剪贴板（这个功能暂未在API中实现，可以后续添加）
   const handleCopyItem = async (itemId: string) => {
     try {
-      // 这里可以实现调用复制到剪贴板的API
-      // 可以使用 itemId 查找项目并复制
       console.log(`复制项目 ID: ${itemId}`);
-      // 暂时返回成功
-      return true;
+      return await copyClipboardItem(itemId);
     } catch (err) {
       console.error("复制到剪贴板失败", err);
       setError("复制到剪贴板失败");
