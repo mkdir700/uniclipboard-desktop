@@ -8,8 +8,10 @@ use std::fmt;
 use tokio_tungstenite::tungstenite::Message;
 use twox_hash::xxh3::hash64;
 
+use crate::application::file_service::FileService;
 use crate::core::transfer::ClipboardTransferMessage;
 use crate::domain::device::{Device, DeviceStatus};
+use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord;
 
 // pub enum FileType {
 //     Text,
@@ -348,5 +350,13 @@ impl WebSocketMessage {
                 anyhow::bail!("Failed to serialize WebSocketMessage: {}", e)
             }
         }
+    }
+}
+
+impl TryFrom<DbClipboardRecord> for Payload {
+    type Error = anyhow::Error;
+
+    fn try_from(record: DbClipboardRecord) -> Result<Self, Self::Error> {
+        FileService::create_payload_from_record(&record)
     }
 }
