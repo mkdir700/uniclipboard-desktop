@@ -2,11 +2,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::application::clipboard_service::{ClipboardItemResponse, ClipboardService};
 use crate::core::UniClipboard;
+use crate::infrastructure::storage::db::models::clipboard_record::OrderBy;
 
 // 获取剪贴板历史记录
 #[tauri::command]
 pub async fn get_clipboard_items(
     state: tauri::State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
+    order_by: Option<OrderBy>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<ClipboardItemResponse>, String> {
@@ -19,7 +21,7 @@ pub async fn get_clipboard_items(
 
     let service = ClipboardService::new(app);
     service
-        .get_clipboard_items(limit, offset)
+        .get_clipboard_items(order_by, limit, offset)
         .await
         .map_err(|e| format!("获取剪贴板历史记录失败: {}", e))
 }

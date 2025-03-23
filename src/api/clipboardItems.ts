@@ -1,5 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 
+/**
+ * 排序选项枚举
+ */
+export enum OrderBy {
+  CreatedAtAsc = "created_at_asc",
+  CreatedAtDesc = "created_at_desc",
+  UpdatedAtAsc = "updated_at_asc",
+  UpdatedAtDesc = "updated_at_desc",
+  ContentTypeAsc = "content_type_asc",
+  ContentTypeDesc = "content_type_desc",
+  IsFavoritedAsc = "is_favorited_asc",
+  IsFavoritedDesc = "is_favorited_desc"
+}
+
 export interface ClipboardItemResponse {
   id: string;
   device_id: string;
@@ -15,13 +29,22 @@ export interface ClipboardItemResponse {
 
 /**
  * 获取剪贴板历史记录
+ * @param orderBy 排序方式
  * @param limit 限制返回的条目数
  * @param offset 偏移量，用于分页
  * @returns Promise，返回剪贴板条目数组
  */
-export async function getClipboardItems(limit?: number, offset?: number): Promise<ClipboardItemResponse[]> {
+export async function getClipboardItems(
+  orderBy?: OrderBy,
+  limit?: number, 
+  offset?: number
+): Promise<ClipboardItemResponse[]> {
   try {
-    return await invoke('get_clipboard_items', { limit, offset });
+    return await invoke('get_clipboard_items', { 
+      order_by: orderBy, 
+      limit, 
+      offset 
+    });
   } catch (error) {
     console.error('获取剪贴板历史记录失败:', error);
     throw error;

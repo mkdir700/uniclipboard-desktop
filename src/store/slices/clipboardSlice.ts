@@ -4,7 +4,8 @@ import {
   deleteClipboardItem, 
   copyClipboardItem,
   clearClipboardItems,
-  ClipboardItemResponse
+  ClipboardItemResponse,
+  OrderBy
 } from '../../api/clipboardItems';
 
 // 定义状态接口
@@ -23,12 +24,19 @@ const initialState: ClipboardState = {
   deleteConfirmId: null
 };
 
+// 定义获取剪贴板项目的参数接口
+interface FetchClipboardItemsParams {
+  orderBy?: OrderBy;
+  limit?: number;
+  offset?: number;
+}
+
 // 异步 Thunk Actions
 export const fetchClipboardItems = createAsyncThunk(
   'clipboard/fetchItems',
-  async (_, { rejectWithValue }) => {
+  async (params: FetchClipboardItemsParams = {}, { rejectWithValue }) => {
     try {
-      return await getClipboardItems();
+      return await getClipboardItems(params.orderBy, params.limit, params.offset);
     } catch (error) {
       return rejectWithValue('获取剪贴板内容失败');
     }

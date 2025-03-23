@@ -1,6 +1,6 @@
 use diesel::prelude::*;
-use crate::core::transfer::{ContentType, ClipboardMetadata};
-use anyhow::Result;
+use crate::core::transfer::ContentType;
+use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = crate::infrastructure::storage::db::schema::clipboard_records)]
@@ -11,6 +11,7 @@ pub struct DbClipboardRecord {
     pub local_file_path: Option<String>,
     pub remote_record_id: Option<String>,
     pub content_type: String,
+    pub content_hash: String,
     pub is_favorited: bool,
     pub created_at: i32,
     pub updated_at: i32,
@@ -39,7 +40,41 @@ pub struct NewClipboardRecord {
     pub local_file_path: Option<String>,
     pub remote_record_id: Option<String>,
     pub content_type: String,
+    pub content_hash: String,
     pub is_favorited: bool,
     pub created_at: i32,
     pub updated_at: i32,
+}
+
+#[derive(AsChangeset, Debug)]
+#[diesel(table_name = crate::infrastructure::storage::db::schema::clipboard_records)]
+pub struct UpdateClipboardRecord {
+    pub is_favorited: bool,
+    pub updated_at: i32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum OrderBy {
+    #[serde(rename = "created_at_asc")]
+    CreatedAtAsc,
+    #[serde(rename = "created_at_desc")]
+    CreatedAtDesc,
+    #[serde(rename = "updated_at_asc")]
+    UpdatedAtAsc,
+    #[serde(rename = "updated_at_desc")]
+    UpdatedAtDesc,
+    #[serde(rename = "content_type_asc")]
+    ContentTypeAsc,
+    #[serde(rename = "content_type_desc")]
+    ContentTypeDesc,
+    #[serde(rename = "is_favorited_asc")]
+    IsFavoritedAsc,
+    #[serde(rename = "is_favorited_desc")]
+    IsFavoritedDesc,
+}
+
+impl Default for OrderBy {
+    fn default() -> Self {
+        OrderBy::UpdatedAtDesc
+    }
 }

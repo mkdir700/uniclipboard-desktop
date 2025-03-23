@@ -4,15 +4,16 @@ import {
   getDisplayType,
   isImageType,
   ClipboardItemResponse,
+  OrderBy,
 } from "../api/clipboardItems";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { 
-  fetchClipboardItems, 
-  removeClipboardItem, 
+import {
+  fetchClipboardItems,
+  removeClipboardItem,
   copyToClipboard,
-  clearError as clearReduxError
+  clearError as clearReduxError,
 } from "../store/slices/clipboardSlice";
 
 interface DisplayClipboardItem {
@@ -40,10 +41,16 @@ const globalListenerState: ListenerState = {
 const ClipboardContent: React.FC = () => {
   // 使用 Redux 状态和 dispatch
   const dispatch = useAppDispatch();
-  const { items: reduxItems, loading, error } = useAppSelector(state => state.clipboard);
-  
+  const {
+    items: reduxItems,
+    loading,
+    error,
+  } = useAppSelector((state) => state.clipboard);
+
   // 本地状态用于转换后的显示项目
-  const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>([]);
+  const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(
+    []
+  );
 
   // 加载剪贴板记录
   useEffect(() => {
@@ -101,13 +108,18 @@ const ClipboardContent: React.FC = () => {
   // 从 Redux 加载剪贴板记录
   const loadClipboardRecords = async () => {
     console.log("开始加载剪贴板记录...");
-    dispatch(fetchClipboardItems());
+    dispatch(
+      fetchClipboardItems({
+        orderBy: OrderBy.UpdatedAtDesc,
+      })
+    );
   };
 
   // 监听 Redux 中的 items 变化，转换为显示项目
   useEffect(() => {
     if (reduxItems && reduxItems.length > 0) {
-      const items: DisplayClipboardItem[] = reduxItems.map(convertToDisplayItem);
+      const items: DisplayClipboardItem[] =
+        reduxItems.map(convertToDisplayItem);
       setClipboardItems(items);
     } else {
       setClipboardItems([]);

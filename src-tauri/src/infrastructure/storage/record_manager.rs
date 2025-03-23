@@ -7,7 +7,7 @@ use log::{error, info};
 use uuid::Uuid;
 
 use super::db::dao::clipboard_record;
-use super::db::models::clipboard_record::DbClipboardRecord;
+use super::db::models::clipboard_record::{DbClipboardRecord, OrderBy};
 use super::db::pool::DB_POOL;
 
 /// 剪贴板历史记录管理器
@@ -22,35 +22,53 @@ impl ClipboardRecordManager {
         Self { max_records }
     }
 
-    /// 添加一条剪贴板记录
+    /// 添加或更新一条剪贴板记录
+    /// 
+    /// 如果内容hash在本地已存在，则更新记录
     ///
     /// # Arguments
     /// * `metadata` - 剪贴板内容元数据
     ///
     /// # Returns
     /// * `Result<String>` - 返回记录ID
-    pub async fn add_record_with_metadata(&self, metadata: &ClipboardMetadata) -> Result<String> {
+    pub async fn add_or_update_record_with_metadata(&self, metadata: &ClipboardMetadata) -> Result<String> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp() as i32;
-
-        let record = DbClipboardRecord {
-            id: id.clone(),
-            device_id: metadata.get_device_id().to_string(),
-            local_file_path: Some(metadata.get_storage_path().to_string()),
-            remote_record_id: None,
-            content_type: metadata.get_content_type().as_str().to_string(),
-            is_favorited: false,
-            created_at: now,
-            updated_at: now,
-        };
+        let content_hash = metadata.get_content_hash().to_string();
 
         let mut conn = DB_POOL.get_connection()?;
-        clipboard_record::insert_clipboard_record(&mut conn, &record)?;
+        let records = clipboard_record::query_clipboard_records_by_content_hash(&mut conn, &content_hash)?;
 
-        // 清理旧记录
-        self.cleanup_old_records().await;
-
-        Ok(id)
+        if records.is_empty() {
+            // 如果记录不存在，创建新记录
+            let record = DbClipboardRecord {
+                id: id.clone(),
+                device_id: metadata.get_device_id().to_string(),
+                local_file_path: Some(metadata.get_storage_path().to_string()),
+                remote_record_id: None,
+                content_type: metadata.get_content_type().as_str().to_string(),
+                content_hash: content_hash.clone(),
+                is_favorited: false,
+                created_at: now,
+                updated_at: now,
+            };
+            clipboard_record::insert_clipboard_record(&mut conn, &record)?;
+            
+            // 清理旧记录
+            self.cleanup_old_records().await;
+            
+            Ok(id)
+        } else {
+            // 如果记录已存在，更新现有记录
+            let existing_record = &records[0];
+            let record_id = existing_record.id.clone();
+            
+            // 使用 update_clipboard_record 函数更新记录
+            // 这个函数接受记录 ID 并设置更新时间
+            clipboard_record::update_clipboard_record(&mut conn, existing_record)?;
+            
+            Ok(record_id)
+        }
     }
 
     pub async fn add_record_with_transfer_message(
@@ -67,6 +85,7 @@ impl ClipboardRecordManager {
             local_file_path: None,
             remote_record_id: Some(message.record_id.clone()),
             content_type,
+            content_hash: message.metadata.get_content_hash().to_string(),
             is_favorited: false,
             created_at: now,
             updated_at: now,
@@ -81,6 +100,7 @@ impl ClipboardRecordManager {
     /// 获取历史记录列表
     pub async fn get_records(
         &self,
+        order_by: Option<OrderBy>,
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Vec<DbClipboardRecord>> {
@@ -88,7 +108,7 @@ impl ClipboardRecordManager {
         let offset = offset.unwrap_or(0);
         let mut conn = DB_POOL.get_connection()?;
         let records =
-            clipboard_record::query_clipboard_records(&mut conn, Some(limit), Some(offset))?;
+            clipboard_record::query_clipboard_records(&mut conn, order_by, Some(limit), Some(offset))?;
         Ok(records)
     }
 
@@ -97,7 +117,7 @@ impl ClipboardRecordManager {
         &self
     ) -> Result<Vec<DbClipboardRecord>> {
         let mut conn = DB_POOL.get_connection()?;
-        let records = clipboard_record::query_clipboard_records(&mut conn, None, None)?;
+        let records = clipboard_record::query_clipboard_records(&mut conn, None, None, None)?;
         Ok(records)
     }
 
