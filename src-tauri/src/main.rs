@@ -143,9 +143,9 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
         ))
         .manage(Arc::new(Mutex::new(Some(uniclipboard_app.clone()))))
         .manage(Arc::new(Mutex::new(api::event::EventListenerState::default())))
-        .setup(move |app| {
+        .setup(move |_app| {
             // 获取应用句柄并克隆以便在异步任务中使用
-            let app_handle = app.handle().clone();
+            let _ = _app.handle().clone();
 
             // 启动异步任务
             tauri::async_runtime::spawn(async move {
