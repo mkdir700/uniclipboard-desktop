@@ -77,11 +77,6 @@ const Header: React.FC = () => {
             >
               <span className="mr-1.5">{filter.icon}</span>
               <span>{filter.label}</span>
-              {activeFilter === filter.id && (
-                <span className="ml-1.5 flex items-center justify-center h-4 w-4 bg-white bg-opacity-30 rounded-full text-xs">
-                  ✓
-                </span>
-              )}
             </button>
           ))}
         </div>
