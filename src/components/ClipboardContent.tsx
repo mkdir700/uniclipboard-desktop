@@ -134,9 +134,9 @@ const ClipboardContent: React.FC = () => {
     const type = getDisplayType(item.content_type);
 
     // 格式化时间
-    const createdAt = new Date(item.created_at * 1000); // 转换为毫秒
+    const updatedAt = new Date(item.updated_at * 1000); // 转换为毫秒
     const now = new Date();
-    const diffMs = now.getTime() - createdAt.getTime();
+    const diffMs = now.getTime() - updatedAt.getTime();
     const diffMins = Math.round(diffMs / 60000);
 
     let timeString: string;
