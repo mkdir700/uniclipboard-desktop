@@ -77,8 +77,8 @@ diesel = { version = "2.2.0", features = [
 ] }
 # build libsqlite3 as part of the build process
 # uncomment this line if you run into setup issues
-# libsqlite3-sys = { version = "0.30", features = ["bundled"] }
-libsqlite3-sys = { version = "0.30" }
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+# libsqlite3-sys = { version = "0.30" }
 dotenvy = "0.15"
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] }
 tauri-plugin-devtools = "2.0.0"
