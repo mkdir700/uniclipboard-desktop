@@ -7,6 +7,7 @@ diesel::table! {
         local_file_path -> Nullable<Text>,
         remote_record_id -> Nullable<Text>,
         content_type -> Text,
+        content_hash -> Text,
         is_favorited -> Bool,
         created_at -> Integer,
         updated_at -> Integer,

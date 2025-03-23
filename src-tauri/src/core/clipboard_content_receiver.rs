@@ -79,7 +79,7 @@ impl ClipboardContentReceiver {
                 let metadata = ClipboardMetadata::from_payload(&payload, &file_path);
                 // 新增记录
                 let record_id = self.record_manager
-                    .add_record_with_metadata(&metadata)
+                    .add_or_update_record_with_metadata(&metadata)
                     .await?;
 
                 info!("Downloaded content stored at: {:?}", file_path);

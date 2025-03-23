@@ -44,6 +44,11 @@ pub fn get_local_ip() -> String {
     }
 }
 
+/// 当前时间
+pub fn get_current_time() -> i32 {
+    chrono::Utc::now().timestamp() as i32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
