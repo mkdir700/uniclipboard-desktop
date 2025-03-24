@@ -1,4 +1,6 @@
-use crate::infrastructure::storage::db::models::clipboard_record::{DbClipboardRecord, NewClipboardRecord, UpdateClipboardRecord, OrderBy};
+use crate::infrastructure::storage::db::models::clipboard_record::{
+    DbClipboardRecord, NewClipboardRecord, OrderBy, UpdateClipboardRecord,
+};
 use crate::infrastructure::storage::db::schema::clipboard_records;
 use crate::utils::helpers::get_current_time;
 use anyhow::{Context, Result};
@@ -7,7 +9,10 @@ use diesel::sqlite::SqliteConnection;
 use log::debug;
 
 /// 插入一条剪贴板记录
-pub fn insert_clipboard_record(conn: &mut SqliteConnection, record: &DbClipboardRecord) -> Result<()> {
+pub fn insert_clipboard_record(
+    conn: &mut SqliteConnection,
+    record: &DbClipboardRecord,
+) -> Result<()> {
     let new_record = NewClipboardRecord {
         id: record.id.clone(),
         device_id: record.device_id.clone(),
@@ -28,7 +33,10 @@ pub fn insert_clipboard_record(conn: &mut SqliteConnection, record: &DbClipboard
 }
 
 /// 更新一条剪贴板记录
-pub fn update_clipboard_record(conn: &mut SqliteConnection, record: &DbClipboardRecord) -> Result<()> {
+pub fn update_clipboard_record(
+    conn: &mut SqliteConnection,
+    record: &DbClipboardRecord,
+) -> Result<()> {
     let update = UpdateClipboardRecord {
         is_favorited: record.is_favorited,
         updated_at: get_current_time(),
@@ -67,12 +75,18 @@ pub fn get_record_count(conn: &mut SqliteConnection) -> Result<i64> {
 }
 
 /// 查询剪贴板记录
-pub fn query_clipboard_records(conn: &mut SqliteConnection, order_by: Option<OrderBy>, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<DbClipboardRecord>> {
+pub fn query_clipboard_records(
+    conn: &mut SqliteConnection,
+    is_favorited: Option<bool>,
+    order_by: Option<OrderBy>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> Result<Vec<DbClipboardRecord>> {
     let limit = limit.unwrap_or(50);
     let offset = offset.unwrap_or(0);
 
     let mut query = clipboard_records::table.into_boxed();
-    
+
     // 根据order_by参数设置排序方式
     match order_by.unwrap_or_default() {
         OrderBy::CreatedAtAsc => {
@@ -101,6 +115,10 @@ pub fn query_clipboard_records(conn: &mut SqliteConnection, order_by: Option<Ord
         }
     }
 
+    if let Some(is_favorited) = is_favorited {
+        query = query.filter(clipboard_records::is_favorited.eq(is_favorited));
+    }
+
     let records = query
         .limit(limit)
         .offset(offset)
@@ -111,7 +129,10 @@ pub fn query_clipboard_records(conn: &mut SqliteConnection, order_by: Option<Ord
 }
 
 /// 查询指定ID的剪贴板记录
-pub fn get_clipboard_record_by_id(conn: &mut SqliteConnection, id: &str) -> Result<Option<DbClipboardRecord>> {
+pub fn get_clipboard_record_by_id(
+    conn: &mut SqliteConnection,
+    id: &str,
+) -> Result<Option<DbClipboardRecord>> {
     let record = clipboard_records::table
         .find(id)
         .first::<DbClipboardRecord>(conn)
@@ -121,7 +142,10 @@ pub fn get_clipboard_record_by_id(conn: &mut SqliteConnection, id: &str) -> Resu
 }
 
 /// 查询指定内容hash的剪贴板记录
-pub fn query_clipboard_records_by_content_hash(conn: &mut SqliteConnection, content_hash: &str) -> Result<Vec<DbClipboardRecord>> {
+pub fn query_clipboard_records_by_content_hash(
+    conn: &mut SqliteConnection,
+    content_hash: &str,
+) -> Result<Vec<DbClipboardRecord>> {
     let records = clipboard_records::table
         .filter(clipboard_records::content_hash.eq(content_hash))
         .load::<DbClipboardRecord>(conn)

@@ -5,7 +5,9 @@ import {
   copyClipboardItem,
   clearClipboardItems,
   ClipboardItemResponse,
-  OrderBy
+  OrderBy,
+  favoriteClipboardItem,
+  unfavoriteClipboardItem
 } from '../../api/clipboardItems';
 
 // 定义状态接口
@@ -29,6 +31,7 @@ interface FetchClipboardItemsParams {
   orderBy?: OrderBy;
   limit?: number;
   offset?: number;
+  isFavorited?: boolean;
 }
 
 // 异步 Thunk Actions
@@ -36,9 +39,15 @@ export const fetchClipboardItems = createAsyncThunk(
   'clipboard/fetchItems',
   async (params: FetchClipboardItemsParams = {}, { rejectWithValue }) => {
     try {
-      return await getClipboardItems(params.orderBy, params.limit, params.offset);
+      console.log("fetchClipboardItems", params);
+      return await getClipboardItems(
+        params.orderBy,
+        params.limit,
+        params.offset,
+        params.isFavorited
+      );
     } catch (error) {
-      return rejectWithValue('获取剪贴板内容失败');
+      return rejectWithValue("获取剪贴板内容失败");
     }
   }
 );
@@ -56,18 +65,21 @@ export const removeClipboardItem = createAsyncThunk(
 );
 
 // 目前API中没有toggleFavorite功能，先注释掉
-// export const toggleFavoriteItem = createAsyncThunk(
-//   'clipboard/toggleFavorite',
-//   async ({ id, isFavorited }: { id: string, isFavorited: boolean }, { rejectWithValue }) => {
-//     try {
-//       // 这里需要实现收藏功能的API
-//       // await favoriteClipboardItem(id, isFavorited);
-//       return { id, isFavorited };
-//     } catch (error) {
-//       return rejectWithValue('设置收藏状态失败');
-//     }
-//   }
-// );
+export const toggleFavoriteItem = createAsyncThunk(
+  'clipboard/toggleFavorite',
+  async ({ id, isFavorited }: { id: string, isFavorited: boolean }, { rejectWithValue }) => {
+    try {
+      if (isFavorited) {
+        await favoriteClipboardItem(id);
+      } else {
+        await unfavoriteClipboardItem(id);
+      }
+      return { id, isFavorited };
+    } catch (error) {
+      return rejectWithValue('设置收藏状态失败');
+    }
+  }
+);
 
 export const clearAllItems = createAsyncThunk(
   'clipboard/clearAll',

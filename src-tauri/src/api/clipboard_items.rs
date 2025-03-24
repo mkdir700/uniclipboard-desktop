@@ -8,20 +8,22 @@ use crate::infrastructure::storage::db::models::clipboard_record::OrderBy;
 #[tauri::command]
 pub async fn get_clipboard_items(
     state: tauri::State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
+    is_favorited: Option<bool>,
     order_by: Option<OrderBy>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<ClipboardItemResponse>, String> {
     let app = state
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .as_ref()
         .ok_or("应用未初始化")?
         .clone();
 
+    log::debug!("get_clipboard_items: is_favorited = {:?}", is_favorited);
     let service = ClipboardService::new(app);
     service
-        .get_clipboard_items(order_by, limit, offset)
+        .get_clipboard_items(is_favorited, order_by, limit, offset)
         .await
         .map_err(|e| format!("获取剪贴板历史记录失败: {}", e))
 }
@@ -35,7 +37,7 @@ pub async fn get_clipboard_item(
 ) -> Result<Option<ClipboardItemResponse>, String> {
     let app = state
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .as_ref()
         .ok_or("应用未初始化")?
         .clone();
@@ -55,7 +57,7 @@ pub async fn delete_clipboard_item(
 ) -> Result<bool, String> {
     let app = state
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .as_ref()
         .ok_or("应用未初始化")?
         .clone();
@@ -74,7 +76,7 @@ pub async fn clear_clipboard_items(
 ) -> Result<usize, String> {
     let app = state
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .as_ref()
         .ok_or("应用未初始化")?
         .clone();
@@ -94,7 +96,7 @@ pub async fn copy_clipboard_item(
 ) -> Result<bool, String> {
     let app = state
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .as_ref()
         .ok_or("应用未初始化")?
         .clone();
@@ -104,4 +106,32 @@ pub async fn copy_clipboard_item(
         .copy_clipboard_item(&id)
         .await
         .map_err(|e| format!("复制剪贴板记录失败: {}", e))
+}
+
+/// 收藏剪贴板内容
+#[tauri::command]
+pub async fn toggle_favorite_clipboard_item(
+    state: tauri::State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
+    id: String,
+    is_favorited: bool,
+) -> Result<bool, String> {
+    let app = state
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .ok_or("应用未初始化")?
+        .clone();
+
+    let service = ClipboardService::new(app);
+    if is_favorited {
+        service
+            .favorite_clipboard_item(&id)
+            .await
+            .map_err(|e| format!("收藏剪贴板记录失败: {}", e))
+    } else {
+        service
+            .unfavorite_clipboard_item(&id)
+            .await
+            .map_err(|e| format!("取消收藏剪贴板记录失败: {}", e))
+    }
 }

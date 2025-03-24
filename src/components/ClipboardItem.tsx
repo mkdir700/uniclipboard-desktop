@@ -10,6 +10,7 @@ interface ClipboardItemProps {
   isFavorited?: boolean;
   onDelete?: () => void;
   onCopy?: () => Promise<boolean>;
+  toggleFavorite?: (isFavorited: boolean) => void;
 }
 
 const ClipboardItem: React.FC<ClipboardItemProps> = ({
@@ -22,12 +23,16 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   isFavorited = false,
   onDelete,
   onCopy,
+  toggleFavorite,
 }) => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [favorited, setFavorited] = useState(isFavorited);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [deleteConfirmation, setDeleteConfirmation] = useState(false);
-  const [deleteTimer, setDeleteTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [deleteTimer, setDeleteTimer] = useState<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   // 组件卸载时清除计时器
   useEffect(() => {
@@ -89,6 +94,14 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     } catch (err) {
       console.error("复制失败:", err);
     }
+  };
+
+  // 处理收藏操作
+  const handleFavoriteClick = () => {
+    const newFavorited = !favorited;
+    console.log("handleFavoriteClick", newFavorited);
+    setFavorited(newFavorited);
+    toggleFavorite && toggleFavorite(newFavorited);
   };
 
   // 处理删除操作
@@ -188,10 +201,16 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         </button>
 
         {/* 收藏按钮 */}
-        <button className="p-1 rounded-full hover:bg-gray-700/50">
+        <button
+          className="p-1 rounded-full hover:bg-gray-700/50"
+          onClick={handleFavoriteClick}
+          title={favorited ? "取消收藏" : "收藏"}
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className={`h-4 w-4 ${isFavorited ? "text-yellow-400 fill-yellow-400" : "text-gray-400"}`}
+            className={`h-4 w-4 ${
+              favorited ? "text-yellow-400 fill-yellow-400" : "text-gray-400"
+            }`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -206,7 +225,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         </button>
 
         {/* 分享按钮 */}
-        <button className="p-1 rounded-full hover:bg-gray-700/50">
+        {/* <button className="p-1 rounded-full hover:bg-gray-700/50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-4 w-4 text-gray-400"
@@ -221,7 +240,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
               d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
             />
           </svg>
-        </button>
+        </button> */}
 
         {/* 删除按钮 */}
         <button

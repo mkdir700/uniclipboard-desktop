@@ -1,10 +1,10 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use crate::{application::file_service::FileService, core::UniClipboard};
 use crate::core::transfer::ContentType;
 use crate::infrastructure::storage::db::models::clipboard_record::{DbClipboardRecord, OrderBy};
 use crate::message::Payload;
+use crate::{application::file_service::FileService, core::UniClipboard};
 use serde::{Deserialize, Serialize};
 
 /// 文本摘要的最大长度
@@ -120,12 +120,15 @@ impl ClipboardService {
     /// 获取剪贴板历史记录
     pub async fn get_clipboard_items(
         &self,
+        is_favorited: Option<bool>,
         order_by: Option<OrderBy>,
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Vec<ClipboardItemResponse>> {
         let record_manager = self.app.get_record_manager();
-        let records = record_manager.get_records(order_by, limit, offset).await?;
+        let records = record_manager
+            .get_records(is_favorited, order_by, limit, offset)
+            .await?;
         Ok(records
             .into_iter()
             .map(ClipboardItemResponse::from_record)
@@ -207,5 +210,19 @@ impl ClipboardService {
         } else {
             Ok(false)
         }
+    }
+
+    /// 收藏剪贴板内容
+    pub async fn favorite_clipboard_item(&self, id: &str) -> Result<bool> {
+        let record_manager = self.app.get_record_manager();
+        record_manager.update_record_is_favorited(id, true).await?;
+        Ok(true)
+    }
+
+    /// 取消收藏剪贴板内容
+    pub async fn unfavorite_clipboard_item(&self, id: &str) -> Result<bool> {
+        let record_manager = self.app.get_record_manager();
+        record_manager.update_record_is_favorited(id, false).await?;
+        Ok(true)
     }
 }

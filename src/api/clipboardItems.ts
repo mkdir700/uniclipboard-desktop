@@ -37,13 +37,15 @@ export interface ClipboardItemResponse {
 export async function getClipboardItems(
   orderBy?: OrderBy,
   limit?: number, 
-  offset?: number
+  offset?: number,
+  isFavorited?: boolean
 ): Promise<ClipboardItemResponse[]> {
   try {
     return await invoke('get_clipboard_items', { 
-      order_by: orderBy, 
-      limit, 
-      offset 
+      orderBy,
+      limit,
+      offset,
+      isFavorited,
     });
   } catch (error) {
     console.error('获取剪贴板历史记录失败:', error);
@@ -142,4 +144,32 @@ export function isImageType(contentType: string): boolean {
  */
 export function isTextType(contentType: string): boolean {
   return contentType === "text" || contentType.startsWith("text/");
+}
+
+/**
+ * 收藏剪贴板条目
+ * @param id 剪贴板条目ID
+ * @returns Promise，成功返回true
+ */
+export async function favoriteClipboardItem(id: string): Promise<boolean> {
+  try {
+    return await invoke('toggle_favorite_clipboard_item', { id, isFavorited: true });
+  } catch (error) {
+    console.error('收藏剪贴板条目失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 取消收藏剪贴板条目
+ * @param id 剪贴板条目ID
+ * @returns Promise，成功返回true
+ */
+export async function unfavoriteClipboardItem(id: string): Promise<boolean> {
+  try {
+    return await invoke('toggle_favorite_clipboard_item', { id, isFavorited: false });
+  } catch (error) {
+    console.error("取消收藏剪贴板条目失败:", error);
+    throw error;
+  }
 }

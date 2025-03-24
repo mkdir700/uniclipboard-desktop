@@ -115,7 +115,9 @@ impl LocalClipboardManager {
                     // 步骤2: 使用 payload + 本地存储路径，构建 metadata
                     let metadata = metadata_generator.generate_metadata(&payload, &storage_path);
                     info!("Push to remote: {}", metadata);
-                    let result = record_manager.add_or_update_record_with_metadata(&metadata).await;
+                    let result = record_manager
+                        .add_or_update_record_with_metadata(&metadata)
+                        .await;
 
                     match result {
                         Ok(record_id) => {
@@ -259,7 +261,15 @@ impl RemoteClipboardManager {
                                     *last_payload.write().await = tmp;
                                 } else {
                                     // 获取最新添加的记录ID，发布剪贴板新内容事件
-                                    if let Ok(records) = record_manager.get_records(Some(OrderBy::UpdatedAtDesc), Some(1), Some(0)).await {
+                                    if let Ok(records) = record_manager
+                                        .get_records(
+                                            None,
+                                            Some(OrderBy::UpdatedAtDesc),
+                                            Some(1),
+                                            Some(0),
+                                        )
+                                        .await
+                                    {
                                         if let Some(latest_record) = records.first() {
                                             publish_clipboard_new_content(latest_record.id.clone());
                                         }
@@ -482,7 +492,7 @@ impl UniClipboard {
         info!("剪贴板同步已停止");
         Ok(())
     }
-    
+
     pub fn get_local_clipboard(&self) -> Arc<dyn LocalClipboardTrait> {
         self.local_manager.clipboard.clone()
     }

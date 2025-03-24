@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  onFilterChange?: (filterId: string) => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
   // 定义筛选类型
   const filterTypes = [
     { id: "all", label: "全部", icon: "📋" },
@@ -18,8 +22,8 @@ const Header: React.FC = () => {
   // 处理筛选器点击
   const handleFilterClick = (filterId: string) => {
     setActiveFilter(filterId);
-    // 这里可以添加筛选逻辑，例如触发父组件的回调函数
-    // onFilterChange(filterId);
+    // 调用父组件传入的回调函数
+    onFilterChange?.(filterId);
   };
 
   return (

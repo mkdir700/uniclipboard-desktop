@@ -7,7 +7,7 @@ use log::{error, info};
 use uuid::Uuid;
 
 use super::db::dao::clipboard_record;
-use super::db::models::clipboard_record::{DbClipboardRecord, OrderBy};
+use super::db::models::clipboard_record::{DbClipboardRecord, OrderBy, UpdateClipboardRecord};
 use super::db::pool::DB_POOL;
 
 /// 剪贴板历史记录管理器
@@ -23,7 +23,7 @@ impl ClipboardRecordManager {
     }
 
     /// 添加或更新一条剪贴板记录
-    /// 
+    ///
     /// 如果内容hash在本地已存在，则更新记录
     ///
     /// # Arguments
@@ -31,13 +31,17 @@ impl ClipboardRecordManager {
     ///
     /// # Returns
     /// * `Result<String>` - 返回记录ID
-    pub async fn add_or_update_record_with_metadata(&self, metadata: &ClipboardMetadata) -> Result<String> {
+    pub async fn add_or_update_record_with_metadata(
+        &self,
+        metadata: &ClipboardMetadata,
+    ) -> Result<String> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp() as i32;
         let content_hash = metadata.get_content_hash().to_string();
 
         let mut conn = DB_POOL.get_connection()?;
-        let records = clipboard_record::query_clipboard_records_by_content_hash(&mut conn, &content_hash)?;
+        let records =
+            clipboard_record::query_clipboard_records_by_content_hash(&mut conn, &content_hash)?;
 
         if records.is_empty() {
             // 如果记录不存在，创建新记录
@@ -53,20 +57,20 @@ impl ClipboardRecordManager {
                 updated_at: now,
             };
             clipboard_record::insert_clipboard_record(&mut conn, &record)?;
-            
+
             // 清理旧记录
             self.cleanup_old_records().await;
-            
+
             Ok(id)
         } else {
             // 如果记录已存在，更新现有记录
             let existing_record = &records[0];
             let record_id = existing_record.id.clone();
-            
+
             // 使用 update_clipboard_record 函数更新记录
             // 这个函数接受记录 ID 并设置更新时间
             clipboard_record::update_clipboard_record(&mut conn, existing_record)?;
-            
+
             Ok(record_id)
         }
     }
@@ -98,8 +102,10 @@ impl ClipboardRecordManager {
     }
 
     /// 获取历史记录列表
+    ///! TODO: 如果后续有新的形参，则需要变动多个地方，考虑优化
     pub async fn get_records(
         &self,
+        is_favorited: Option<bool>,
         order_by: Option<OrderBy>,
         limit: Option<i64>,
         offset: Option<i64>,
@@ -107,17 +113,20 @@ impl ClipboardRecordManager {
         let limit = limit.unwrap_or(50);
         let offset = offset.unwrap_or(0);
         let mut conn = DB_POOL.get_connection()?;
-        let records =
-            clipboard_record::query_clipboard_records(&mut conn, order_by, Some(limit), Some(offset))?;
+        let records = clipboard_record::query_clipboard_records(
+            &mut conn,
+            is_favorited,
+            order_by,
+            Some(limit),
+            Some(offset),
+        )?;
         Ok(records)
     }
 
     /// 获取所有的记录
-    pub async fn get_all_records(
-        &self
-    ) -> Result<Vec<DbClipboardRecord>> {
+    pub async fn get_all_records(&self) -> Result<Vec<DbClipboardRecord>> {
         let mut conn = DB_POOL.get_connection()?;
-        let records = clipboard_record::query_clipboard_records(&mut conn, None, None, None)?;
+        let records = clipboard_record::query_clipboard_records(&mut conn, None, None, None, None)?;
         Ok(records)
     }
 
@@ -132,6 +141,17 @@ impl ClipboardRecordManager {
     pub async fn delete_record(&self, id: &str) -> Result<bool> {
         let mut conn = DB_POOL.get_connection()?;
         clipboard_record::delete_clipboard_record(&mut conn, id)?;
+        Ok(true)
+    }
+
+    /// 收藏指定ID的历史记录
+    pub async fn update_record_is_favorited(&self, id: &str, is_favorited: bool) -> Result<bool> {
+        let mut conn = DB_POOL.get_connection()?;
+        let record = clipboard_record::get_clipboard_record_by_id(&mut conn, id)?;
+        if let Some(mut record) = record {
+            record.is_favorited = is_favorited;
+            clipboard_record::update_clipboard_record(&mut conn, &record)?;
+        }
         Ok(true)
     }
 

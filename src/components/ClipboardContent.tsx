@@ -14,6 +14,7 @@ import {
   removeClipboardItem,
   copyToClipboard,
   clearError as clearReduxError,
+  toggleFavoriteItem,
 } from "../store/slices/clipboardSlice";
 
 interface DisplayClipboardItem {
@@ -38,7 +39,11 @@ const globalListenerState: ListenerState = {
   isActive: false,
 };
 
-const ClipboardContent: React.FC = () => {
+interface ClipboardContentProps {
+  filter: string;
+}
+
+const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   // 使用 Redux 状态和 dispatch
   const dispatch = useAppDispatch();
   const {
@@ -105,26 +110,37 @@ const ClipboardContent: React.FC = () => {
     };
   }, []);
 
+  // 监听 filter 变化，重新加载数据
+  useEffect(() => {
+    loadClipboardRecords();
+  }, [filter]);
+
   // 从 Redux 加载剪贴板记录
   const loadClipboardRecords = async () => {
-    console.log("开始加载剪贴板记录...");
+    console.log("开始加载剪贴板记录...", filter);
     dispatch(
       fetchClipboardItems({
         orderBy: OrderBy.UpdatedAtDesc,
+        isFavorited: filter === "favorite" ? true : undefined,
       })
     );
   };
 
   // 监听 Redux 中的 items 变化，转换为显示项目
   useEffect(() => {
+    console.log("筛选条件:", filter);
+    console.log("查询结果:", reduxItems);
+
     if (reduxItems && reduxItems.length > 0) {
       const items: DisplayClipboardItem[] =
         reduxItems.map(convertToDisplayItem);
       setClipboardItems(items);
+      console.log("转换后的显示项目:", items);
     } else {
       setClipboardItems([]);
+      console.log("没有查询到任何项目");
     }
-  }, [reduxItems]);
+  }, [reduxItems, filter]);
 
   // 将剪贴板项目转换为显示项目
   const convertToDisplayItem = (
@@ -188,6 +204,10 @@ const ClipboardContent: React.FC = () => {
     }
   };
 
+  const handleToggleFavorite = async (itemId: string, isFavorited: boolean) => {
+    dispatch(toggleFavoriteItem({ id: itemId, isFavorited }));
+  };
+
   // 清除错误信息
   useEffect(() => {
     if (error) {
@@ -229,6 +249,9 @@ const ClipboardContent: React.FC = () => {
                   isFavorited={item.isFavorited}
                   onDelete={() => handleDeleteItem(item.id)}
                   onCopy={() => handleCopyItem(item.id)}
+                  toggleFavorite={(isFavorited) =>
+                    handleToggleFavorite(item.id, isFavorited)
+                  }
                 />
               ))
             ) : (
