@@ -1,4 +1,4 @@
-use crate::core::transfer::{ClipboardMetadata, ClipboardTransferMessage, ContentType};
+use crate::core::transfer::{ClipboardMetadata, ClipboardTransferMessage};
 use crate::infrastructure::storage::db::schema::clipboard_records;
 use anyhow::Result;
 use chrono::Utc;
@@ -7,7 +7,7 @@ use log::{error, info};
 use uuid::Uuid;
 
 use super::db::dao::clipboard_record;
-use super::db::models::clipboard_record::{DbClipboardRecord, OrderBy, UpdateClipboardRecord};
+use super::db::models::clipboard_record::{DbClipboardRecord, OrderBy};
 use super::db::pool::DB_POOL;
 
 /// 剪贴板历史记录管理器
@@ -51,10 +51,11 @@ impl ClipboardRecordManager {
                 local_file_path: Some(metadata.get_storage_path().to_string()),
                 remote_record_id: None,
                 content_type: metadata.get_content_type().as_str().to_string(),
-                content_hash: content_hash.clone(),
+                content_hash: Some(content_hash.clone()),
                 is_favorited: false,
                 created_at: now,
                 updated_at: now,
+                active_time: now,
             };
             clipboard_record::insert_clipboard_record(&mut conn, &record)?;
 
@@ -69,7 +70,11 @@ impl ClipboardRecordManager {
 
             // 使用 update_clipboard_record 函数更新记录
             // 这个函数接受记录 ID 并设置更新时间
-            clipboard_record::update_clipboard_record(&mut conn, existing_record)?;
+            clipboard_record::update_clipboard_record(
+                &mut conn,
+                &record_id,
+                &existing_record.get_update_record(),
+            )?;
 
             Ok(record_id)
         }
@@ -89,10 +94,11 @@ impl ClipboardRecordManager {
             local_file_path: None,
             remote_record_id: Some(message.record_id.clone()),
             content_type,
-            content_hash: message.metadata.get_content_hash().to_string(),
+            content_hash: Some(message.metadata.get_content_hash().to_string()),
             is_favorited: false,
             created_at: now,
             updated_at: now,
+            active_time: now,
         };
 
         let mut conn = DB_POOL.get_connection()?;
@@ -150,7 +156,30 @@ impl ClipboardRecordManager {
         let record = clipboard_record::get_clipboard_record_by_id(&mut conn, id)?;
         if let Some(mut record) = record {
             record.is_favorited = is_favorited;
-            clipboard_record::update_clipboard_record(&mut conn, &record)?;
+            clipboard_record::update_clipboard_record(
+                &mut conn,
+                &record.id,
+                &record.get_update_record(),
+            )?;
+        }
+        Ok(true)
+    }
+
+    /// 更新指定ID的活跃时间为当前时间
+    pub async fn update_record_active_time(
+        &self,
+        id: &str,
+        active_time: Option<i32>,
+    ) -> Result<bool> {
+        let mut conn = DB_POOL.get_connection()?;
+        let record = clipboard_record::get_clipboard_record_by_id(&mut conn, id)?;
+        if let Some(mut record) = record {
+            record.active_time = active_time.unwrap_or(Utc::now().timestamp() as i32);
+            clipboard_record::update_clipboard_record(
+                &mut conn,
+                &record.id,
+                &record.get_update_record(),
+            )?;
         }
         Ok(true)
     }

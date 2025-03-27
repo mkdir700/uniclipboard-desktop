@@ -120,7 +120,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     console.log("开始加载剪贴板记录...", filter);
     dispatch(
       fetchClipboardItems({
-        orderBy: OrderBy.UpdatedAtDesc,
+        orderBy: OrderBy.ActiveTimeDesc,
         isFavorited: filter === "favorite" ? true : undefined,
       })
     );
@@ -150,9 +150,9 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     const type = getDisplayType(item.content_type);
 
     // 格式化时间
-    const updatedAt = new Date(item.updated_at * 1000); // 转换为毫秒
+    const activeTime = new Date(item.active_time * 1000); // 转换为毫秒
     const now = new Date();
-    const diffMs = now.getTime() - updatedAt.getTime();
+    const diffMs = now.getTime() - activeTime.getTime();
     const diffMins = Math.round(diffMs / 60000);
 
     let timeString: string;

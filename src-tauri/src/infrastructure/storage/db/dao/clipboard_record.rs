@@ -6,7 +6,6 @@ use crate::utils::helpers::get_current_time;
 use anyhow::{Context, Result};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use log::debug;
 
 /// 插入一条剪贴板记录
 pub fn insert_clipboard_record(
@@ -19,7 +18,7 @@ pub fn insert_clipboard_record(
         local_file_path: record.local_file_path.clone(),
         remote_record_id: record.remote_record_id.clone(),
         content_type: record.content_type.clone(),
-        content_hash: record.content_hash.clone(),
+        content_hash: record.content_hash.clone().unwrap_or_default(),
         is_favorited: record.is_favorited,
         created_at: record.created_at,
         updated_at: record.updated_at,
@@ -35,15 +34,11 @@ pub fn insert_clipboard_record(
 /// 更新一条剪贴板记录
 pub fn update_clipboard_record(
     conn: &mut SqliteConnection,
-    record: &DbClipboardRecord,
+    id: &str,
+    update: &UpdateClipboardRecord,
 ) -> Result<()> {
-    let update = UpdateClipboardRecord {
-        is_favorited: record.is_favorited,
-        updated_at: get_current_time(),
-    };
-
-    diesel::update(clipboard_records::table.find(&record.id))
-        .set(&update)
+    diesel::update(clipboard_records::table.find(id))
+        .set(update)
         .execute(conn)
         .context("Failed to update clipboard record")?;
     Ok(())
@@ -100,6 +95,12 @@ pub fn query_clipboard_records(
         }
         OrderBy::UpdatedAtDesc => {
             query = query.order(clipboard_records::updated_at.desc());
+        }
+        OrderBy::ActiveTimeAsc => {
+            query = query.order(clipboard_records::active_time.asc());
+        }
+        OrderBy::ActiveTimeDesc => {
+            query = query.order(clipboard_records::active_time.desc());
         }
         OrderBy::ContentTypeAsc => {
             query = query.order(clipboard_records::content_type.asc());

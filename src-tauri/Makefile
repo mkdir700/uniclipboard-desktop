@@ -18,7 +18,7 @@ generate-migrations:
 	diesel migration generate
 
 db-upgrade:
-	export DATABASE_URL=uniclipboard.db && diesel migration run && diesel print-schema > src/schema.rs
+	export DATABASE_URL=uniclipboard.db && diesel migration run && diesel print-schema > src/infrastructure/storage/db/schema.rs
 
 db-downgrade:
 	export DATABASE_URL=uniclipboard.db && diesel migration redo

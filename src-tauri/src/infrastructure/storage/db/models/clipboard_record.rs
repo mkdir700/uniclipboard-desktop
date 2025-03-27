@@ -1,5 +1,5 @@
-use diesel::prelude::*;
 use crate::core::transfer::ContentType;
+use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Selectable, Debug)]
@@ -11,10 +11,11 @@ pub struct DbClipboardRecord {
     pub local_file_path: Option<String>,
     pub remote_record_id: Option<String>,
     pub content_type: String,
-    pub content_hash: String,
+    pub content_hash: Option<String>,
     pub is_favorited: bool,
     pub created_at: i32,
     pub updated_at: i32,
+    pub active_time: i32,
 }
 
 impl DbClipboardRecord {
@@ -22,10 +23,19 @@ impl DbClipboardRecord {
     pub fn get_content_type(&self) -> Option<ContentType> {
         ContentType::from_str(&self.content_type)
     }
+
+    /// 获取更新记录
+    pub fn get_update_record(&self) -> UpdateClipboardRecord {
+        UpdateClipboardRecord {
+            is_favorited: self.is_favorited,
+            updated_at: self.updated_at,
+            active_time: self.active_time,
+        }
+    }
 }
 
 /// 剪贴板项目元数据
-/// 
+///
 /// 用于从DbClipboardRecord中提取显示信息
 pub struct ClipboardItemMetadata {
     pub display_content: String,
@@ -51,6 +61,7 @@ pub struct NewClipboardRecord {
 pub struct UpdateClipboardRecord {
     pub is_favorited: bool,
     pub updated_at: i32,
+    pub active_time: i32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -63,6 +74,10 @@ pub enum OrderBy {
     UpdatedAtAsc,
     #[serde(rename = "updated_at_desc")]
     UpdatedAtDesc,
+    #[serde(rename = "active_time_asc")]
+    ActiveTimeAsc,
+    #[serde(rename = "active_time_desc")]
+    ActiveTimeDesc,
     #[serde(rename = "content_type_asc")]
     ContentTypeAsc,
     #[serde(rename = "content_type_desc")]
@@ -75,6 +90,6 @@ pub enum OrderBy {
 
 impl Default for OrderBy {
     fn default() -> Self {
-        OrderBy::UpdatedAtDesc
+        OrderBy::ActiveTimeDesc
     }
 }

@@ -39,7 +39,6 @@ export const fetchClipboardItems = createAsyncThunk(
   'clipboard/fetchItems',
   async (params: FetchClipboardItemsParams = {}, { rejectWithValue }) => {
     try {
-      console.log("fetchClipboardItems", params);
       return await getClipboardItems(
         params.orderBy,
         params.limit,

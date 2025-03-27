@@ -20,6 +20,7 @@ pub struct ClipboardItemResponse {
     pub is_favorited: bool,
     pub created_at: i32,
     pub updated_at: i32,
+    pub active_time: i32,
     pub content_size: usize,
     pub is_truncated: bool,
 }
@@ -43,6 +44,7 @@ impl ClipboardItemResponse {
             is_favorited: record.is_favorited,
             created_at: record.created_at,
             updated_at: record.updated_at,
+            active_time: record.active_time,
             content_size,
             is_truncated,
         }
@@ -66,6 +68,7 @@ impl ClipboardItemResponse {
             is_favorited: record.is_favorited,
             created_at: record.created_at,
             updated_at: record.updated_at,
+            active_time: record.active_time,
             content_size,
             is_truncated,
         }
@@ -201,6 +204,10 @@ impl ClipboardService {
         let record = record_manager.get_record_by_id(id).await?;
 
         if let Some(record) = record {
+            if let Err(e) = record_manager.update_record_active_time(id, None).await {
+                log::warn!("更新活跃时间失败: {}", e);
+            }
+
             // 将记录转换为 Payload
             let payload = Payload::try_from(record)?;
 

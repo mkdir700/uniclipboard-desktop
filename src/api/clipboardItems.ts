@@ -11,7 +11,9 @@ export enum OrderBy {
   ContentTypeAsc = "content_type_asc",
   ContentTypeDesc = "content_type_desc",
   IsFavoritedAsc = "is_favorited_asc",
-  IsFavoritedDesc = "is_favorited_desc"
+  IsFavoritedDesc = "is_favorited_desc",
+  ActiveTimeAsc = "active_time_asc",
+  ActiveTimeDesc = "active_time_desc",
 }
 
 export interface ClipboardItemResponse {
@@ -23,6 +25,7 @@ export interface ClipboardItemResponse {
   is_favorited: boolean;
   created_at: number;
   updated_at: number;
+  active_time: number;
   content_size: number;
   is_truncated: boolean;
 }
