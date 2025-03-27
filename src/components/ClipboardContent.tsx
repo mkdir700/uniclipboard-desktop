@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ClipboardItem from "./ClipboardItem";
 import {
   getDisplayType,
@@ -52,6 +52,16 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     error,
   } = useAppSelector((state) => state.clipboard);
 
+  // 使用ref保存最新的filter值
+  const currentFilterRef = useRef(filter);
+
+  // 更新ref以跟踪最新的filter
+  useEffect(() => {
+    currentFilterRef.current = filter;
+    loadClipboardRecords();
+    console.log("filter变化，更新ref值:", currentFilterRef.current);
+  }, [filter]);
+
   // 本地状态用于转换后的显示项目
   const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(
     []
@@ -59,9 +69,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
   // 加载剪贴板记录
   useEffect(() => {
-    // 先立即加载一次数据
-    loadClipboardRecords();
-
     // 设置监听器的函数
     const setupListener = async () => {
       // 只有在还没有活跃的监听器时才设置
@@ -81,7 +88,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
             timestamp: number;
           }>("clipboard-new-content", (event) => {
             console.log("收到新剪贴板内容事件:", event);
-            // 重新加载剪贴板记录
             loadClipboardRecords();
           });
 
@@ -110,18 +116,13 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     };
   }, []);
 
-  // 监听 filter 变化，重新加载数据
-  useEffect(() => {
-    loadClipboardRecords();
-  }, [filter]);
-
   // 从 Redux 加载剪贴板记录
   const loadClipboardRecords = async () => {
-    console.log("开始加载剪贴板记录...", filter);
+    console.log("开始加载剪贴板记录...", currentFilterRef.current);
     dispatch(
       fetchClipboardItems({
         orderBy: OrderBy.ActiveTimeDesc,
-        isFavorited: filter === "favorite" ? true : undefined,
+        isFavorited: currentFilterRef.current === "favorite" ? true : undefined,
       })
     );
   };
