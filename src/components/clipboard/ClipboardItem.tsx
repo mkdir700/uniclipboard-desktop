@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 interface ClipboardItemProps {
   type: "text" | "image" | "link" | "code" | "file";
@@ -33,6 +33,9 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   const [deleteTimer, setDeleteTimer] = useState<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [imageHeight, setImageHeight] = useState<number | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   // 组件卸载时清除计时器
   useEffect(() => {
@@ -46,6 +49,11 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   // 获取卡片样式
   const getCardStyle = () => {
     return "bg-gray-800/60";
+  };
+
+  // 计算内容字符数
+  const getCharCount = () => {
+    return content.length;
   };
 
   // 复制内容到剪贴板
@@ -123,6 +131,39 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
       }, 2000);
       setDeleteTimer(timer);
     }
+  };
+
+  // 图片加载完成后检查高度
+  const handleImageLoad = () => {
+    if (imageRef.current) {
+      setImageHeight(imageRef.current.naturalHeight);
+    }
+  };
+
+  // 图片最大高度阈值
+  const IMAGE_HEIGHT_THRESHOLD = 300;
+
+  // 检查图片是否需要展开/折叠
+  const needsImageExpand = (height: number | null): boolean => {
+    return height !== null && height > IMAGE_HEIGHT_THRESHOLD;
+  };
+
+  // 检查内容是否需要展开/收起功能
+  const needsExpandCollapse = (content: string, type: string): boolean => {
+    if (type === "image") {
+      return needsImageExpand(imageHeight);
+    }
+
+    // 链接类型特殊处理：基于字符长度判断
+    if (type === "link") {
+      // 链接如果超过100个字符，认为需要展开/收起
+      return content.length > 100;
+    }
+
+    // 计算内容的行数
+    const lines = content.split("\n");
+    // 如果超过两行，就需要展开/收起功能
+    return lines.length > 2;
   };
 
   // 渲染操作按钮
@@ -224,24 +265,6 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
           </svg>
         </button>
 
-        {/* 分享按钮 */}
-        {/* <button className="p-1 rounded-full hover:bg-gray-700/50">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4 text-gray-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-            />
-          </svg>
-        </button> */}
-
         {/* 删除按钮 */}
         <button
           className="p-1 rounded-full hover:bg-gray-700/50"
@@ -286,61 +309,123 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
 
   // 渲染内容
   const renderContent = () => {
+    const contentNeedsExpand =
+      type === "image"
+        ? needsImageExpand(imageHeight)
+        : needsExpandCollapse(content, type);
+
+    // 渐变蒙版组件
+    const renderGradientMask = () => {
+      if (isExpanded || !contentNeedsExpand) return null;
+
+      return (
+        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-gray-800/90 to-transparent pointer-events-none">
+          {/* 渐变蒙版，提示内容被截断 */}
+        </div>
+      );
+    };
+
     switch (type) {
       case "text":
         return (
-          <div className="text-sm text-gray-300 line-clamp-2">{content}</div>
+          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
+            <pre
+              className={`whitespace-pre-wrap ${
+                isExpanded ? "" : "line-clamp-2"
+              }`}
+            >
+              {content}
+            </pre>
+            {renderGradientMask()}
+          </div>
         );
       case "image":
+        const imageNeedsExpand = needsImageExpand(imageHeight);
         return (
-          <div>
+          <div
+            className={`relative overflow-hidden ${
+              isExpanded || !imageNeedsExpand ? "" : "max-h-[300px]"
+            }`}
+          >
             <img
+              ref={imageRef}
               src={
                 imageUrl ||
                 "https://images.unsplash.com/photo-1493723843671-1d655e66ac1c?ixlib=rb-1.2.1&auto=format&fit=crop&w=1050&q=80"
               }
-              className="rounded-md w-full h-24 object-cover"
+              className="w-full object-contain rounded-md"
               alt="图片"
+              onLoad={handleImageLoad}
             />
+            {imageNeedsExpand && !isExpanded && (
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-800/90 to-transparent">
+                {/* 渐变蒙版，提示图片被截断 */}
+              </div>
+            )}
           </div>
         );
       case "link":
         return (
-          <div className="text-sm text-gray-300 line-clamp-2">
-            <a
-              href={content}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:underline"
-            >
-              {content}
-            </a>
+          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
+            <div className={`${isExpanded ? "" : "line-clamp-2"} break-all`}>
+              <a
+                href={content}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:underline"
+                onClick={(e) => {
+                  if (contentNeedsExpand && !isExpanded) {
+                    e.preventDefault();
+                    setIsExpanded(true);
+                  }
+                }}
+              >
+                {content}
+              </a>
+            </div>
+            {renderGradientMask()}
           </div>
         );
       case "code":
         return (
-          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto">
-            <pre className="whitespace-pre-wrap line-clamp-2">{content}</pre>
+          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
+            <pre
+              className={`whitespace-pre-wrap ${
+                isExpanded ? "" : "line-clamp-2"
+              }`}
+            >
+              {content}
+            </pre>
+            {renderGradientMask()}
           </div>
         );
       case "file":
         return (
-          <div className="flex items-center p-2 bg-gray-800/50 rounded border border-gray-700/30">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <span className="text-sm text-gray-200 truncate">{content}</span>
+          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
+            <div className="flex items-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              <pre
+                className={`whitespace-pre-wrap ${
+                  isExpanded ? "" : "line-clamp-2"
+                }`}
+              >
+                {content}
+              </pre>
+            </div>
+            {renderGradientMask()}
           </div>
         );
       default:
@@ -349,22 +434,57 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   };
 
   const deviceInfo = device ? `${device} · ` : "";
+  const shouldUseExpand =
+    type === "image"
+      ? needsImageExpand(imageHeight)
+      : needsExpandCollapse(content, type);
+  const charCount = getCharCount();
 
   return (
     <div
-      className={`${getCardStyle()} rounded-lg overflow-hidden hover:ring-1 hover:ring-violet-400/40 transition duration-150 group`}
+      className={`${getCardStyle()} rounded-lg overflow-hidden hover:ring-1 hover:ring-violet-400/40 transition duration-150 group mb-3 relative`}
     >
-      <div className="p-2">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center text-xs text-gray-400">
-            <span className="truncate max-w-[120px]">{deviceInfo}</span>
-            <span>{time}</span>
-          </div>
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="p-3">
+        {/* 右上角操作按钮 */}
+        <div className="absolute top-2 right-2 z-10">
+          <div className="flex items-center space-x-1 bg-gray-800/80 rounded-md p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             {renderActionButtons()}
           </div>
         </div>
-        {renderContent()}
+
+        <div className="flex items-start">
+          <div className="flex-1">
+            {renderContent()}
+            <div className="flex justify-between items-center mt-2">
+              <div className="text-xs text-gray-400">{time}</div>
+
+              {shouldUseExpand && (
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="text-xs text-gray-400 hover:text-gray-300 flex items-center mx-2"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4 mr-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d={isExpanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"}
+                    />
+                  </svg>
+                  {isExpanded ? "收起" : "展开"}
+                </button>
+              )}
+
+              <div className="text-xs text-gray-400">{charCount} 字符</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

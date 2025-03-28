@@ -132,14 +132,20 @@ impl ContentProcessorService {
         }
     }
 
+    /// 处理文本文件
+    pub fn process_text_file(
+        file_path: &str,
+        max_length: Option<usize>,
+    ) -> Result<(String, usize, bool)> {
+        Self::read_text_file(file_path, max_length)
+    }
+
     /// 处理链接文件
     pub fn process_link_file(
         file_path: &str,
         _full_content: bool,
     ) -> Result<(String, usize, bool)> {
-        // 链接文件通常是文本文件，包含URL和可能的标题
-        // 这里简单实现为读取文本内容
-        Self::read_text_file(file_path, None)
+        ContentProcessorService::read_text_file(file_path, None)
     }
 
     /// 读取文件内容为 Bytes

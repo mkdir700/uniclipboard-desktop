@@ -35,13 +35,9 @@ pub fn process_clipboard_content(
     if let Some(file_path) = &record.local_file_path {
         match record.get_content_type() {
             Some(ContentType::Text) => {
-                match ContentProcessorService::read_text_file(
+                match ContentProcessorService::process_text_file(
                     file_path,
-                    if full_content {
-                        None
-                    } else {
-                        Some(MAX_TEXT_PREVIEW_LENGTH)
-                    },
+                    Some(MAX_TEXT_PREVIEW_LENGTH),
                 ) {
                     Ok(result) => result,
                     Err(e) => (format!("无法读取文本内容: {}", e), 0, false),
@@ -58,6 +54,12 @@ pub fn process_clipboard_content(
                 match ContentProcessorService::process_link_file(file_path, full_content) {
                     Ok(result) => result,
                     Err(e) => (format!("无法读取链接内容: {}", e), 0, false),
+                }
+            }
+            Some(ContentType::CodeSnippet) => {
+                match ContentProcessorService::process_text_file(file_path, None) {
+                    Ok(result) => result,
+                    Err(e) => (format!("无法读取代码片段内容: {}", e), 0, false),
                 }
             }
             _ => (
