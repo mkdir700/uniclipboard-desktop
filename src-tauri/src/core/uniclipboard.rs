@@ -14,7 +14,7 @@ use crate::core::event_bus::publish_clipboard_new_content;
 use crate::core::metadata::MetadataGenerator;
 use crate::core::transfer::ClipboardTransferMessage;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
-use crate::infrastructure::storage::db::models::clipboard_record::OrderBy;
+use crate::infrastructure::storage::db::models::clipboard_record::{Filter, OrderBy};
 use crate::infrastructure::storage::db::pool::DB_POOL;
 use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
@@ -263,10 +263,10 @@ impl RemoteClipboardManager {
                                     // 获取最新添加的记录ID，发布剪贴板新内容事件
                                     if let Ok(records) = record_manager
                                         .get_records(
-                                            None,
                                             Some(OrderBy::UpdatedAtDesc),
                                             Some(1),
                                             Some(0),
+                                            Some(Filter::All),
                                         )
                                         .await
                                     {

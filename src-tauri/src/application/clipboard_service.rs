@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::sync::Arc;
 
 use crate::core::transfer::ContentType;
-use crate::infrastructure::storage::db::models::clipboard_record::{DbClipboardRecord, OrderBy};
+use crate::infrastructure::storage::db::models::clipboard_record::{DbClipboardRecord, Filter, OrderBy};
 use crate::message::Payload;
 use crate::{application::file_service::FileService, core::UniClipboard};
 use serde::{Deserialize, Serialize};
@@ -123,14 +123,14 @@ impl ClipboardService {
     /// 获取剪贴板历史记录
     pub async fn get_clipboard_items(
         &self,
-        is_favorited: Option<bool>,
         order_by: Option<OrderBy>,
         limit: Option<i64>,
         offset: Option<i64>,
+        filter: Option<Filter>,
     ) -> Result<Vec<ClipboardItemResponse>> {
         let record_manager = self.app.get_record_manager();
         let records = record_manager
-            .get_records(is_favorited, order_by, limit, offset)
+            .get_records(order_by, limit, offset, filter)
             .await?;
         Ok(records
             .into_iter()

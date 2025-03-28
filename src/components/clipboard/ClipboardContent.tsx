@@ -5,6 +5,7 @@ import {
   isImageType,
   ClipboardItemResponse,
   OrderBy,
+  Filter,
 } from "@/api/clipboardItems";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -40,7 +41,7 @@ const globalListenerState: ListenerState = {
 };
 
 interface ClipboardContentProps {
-  filter: string;
+  filter: Filter;
 }
 
 const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
@@ -52,8 +53,8 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     error,
   } = useAppSelector((state) => state.clipboard);
 
-  // 使用ref保存最新的filter值
-  const currentFilterRef = useRef(filter);
+  // 使用ref保存最新的filter值，明确类型
+  const currentFilterRef = useRef<Filter>(filter);
 
   // 更新ref以跟踪最新的filter
   useEffect(() => {
@@ -122,7 +123,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     dispatch(
       fetchClipboardItems({
         orderBy: OrderBy.ActiveTimeDesc,
-        isFavorited: currentFilterRef.current === "favorite" ? true : undefined,
+        filter: currentFilterRef.current,
       })
     );
   };

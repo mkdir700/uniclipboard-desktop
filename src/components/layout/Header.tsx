@@ -1,26 +1,27 @@
 import React, { useState } from "react";
+import { Filter } from "@/api/clipboardItems";
 
 interface HeaderProps {
-  onFilterChange?: (filterId: string) => void;
+  onFilterChange?: (filterId: Filter) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
   // 定义筛选类型
   const filterTypes = [
-    { id: "all", label: "全部", icon: "📋" },
-    { id: "favorite", label: "收藏", icon: "⭐" },
-    { id: "text", label: "文本", icon: "📝" },
-    { id: "image", label: "图片", icon: "🖼️" },
-    { id: "link", label: "链接", icon: "🔗" },
-    { id: "file", label: "文件", icon: "📁" },
-    { id: "code", label: "代码", icon: "💻" },
+    { id: Filter.All, label: "全部", icon: "📋" },
+    { id: Filter.Favorited, label: "收藏", icon: "⭐" },
+    { id: Filter.Text, label: "文本", icon: "📝" },
+    { id: Filter.Image, label: "图片", icon: "🖼️" },
+    { id: Filter.Link, label: "链接", icon: "🔗" },
+    { id: Filter.File, label: "文件", icon: "📁" },
+    { id: Filter.Code, label: "代码", icon: "💻" },
   ];
 
   // 当前选中的筛选类型
-  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState<Filter>(Filter.All);
 
   // 处理筛选器点击
-  const handleFilterClick = (filterId: string) => {
+  const handleFilterClick = (filterId: Filter) => {
     setActiveFilter(filterId);
     // 调用父组件传入的回调函数
     onFilterChange?.(filterId);
@@ -72,7 +73,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
               key={filter.id}
               className={`px-3 py-1.5 rounded-md transition-all duration-200 flex items-center ${
                 activeFilter === filter.id
-                  ? filter.id === "favorite"
+                  ? filter.id === Filter.Favorited
                     ? "bg-yellow-500 text-white shadow-lg shadow-yellow-500/20 transform scale-105"
                     : "bg-violet-500 text-white shadow-lg shadow-violet-500/20 transform scale-105"
                   : "bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white"

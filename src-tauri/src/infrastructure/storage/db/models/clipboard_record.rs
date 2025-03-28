@@ -93,3 +93,27 @@ impl Default for OrderBy {
         OrderBy::ActiveTimeDesc
     }
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum Filter {
+    #[serde(rename = "all")]
+    All,
+    #[serde(rename = "favorited")]
+    Favorited,
+    #[serde(rename = "text")]
+    Text,
+    #[serde(rename = "image")]
+    Image,
+    #[serde(rename = "link")]
+    Link,
+    #[serde(rename = "code")]
+    Code,
+    #[serde(rename = "file")]
+    File,
+}
+
+impl Default for Filter {
+    fn default() -> Self {
+        Filter::All
+    }
+}

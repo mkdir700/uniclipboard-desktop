@@ -7,8 +7,9 @@ import {
   ClipboardItemResponse,
   OrderBy,
   favoriteClipboardItem,
-  unfavoriteClipboardItem
-} from '../../api/clipboardItems';
+  unfavoriteClipboardItem,
+  Filter
+} from '@/api/clipboardItems';
 
 // 定义状态接口
 interface ClipboardState {
@@ -32,6 +33,7 @@ interface FetchClipboardItemsParams {
   limit?: number;
   offset?: number;
   isFavorited?: boolean;
+  filter?: Filter;
 }
 
 // 异步 Thunk Actions
@@ -43,7 +45,7 @@ export const fetchClipboardItems = createAsyncThunk(
         params.orderBy,
         params.limit,
         params.offset,
-        params.isFavorited
+        params.filter
       );
     } catch (error) {
       return rejectWithValue("获取剪贴板内容失败");

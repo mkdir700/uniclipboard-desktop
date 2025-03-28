@@ -7,7 +7,7 @@ use log::{error, info};
 use uuid::Uuid;
 
 use super::db::dao::clipboard_record;
-use super::db::models::clipboard_record::{DbClipboardRecord, OrderBy};
+use super::db::models::clipboard_record::{DbClipboardRecord, Filter, OrderBy};
 use super::db::pool::DB_POOL;
 
 /// 剪贴板历史记录管理器
@@ -111,20 +111,20 @@ impl ClipboardRecordManager {
     ///! TODO: 如果后续有新的形参，则需要变动多个地方，考虑优化
     pub async fn get_records(
         &self,
-        is_favorited: Option<bool>,
         order_by: Option<OrderBy>,
         limit: Option<i64>,
         offset: Option<i64>,
+        filter: Option<Filter>,
     ) -> Result<Vec<DbClipboardRecord>> {
         let limit = limit.unwrap_or(50);
         let offset = offset.unwrap_or(0);
         let mut conn = DB_POOL.get_connection()?;
         let records = clipboard_record::query_clipboard_records(
             &mut conn,
-            is_favorited,
             order_by,
             Some(limit),
             Some(offset),
+            filter,
         )?;
         Ok(records)
     }

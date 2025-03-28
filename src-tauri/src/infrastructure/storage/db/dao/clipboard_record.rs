@@ -1,5 +1,5 @@
 use crate::infrastructure::storage::db::models::clipboard_record::{
-    DbClipboardRecord, NewClipboardRecord, OrderBy, UpdateClipboardRecord,
+    DbClipboardRecord, Filter, NewClipboardRecord, OrderBy, UpdateClipboardRecord,
 };
 use crate::infrastructure::storage::db::schema::clipboard_records;
 use crate::utils::helpers::get_current_time;
@@ -72,10 +72,10 @@ pub fn get_record_count(conn: &mut SqliteConnection) -> Result<i64> {
 /// 查询剪贴板记录
 pub fn query_clipboard_records(
     conn: &mut SqliteConnection,
-    is_favorited: Option<bool>,
     order_by: Option<OrderBy>,
     limit: Option<i64>,
     offset: Option<i64>,
+    filter: Option<Filter>,
 ) -> Result<Vec<DbClipboardRecord>> {
     let limit = limit.unwrap_or(50);
     let offset = offset.unwrap_or(0);
@@ -116,8 +116,27 @@ pub fn query_clipboard_records(
         }
     }
 
-    if let Some(is_favorited) = is_favorited {
-        query = query.filter(clipboard_records::is_favorited.eq(is_favorited));
+    match filter.unwrap_or_default() {
+        Filter::All => {}
+        Filter::Favorited => {
+            query = query.filter(clipboard_records::is_favorited.eq(true));
+        }
+        Filter::Text => {
+            query = query.filter(clipboard_records::content_type.eq("text"));
+        }
+        Filter::Image => {
+            query = query.filter(clipboard_records::content_type.eq("image"));
+        }
+        Filter::Link => {
+            query = query.filter(clipboard_records::content_type.eq("link"));
+        }
+        Filter::Code => {
+            query = query.filter(clipboard_records::content_type.eq("code"));
+        }
+        Filter::File => {
+            query = query.filter(clipboard_records::content_type.eq("file"));
+        }
+        _ => {}
     }
 
     let records = query

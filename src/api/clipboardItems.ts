@@ -16,6 +16,19 @@ export enum OrderBy {
   ActiveTimeDesc = "active_time_desc",
 }
 
+/**
+ * 过滤选项枚举
+ */
+export enum Filter {
+  All = "all",
+  Favorited = "favorited",
+  Text = "text",
+  Image = "image",
+  Link = "link",
+  Code = "code",
+  File = "file",
+}
+
 export interface ClipboardItemResponse {
   id: string;
   device_id: string;
@@ -41,14 +54,14 @@ export async function getClipboardItems(
   orderBy?: OrderBy,
   limit?: number, 
   offset?: number,
-  isFavorited?: boolean
+  filter?: Filter,
 ): Promise<ClipboardItemResponse[]> {
   try {
     return await invoke('get_clipboard_items', { 
       orderBy,
       limit,
       offset,
-      isFavorited,
+      filter,
     });
   } catch (error) {
     console.error('获取剪贴板历史记录失败:', error);

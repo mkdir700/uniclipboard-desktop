@@ -3,11 +3,11 @@ import Header from "@/components/layout/Header";
 import ClipboardContent from "@/components/clipboard/ClipboardContent";
 import ActionBar from "@/components/layout/ActionBar";
 import { MainLayout } from "@/layouts";
-
+import { Filter } from "@/api/clipboardItems";
 const DashboardPage: React.FC = () => {
-  const [currentFilter, setCurrentFilter] = useState("all");
+  const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.All);
 
-  const handleFilterChange = (filterId: string) => {
+  const handleFilterChange = (filterId: Filter) => {
     setCurrentFilter(filterId);
     // TODO: 根据筛选器更新剪贴板内容
   };
