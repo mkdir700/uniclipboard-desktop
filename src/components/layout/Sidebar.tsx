@@ -40,36 +40,6 @@ const Sidebar: React.FC = () => {
             </svg>
           </Link>
 
-          {/* 历史记录 */}
-          <Link
-            to="/history"
-            className={`group flex items-center justify-center px-2 py-3 text-sm font-medium rounded-lg ${
-              path === "/history"
-                ? "bg-gray-600 bg-opacity-80 text-white"
-                : "text-gray-300 hover:bg-gray-600 hover:bg-opacity-60 hover:text-white transition duration-150"
-            }`}
-            title="历史记录"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className={`h-6 w-6 ${
-                path === "/history"
-                  ? "text-violet-300"
-                  : "text-gray-400 group-hover:text-violet-300"
-              }`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </Link>
-
           {/* 设备管理 */}
           <Link
             to="/devices"

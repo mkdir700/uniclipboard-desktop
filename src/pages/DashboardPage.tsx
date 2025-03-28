@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import Header from "../components/Header";
-import ClipboardContent from "../components/ClipboardContent";
-import ActionBar from "../components/ActionBar";
-import { MainLayout } from "../layouts";
+import Header from "@/components/layout/Header";
+import ClipboardContent from "@/components/clipboard/ClipboardContent";
+import ActionBar from "@/components/layout/ActionBar";
+import { MainLayout } from "@/layouts";
 
 const DashboardPage: React.FC = () => {
   const [currentFilter, setCurrentFilter] = useState("all");

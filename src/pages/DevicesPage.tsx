@@ -1,13 +1,7 @@
 import React, { useState } from "react";
-import {
-  DeviceList,
-  DeviceRules,
-  DevicePermissions,
-  DevicePairingModal,
-  DeviceHeader,
-  DeviceFooter,
-} from "../components";
-import { MainLayout } from "../layouts";
+import { DeviceList, DeviceHeader, DeviceFooter } from "@/components";
+import { Rules, Permissions, PairingModal } from "@/components/device";
+import { MainLayout } from "@/layouts";
 
 const DevicesPage: React.FC = () => {
   const [showPairingModal, setShowPairingModal] = useState(false);
@@ -32,10 +26,10 @@ const DevicesPage: React.FC = () => {
           <DeviceList />
 
           {/* 设备规则 */}
-          <DeviceRules />
+          <Rules />
 
           {/* 权限管理 */}
-          <DevicePermissions />
+          <Permissions />
         </div>
       </div>
 
@@ -43,9 +37,7 @@ const DevicesPage: React.FC = () => {
       <DeviceFooter />
 
       {/* 设备配对模态框 */}
-      {showPairingModal && (
-        <DevicePairingModal onClose={handleClosePairingModal} />
-      )}
+      {showPairingModal && <PairingModal onClose={handleClosePairingModal} />}
     </MainLayout>
   );
 };

@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
-import { SettingsLayout } from "../layouts";
-import { SettingContentLayout } from "../layouts";
-import SyncSection from "../components/setting/SyncSection";
-import SecuritySection from "../components/setting/SecuritySection";
-import NetworkSection from "../components/setting/NetworkSection";
-import StorageSection from "../components/setting/StorageSection";
-import AboutSection from "../components/setting/AboutSection";
-import { CategoryItem } from "../components/setting/SettingHeader";
-import GeneralSection from "../components/setting/GeneralSection";
+import { SettingsLayout } from "@/layouts";
+import { SettingContentLayout } from "@/layouts";
+import SyncSection from "@/components/setting/SyncSection";
+import SecuritySection from "@/components/setting/SecuritySection";
+import NetworkSection from "@/components/setting/NetworkSection";
+import StorageSection from "@/components/setting/StorageSection";
+import AboutSection from "@/components/setting/AboutSection";
+import { CategoryItem } from "@/components/setting/SettingHeader";
+import GeneralSection from "@/components/setting/GeneralSection";
 
 // 集中定义所有设置类别
 const SETTING_CATEGORIES: CategoryItem[] = [

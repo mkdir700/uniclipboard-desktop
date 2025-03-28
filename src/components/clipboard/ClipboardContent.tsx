@@ -5,17 +5,17 @@ import {
   isImageType,
   ClipboardItemResponse,
   OrderBy,
-} from "../api/clipboardItems";
+} from "@/api/clipboardItems";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   fetchClipboardItems,
   removeClipboardItem,
   copyToClipboard,
   clearError as clearReduxError,
   toggleFavoriteItem,
-} from "../store/slices/clipboardSlice";
+} from "@/store/slices/clipboardSlice";
 
 interface DisplayClipboardItem {
   id: string;
