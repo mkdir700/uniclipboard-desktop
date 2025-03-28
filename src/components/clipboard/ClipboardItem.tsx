@@ -306,28 +306,15 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         );
       case "link":
         return (
-          <div className="flex items-center p-2 bg-gray-800/50 rounded border border-gray-700/30">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-blue-400 mr-2 flex-shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          <div className="text-sm text-gray-300 line-clamp-2">
+            <a
+              href={content}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:underline"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 10-5.656-5.656l-1.102 1.101"
-              />
-            </svg>
-            <span className="text-sm text-gray-200 truncate">{content}</span>
+              {content}
+            </a>
           </div>
         );
       case "code":
