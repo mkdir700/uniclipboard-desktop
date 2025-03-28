@@ -34,14 +34,6 @@ impl DbClipboardRecord {
     }
 }
 
-/// 剪贴板项目元数据
-///
-/// 用于从DbClipboardRecord中提取显示信息
-pub struct ClipboardItemMetadata {
-    pub display_content: String,
-    // 根据需要添加其他字段
-}
-
 #[derive(Insertable, Debug)]
 #[diesel(table_name = crate::infrastructure::storage::db::schema::clipboard_records)]
 pub struct NewClipboardRecord {
