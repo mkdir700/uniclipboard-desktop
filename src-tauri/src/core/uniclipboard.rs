@@ -11,8 +11,7 @@ use crate::config::get_config_dir;
 use crate::core::clipboard_content_receiver::ClipboardContentReceiver;
 use crate::core::download_decision::DownloadDecisionMaker;
 use crate::core::event_bus::publish_clipboard_new_content;
-use crate::core::metadata::MetadataGenerator;
-use crate::core::transfer::ClipboardTransferMessage;
+use crate::core::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
 use crate::infrastructure::storage::db::models::clipboard_record::{Filter, OrderBy};
 use crate::infrastructure::storage::db::pool::DB_POOL;
@@ -33,7 +32,6 @@ pub struct LocalClipboardManager {
     last_payload: Arc<RwLock<Option<Payload>>>,
     record_manager: Arc<ClipboardRecordManager>,
     file_storage: Arc<FileStorageManager>,
-    metadata_generator: Arc<MetadataGenerator>,
 }
 
 impl LocalClipboardManager {
@@ -44,7 +42,6 @@ impl LocalClipboardManager {
         device_id: String,
     ) -> Result<Self> {
         let file_storage = Arc::new(FileStorageManager::new()?);
-        let metadata_generator = Arc::new(MetadataGenerator::new(device_id.clone()));
 
         Ok(Self {
             device_id,
@@ -55,7 +52,6 @@ impl LocalClipboardManager {
             last_payload: Arc::new(RwLock::new(None)),
             record_manager,
             file_storage,
-            metadata_generator,
         })
     }
 
@@ -79,7 +75,6 @@ impl LocalClipboardManager {
         let last_payload = self.last_payload.clone();
         let record_manager = self.record_manager.clone();
         let file_storage = self.file_storage.clone();
-        let metadata_generator = self.metadata_generator.clone();
         info!("Local to remote sync is running");
 
         tokio::spawn(async move {
@@ -113,7 +108,7 @@ impl LocalClipboardManager {
                     };
 
                     // 步骤2: 使用 payload + 本地存储路径，构建 metadata
-                    let metadata = metadata_generator.generate_metadata(&payload, &storage_path);
+                    let metadata = (&payload, &storage_path).into();
                     info!("Push to remote: {}", metadata);
                     let result = record_manager
                         .add_or_update_record_with_metadata(&metadata)
@@ -124,11 +119,11 @@ impl LocalClipboardManager {
                             // 发布剪贴板新内容事件
                             publish_clipboard_new_content(record_id.clone());
                             // 步骤3: 将 metadata 发送至远程
-                            let sync_message = ClipboardTransferMessage::from_metadata(
+                            let sync_message = ClipboardTransferMessage::from((
                                 metadata,
                                 device_id.clone(),
                                 record_id,
-                            );
+                            ));
                             if let Err(e) = remote_sync.push(sync_message).await {
                                 // 恢复到之前的值
                                 *last_payload.write().await = tmp;

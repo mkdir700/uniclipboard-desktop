@@ -34,6 +34,9 @@ anyhow = "1.0.89"
 log = "0.4"
 env_logger = { version = "0.10", features = ["color"] }
 
+# 正则表达式
+regex = "1.9.5"
+
 # 命令行参数解析
 clap = { version = "4.3", features = ["derive"] }
 dialoguer = "0.10.4"

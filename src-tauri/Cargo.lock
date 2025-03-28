@@ -6744,6 +6744,7 @@ dependencies = [
  "png",
  "rand 0.8.5",
  "rayon",
+ "regex",
  "reqwest_dav",
  "serde",
  "serde_json",

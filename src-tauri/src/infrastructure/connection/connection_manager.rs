@@ -2,7 +2,7 @@ use crate::application::device_service::{
     get_device_manager, subscribe_new_devices, GLOBAL_DEVICE_MANAGER,
 };
 use crate::config::Setting;
-use crate::core::transfer::ClipboardTransferMessage;
+use crate::core::transfer_message::ClipboardTransferMessage;
 use crate::domain::device::Device;
 use crate::infrastructure::web::handlers::message_handler::MessageSource;
 use crate::message::WebSocketMessage;

@@ -1,11 +1,11 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::config::Setting;
+use crate::core::transfer_message::ClipboardTransferMessage;
 use crate::interface::{RemoteClipboardSync as RemoteClipboardSyncTrait, RemoteSyncManagerTrait};
-use crate::core::transfer::ClipboardTransferMessage;
 use anyhow::Result;
-use tokio::sync::RwLock;
 use async_trait::async_trait;
+use tokio::sync::RwLock;
 
 pub struct RemoteSyncManager {
     sync_handler: Arc<RwLock<Option<Arc<dyn RemoteClipboardSyncTrait>>>>,
@@ -131,7 +131,7 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
 //             Utc::now(),
 //         );
 //         let message = ClipboardSyncMessage::from_payload(payload);
-    
+
 //         mock_handler
 //             .expect_push()
 //             .withf(|m: &ClipboardSyncMessage| {
@@ -140,7 +140,7 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
 //             })
 //             .times(1)
 //             .returning(|_| Ok(()));
-    
+
 //         manager.set_sync_handler(Arc::new(mock_handler)).await;
 //         assert!(manager.push(message).await.is_ok());
 //     }
@@ -171,7 +171,7 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
 //     async fn test_start() {
 //         let manager = RemoteSyncManager::new();
 //         let mut mock_handler = MockRemoteClipboardSync::new();
-        
+
 //         mock_handler
 //             .expect_start()
 //             .times(1)
@@ -180,12 +180,12 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
 //         manager.set_sync_handler(Arc::new(mock_handler)).await;
 //         assert!(manager.start().await.is_ok());
 //     }
-    
+
 //     #[tokio::test]
 //     async fn test_stop() {
 //         let manager = RemoteSyncManager::new();
 //         let mut mock_handler = MockRemoteClipboardSync::new();
-        
+
 //         mock_handler
 //             .expect_stop()
 //             .times(1)
@@ -194,12 +194,12 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
 //         manager.set_sync_handler(Arc::new(mock_handler)).await;
 //         assert!(manager.stop().await.is_ok());
 //     }
-    
+
 //     #[tokio::test]
 //     async fn test_pause() {
 //         let manager = RemoteSyncManager::new();
 //         let mut mock_handler = MockRemoteClipboardSync::new();
-        
+
 //         mock_handler
 //             .expect_pause()
 //             .times(1)
@@ -208,12 +208,12 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
 //         manager.set_sync_handler(Arc::new(mock_handler)).await;
 //         assert!(manager.pause().await.is_ok());
 //     }
-    
+
 //     #[tokio::test]
 //     async fn test_resume() {
 //         let manager = RemoteSyncManager::new();
 //         let mut mock_handler = MockRemoteClipboardSync::new();
-        
+
 //         mock_handler
 //             .expect_resume()
 //             .times(1)

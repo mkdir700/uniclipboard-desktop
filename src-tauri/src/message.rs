@@ -9,7 +9,8 @@ use tokio_tungstenite::tungstenite::Message;
 use twox_hash::xxh3::hash64;
 
 use crate::application::file_service::FileService;
-use crate::core::transfer::ClipboardTransferMessage;
+use crate::core::transfer_message::ClipboardTransferMessage;
+use crate::core::ClipboardMetadata;
 use crate::domain::device::{Device, DeviceStatus};
 use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord;
 
@@ -353,10 +354,36 @@ impl WebSocketMessage {
     }
 }
 
+/// 从 DbClipboardRecord 创建 Payload
 impl TryFrom<DbClipboardRecord> for Payload {
     type Error = anyhow::Error;
 
     fn try_from(record: DbClipboardRecord) -> Result<Self, Self::Error> {
         FileService::create_payload_from_record(&record)
+    }
+}
+
+/// 从 ClipboardTransferMessage 和 Bytes 创建 Payload
+impl From<(&ClipboardTransferMessage, Bytes)> for Payload {
+    fn from((message, bytes): (&ClipboardTransferMessage, Bytes)) -> Self {
+        match &message.metadata {
+            ClipboardMetadata::Text(_) => Payload::new_text(
+                bytes,
+                message.sender_id.clone(),
+                message.metadata.get_timestamp(),
+            ),
+            ClipboardMetadata::Image(image) => Payload::new_image(
+                bytes,
+                message.sender_id.clone(),
+                message.metadata.get_timestamp(),
+                image.width,
+                image.height,
+                image.format.clone(),
+                image.size,
+            ),
+            _ => {
+                unimplemented!()
+            }
+        }
     }
 }

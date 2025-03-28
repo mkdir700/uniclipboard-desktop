@@ -1,14 +1,14 @@
 use crate::config::Setting as Config;
+use crate::core::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
+use crate::infrastructure::web::WebSocketMessageHandler;
 use crate::interface::RemoteClipboardSync;
 use crate::message::WebSocketMessage;
-use crate::core::transfer::ClipboardTransferMessage;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::info;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::infrastructure::web::WebSocketMessageHandler;
 
 #[derive(Clone)]
 pub struct WebSocketSync {

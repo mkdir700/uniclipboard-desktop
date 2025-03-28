@@ -1,13 +1,13 @@
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use bytes::Bytes;
-use chrono::{Utc, TimeZone};
+use chrono::{TimeZone, Utc};
 use image::{GenericImageView, ImageFormat};
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 
-use crate::core::transfer::ContentType;
+use crate::core::content_type::ContentType;
 use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord;
 use crate::message::Payload;
 
@@ -172,7 +172,11 @@ impl FileService {
         match record.get_content_type() {
             Some(ContentType::Text) => {
                 let content = Self::read_file_as_bytes(file_path)?;
-                Ok(Payload::new_text(content, record.device_id.clone(), timestamp))
+                Ok(Payload::new_text(
+                    content,
+                    record.device_id.clone(),
+                    timestamp,
+                ))
             }
             Some(ContentType::Image) => {
                 let (content, dimensions, format) = Self::read_image_file(file_path)?;

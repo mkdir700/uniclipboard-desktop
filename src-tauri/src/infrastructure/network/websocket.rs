@@ -1,11 +1,8 @@
 use crate::application::device_service::get_device_manager;
 use crate::config::Setting;
+use crate::core::transfer_message::ClipboardTransferMessage;
 use crate::domain::device::Device;
-use crate::core::transfer::ClipboardTransferMessage;
-use crate::message::DeviceSyncInfo;
-use crate::message::DevicesSyncMessage;
-use crate::message::RegisterDeviceMessage;
-use crate::message::WebSocketMessage;
+use crate::message::{DeviceSyncInfo, DevicesSyncMessage, RegisterDeviceMessage, WebSocketMessage};
 use anyhow::Result;
 use futures::StreamExt;
 use futures_util::SinkExt;

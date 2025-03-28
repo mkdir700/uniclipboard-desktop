@@ -1,8 +1,8 @@
-use crate::core::transfer::ClipboardTransferMessage;
+use crate::core::transfer_message::ClipboardTransferMessage;
 use anyhow::Result;
+use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::Duration;
-use async_trait::async_trait;
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]

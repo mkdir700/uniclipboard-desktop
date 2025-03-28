@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
+use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
-use crate::{
-    core::transfer::ClipboardMetadata, infrastructure::storage::file_storage::FileStorageManager,
-};
 
-use super::transfer::ClipboardTransferMessage;
 use super::event_bus::publish_clipboard_new_content;
+use super::transfer_message::ClipboardTransferMessage;
 use crate::application::device_service::get_device_manager;
 use crate::message::Payload;
 use anyhow::Result;
@@ -72,18 +70,19 @@ impl ClipboardContentReceiver {
                 info!("Downloaded file with size: {} bytes", bytes.len());
 
                 // 根据内容类型创建对应的Payload
-                let payload = message.to_payload(bytes);
+                let payload = Payload::from((&message, bytes));
 
                 // 存储下载的内容
                 let file_path = self.file_storage.store(&payload).await?;
-                let metadata = ClipboardMetadata::from_payload(&payload, &file_path);
+                let metadata = (&payload, &file_path).into();
                 // 新增记录
-                let record_id = self.record_manager
+                let record_id = self
+                    .record_manager
                     .add_or_update_record_with_metadata(&metadata)
                     .await?;
 
                 info!("Downloaded content stored at: {:?}", file_path);
-                
+
                 // 发布剪贴板新内容事件
                 publish_clipboard_new_content(record_id);
 

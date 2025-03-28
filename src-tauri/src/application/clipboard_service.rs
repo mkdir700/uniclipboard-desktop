@@ -1,8 +1,10 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use crate::core::transfer::ContentType;
-use crate::infrastructure::storage::db::models::clipboard_record::{DbClipboardRecord, Filter, OrderBy};
+use crate::core::content_type::ContentType;
+use crate::infrastructure::storage::db::models::clipboard_record::{
+    DbClipboardRecord, Filter, OrderBy,
+};
 use crate::message::Payload;
 use crate::{application::file_service::FileService, core::UniClipboard};
 use serde::{Deserialize, Serialize};

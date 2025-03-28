@@ -1,4 +1,4 @@
-use crate::core::transfer::ContentType;
+use crate::core::content_type::ContentType;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
