@@ -1,0 +1,32 @@
+[build]
+# 使用并行编译
+codegen-units = 16
+# 增大缓存大小
+incremental = true
+# 使用sccache
+rustc-wrapper = "sccache"
+
+# macOS优化
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "target-cpu=native"]
+
+# 启用pipelining以加速链接
+[profile.dev]
+codegen-units = 16
+
+# 依赖优化
+[profile.dev.package."*"]
+# 对第三方包使用发布优化但保留调试信息
+opt-level = 1
+debug = false
+
+# 对特定的慢速编译包进行优化
+[profile.dev.package.objc2]
+opt-level = 3
+codegen-units = 1
+
+[profile.dev.package.image]
+opt-level = 2
+
+[profile.dev.package.clipboard-rs]
+opt-level = 2
