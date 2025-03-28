@@ -113,6 +113,7 @@ fn get_content_type(record: &DbClipboardRecord) -> Result<String, warp::Rejectio
             Ok(content_type)
         }
         "link" => Ok("text/plain; charset=utf-8".to_string()),
+        "code" => Ok("text/plain; charset=utf-8".to_string()),
         "code_snippet" => Ok("text/plain; charset=utf-8".to_string()),
         "rich_text" => Ok("text/html; charset=utf-8".to_string()),
         _ => Ok("application/octet-stream".to_string()),

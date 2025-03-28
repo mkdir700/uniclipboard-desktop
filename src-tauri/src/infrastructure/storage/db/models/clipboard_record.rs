@@ -21,7 +21,7 @@ pub struct DbClipboardRecord {
 impl DbClipboardRecord {
     /// 获取内容类型枚举
     pub fn get_content_type(&self) -> Option<ContentType> {
-        ContentType::from_str(&self.content_type)
+        ContentType::try_from(&self.content_type).ok()
     }
 
     /// 获取更新记录

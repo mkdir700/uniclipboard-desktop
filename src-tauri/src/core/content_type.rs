@@ -12,35 +12,55 @@ pub enum ContentType {
     RichText,
 }
 
-impl ContentType {
-    /// 获取内容类型的字符串表示
-    pub fn as_str(&self) -> &'static str {
-        match self {
+impl Display for ContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             ContentType::Text => "text",
             ContentType::Image => "image",
             ContentType::Link => "link",
             ContentType::File => "file",
-            ContentType::CodeSnippet => "code_snippet",
+            ContentType::CodeSnippet => "code",
             ContentType::RichText => "rich_text",
-        }
+        };
+        write!(f, "{}", s)
     }
+}
 
-    /// 从字符串解析内容类型
-    pub fn from_str(s: &str) -> Option<Self> {
+impl TryFrom<&str> for ContentType {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "text" => Some(ContentType::Text),
-            "image" => Some(ContentType::Image),
-            "link" => Some(ContentType::Link),
-            "file" => Some(ContentType::File),
-            "code_snippet" => Some(ContentType::CodeSnippet),
-            "rich_text" => Some(ContentType::RichText),
-            _ => None,
+            "text" => Ok(ContentType::Text),
+            "image" => Ok(ContentType::Image),
+            "link" => Ok(ContentType::Link),
+            "file" => Ok(ContentType::File),
+            "code" => Ok(ContentType::CodeSnippet),
+            "rich_text" => Ok(ContentType::RichText),
+            _ => Err(format!("无效的内容类型: {}", s)),
         }
     }
 }
 
-impl Display for ContentType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
+// 将 ContentType 转换为 String
+impl From<ContentType> for String {
+    fn from(content_type: ContentType) -> Self {
+        match content_type {
+            ContentType::Text => "text".to_string(),
+            ContentType::Image => "image".to_string(),
+            ContentType::Link => "link".to_string(),
+            ContentType::File => "file".to_string(),
+            ContentType::CodeSnippet => "code".to_string(),
+            ContentType::RichText => "rich_text".to_string(),
+        }
+    }
+}
+
+// 为 &String 实现 TryFrom
+impl TryFrom<&String> for ContentType {
+    type Error = String;
+
+    fn try_from(s: &String) -> Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
     }
 }

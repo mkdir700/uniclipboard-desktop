@@ -78,7 +78,7 @@ pub fn process_clipboard_content(
 impl From<(DbClipboardRecord, bool)> for ClipboardItemResponse {
     fn from((record, full_content): (DbClipboardRecord, bool)) -> Self {
         let content_type = match record.get_content_type() {
-            Some(ct) => ct.as_str().to_string(),
+            Some(ct) => ct.to_string(),
             None => record.content_type.clone(),
         };
 
