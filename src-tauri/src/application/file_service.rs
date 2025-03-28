@@ -16,9 +16,9 @@ const MAX_THUMBNAIL_SIZE: u32 = 1200;
 /// 最大图片大小，超过此大小将压缩（字节）
 const MAX_IMAGE_SIZE: usize = 1024 * 1024; // 1MB
 
-pub struct FileService;
+pub struct ContentProcessorService;
 
-impl FileService {
+impl ContentProcessorService {
     /// 根据图片文件路径获取MIME类型
     pub fn get_image_mime_type(path: &str) -> &'static str {
         let path = Path::new(path);
@@ -130,6 +130,16 @@ impl FileService {
         } else {
             Ok((content, original_length, false))
         }
+    }
+
+    /// 处理链接文件
+    pub fn process_link_file(
+        file_path: &str,
+        _full_content: bool,
+    ) -> Result<(String, usize, bool)> {
+        // 链接文件通常是文本文件，包含URL和可能的标题
+        // 这里简单实现为读取文本内容
+        Self::read_text_file(file_path, None)
     }
 
     /// 读取文件内容为 Bytes

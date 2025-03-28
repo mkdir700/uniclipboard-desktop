@@ -8,7 +8,7 @@ use std::fmt;
 use tokio_tungstenite::tungstenite::Message;
 use twox_hash::xxh3::hash64;
 
-use crate::application::file_service::FileService;
+use crate::application::file_service::ContentProcessorService;
 use crate::core::transfer_message::ClipboardTransferMessage;
 use crate::core::ClipboardMetadata;
 use crate::domain::device::{Device, DeviceStatus};
@@ -359,7 +359,7 @@ impl TryFrom<DbClipboardRecord> for Payload {
     type Error = anyhow::Error;
 
     fn try_from(record: DbClipboardRecord) -> Result<Self, Self::Error> {
-        FileService::create_payload_from_record(&record)
+        ContentProcessorService::create_payload_from_record(&record)
     }
 }
 

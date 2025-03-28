@@ -6,7 +6,7 @@ use crate::infrastructure::storage::db::models::clipboard_record::{
     DbClipboardRecord, Filter, OrderBy,
 };
 use crate::message::Payload;
-use crate::{application::file_service::FileService, core::UniClipboard};
+use crate::{application::file_service::ContentProcessorService, core::UniClipboard};
 use serde::{Deserialize, Serialize};
 
 /// 文本摘要的最大长度
@@ -27,88 +27,74 @@ pub struct ClipboardItemResponse {
     pub is_truncated: bool,
 }
 
-impl ClipboardItemResponse {
-    /// 从数据库记录创建响应对象（带预览内容）
-    pub fn from_record(record: DbClipboardRecord) -> Self {
-        let content_type = match record.get_content_type() {
-            Some(ct) => ct.as_str().to_string(),
-            None => record.content_type.clone(),
-        };
-
-        let (display_content, content_size, is_truncated) = Self::process_content(&record, false);
-
-        Self {
-            id: record.id,
-            device_id: record.device_id,
-            content_type,
-            display_content,
-            is_downloaded: record.local_file_path.is_some(),
-            is_favorited: record.is_favorited,
-            created_at: record.created_at,
-            updated_at: record.updated_at,
-            active_time: record.active_time,
-            content_size,
-            is_truncated,
-        }
-    }
-
-    /// 从数据库记录创建响应对象（带完整内容）
-    pub fn from_record_full(record: DbClipboardRecord) -> Self {
-        let content_type = match record.get_content_type() {
-            Some(ct) => ct.as_str().to_string(),
-            None => record.content_type.clone(),
-        };
-
-        let (display_content, content_size, is_truncated) = Self::process_content(&record, true);
-
-        Self {
-            id: record.id,
-            device_id: record.device_id,
-            content_type,
-            display_content,
-            is_downloaded: record.local_file_path.is_some(),
-            is_favorited: record.is_favorited,
-            created_at: record.created_at,
-            updated_at: record.updated_at,
-            active_time: record.active_time,
-            content_size,
-            is_truncated,
-        }
-    }
-
-    /// 处理剪贴板内容
-    fn process_content(record: &DbClipboardRecord, full_content: bool) -> (String, usize, bool) {
-        if let Some(file_path) = &record.local_file_path {
-            match record.get_content_type() {
-                Some(ContentType::Text) => {
-                    match FileService::read_text_file(
-                        file_path,
-                        if full_content {
-                            None
-                        } else {
-                            Some(MAX_TEXT_PREVIEW_LENGTH)
-                        },
-                    ) {
-                        Ok(result) => result,
-                        Err(e) => (format!("无法读取文本内容: {}", e), 0, false),
-                    }
+/// 处理剪贴板内容，提取显示内容和相关元数据
+pub fn process_clipboard_content(
+    record: &DbClipboardRecord,
+    full_content: bool,
+) -> (String, usize, bool) {
+    if let Some(file_path) = &record.local_file_path {
+        match record.get_content_type() {
+            Some(ContentType::Text) => {
+                match ContentProcessorService::read_text_file(
+                    file_path,
+                    if full_content {
+                        None
+                    } else {
+                        Some(MAX_TEXT_PREVIEW_LENGTH)
+                    },
+                ) {
+                    Ok(result) => result,
+                    Err(e) => (format!("无法读取文本内容: {}", e), 0, false),
                 }
-                Some(ContentType::Image) => {
-                    match FileService::process_image_file(file_path, full_content) {
-                        Ok(result) => result,
-                        Err(e) => (format!("无法读取图片内容: {}", e), 0, false),
-                    }
-                }
-                _ => (
-                    format!("不支持的内容类型: {}", record.content_type),
-                    0,
-                    false,
-                ),
             }
-        } else if record.remote_record_id.is_some() {
-            ("远程内容尚未下载".to_string(), 0, false)
-        } else {
-            ("无内容可显示".to_string(), 0, false)
+            Some(ContentType::Image) => {
+                match ContentProcessorService::process_image_file(file_path, full_content) {
+                    Ok(result) => result,
+                    Err(e) => (format!("无法读取图片内容: {}", e), 0, false),
+                }
+            }
+            Some(ContentType::Link) => {
+                // 使用 FileService::process_link_file 处理链接内容
+                match ContentProcessorService::process_link_file(file_path, full_content) {
+                    Ok(result) => result,
+                    Err(e) => (format!("无法读取链接内容: {}", e), 0, false),
+                }
+            }
+            _ => (
+                format!("不支持的内容类型: {}", record.content_type),
+                0,
+                false,
+            ),
+        }
+    } else if record.remote_record_id.is_some() {
+        ("远程内容尚未下载".to_string(), 0, false)
+    } else {
+        ("无内容可显示".to_string(), 0, false)
+    }
+}
+
+impl From<(DbClipboardRecord, bool)> for ClipboardItemResponse {
+    fn from((record, full_content): (DbClipboardRecord, bool)) -> Self {
+        let content_type = match record.get_content_type() {
+            Some(ct) => ct.as_str().to_string(),
+            None => record.content_type.clone(),
+        };
+
+        let (display_content, content_size, is_truncated) =
+            process_clipboard_content(&record, full_content);
+
+        ClipboardItemResponse {
+            id: record.id,
+            device_id: record.device_id,
+            content_type,
+            display_content,
+            is_downloaded: record.local_file_path.is_some(),
+            is_favorited: record.is_favorited,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
+            active_time: record.active_time,
+            content_size,
+            is_truncated,
         }
     }
 }
@@ -136,7 +122,7 @@ impl ClipboardService {
             .await?;
         Ok(records
             .into_iter()
-            .map(ClipboardItemResponse::from_record)
+            .map(|r| ClipboardItemResponse::from((r, false)))
             .collect())
     }
 
@@ -149,13 +135,7 @@ impl ClipboardService {
         let record_manager = self.app.get_record_manager();
         let record = record_manager.get_record_by_id(id).await?;
 
-        Ok(record.map(|r| {
-            if full_content {
-                ClipboardItemResponse::from_record_full(r)
-            } else {
-                ClipboardItemResponse::from_record(r)
-            }
-        }))
+        Ok(record.map(|r| ClipboardItemResponse::from((r, full_content))))
     }
 
     /// 删除指定的剪贴板项目
