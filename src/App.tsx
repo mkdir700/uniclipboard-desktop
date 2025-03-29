@@ -13,7 +13,7 @@ import {
 import { SettingProvider } from "@/contexts/SettingContext";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import "./App.css";
 
 // 动画配置
@@ -72,15 +72,6 @@ const OnboardingWrapper = ({
   }
 
   return <OnboardingPage onComplete={handleComplete} />;
-};
-
-// 使用路由包装器，以便可以使用useNavigate
-const AppWithRouter = () => {
-  return (
-    <Router>
-      <AppContent />
-    </Router>
-  );
 };
 
 // 主应用程序内容
