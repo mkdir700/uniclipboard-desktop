@@ -1,6 +1,12 @@
 import React from "react";
+import { ClipboardStats } from "@/api/clipboardItems";
+import { formatFileSize } from "@/utils";
 
-const ActionBar: React.FC = () => {
+interface ActionBarProps {
+  stats: ClipboardStats;
+}
+
+const ActionBar: React.FC<ActionBarProps> = ({ stats }) => {
   return (
     <footer className="bg-gray-900 border-t border-gray-800/50 px-4 py-3">
       <div className="flex items-center justify-between">
@@ -56,7 +62,10 @@ const ActionBar: React.FC = () => {
         </div>
 
         <div className="text-xs text-gray-400">
-          <span>已同步 34 项 · 已使用 128MB 存储空间</span>
+          <span>
+            共 {stats.total_items} 项 · 已使用{" "}
+            {formatFileSize(stats.total_size)}
+          </span>
         </div>
 
         <div className="flex space-x-2">

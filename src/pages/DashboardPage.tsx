@@ -1,16 +1,23 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import ClipboardContent from "@/components/clipboard/ClipboardContent";
 import ActionBar from "@/components/layout/ActionBar";
 import { MainLayout } from "@/layouts";
 import { Filter } from "@/api/clipboardItems";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { fetchStats } from "@/store/slices/statsSlice";
+
 const DashboardPage: React.FC = () => {
   const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.All);
-
+  const statsState = useAppSelector((state) => state.stats);
+  const dispatch = useAppDispatch();
   const handleFilterChange = (filterId: Filter) => {
     setCurrentFilter(filterId);
-    // TODO: 根据筛选器更新剪贴板内容
   };
+
+  useEffect(() => {
+    dispatch(fetchStats());
+  }, [dispatch]);
 
   return (
     <MainLayout>
@@ -21,7 +28,7 @@ const DashboardPage: React.FC = () => {
       <ClipboardContent filter={currentFilter} />
 
       {/* 底部快捷操作栏 */}
-      <ActionBar />
+      <ActionBar stats={statsState.stats} />
     </MainLayout>
   );
 };

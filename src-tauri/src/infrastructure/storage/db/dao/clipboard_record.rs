@@ -175,3 +175,22 @@ pub fn query_clipboard_records_by_content_hash(
         .context("Failed to query clipboard records by content hash")?;
     Ok(records)
 }
+
+/// 获取剪贴板统计信息
+pub fn get_total_items(conn: &mut SqliteConnection) -> Result<i64> {
+    let count = clipboard_records::table
+        .count()
+        .get_result(conn)
+        .context("Failed to get total items")?;
+    Ok(count)
+}
+
+/// 获取剪贴板总占用空间
+pub fn get_total_size(conn: &mut SqliteConnection) -> Result<i64> {
+    let size: Option<i64> = clipboard_records::table
+        .select(diesel::dsl::sum(clipboard_records::content_size))
+        .first(conn)
+        .context("Failed to get total size")?;
+
+    Ok(size.unwrap_or(0))
+}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { formatFileSize } from "@/utils";
 
 interface ClipboardItemProps {
   type: "text" | "image" | "link" | "code" | "file";
@@ -56,16 +57,6 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   // 计算内容字符数
   const getCharCount = () => {
     return content.length;
-  };
-
-  // 格式化文件大小为人类可读格式
-  const formatFileSize = (bytes?: number): string => {
-    if (bytes === undefined) return "未知大小";
-    if (bytes === 0) return "0 字节";
-
-    const units = ["字节", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
   };
 
   // 获取内容大小信息

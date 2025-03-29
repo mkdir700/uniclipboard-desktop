@@ -209,6 +209,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             api::clipboard_items::get_clipboard_item,
             api::clipboard_items::copy_clipboard_item,
             api::clipboard_items::toggle_favorite_clipboard_item,
+            api::clipboard_items::get_clipboard_stats,
             api::event::listen_clipboard_new_content,
             api::event::stop_listen_clipboard_new_content,
             api::onboarding::check_onboarding_status,

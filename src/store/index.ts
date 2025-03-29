@@ -1,10 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit';
 import clipboardReducer from './slices/clipboardSlice';
+import statsReducer from './slices/statsSlice';
 
 export const store = configureStore({
   reducer: {
     clipboard: clipboardReducer,
-    // 可以添加其他 reducer
+    stats: statsReducer,
   },
 });
 

@@ -43,6 +43,24 @@ export interface ClipboardItemResponse {
   is_truncated: boolean;
 }
 
+export interface ClipboardStats {
+  total_items: number;
+  total_size: number;
+}
+
+/**
+ * 获取剪贴板统计信息
+ * @returns Promise，返回剪贴板统计信息
+ */
+export async function getClipboardStats(): Promise<ClipboardStats> {
+  try {
+    return await invoke('get_clipboard_stats');
+  } catch (error) {
+    console.error('获取剪贴板统计信息失败:', error);
+    throw error;
+  }
+}
+
 /**
  * 获取剪贴板历史记录
  * @param orderBy 排序方式

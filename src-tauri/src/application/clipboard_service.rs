@@ -5,6 +5,7 @@ use crate::core::content_type::ContentType;
 use crate::infrastructure::storage::db::models::clipboard_record::{
     DbClipboardRecord, Filter, OrderBy,
 };
+use crate::infrastructure::storage::record_manager::ClipboardStats;
 use crate::message::Payload;
 use crate::{application::file_service::ContentProcessorService, core::UniClipboard};
 use serde::{Deserialize, Serialize};
@@ -114,6 +115,13 @@ pub struct ClipboardService {
 impl ClipboardService {
     pub fn new(app: Arc<UniClipboard>) -> Self {
         Self { app }
+    }
+
+    /// 获取剪贴板统计信息
+    pub async fn get_clipboard_stats(&self) -> Result<ClipboardStats> {
+        let record_manager = self.app.get_record_manager();
+        let stats = record_manager.get_stats().await?;
+        Ok(stats)
     }
 
     /// 获取剪贴板历史记录

@@ -5,11 +5,18 @@ use anyhow::Result;
 use chrono::Utc;
 use diesel::prelude::*;
 use log::{error, info};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::db::dao::clipboard_record;
 use super::db::models::clipboard_record::{DbClipboardRecord, Filter, OrderBy};
 use super::db::pool::DB_POOL;
+
+#[derive(Serialize, Deserialize)]
+pub struct ClipboardStats {
+    pub total_items: usize,
+    pub total_size: usize,
+}
 
 /// 剪贴板历史记录管理器
 #[derive(Clone)]
@@ -108,6 +115,17 @@ impl ClipboardRecordManager {
         clipboard_record::insert_clipboard_record(&mut conn, &record)?;
 
         Ok(id)
+    }
+
+    /// 获取剪贴板统计信息
+    pub async fn get_stats(&self) -> Result<ClipboardStats> {
+        let mut conn = DB_POOL.get_connection()?;
+        let total_items = clipboard_record::get_total_items(&mut conn)?;
+        let total_size = clipboard_record::get_total_size(&mut conn)?;
+        Ok(ClipboardStats {
+            total_items: total_items as usize,
+            total_size: total_size as usize,
+        })
     }
 
     /// 获取历史记录列表

@@ -65,7 +65,7 @@ export const removeClipboardItem = createAsyncThunk(
   }
 );
 
-// 目前API中没有toggleFavorite功能，先注释掉
+
 export const toggleFavoriteItem = createAsyncThunk(
   'clipboard/toggleFavorite',
   async ({ id, isFavorited }: { id: string, isFavorited: boolean }, { rejectWithValue }) => {
