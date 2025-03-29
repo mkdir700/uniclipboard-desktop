@@ -49,6 +49,13 @@ pub fn get_current_time() -> i32 {
     chrono::Utc::now().timestamp() as i32
 }
 
+/// 获取当前平台
+pub fn get_current_platform() -> String {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    format!("{} {}", os, arch)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

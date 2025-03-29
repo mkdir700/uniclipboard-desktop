@@ -25,6 +25,8 @@ diesel::table! {
         status -> Integer,
         self_device -> Bool,
         updated_at -> Integer,
+        alias -> Nullable<Text>,
+        platform -> Nullable<Text>,
     }
 }
 

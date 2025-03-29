@@ -8,7 +8,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 
-use crate::domain::device::{Device, DeviceStatus};
+use crate::domain::device::{Device, DeviceStatus, Platform};
 use crate::infrastructure::storage::db::dao;
 use crate::infrastructure::storage::db::models::device::DbDevice;
 use crate::infrastructure::storage::db::pool::DB_POOL;
@@ -54,7 +54,7 @@ impl DeviceManager {
     }
 
     // 获取当前设备的设备信息
-    pub fn get_self_device(&self) -> Result<Option<Device>> {
+    pub fn get_current_device(&self) -> Result<Option<Device>> {
         let mut conn = DB_POOL.get_connection()?;
         let db_device = dao::device::get_self_device(&mut conn)?;
         Ok(db_device.map(|d| d.into()))
@@ -198,5 +198,19 @@ impl DeviceManager {
         let mut conn = DB_POOL.get_connection()?;
         let device = dao::device::get_device_by_ip_and_port(&mut conn, ip, port as i32)?;
         Ok(device.map(|d| d.into()))
+    }
+
+    /// 设置设备别名
+    pub fn set_alias(&self, device_id: &str, alias: &str) -> Result<()> {
+        let mut conn = DB_POOL.get_connection()?;
+        dao::device::update_device_alias(&mut conn, device_id, alias)?;
+        Ok(())
+    }
+
+    /// 设置设备平台
+    pub fn set_platform(&self, device_id: &str, platform: &Platform) -> Result<()> {
+        let mut conn = DB_POOL.get_connection()?;
+        dao::device::update_device_platform(&mut conn, device_id, &platform.to_string())?;
+        Ok(())
     }
 }

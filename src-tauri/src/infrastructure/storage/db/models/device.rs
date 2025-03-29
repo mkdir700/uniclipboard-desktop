@@ -11,6 +11,8 @@ pub struct DbDevice {
     pub status: i32,
     pub self_device: bool,
     pub updated_at: i32,
+    pub alias: Option<String>,
+    pub platform: Option<String>,
 }
 
 #[derive(Insertable)]
@@ -23,6 +25,8 @@ pub struct NewDevice<'a> {
     pub status: i32,
     pub self_device: bool,
     pub updated_at: i32,
+    pub alias: Option<&'a str>,
+    pub platform: Option<&'a str>,
 }
 
 #[derive(AsChangeset)]
@@ -34,6 +38,8 @@ pub struct UpdateDevice<'a> {
     pub status: i32,
     pub self_device: bool,
     pub updated_at: i32,
+    pub alias: Option<&'a str>,
+    pub platform: Option<&'a str>,
 }
 
 impl<'a> From<&'a DbDevice> for NewDevice<'a> {
@@ -46,6 +52,8 @@ impl<'a> From<&'a DbDevice> for NewDevice<'a> {
             status: device.status,
             self_device: device.self_device,
             updated_at: device.updated_at,
+            alias: device.alias.as_deref(),
+            platform: device.platform.as_deref(),
         }
     }
 }

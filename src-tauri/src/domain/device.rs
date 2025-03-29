@@ -1,15 +1,49 @@
 use crate::infrastructure::storage::db::models::device::DbDevice;
+use crate::utils::helpers::{generate_device_id, get_current_platform};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt::{self, Display};
-use crate::utils::helpers::generate_device_id;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum DeviceStatus {
     Online = 0,
     Offline = 1,
     Unknown = 2,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum Platform {
+    Windows,
+    MacOS,
+    Linux,
+    Android,
+    IOS,
+    Browser,
+    Unknown,
+}
+
+impl FromStr for Platform {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "windows" => Ok(Platform::Windows),
+            "macos" => Ok(Platform::MacOS),
+            "linux" => Ok(Platform::Linux),
+            "android" => Ok(Platform::Android),
+            "ios" => Ok(Platform::IOS),
+            "browser" => Ok(Platform::Browser),
+            _ => Ok(Platform::Unknown),
+        }
+    }
+}
+
+impl Display for Platform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl PartialEq for DeviceStatus {
@@ -67,6 +101,10 @@ pub struct Device {
     pub self_device: bool,
     /// 设备更新时间(时间戳)
     pub updated_at: Option<i32>,
+    /// 设备平台
+    pub platform: Option<Platform>,
+    /// 设备别名
+    pub alias: Option<String>,
 }
 
 impl Device {
@@ -84,6 +122,8 @@ impl Device {
             status: DeviceStatus::Unknown,
             self_device: false,
             updated_at: None,
+            platform: None,
+            alias: None,
         }
     }
 
@@ -96,6 +136,10 @@ impl Device {
             status: DeviceStatus::Unknown,
             self_device: true,
             updated_at: None,
+            platform: Some(
+                Platform::from_str(&get_current_platform()).unwrap_or(Platform::Unknown),
+            ),
+            alias: None,
         }
     }
 }
@@ -130,6 +174,8 @@ impl From<&Device> for DbDevice {
             status: device.status.clone() as i32,
             self_device: device.self_device,
             updated_at: device.updated_at.unwrap_or(0) as i32,
+            alias: device.alias.clone(),
+            platform: device.platform.map(|p| p.to_string()),
         }
     }
 }
@@ -145,6 +191,11 @@ impl From<&DbDevice> for Device {
         device.self_device = db_device.self_device;
         device.status = DeviceStatus::try_from(db_device.status).unwrap_or(DeviceStatus::Unknown);
         device.updated_at = Some(db_device.updated_at);
+        device.alias = db_device.alias.clone();
+        device.platform = db_device
+            .platform
+            .as_ref()
+            .map(|p| Platform::from_str(p).unwrap());
         device
     }
 }

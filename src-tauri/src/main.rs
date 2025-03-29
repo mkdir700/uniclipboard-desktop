@@ -24,7 +24,7 @@ fn init_uniclipboard(user_setting: Setting) -> Arc<UniClipboard> {
     // 注册当前设备
     {
         let manager = get_device_manager();
-        match manager.get_self_device() {
+        match manager.get_current_device() {
             Ok(Some(device)) => {
                 SETTING.write().unwrap().set_device_id(device.id.clone());
                 log::info!("Self device already exists: {}", device.id);
@@ -211,6 +211,10 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             api::clipboard_items::toggle_favorite_clipboard_item,
             api::event::listen_clipboard_new_content,
             api::event::stop_listen_clipboard_new_content,
+            api::onboarding::check_onboarding_status,
+            api::onboarding::complete_onboarding,
+            api::onboarding::get_device_id,
+            api::onboarding::save_device_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

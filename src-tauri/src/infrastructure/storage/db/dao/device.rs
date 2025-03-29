@@ -21,6 +21,8 @@ pub fn insert_device(conn: &mut SqliteConnection, device: &DbDevice) -> Result<(
         status: device.status,
         self_device: device.self_device,
         updated_at: device.updated_at,
+        alias: device.alias.as_deref(),
+        platform: device.platform.as_deref(),
     };
 
     diesel::insert_into(devices::table)
@@ -78,6 +80,8 @@ pub fn update_device(conn: &mut SqliteConnection, device: &DbDevice) -> Result<(
         status: device.status,
         self_device: device.self_device,
         updated_at: device.updated_at,
+        alias: device.alias.as_deref(),
+        platform: device.platform.as_deref(),
     };
 
     diesel::update(devices::table.find(&device.id))
@@ -107,11 +111,7 @@ pub fn clear_devices(conn: &mut SqliteConnection) -> Result<()> {
     Ok(())
 }
 
-pub fn update_device_status(
-    conn: &mut SqliteConnection,
-    id: &str,
-    status: i32,
-) -> Result<()> {
+pub fn update_device_status(conn: &mut SqliteConnection, id: &str, status: i32) -> Result<()> {
     diesel::update(devices::table.find(id))
         .set(devices::status.eq(status))
         .execute(conn)
@@ -119,3 +119,18 @@ pub fn update_device_status(
     Ok(())
 }
 
+pub fn update_device_alias(conn: &mut SqliteConnection, id: &str, alias: &str) -> Result<()> {
+    diesel::update(devices::table.find(id))
+        .set(devices::alias.eq(alias))
+        .execute(conn)
+        .context("Failed to update device alias")?;
+    Ok(())
+}
+
+pub fn update_device_platform(conn: &mut SqliteConnection, id: &str, platform: &str) -> Result<()> {
+    diesel::update(devices::table.find(id))
+        .set(devices::platform.eq(platform))
+        .execute(conn)
+        .context("Failed to update device platform")?;
+    Ok(())
+}
