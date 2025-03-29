@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import ClipboardItem from "./ClipboardItem";
 import {
   getDisplayType,
@@ -35,11 +35,16 @@ interface ListenerState {
   isActive: boolean;
   unlisten?: () => void;
   cleanupPromise?: Promise<() => void>;
+  lastEventTimestamp?: number;
+  eventHandler?: (specificFilter: Filter) => void;
 }
 
 const globalListenerState: ListenerState = {
   isActive: false,
 };
+
+// 防抖延迟时间（毫秒）
+const DEBOUNCE_DELAY = 500;
 
 interface ClipboardContentProps {
   filter: Filter;
@@ -57,12 +62,46 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   // 使用ref保存最新的filter值，明确类型
   const currentFilterRef = useRef<Filter>(filter);
 
+  // 使用useCallback包装loadClipboardRecords，增加防抖处理
+  const debouncedLoadRef = useRef<number | null>(null);
+
+  const loadClipboardRecords = useCallback(
+    async (specificFilter?: Filter) => {
+      const filterToUse = specificFilter || currentFilterRef.current;
+      console.log("开始加载剪贴板记录...", filterToUse);
+      dispatch(
+        fetchClipboardItems({
+          orderBy: OrderBy.ActiveTimeDesc,
+          filter: filterToUse,
+        })
+      );
+    },
+    [dispatch]
+  );
+
+  const debouncedLoadClipboardRecords = useCallback(
+    (specificFilter?: Filter) => {
+      // 清除之前的定时器
+      if (debouncedLoadRef.current) {
+        clearTimeout(debouncedLoadRef.current);
+      }
+
+      // 设置新的定时器
+      debouncedLoadRef.current = setTimeout(() => {
+        loadClipboardRecords(specificFilter);
+        debouncedLoadRef.current = null;
+      }, DEBOUNCE_DELAY);
+    },
+    [loadClipboardRecords]
+  );
+
   // 更新ref以跟踪最新的filter
   useEffect(() => {
+    console.log("filter变化，更新ref值:", filter);
     currentFilterRef.current = filter;
-    loadClipboardRecords();
+    loadClipboardRecords(filter); // 直接加载，不用防抖
     console.log("filter变化，更新ref值:", currentFilterRef.current);
-  }, [filter]);
+  }, [filter, loadClipboardRecords]);
 
   // 本地状态用于转换后的显示项目
   const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(
@@ -71,6 +110,11 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
   // 加载剪贴板记录
   useEffect(() => {
+    // 更新全局事件处理函数，使其总是使用最新的过滤器和防抖函数
+    globalListenerState.eventHandler = (specificFilter: Filter) => {
+      debouncedLoadClipboardRecords(specificFilter);
+    };
+
     // 设置监听器的函数
     const setupListener = async () => {
       // 只有在还没有活跃的监听器时才设置
@@ -84,13 +128,38 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
           console.log("后端剪贴板新内容监听已启动");
 
           console.log("开始监听剪贴板新内容事件...");
+          // 清除之前可能存在的监听器
+          if (globalListenerState.unlisten) {
+            console.log("清除之前的监听器");
+            globalListenerState.unlisten();
+            globalListenerState.unlisten = undefined;
+          }
+
           // 使用listen函数监听全局事件
           const unlisten = await listen<{
             record_id: string;
             timestamp: number;
           }>("clipboard-new-content", (event) => {
             console.log("收到新剪贴板内容事件:", event);
-            loadClipboardRecords();
+
+            // 检查事件时间戳，避免短时间内重复处理同一事件
+            const currentTime = Date.now();
+            if (
+              globalListenerState.lastEventTimestamp &&
+              currentTime - globalListenerState.lastEventTimestamp <
+                DEBOUNCE_DELAY
+            ) {
+              console.log("忽略短时间内的重复事件");
+              return;
+            }
+
+            // 更新最后事件时间戳
+            globalListenerState.lastEventTimestamp = currentTime;
+
+            // 使用最新的事件处理函数
+            if (globalListenerState.eventHandler) {
+              globalListenerState.eventHandler(currentFilterRef.current);
+            }
           });
 
           // 保存解除监听的函数到全局状态
@@ -113,21 +182,14 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
     // 组件卸载时的清理函数
     return () => {
-      // 不在这里清理全局监听器，让它持续存在
+      // 清除防抖定时器
+      if (debouncedLoadRef.current) {
+        clearTimeout(debouncedLoadRef.current);
+      }
+      // 不清理全局监听器，让它持续存在
       console.log("组件卸载，但保持全局监听器活跃");
     };
-  }, []);
-
-  // 从 Redux 加载剪贴板记录
-  const loadClipboardRecords = async () => {
-    console.log("开始加载剪贴板记录...", currentFilterRef.current);
-    dispatch(
-      fetchClipboardItems({
-        orderBy: OrderBy.ActiveTimeDesc,
-        filter: currentFilterRef.current,
-      })
-    );
-  };
+  }, [debouncedLoadClipboardRecords]);
 
   // 监听 Redux 中的 items 变化，转换为显示项目
   useEffect(() => {
@@ -201,6 +263,11 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     try {
       console.log(`复制项目 ID: ${itemId}`);
       const result = await dispatch(copyToClipboard(itemId)).unwrap();
+
+      // 注意：不需要手动调用loadClipboardRecords，
+      // 因为后端会发送clipboard-new-content事件，
+      // 事件监听器会自动处理加载
+
       return result.success;
     } catch (err) {
       console.error("复制到剪贴板失败", err);
