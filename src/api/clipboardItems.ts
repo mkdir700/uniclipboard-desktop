@@ -130,6 +130,19 @@ export async function clearClipboardItems(): Promise<number> {
 }
 
 /**
+ * 同步剪贴板内容
+ * @returns Promise，成功返回true
+ */
+export async function syncClipboardItems(): Promise<boolean> {
+  try {
+    return await invoke('sync_clipboard_items');
+  } catch (error) {
+    console.error('同步剪贴板内容失败:', error);
+    throw error;
+  }
+}
+
+/**
  * 复制剪贴板内容
  * @param id 剪贴板条目ID
  * @returns Promise，成功返回true
