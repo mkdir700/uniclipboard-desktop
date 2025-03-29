@@ -6717,6 +6717,7 @@ dependencies = [
  "clap",
  "clipboard-rs",
  "clipboard-win",
+ "cocoa",
  "console",
  "ctor",
  "device_query",

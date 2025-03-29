@@ -101,6 +101,9 @@ network_tests = []
 hardware_tests = []
 testing = []
 
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+
 [target.'cfg(windows)'.dependencies]
 clipboard-win = { version = "5.4.0" }
 winapi = { version = "0.3.9", features = [

@@ -16,6 +16,7 @@ use core::{context::AppContextBuilder, uniclipboard::UniClipboard, UniClipboardB
 use infrastructure::storage::db::pool::DB_POOL;
 use log::error;
 use std::sync::Arc;
+use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use utils::logging;
 
 // 初始化UniClipboard
@@ -145,9 +146,39 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
         .manage(Arc::new(Mutex::new(
             api::event::EventListenerState::default(),
         )))
-        .setup(move |_app| {
+        .setup(move |app| {
             // 获取应用句柄并克隆以便在异步任务中使用
-            let _ = _app.handle().clone();
+            let app_handle = app.handle().clone();
+
+            let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                .title("")
+                .inner_size(800.0, 600.0);
+
+            // set transparent title bar only when building for macOS
+            #[cfg(target_os = "macos")]
+            let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
+
+            let window = win_builder.build().unwrap();
+
+            // set background color only when building for macOS
+            #[cfg(target_os = "macos")]
+            {
+                use cocoa::appkit::{NSColor, NSWindow};
+                use cocoa::base::{id, nil};
+
+                let ns_window = window.ns_window().unwrap() as id;
+                unsafe {
+                    // 101828 修改背景颜色
+                    let bg_color = NSColor::colorWithRed_green_blue_alpha_(
+                        nil,
+                        16.0 / 255.0,
+                        24.0 / 255.0,
+                        40.0 / 255.0,
+                        1.0,
+                    );
+                    ns_window.setBackgroundColor_(bg_color);
+                }
+            }
 
             // 启动异步任务
             tauri::async_runtime::spawn(async move {
