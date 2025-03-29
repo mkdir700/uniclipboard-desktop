@@ -12,6 +12,8 @@ pub struct TextMetadata {
     pub timestamp: DateTime<Utc>,
     /// 文本长度
     pub length: usize,
+    /// 内容大小
+    pub size: usize,
     /// 存储路径
     pub storage_path: String,
 }

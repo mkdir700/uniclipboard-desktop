@@ -32,11 +32,11 @@ pub fn process_clipboard_content(
     record: &DbClipboardRecord,
     full_content: bool,
 ) -> (String, usize, bool) {
-    if let Some(file_path) = &record.local_file_path {
+    if let Some(local_file_path) = &record.local_file_path {
         match record.get_content_type() {
             Some(ContentType::Text) => {
                 match ContentProcessorService::process_text_file(
-                    file_path,
+                    local_file_path,
                     Some(MAX_TEXT_PREVIEW_LENGTH),
                 ) {
                     Ok(result) => result,
@@ -44,22 +44,28 @@ pub fn process_clipboard_content(
                 }
             }
             Some(ContentType::Image) => {
-                match ContentProcessorService::process_image_file(file_path, full_content) {
+                match ContentProcessorService::process_image_file(local_file_path, full_content) {
                     Ok(result) => result,
                     Err(e) => (format!("无法读取图片内容: {}", e), 0, false),
                 }
             }
             Some(ContentType::Link) => {
                 // 使用 FileService::process_link_file 处理链接内容
-                match ContentProcessorService::process_link_file(file_path, full_content) {
+                match ContentProcessorService::process_link_file(local_file_path, full_content) {
                     Ok(result) => result,
                     Err(e) => (format!("无法读取链接内容: {}", e), 0, false),
                 }
             }
             Some(ContentType::CodeSnippet) => {
-                match ContentProcessorService::process_text_file(file_path, None) {
+                match ContentProcessorService::process_text_file(local_file_path, None) {
                     Ok(result) => result,
                     Err(e) => (format!("无法读取代码片段内容: {}", e), 0, false),
+                }
+            }
+            Some(ContentType::File) => {
+                match ContentProcessorService::process_file(local_file_path) {
+                    Ok(result) => result,
+                    Err(e) => (format!("无法读取文件内容: {}", e), 0, false),
                 }
             }
             _ => (
@@ -184,6 +190,7 @@ impl ClipboardService {
 
     /// 复制剪贴板项目
     pub async fn copy_clipboard_item(&self, id: &str) -> Result<bool> {
+        log::info!("复制剪贴板项目: {}", id);
         let record_manager = self.app.get_record_manager();
         let record = record_manager.get_record_by_id(id).await?;
 

@@ -12,6 +12,7 @@ diesel::table! {
         created_at -> Integer,
         updated_at -> Integer,
         active_time -> Integer,
+        content_size -> Nullable<Integer>,
     }
 }
 

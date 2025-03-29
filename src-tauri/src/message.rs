@@ -27,6 +27,7 @@ use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRec
 pub enum Payload {
     Text(TextPayload),
     Image(ImagePayload),
+    File(FilePayload),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -73,6 +74,41 @@ impl ImagePayload {
         self.width == other.width
             && self.height == other.height
             && (self.size as f64 - other.size as f64).abs() / (self.size as f64) <= 0.1
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FilePayload {
+    pub content: String,
+    pub content_hash: u64,
+    pub file_name: String,
+    pub file_size: u64,
+    pub device_id: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+impl FilePayload {
+    pub fn new(
+        file_path: String,
+        file_name: String,
+        file_size: u64,
+        content_hash: u64,
+        device_id: String,
+        timestamp: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            content: file_path,
+            content_hash,
+            file_name,
+            file_size,
+            device_id,
+            timestamp,
+        }
+    }
+
+    /// 获取文件路径
+    pub fn get_file_path(&self) -> String {
+        self.content.clone()
     }
 }
 
@@ -124,12 +160,22 @@ impl Payload {
         })
     }
 
-    #[allow(dead_code)]
-    pub fn get_content(&self) -> &Bytes {
-        match self {
-            Payload::Text(p) => &p.content,
-            Payload::Image(p) => &p.content,
-        }
+    pub fn new_file(
+        content: String,
+        content_hash: u64,
+        file_name: String,
+        file_size: u64,
+        device_id: String,
+        timestamp: DateTime<Utc>,
+    ) -> Self {
+        Payload::File(FilePayload {
+            content,
+            content_hash,
+            file_name,
+            file_size,
+            device_id,
+            timestamp,
+        })
     }
 
     #[allow(dead_code)]
@@ -137,6 +183,7 @@ impl Payload {
         match self {
             Payload::Text(p) => p.timestamp,
             Payload::Image(p) => p.timestamp,
+            Payload::File(p) => p.timestamp,
         }
     }
 
@@ -158,6 +205,7 @@ impl Payload {
         match self {
             Payload::Text(p) => &p.device_id,
             Payload::Image(p) => &p.device_id,
+            Payload::File(p) => &p.device_id,
         }
     }
 
@@ -172,6 +220,9 @@ impl Payload {
                 let content_hash = p.content_hash();
                 let size_info = format!("{}x{}", p.width, p.height);
                 format!("img_{:016x}_{}", content_hash, size_info)
+            }
+            Payload::File(p) => {
+                format!("file_{:016x}", hash64(p.content.as_bytes()))
             }
         }
     }
@@ -201,6 +252,7 @@ impl Payload {
         match self {
             Payload::Text(_) => "text",
             Payload::Image(_) => "image",
+            Payload::File(_) => "file",
         }
     }
 }
@@ -237,6 +289,15 @@ impl fmt::Display for Payload {
                 image.height,
                 image.format,
                 friendly_size(image.size)
+            ),
+            Payload::File(file) => write!(
+                f,
+                "文件消息 - KEY: {}, 设备: {}, 时间: {}, 文件名: {}, 大小: {}",
+                self.get_key(),
+                file.device_id,
+                file.timestamp,
+                file.file_name,
+                friendly_size(file.file_size as usize)
             ),
         }
     }
@@ -275,24 +336,6 @@ pub enum WebSocketMessage {
     Register(RegisterDeviceMessage),
     Unregister(String),
 }
-
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// pub struct ClipboardSyncMessage {
-//     /// 设备ID
-//     pub device_id: String,
-//     /// 文件代码（用于标识文件）
-//     pub file_code: String,
-//     /// 文件类型
-//     pub file_type: String,
-//     /// 文件大小
-//     pub file_size: u64,
-//     /// 元数据
-//     pub metadata: ClipboardMetadata,
-//     /// 完整内容（可选，大文件可能不包含）
-//     pub payload: Option<Payload>,
-//     /// 时间戳
-//     pub timestamp: u64,
-// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceSyncInfo {

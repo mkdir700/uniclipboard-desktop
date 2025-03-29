@@ -67,6 +67,18 @@ impl ClipboardMetadata {
         }
     }
 
+    /// 获取内容大小
+    pub fn get_size(&self) -> usize {
+        match self {
+            ClipboardMetadata::Text(text) => text.size,
+            ClipboardMetadata::Image(image) => image.size,
+            ClipboardMetadata::Link(link) => link.size,
+            ClipboardMetadata::File(file) => file.size,
+            ClipboardMetadata::CodeSnippet(code) => code.size,
+            ClipboardMetadata::RichText(rich_text) => rich_text.size,
+        }
+    }
+    
     /// 获取唯一标识符
     pub fn get_key(&self) -> String {
         match self {
@@ -148,6 +160,7 @@ impl Display for ClipboardMetadata {
     }
 }
 
+/// 从 Payload 和本地存储路径创建 ClipboardMetadata
 impl<P: AsRef<Path>> From<(&Payload, P)> for ClipboardMetadata {
     fn from((payload, storage_path): (&Payload, P)) -> Self {
         let path = storage_path.as_ref();
@@ -166,6 +179,14 @@ impl<P: AsRef<Path>> From<(&Payload, P)> for ClipboardMetadata {
                 height: image.height,
                 format: image.format.clone(),
                 size: image.size,
+                storage_path: path.to_string_lossy().to_string(),
+            }),
+            Payload::File(file) => ClipboardMetadata::File(TextMetadata {
+                content_hash: file.content_hash,
+                device_id: file.device_id.clone(),
+                timestamp: file.timestamp,
+                length: file.file_size as usize,
+                size: file.file_size as usize,
                 storage_path: path.to_string_lossy().to_string(),
             }),
         }

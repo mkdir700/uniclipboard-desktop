@@ -7,8 +7,10 @@ use clipboard_rs::common::RustImage;
 use clipboard_rs::{Clipboard, ClipboardContext};
 use clipboard_rs::{ClipboardHandler, RustImageData};
 use log::debug;
+use std::fs;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
+use twox_hash::xxh3::hash64;
 
 pub struct RsClipboard(Arc<Mutex<dyn ClipboardContextTrait>>, Arc<Notify>, Setting);
 
@@ -22,6 +24,8 @@ pub trait ClipboardContextTrait: Send + Sync {
     fn set_text(&self, text: String) -> Result<()>;
     fn get_image(&self) -> Result<RustImageData>;
     fn set_image(&self, image: RustImageData) -> Result<()>;
+    fn get_file(&self) -> Result<String>;
+    fn set_file(&self, file: String) -> Result<()>;
 }
 
 impl RsClipboardChangeHandler {
@@ -40,6 +44,22 @@ impl ClipboardHandler for RsClipboardChangeHandler {
 impl RsClipboard {
     fn clipboard(&self) -> Arc<Mutex<dyn ClipboardContextTrait>> {
         self.0.clone()
+    }
+
+    fn read_file(&self) -> Result<String> {
+        let clipboard = self.clipboard();
+        let guard = clipboard
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock clipboard: {}", e))?;
+        guard.get_file()
+    }
+
+    fn write_file(&self, file: String) -> Result<()> {
+        let clipboard = self.clipboard();
+        let guard = clipboard
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Failed to lock clipboard: {}", e))?;
+        guard.set_file(file)
     }
 
     fn read_text(&self) -> Result<String> {
@@ -67,10 +87,9 @@ impl RsClipboard {
         let guard = clipboard
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to lock clipboard: {}", e))?;
-        let image = guard
+        guard
             .get_image()
-            .map_err(|e| anyhow::anyhow!("Failed to read image: {}", e))?;
-        Ok(image)
+            .map_err(|e| anyhow::anyhow!("Failed to read image: {}", e))
     }
 
     fn write_image(&self, image: RustImageData) -> Result<()> {
@@ -84,10 +103,35 @@ impl RsClipboard {
     }
 
     pub fn read(&self) -> Result<Payload> {
-        if let Ok(image) = self.read_image() {
+        let timestamp = Utc::now();
+        if let Ok(file_path) = self.read_file() {
+            debug!("read file: {}", file_path);
+            let device_id = self.2.get_device_id();
+            let file_path_clone = file_path.clone();
+            let file_name = std::path::Path::new(&file_path_clone)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let file_size = fs::metadata(&file_path_clone)
+                .map_err(|e| anyhow::anyhow!("Failed to get file size: {}", e))?
+                .len();
+            // 使用文件存放路径计算哈希值
+            let content_hash = hash64(file_path_clone.as_bytes());
+            Ok(Payload::new_file(
+                file_path,
+                content_hash,
+                file_name,
+                file_size,
+                device_id,
+                timestamp,
+            ))
+        } else if let Ok(image) = self.read_image() {
             let (width, height) = image.get_size();
             let png_bytes = {
-                let png_buffer = image.to_png().unwrap();
+                let png_buffer = image
+                    .to_png()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert image to PNG: {}", e))?;
                 png_buffer.get_bytes().to_vec()
             };
             let size = png_bytes.len();
@@ -95,7 +139,7 @@ impl RsClipboard {
             Ok(Payload::new_image(
                 Bytes::from(png_bytes),
                 device_id,
-                Utc::now(),
+                timestamp,
                 width as usize,
                 height as usize,
                 "png".to_string(),
@@ -103,11 +147,8 @@ impl RsClipboard {
             ))
         } else if let Ok(text) = self.read_text() {
             let device_id = self.2.get_device_id();
-            Ok(Payload::new_text(
-                Bytes::from(text),
-                device_id,
-                Utc::now(),
-            ))
+            let timestamp = Utc::now();
+            Ok(Payload::new_text(Bytes::from(text), device_id, timestamp))
         } else {
             Err(anyhow::anyhow!("Clipboard is empty"))
         }
@@ -124,6 +165,7 @@ impl RsClipboard {
                 let text = String::from_utf8(text.content.to_vec())?;
                 self.write_text(&text)
             }
+            Payload::File(file) => self.write_file(file.get_file_path()),
         }
     }
 
@@ -144,6 +186,24 @@ impl ClipboardContextTrait for ClipboardContextWrapper {
         self.0
             .set_text(text)
             .map_err(|e| anyhow::anyhow!("Failed to set text: {}", e))
+    }
+
+    fn get_file(&self) -> Result<String> {
+        let files = self
+            .0
+            .get_files()
+            .map_err(|e| anyhow::anyhow!("Failed to get file: {}", e))?;
+        if files.is_empty() {
+            Err(anyhow::anyhow!("No file"))
+        } else {
+            Ok(files[0].clone())
+        }
+    }
+
+    fn set_file(&self, file: String) -> Result<()> {
+        self.0
+            .set_files(vec![file])
+            .map_err(|e| anyhow::anyhow!("Failed to set file: {}", e))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -284,6 +344,7 @@ mod mock {
     pub struct MockClipboardContext {
         text: Mutex<String>,
         image: Mutex<Option<MockImageData>>,
+        file: Mutex<String>,
     }
 
     #[derive(Clone)]
@@ -298,6 +359,7 @@ mod mock {
             Self {
                 text: Mutex::new(String::new()),
                 image: Mutex::new(None),
+                file: Mutex::new(String::new()),
             }
         }
     }
@@ -340,6 +402,15 @@ mod mock {
                 height,
                 data,
             });
+            Ok(())
+        }
+
+        fn get_file(&self) -> Result<String> {
+            Ok(self.file.lock().unwrap().clone())
+        }
+
+        fn set_file(&self, file: String) -> Result<()> {
+            *self.file.lock().unwrap() = file;
             Ok(())
         }
     }

@@ -108,6 +108,7 @@ impl ContentDetector {
             device_id,
             timestamp,
             length: content.len(),
+            size: content.len(),
             storage_path,
         };
 

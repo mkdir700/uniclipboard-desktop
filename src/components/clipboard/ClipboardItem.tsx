@@ -11,6 +11,7 @@ interface ClipboardItemProps {
   onDelete?: () => void;
   onCopy?: () => Promise<boolean>;
   toggleFavorite?: (isFavorited: boolean) => void;
+  fileSize?: number;
 }
 
 const ClipboardItem: React.FC<ClipboardItemProps> = ({
@@ -24,6 +25,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   onDelete,
   onCopy,
   toggleFavorite,
+  fileSize,
 }) => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -54,6 +56,26 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   // 计算内容字符数
   const getCharCount = () => {
     return content.length;
+  };
+
+  // 格式化文件大小为人类可读格式
+  const formatFileSize = (bytes?: number): string => {
+    if (bytes === undefined) return "未知大小";
+    if (bytes === 0) return "0 字节";
+
+    const units = ["字节", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
+  };
+
+  // 获取内容大小信息
+  const getSizeInfo = (): string => {
+    if (type === "text" || type === "link" || type === "code") {
+      return `${getCharCount()} 字符`;
+    } else if (type === "image" || type === "file") {
+      return formatFileSize(fileSize);
+    }
+    return "";
   };
 
   // 复制内容到剪贴板
@@ -438,7 +460,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     type === "image"
       ? needsImageExpand(imageHeight)
       : needsExpandCollapse(content, type);
-  const charCount = getCharCount();
+  const sizeInfo = getSizeInfo();
 
   return (
     <div
@@ -481,7 +503,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                 </button>
               )}
 
-              <div className="text-xs text-gray-400">{charCount} 字符</div>
+              <div className="text-xs text-gray-400">{sizeInfo}</div>
             </div>
           </div>
         </div>

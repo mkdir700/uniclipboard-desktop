@@ -2,7 +2,6 @@ use crate::infrastructure::storage::db::models::clipboard_record::{
     DbClipboardRecord, Filter, NewClipboardRecord, OrderBy, UpdateClipboardRecord,
 };
 use crate::infrastructure::storage::db::schema::clipboard_records;
-use crate::utils::helpers::get_current_time;
 use anyhow::{Context, Result};
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
@@ -19,6 +18,7 @@ pub fn insert_clipboard_record(
         remote_record_id: record.remote_record_id.clone(),
         content_type: record.content_type.clone(),
         content_hash: record.content_hash.clone().unwrap_or_default(),
+        content_size: record.content_size,
         is_favorited: record.is_favorited,
         created_at: record.created_at,
         updated_at: record.updated_at,
@@ -140,9 +140,10 @@ pub fn query_clipboard_records(
     }
 
     let records = query
+        .select(DbClipboardRecord::as_select())
         .limit(limit)
         .offset(offset)
-        .load::<DbClipboardRecord>(conn)
+        .load(conn)
         .context("Failed to query clipboard records")?;
 
     Ok(records)
@@ -155,7 +156,8 @@ pub fn get_clipboard_record_by_id(
 ) -> Result<Option<DbClipboardRecord>> {
     let record = clipboard_records::table
         .find(id)
-        .first::<DbClipboardRecord>(conn)
+        .select(DbClipboardRecord::as_select())
+        .first(conn)
         .optional()
         .context("Failed to get clipboard record by id")?;
     Ok(record)
@@ -168,7 +170,8 @@ pub fn query_clipboard_records_by_content_hash(
 ) -> Result<Vec<DbClipboardRecord>> {
     let records = clipboard_records::table
         .filter(clipboard_records::content_hash.eq(content_hash))
-        .load::<DbClipboardRecord>(conn)
+        .select(DbClipboardRecord::as_select())
+        .load(conn)
         .context("Failed to query clipboard records by content hash")?;
     Ok(records)
 }

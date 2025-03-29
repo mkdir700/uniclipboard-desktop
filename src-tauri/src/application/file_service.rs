@@ -6,6 +6,7 @@ use image::{GenericImageView, ImageFormat};
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
+use twox_hash::xxh3::hash64;
 
 use crate::core::content_type::ContentType;
 use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord;
@@ -148,6 +149,24 @@ impl ContentProcessorService {
         ContentProcessorService::read_text_file(file_path, None)
     }
 
+    /// 处理文件
+    pub fn process_file(file_path: &str) -> Result<(String, usize, bool)> {
+        // file_fb63488bc747acaa
+        // 读取本地存储路径，打开 file_path 文件
+        let real_file_path_str = fs::read_to_string(file_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
+        let real_file_path = Path::new(&real_file_path_str);
+        let file_name = real_file_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown")
+            .to_string();
+        let file_size = fs::metadata(real_file_path)
+            .map_err(|e| anyhow::anyhow!("Failed to get file size: {}", e))?
+            .len() as usize;
+        Ok((file_name, file_size, false))
+    }
+
     /// 读取文件内容为 Bytes
     pub fn read_file_as_bytes(file_path: &str) -> Result<Bytes> {
         let content = fs::read(file_path)?;
@@ -186,7 +205,7 @@ impl ContentProcessorService {
 
         // 根据内容类型创建对应的 Payload
         match record.get_content_type() {
-            Some(ContentType::Text) => {
+            Some(ContentType::Text) | Some(ContentType::Link) | Some(ContentType::CodeSnippet) => {
                 let content = Self::read_file_as_bytes(file_path)?;
                 Ok(Payload::new_text(
                     content,
@@ -205,6 +224,31 @@ impl ContentProcessorService {
                     dimensions.1 as usize,
                     format,
                     size,
+                ))
+            }
+            Some(ContentType::File) => {
+                let real_file_path_str = fs::read_to_string(file_path)
+                    .map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
+                let real_file_path = Path::new(&real_file_path_str);
+                let file_name = real_file_path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let file_size = fs::metadata(real_file_path)
+                    .map_err(|e| anyhow::anyhow!("Failed to get file size: {}", e))?
+                    .len() as usize;
+                let content_hash: u64 = match &record.content_hash {
+                    Some(hash) => hash.parse().unwrap_or(0),
+                    None => hash64(file_path.as_bytes()),
+                };
+                Ok(Payload::new_file(
+                    real_file_path_str,
+                    content_hash,
+                    file_name,
+                    file_size as u64,
+                    record.device_id.clone(),
+                    timestamp,
                 ))
             }
             _ => Err(anyhow::anyhow!(

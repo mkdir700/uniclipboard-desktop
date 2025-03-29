@@ -22,6 +22,7 @@ interface DisplayClipboardItem {
   id: string;
   type: "text" | "image" | "link" | "code" | "file";
   content: string;
+  contentSize: number;
   time: string;
   device?: string;
   imageUrl?: string;
@@ -181,6 +182,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
       id: item.id,
       type,
       content: item.display_content,
+      contentSize: item.content_size,
       time: timeString,
       device: item.device_id,
       imageUrl,
@@ -244,6 +246,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
                   key={item.id}
                   type={item.type}
                   content={item.content}
+                  fileSize={item.contentSize}
                   time={item.time}
                   device={item.device}
                   imageUrl={item.imageUrl}
