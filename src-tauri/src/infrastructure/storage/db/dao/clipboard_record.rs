@@ -22,6 +22,7 @@ pub fn insert_clipboard_record(
         is_favorited: record.is_favorited,
         created_at: record.created_at,
         updated_at: record.updated_at,
+        extra: record.extra.clone(),
     };
 
     diesel::insert_into(clipboard_records::table)

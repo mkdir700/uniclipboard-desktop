@@ -1,3 +1,4 @@
+use super::traits::ClipboardContextTrait;
 use crate::config::Setting;
 use crate::message::Payload;
 use anyhow::Result;
@@ -18,16 +19,6 @@ pub struct RsClipboardChangeHandler(Arc<Notify>);
 
 pub struct ClipboardContextWrapper(ClipboardContext);
 
-// 定义一个 trait 来抽象 ClipboardContext 的行为
-pub trait ClipboardContextTrait: Send + Sync {
-    fn get_text(&self) -> Result<String>;
-    fn set_text(&self, text: String) -> Result<()>;
-    fn get_image(&self) -> Result<RustImageData>;
-    fn set_image(&self, image: RustImageData) -> Result<()>;
-    fn get_file(&self) -> Result<String>;
-    fn set_file(&self, file: String) -> Result<()>;
-}
-
 impl RsClipboardChangeHandler {
     pub fn new(notify: Arc<Notify>) -> Self {
         Self(notify)
@@ -46,20 +37,20 @@ impl RsClipboard {
         self.0.clone()
     }
 
-    fn read_file(&self) -> Result<String> {
+    fn read_files(&self) -> Result<Vec<String>> {
         let clipboard = self.clipboard();
         let guard = clipboard
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to lock clipboard: {}", e))?;
-        guard.get_file()
+        guard.get_files()
     }
 
-    fn write_file(&self, file: String) -> Result<()> {
+    fn write_files(&self, files: Vec<String>) -> Result<()> {
         let clipboard = self.clipboard();
         let guard = clipboard
             .lock()
             .map_err(|e| anyhow::anyhow!("Failed to lock clipboard: {}", e))?;
-        guard.set_file(file)
+        guard.set_files(files)
     }
 
     fn read_text(&self) -> Result<String> {
@@ -104,28 +95,11 @@ impl RsClipboard {
 
     pub fn read(&self) -> Result<Payload> {
         let timestamp = Utc::now();
-        if let Ok(file_path) = self.read_file() {
-            debug!("read file: {}", file_path);
+        if let Ok(file_paths) = self.read_files() {
             let device_id = self.2.get_device_id();
-            let file_path_clone = file_path.clone();
-            let file_name = std::path::Path::new(&file_path_clone)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let file_size = fs::metadata(&file_path_clone)
-                .map_err(|e| anyhow::anyhow!("Failed to get file size: {}", e))?
-                .len();
-            // 使用文件存放路径计算哈希值
-            let content_hash = hash64(file_path_clone.as_bytes());
-            Ok(Payload::new_file(
-                file_path,
-                content_hash,
-                file_name,
-                file_size,
-                device_id,
-                timestamp,
-            ))
+            Ok(Payload::new_file_from_path(
+                file_paths, device_id, timestamp,
+            )?)
         } else if let Ok(image) = self.read_image() {
             let (width, height) = image.get_size();
             let png_bytes = {
@@ -157,15 +131,15 @@ impl RsClipboard {
     pub fn write(&self, payload: Payload) -> Result<()> {
         match payload {
             Payload::Image(image) => {
-                let image_data = RustImageData::from_bytes(&image.content.to_vec())
+                let image_data = RustImageData::from_bytes(&image.get_content().to_vec())
                     .map_err(|e| anyhow::anyhow!("Failed to convert image: {}", e))?;
                 self.write_image(image_data)
             }
             Payload::Text(text) => {
-                let text = String::from_utf8(text.content.to_vec())?;
+                let text = String::from_utf8(text.get_content().to_vec())?;
                 self.write_text(&text)
             }
-            Payload::File(file) => self.write_file(file.get_file_path()),
+            Payload::File(file) => self.write_files(file.get_file_paths()),
         }
     }
 
@@ -188,7 +162,7 @@ impl ClipboardContextTrait for ClipboardContextWrapper {
             .map_err(|e| anyhow::anyhow!("Failed to set text: {}", e))
     }
 
-    fn get_file(&self) -> Result<String> {
+    fn get_files(&self) -> Result<Vec<String>> {
         let files = self
             .0
             .get_files()
@@ -196,13 +170,13 @@ impl ClipboardContextTrait for ClipboardContextWrapper {
         if files.is_empty() {
             Err(anyhow::anyhow!("No file"))
         } else {
-            Ok(files[0].clone())
+            Ok(files)
         }
     }
 
-    fn set_file(&self, file: String) -> Result<()> {
+    fn set_files(&self, files: Vec<String>) -> Result<()> {
         self.0
-            .set_files(vec![file])
+            .set_files(files)
             .map_err(|e| anyhow::anyhow!("Failed to set file: {}", e))
     }
 
@@ -405,12 +379,12 @@ mod mock {
             Ok(())
         }
 
-        fn get_file(&self) -> Result<String> {
-            Ok(self.file.lock().unwrap().clone())
+        fn get_files(&self) -> Result<Vec<String>> {
+            Ok(vec![self.file.lock().unwrap().clone()])
         }
 
-        fn set_file(&self, file: String) -> Result<()> {
-            *self.file.lock().unwrap() = file;
+        fn set_files(&self, files: Vec<String>) -> Result<()> {
+            *self.file.lock().unwrap() = files.join("\n");
             Ok(())
         }
     }
@@ -500,7 +474,7 @@ mod tests {
         let read_payload = clipboard.read().unwrap();
         match read_payload {
             Payload::Text(text_payload) => {
-                assert_eq!(text_payload.content, Bytes::from(text.to_string()));
+                assert_eq!(text_payload.get_content(), Bytes::from(text.to_string()));
             }
             _ => panic!("Expected text payload"),
         }

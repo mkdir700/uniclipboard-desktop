@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::core::content_type::ContentType;
 use crate::infrastructure::storage::db::models::clipboard_record::{
-    DbClipboardRecord, Filter, OrderBy,
+    DbClipboardRecord, FileExtra, Filter, ImageExtra, OrderBy,
 };
 use crate::infrastructure::storage::record_manager::ClipboardStats;
 use crate::message::Payload;
@@ -14,18 +14,62 @@ use serde::{Deserialize, Serialize};
 const MAX_TEXT_PREVIEW_LENGTH: usize = 1000;
 
 #[derive(Serialize, Deserialize)]
+pub struct TextItem {
+    pub display_text: String,
+    pub is_truncated: bool,
+    pub size: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ImageItem {
+    pub thumbnail: String,
+    pub size: usize,
+    pub width: usize,
+    pub height: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FileItem {
+    pub file_names: Vec<String>,
+    pub file_sizes: Vec<usize>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LinkItem {
+    pub url: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CodeItem {
+    pub code: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum ClipboardItem {
+    #[serde(rename = "text")]
+    Text(TextItem),
+    #[serde(rename = "link")]
+    Link(LinkItem),
+    #[serde(rename = "code")]
+    Code(CodeItem),
+    #[serde(rename = "image")]
+    Image(ImageItem),
+    #[serde(rename = "file")]
+    File(FileItem),
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct ClipboardItemResponse {
     pub id: String,
     pub device_id: String,
-    pub content_type: String,
-    pub display_content: String,
     pub is_downloaded: bool,
     pub is_favorited: bool,
     pub created_at: i32,
     pub updated_at: i32,
     pub active_time: i32,
-    pub content_size: usize,
-    pub is_truncated: bool,
+    pub item: ClipboardItem,
 }
 
 /// 处理剪贴板内容，提取显示内容和相关元数据
@@ -84,30 +128,118 @@ pub fn process_clipboard_content(
 
 impl From<(DbClipboardRecord, bool)> for ClipboardItemResponse {
     fn from((record, full_content): (DbClipboardRecord, bool)) -> Self {
-        let content_type = match record.get_content_type() {
-            Some(ct) => ct.to_string(),
-            None => record.content_type.clone(),
-        };
-
         let (display_content, content_size, is_truncated) =
             process_clipboard_content(&record, full_content);
 
-        ClipboardItemResponse {
-            id: record.id,
-            device_id: record.device_id,
-            content_type,
-            display_content,
-            is_downloaded: record.local_file_path.is_some(),
-            is_favorited: record.is_favorited,
-            created_at: record.created_at,
-            updated_at: record.updated_at,
-            active_time: record.active_time,
-            content_size,
-            is_truncated,
+        match record.get_content_type() {
+            Some(ContentType::Text) | Some(ContentType::RichText) => {
+                let item = ClipboardItem::Text(TextItem {
+                    display_text: display_content,
+                    is_truncated,
+                    size: content_size,
+                });
+                ClipboardItemResponse {
+                    id: record.id,
+                    device_id: record.device_id,
+                    is_downloaded: record.local_file_path.is_some(),
+                    is_favorited: record.is_favorited,
+                    created_at: record.created_at,
+                    updated_at: record.updated_at,
+                    active_time: record.active_time,
+                    item,
+                }
+            }
+            Some(ContentType::Link) => {
+                let item = ClipboardItem::Link(LinkItem {
+                    url: display_content,
+                });
+                ClipboardItemResponse {
+                    id: record.id,
+                    device_id: record.device_id,
+                    is_downloaded: record.local_file_path.is_some(),
+                    is_favorited: record.is_favorited,
+                    created_at: record.created_at,
+                    updated_at: record.updated_at,
+                    active_time: record.active_time,
+                    item,
+                }
+            }
+            Some(ContentType::CodeSnippet) => {
+                let item = ClipboardItem::Code(CodeItem {
+                    code: display_content,
+                });
+                ClipboardItemResponse {
+                    id: record.id,
+                    device_id: record.device_id,
+                    is_downloaded: record.local_file_path.is_some(),
+                    is_favorited: record.is_favorited,
+                    created_at: record.created_at,
+                    updated_at: record.updated_at,
+                    active_time: record.active_time,
+                    item,
+                }
+            }
+            Some(ContentType::Image) => {
+                let (width, height) = record
+                    .get_typed_extra_enhanced()
+                    .and_then(|extra| extra.as_image().map(|img| (img.width, img.height)))
+                    .unwrap_or((None, None));
+
+                let item = ClipboardItem::Image(ImageItem {
+                    thumbnail: display_content,
+                    size: content_size,
+                    width: width.unwrap_or(0) as usize,
+                    height: height.unwrap_or(0) as usize,
+                });
+                ClipboardItemResponse {
+                    id: record.id,
+                    device_id: record.device_id,
+                    is_downloaded: record.local_file_path.is_some(),
+                    is_favorited: record.is_favorited,
+                    created_at: record.created_at,
+                    updated_at: record.updated_at,
+                    active_time: record.active_time,
+                    item,
+                }
+            }
+            Some(ContentType::File) => {
+                let is_downloaded = record.local_file_path.is_some();
+                let (file_names, file_sizes) = record
+                    .get_typed_extra_enhanced()
+                    .and_then(|extra| {
+                        extra
+                            .as_file()
+                            .map(|f| (f.file_names.clone(), f.file_sizes.clone()))
+                    })
+                    .unwrap_or((vec![], vec![]));
+
+                ClipboardItemResponse {
+                    id: record.id,
+                    device_id: record.device_id,
+                    is_downloaded,
+                    is_favorited: record.is_favorited,
+                    created_at: record.created_at,
+                    updated_at: record.updated_at,
+                    active_time: record.active_time,
+                    item: ClipboardItem::File(FileItem {
+                        file_names,
+                        file_sizes,
+                    }),
+                }
+            }
+            None => ClipboardItemResponse {
+                id: record.id,
+                device_id: record.device_id,
+                is_downloaded: record.local_file_path.is_some(),
+                is_favorited: record.is_favorited,
+                created_at: record.created_at,
+                updated_at: record.updated_at,
+                active_time: record.active_time,
+                item: ClipboardItem::Unknown,
+            },
         }
     }
 }
-
 pub struct ClipboardService {
     app: Arc<UniClipboard>,
 }

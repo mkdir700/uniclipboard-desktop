@@ -84,7 +84,7 @@ impl DownloadDecisionMaker {
             ClipboardMetadata::Text(text) => (text.length as u64) > max_size_bytes,
             ClipboardMetadata::Image(img) => (img.size as u64) > max_size_bytes,
             ClipboardMetadata::Link(link) => (link.length as u64) > max_size_bytes,
-            ClipboardMetadata::File(file) => (file.length as u64) > max_size_bytes,
+            ClipboardMetadata::File(file) => (file.get_total_size() as u64) > max_size_bytes,
             ClipboardMetadata::CodeSnippet(code) => (code.length as u64) > max_size_bytes,
             ClipboardMetadata::RichText(rich_text) => (rich_text.length as u64) > max_size_bytes,
         }

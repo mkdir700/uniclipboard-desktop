@@ -7,13 +7,15 @@ use crate::core::content_type::ContentType;
 use crate::core::metadata_models::{ImageMetadata, TextMetadata};
 use crate::message::Payload;
 
+use super::metadata_models::FileMetadata;
+
 /// 剪贴板内容元数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClipboardMetadata {
     Text(TextMetadata),
     Image(ImageMetadata),
     Link(TextMetadata),
-    File(TextMetadata),
+    File(FileMetadata),
     CodeSnippet(TextMetadata),
     RichText(TextMetadata),
 }
@@ -73,12 +75,12 @@ impl ClipboardMetadata {
             ClipboardMetadata::Text(text) => text.size,
             ClipboardMetadata::Image(image) => image.size,
             ClipboardMetadata::Link(link) => link.size,
-            ClipboardMetadata::File(file) => file.size,
+            ClipboardMetadata::File(file) => file.get_total_size(),
             ClipboardMetadata::CodeSnippet(code) => code.size,
             ClipboardMetadata::RichText(rich_text) => rich_text.size,
         }
     }
-    
+
     /// 获取唯一标识符
     pub fn get_key(&self) -> String {
         match self {
@@ -166,7 +168,7 @@ impl<P: AsRef<Path>> From<(&Payload, P)> for ClipboardMetadata {
         let path = storage_path.as_ref();
         match payload {
             Payload::Text(text) => ContentDetector::create_text_metadata(
-                &text.content,
+                &text.get_content(),
                 text.device_id.clone(),
                 text.timestamp,
                 path.to_string_lossy().to_string(),
@@ -181,12 +183,20 @@ impl<P: AsRef<Path>> From<(&Payload, P)> for ClipboardMetadata {
                 size: image.size,
                 storage_path: path.to_string_lossy().to_string(),
             }),
-            Payload::File(file) => ClipboardMetadata::File(TextMetadata {
+            Payload::File(file) => ClipboardMetadata::File(FileMetadata {
                 content_hash: file.content_hash,
                 device_id: file.device_id.clone(),
                 timestamp: file.timestamp,
-                length: file.file_size as usize,
-                size: file.file_size as usize,
+                file_names: file
+                    .file_infos
+                    .iter()
+                    .map(|f| f.file_name.clone())
+                    .collect(),
+                file_sizes: file
+                    .file_infos
+                    .iter()
+                    .map(|f| f.file_size as usize)
+                    .collect(),
                 storage_path: path.to_string_lossy().to_string(),
             }),
         }

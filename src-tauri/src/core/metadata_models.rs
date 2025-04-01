@@ -38,3 +38,26 @@ pub struct ImageMetadata {
     /// 存储路径
     pub storage_path: String,
 }
+
+/// 文件内容元数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileMetadata {
+    /// 内容哈希值
+    pub content_hash: u64,
+    /// 设备ID
+    pub device_id: String,
+    /// 时间戳
+    pub timestamp: DateTime<Utc>,
+    /// 文件名
+    pub file_names: Vec<String>,
+    /// 文件大小
+    pub file_sizes: Vec<usize>,
+    /// 元数据存储路径
+    pub storage_path: String,
+}
+
+impl FileMetadata {
+    pub fn get_total_size(&self) -> usize {
+        self.file_sizes.iter().sum()
+    }
+}

@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::db::dao::clipboard_record;
-use super::db::models::clipboard_record::{DbClipboardRecord, Filter, OrderBy};
+use super::db::models::clipboard_record::{
+    DbClipboardRecord, ExtraInfo, FileExtra, Filter, OrderBy,
+};
 use super::db::pool::DB_POOL;
 
 #[derive(Serialize, Deserialize)]
@@ -53,19 +55,21 @@ impl ClipboardRecordManager {
 
         if records.is_empty() {
             // 如果记录不存在，创建新记录
-            let record = DbClipboardRecord {
-                id: id.clone(),
-                device_id: metadata.get_device_id().to_string(),
-                local_file_path: Some(metadata.get_storage_path().to_string()),
-                remote_record_id: None,
-                content_type: metadata.get_content_type().to_string(),
-                content_hash: Some(content_hash.clone()),
-                content_size: Some(metadata.get_size() as i32),
-                is_favorited: false,
-                created_at: now,
-                updated_at: now,
-                active_time: now,
-            };
+            let record = DbClipboardRecord::new(
+                id.clone(),
+                metadata.get_device_id().to_string(),
+                Some(metadata.get_storage_path().to_string()),
+                None,
+                metadata.get_content_type().to_string(),
+                Some(content_hash.clone()),
+                Some(metadata.get_size() as i32),
+                false,
+                now,
+                now,
+                now,
+                metadata.try_into()?,
+            )?;
+
             clipboard_record::insert_clipboard_record(&mut conn, &record)?;
 
             // 清理旧记录
@@ -97,19 +101,20 @@ impl ClipboardRecordManager {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp() as i32;
 
-        let record = DbClipboardRecord {
-            id: id.clone(),
-            device_id: message.sender_id.clone(),
-            local_file_path: None,
-            remote_record_id: Some(message.record_id.clone()),
+        let record = DbClipboardRecord::new(
+            id.clone(),
+            message.sender_id.clone(),
+            None,
+            Some(message.record_id.clone()),
             content_type,
-            content_hash: Some(message.metadata.get_content_hash().to_string()),
-            content_size: Some(message.metadata.get_size() as i32),
-            is_favorited: false,
-            created_at: now,
-            updated_at: now,
-            active_time: now,
-        };
+            Some(message.metadata.get_content_hash().to_string()),
+            Some(message.metadata.get_size() as i32),
+            false,
+            now,
+            now,
+            now,
+            (&message.metadata).try_into()?,
+        )?;
 
         let mut conn = DB_POOL.get_connection()?;
         clipboard_record::insert_clipboard_record(&mut conn, &record)?;

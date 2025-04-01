@@ -1,12 +1,24 @@
 import React, { useState, useEffect, useRef } from "react";
 import { formatFileSize } from "@/utils";
+import {
+  ClipboardTextItem,
+  ClipboardImageItem,
+  ClipboardLinkItem,
+  ClipboardCodeItem,
+  ClipboardFileItem,
+} from "@/api/clipboardItems";
 
 interface ClipboardItemProps {
-  type: "text" | "image" | "link" | "code" | "file";
-  content: string;
+  type: "text" | "image" | "link" | "code" | "file" | "unknown";
   time: string;
   device?: string;
-  imageUrl?: string;
+  content:
+    | ClipboardTextItem
+    | ClipboardImageItem
+    | ClipboardLinkItem
+    | ClipboardCodeItem
+    | ClipboardFileItem
+    | null;
   isDownloaded?: boolean;
   isFavorited?: boolean;
   onDelete?: () => void;
@@ -17,10 +29,9 @@ interface ClipboardItemProps {
 
 const ClipboardItem: React.FC<ClipboardItemProps> = ({
   type,
-  content,
   time,
   device = "",
-  imageUrl,
+  content,
   isDownloaded = false,
   isFavorited = false,
   onDelete,
@@ -56,7 +67,20 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
 
   // 计算内容字符数
   const getCharCount = () => {
-    return content.length;
+    if (type === "text") {
+      return (content as ClipboardTextItem).display_text.length;
+    } else if (type === "link") {
+      return (content as ClipboardLinkItem).url.length;
+    } else if (type === "code") {
+      return (content as ClipboardCodeItem).code.length;
+    } else if (type === "file") {
+      return (content as ClipboardFileItem).file_names.length;
+    } else if (type === "image") {
+      return (content as ClipboardImageItem).thumbnail.length;
+    } else if (type === "unknown") {
+      return 0;
+    }
+    return 0;
   };
 
   // 获取内容大小信息
@@ -107,10 +131,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
           setTimeout(() => setCopySuccess(false), 2000);
         }
       } else {
-        // 否则使用浏览器API
-        await navigator.clipboard.writeText(content);
-        setCopySuccess(true);
-        setTimeout(() => setCopySuccess(false), 2000);
+        console.error("没有提供onCopy回调");
       }
     } catch (err) {
       console.error("复制失败:", err);
@@ -177,6 +198,25 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     const lines = content.split("\n");
     // 如果超过两行，就需要展开/收起功能
     return lines.length > 2;
+  };
+
+  // 获取展示的文本内容
+  const getContentText = (): string => {
+    switch (type) {
+      case "text":
+        return (content as ClipboardTextItem).display_text;
+      case "link":
+        return (content as ClipboardLinkItem).url;
+      case "code":
+        return (content as ClipboardCodeItem).code;
+      case "file":
+        return (content as ClipboardFileItem).file_names.join(", ");
+      case "image":
+        return (content as ClipboardImageItem).thumbnail;
+      case "unknown":
+      default:
+        return "未知内容";
+    }
   };
 
   // 渲染操作按钮
@@ -325,7 +365,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     const contentNeedsExpand =
       type === "image"
         ? needsImageExpand(imageHeight)
-        : needsExpandCollapse(content, type);
+        : needsExpandCollapse(getContentText(), type);
 
     // 渐变蒙版组件
     const renderGradientMask = () => {
@@ -347,13 +387,14 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                 isExpanded ? "" : "line-clamp-2"
               }`}
             >
-              {content}
+              {getContentText()}
             </pre>
             {renderGradientMask()}
           </div>
         );
       case "image":
         const imageNeedsExpand = needsImageExpand(imageHeight);
+        const imageItem = content as ClipboardImageItem;
         return (
           <div
             className={`relative overflow-hidden ${
@@ -362,10 +403,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
           >
             <img
               ref={imageRef}
-              src={
-                imageUrl ||
-                "https://images.unsplash.com/photo-1493723843671-1d655e66ac1c?ixlib=rb-1.2.1&auto=format&fit=crop&w=1050&q=80"
-              }
+              src={imageItem.thumbnail}
               className="w-full object-contain rounded-md"
               alt="图片"
               onLoad={handleImageLoad}
@@ -378,11 +416,12 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
           </div>
         );
       case "link":
+        const linkUrl = (content as ClipboardLinkItem).url;
         return (
           <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
             <div className={`${isExpanded ? "" : "line-clamp-2"} break-all`}>
               <a
-                href={content}
+                href={linkUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-400 hover:underline"
@@ -393,13 +432,14 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                   }
                 }}
               >
-                {content}
+                {linkUrl}
               </a>
             </div>
             {renderGradientMask()}
           </div>
         );
       case "code":
+        const codeContent = (content as ClipboardCodeItem).code;
         return (
           <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
             <pre
@@ -407,12 +447,14 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                 isExpanded ? "" : "line-clamp-2"
               }`}
             >
-              {content}
+              {codeContent}
             </pre>
             {renderGradientMask()}
           </div>
         );
       case "file":
+        const fileNames = (content as ClipboardFileItem).file_names.join(", ");
+        console.log("fileNames", fileNames);
         return (
           <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
             <div className="flex items-center">
@@ -435,7 +477,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                   isExpanded ? "" : "line-clamp-2"
                 }`}
               >
-                {content}
+                {fileNames}
               </pre>
             </div>
             {renderGradientMask()}
@@ -450,7 +492,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   const shouldUseExpand =
     type === "image"
       ? needsImageExpand(imageHeight)
-      : needsExpandCollapse(content, type);
+      : needsExpandCollapse(getContentText(), type);
   const sizeInfo = getSizeInfo();
 
   return (

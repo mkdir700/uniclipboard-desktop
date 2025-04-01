@@ -229,27 +229,15 @@ impl ContentProcessorService {
             Some(ContentType::File) => {
                 let real_file_path_str = fs::read_to_string(file_path)
                     .map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
-                let real_file_path = Path::new(&real_file_path_str);
-                let file_name = real_file_path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                let file_size = fs::metadata(real_file_path)
-                    .map_err(|e| anyhow::anyhow!("Failed to get file size: {}", e))?
-                    .len() as usize;
-                let content_hash: u64 = match &record.content_hash {
-                    Some(hash) => hash.parse().unwrap_or(0),
-                    None => hash64(file_path.as_bytes()),
-                };
-                Ok(Payload::new_file(
-                    real_file_path_str,
-                    content_hash,
-                    file_name,
-                    file_size as u64,
+                let file_paths = real_file_path_str
+                    .split('\n')
+                    .map(|path| path.to_string())
+                    .collect::<Vec<String>>();
+                Ok(Payload::new_file_from_path(
+                    file_paths,
                     record.device_id.clone(),
                     timestamp,
-                ))
+                )?)
             }
             _ => Err(anyhow::anyhow!(
                 "Unsupported content type: {}",

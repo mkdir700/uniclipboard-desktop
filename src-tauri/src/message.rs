@@ -4,7 +4,7 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::fmt;
+use std::{fmt, fs};
 use tokio_tungstenite::tungstenite::Message;
 use twox_hash::xxh3::hash64;
 
@@ -13,15 +13,6 @@ use crate::core::transfer_message::ClipboardTransferMessage;
 use crate::core::ClipboardMetadata;
 use crate::domain::device::{Device, DeviceStatus};
 use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord;
-
-// pub enum FileType {
-//     Text,
-//     RichText,
-//     Image,
-//     ImageFile,
-//     File,
-//     Folder,
-// }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Payload {
@@ -36,15 +27,14 @@ pub struct TextPayload {
         serialize_with = "serialize_bytes",
         deserialize_with = "deserialize_bytes"
     )]
-    pub content: Bytes,
+    content: Bytes,
     pub device_id: String,
     pub timestamp: DateTime<Utc>,
 }
 
 impl TextPayload {
-    #[allow(dead_code)]
-    pub fn text(&self) -> &str {
-        std::str::from_utf8(self.content.as_ref()).unwrap()
+    pub fn get_content(&self) -> Bytes {
+        self.content.clone()
     }
 }
 
@@ -54,7 +44,7 @@ pub struct ImagePayload {
         serialize_with = "serialize_bytes",
         deserialize_with = "deserialize_bytes"
     )]
-    pub content: Bytes,
+    content: Bytes,
     pub device_id: String,
     pub timestamp: DateTime<Utc>,
     pub width: usize,
@@ -75,40 +65,50 @@ impl ImagePayload {
             && self.height == other.height
             && (self.size as f64 - other.size as f64).abs() / (self.size as f64) <= 0.1
     }
+
+    pub fn get_content(&self) -> Bytes {
+        self.content.clone()
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FileInfo {
+    pub file_name: String,
+    pub file_size: u64,
+    pub file_path: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FilePayload {
-    pub content: String,
     pub content_hash: u64,
-    pub file_name: String,
-    pub file_size: u64,
+    pub file_infos: Vec<FileInfo>,
     pub device_id: String,
     pub timestamp: DateTime<Utc>,
 }
 
 impl FilePayload {
-    pub fn new(
-        file_path: String,
-        file_name: String,
-        file_size: u64,
-        content_hash: u64,
-        device_id: String,
-        timestamp: DateTime<Utc>,
-    ) -> Self {
+    pub fn new(file_infos: Vec<FileInfo>, device_id: String, timestamp: DateTime<Utc>) -> Self {
+        let content_hash = hash64(
+            &file_infos
+                .iter()
+                .map(|f| f.file_path.as_bytes())
+                .collect::<Vec<_>>()
+                .concat(),
+        );
         Self {
-            content: file_path,
             content_hash,
-            file_name,
-            file_size,
+            file_infos,
             device_id,
             timestamp,
         }
     }
 
     /// 获取文件路径
-    pub fn get_file_path(&self) -> String {
-        self.content.clone()
+    pub fn get_file_paths(&self) -> Vec<String> {
+        self.file_infos
+            .iter()
+            .map(|f| f.file_path.clone())
+            .collect()
     }
 }
 
@@ -161,21 +161,35 @@ impl Payload {
     }
 
     pub fn new_file(
-        content: String,
-        content_hash: u64,
-        file_name: String,
-        file_size: u64,
+        file_infos: Vec<FileInfo>,
         device_id: String,
         timestamp: DateTime<Utc>,
     ) -> Self {
-        Payload::File(FilePayload {
-            content,
-            content_hash,
-            file_name,
-            file_size,
-            device_id,
-            timestamp,
-        })
+        Payload::File(FilePayload::new(file_infos, device_id, timestamp))
+    }
+
+    pub fn new_file_from_path(
+        file_paths: Vec<String>,
+        device_id: String,
+        timestamp: DateTime<Utc>,
+    ) -> Result<Self> {
+        let file_infos = file_paths
+            .iter()
+            .map(|path| {
+                let file_name = path.split("/").last().unwrap_or("unknown");
+                let file_size = fs::metadata(path)
+                    .map_err(|e| anyhow::anyhow!("Failed to get file size: {}", e))?
+                    .len();
+                Ok(FileInfo {
+                    file_name: file_name.to_string(),
+                    file_size,
+                    file_path: path.to_string(),
+                })
+            })
+            .collect::<Result<Vec<FileInfo>>>()?;
+        Ok(Payload::File(FilePayload::new(
+            file_infos, device_id, timestamp,
+        )))
     }
 
     #[allow(dead_code)]
@@ -222,7 +236,7 @@ impl Payload {
                 format!("img_{:016x}_{}", content_hash, size_info)
             }
             Payload::File(p) => {
-                format!("file_{:016x}", hash64(p.content.as_bytes()))
+                format!("file_{:016x}", p.content_hash)
             }
         }
     }
@@ -292,12 +306,12 @@ impl fmt::Display for Payload {
             ),
             Payload::File(file) => write!(
                 f,
-                "文件消息 - KEY: {}, 设备: {}, 时间: {}, 文件名: {}, 大小: {}",
+                "文件消息 - KEY: {}, 设备: {}, 时间: {}, 文件数量: {}, 哈希: {:016x}",
                 self.get_key(),
                 file.device_id,
                 file.timestamp,
-                file.file_name,
-                friendly_size(file.file_size as usize)
+                file.file_infos.len(),
+                file.content_hash
             ),
         }
     }

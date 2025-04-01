@@ -115,7 +115,6 @@ impl ContentDetector {
         // 识别内容类型并创建相应元数据
         match Self::detect_text_type(content) {
             ContentType::Link => ClipboardMetadata::Link(metadata),
-            ContentType::File => ClipboardMetadata::File(metadata),
             ContentType::CodeSnippet => ClipboardMetadata::CodeSnippet(metadata),
             ContentType::RichText => ClipboardMetadata::RichText(metadata),
             _ => ClipboardMetadata::Text(metadata),

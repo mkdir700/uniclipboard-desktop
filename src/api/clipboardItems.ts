@@ -29,18 +29,50 @@ export enum Filter {
   File = "file",
 }
 
+export interface ClipboardTextItem {
+  display_text: string;
+  is_truncated: boolean;
+  size: number;
+}
+
+export interface ClipboardImageItem {
+  thumbnail: string;
+  size: number;
+  width: number;
+  height: number;
+}
+
+export interface ClipboardFileItem {
+  file_names: string[];
+  file_sizes: number[];
+}
+
+export interface ClipboardLinkItem {
+  url: string;
+}
+
+export interface ClipboardCodeItem {
+  code: string;
+}
+
+export interface ClipboardItem {
+  text: ClipboardTextItem;
+  image: ClipboardImageItem;
+  file: ClipboardFileItem;
+  link: ClipboardLinkItem;
+  code: ClipboardCodeItem;
+  unknown: null;
+}
+
 export interface ClipboardItemResponse {
   id: string;
   device_id: string;
-  content_type: string;
-  display_content: string;
   is_downloaded: boolean;
   is_favorited: boolean;
   created_at: number;
   updated_at: number;
   active_time: number;
-  content_size: number;
-  is_truncated: boolean;
+  item: ClipboardItem;
 }
 
 export interface ClipboardStats {
@@ -161,17 +193,19 @@ export async function copyClipboardItem(id: string): Promise<boolean> {
  * @param contentType 内容类型字符串
  * @returns 适合UI显示的类型
  */
-export function getDisplayType(contentType: string): "text" | "image" | "link" | "code" | "file" {
-  if (contentType === "text") {
+export function getDisplayType(item: ClipboardItem): "text" | "image" | "link" | "code" | "file" | "unknown" {
+  if (item.text) {
     return "text";
-  } else if (contentType === "image") {
+  } else if (item.image) {
     return "image";
-  } else if (contentType.includes("code") || contentType.includes("json")) {
-    return "code";
-  } else if (contentType.includes("link") || contentType.includes("url")) {
-    return "link";
-  } else {
+  } else if (item.file) {
     return "file";
+  } else if (item.link) {
+    return "link";
+  } else if (item.code) {
+    return "code";
+  } else {
+    return "unknown";
   }
 }
 

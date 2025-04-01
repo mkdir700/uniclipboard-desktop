@@ -36,11 +36,11 @@ impl FileStorageManager {
     /// 返回存储路径
     pub async fn store(&self, payload: &Payload) -> Result<PathBuf> {
         match payload {
-            Payload::Text(text) => self.store_text(&text.content, payload.get_key()),
+            Payload::Text(text) => self.store_text(&text.get_content(), payload.get_key()),
             Payload::Image(image) => {
-                self.store_image(&image.content, &image.format, payload.get_key())
+                self.store_image(&image.get_content(), &image.format, payload.get_key())
             }
-            Payload::File(file) => self.store_file(&file.get_file_path(), payload.get_key()),
+            Payload::File(file) => self.store_file(&file.get_file_paths(), payload.get_key()),
         }
     }
 
@@ -94,7 +94,7 @@ impl FileStorageManager {
     ///
     /// 返回:
     /// - 存储路径
-    fn store_file(&self, file_path: &str, key: String) -> Result<PathBuf> {
+    fn store_file(&self, file_paths: &Vec<String>, key: String) -> Result<PathBuf> {
         let file_dir = self.storage_dir.join("file");
         if !file_dir.exists() {
             fs::create_dir_all(&file_dir)?;
@@ -102,7 +102,7 @@ impl FileStorageManager {
 
         let local_file_path = file_dir.join(key);
         let mut file = File::create(&local_file_path)?;
-        file.write_all(file_path.as_bytes())?;
+        file.write_all(file_paths.join("\n").as_bytes())?;
 
         info!("File content stored at: {:?}", local_file_path);
         Ok(local_file_path)

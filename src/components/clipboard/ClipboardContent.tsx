@@ -2,9 +2,13 @@ import React, { useState, useEffect } from "react";
 import ClipboardItem from "./ClipboardItem";
 import {
   getDisplayType,
-  isImageType,
   ClipboardItemResponse,
   Filter,
+  ClipboardTextItem,
+  ClipboardImageItem,
+  ClipboardLinkItem,
+  ClipboardCodeItem,
+  ClipboardFileItem,
 } from "@/api/clipboardItems";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
@@ -16,14 +20,18 @@ import {
 
 interface DisplayClipboardItem {
   id: string;
-  type: "text" | "image" | "link" | "code" | "file";
-  content: string;
-  contentSize: number;
+  type: "text" | "image" | "link" | "code" | "file" | "unknown";
   time: string;
-  device?: string;
-  imageUrl?: string;
   isDownloaded?: boolean;
   isFavorited?: boolean;
+  content:
+    | ClipboardTextItem
+    | ClipboardImageItem
+    | ClipboardLinkItem
+    | ClipboardCodeItem
+    | ClipboardFileItem
+    | null;
+  device?: string;
 }
 
 interface ClipboardContentProps {
@@ -64,8 +72,9 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   const convertToDisplayItem = (
     item: ClipboardItemResponse
   ): DisplayClipboardItem => {
+    console.log("转换为显示项目:", item);
     // 获取适合UI显示的类型
-    const type = getDisplayType(item.content_type);
+    const type = getDisplayType(item.item);
 
     // 格式化时间
     const activeTime = new Date(item.active_time * 1000); // 转换为毫秒
@@ -86,23 +95,32 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
     // 处理图片URL
     let imageUrl = undefined;
-    if (isImageType(item.content_type)) {
-      imageUrl = item.display_content.startsWith("data:")
-        ? item.display_content
-        : `data:image/png;base64,${item.display_content}`;
+    if (item.item.image) {
+      imageUrl = item.item.image.thumbnail.startsWith("data:")
+        ? item.item.image.thumbnail
+        : `data:image/png;base64,${item.item.image.thumbnail}`;
     }
 
     // 创建显示项目
     return {
       id: item.id,
       type,
-      content: item.display_content,
-      contentSize: item.content_size,
       time: timeString,
-      device: item.device_id,
-      imageUrl,
       isDownloaded: item.is_downloaded,
       isFavorited: item.is_favorited,
+      content:
+        type === "text"
+          ? item.item.text
+          : type === "image"
+          ? item.item.image
+          : type === "link"
+          ? item.item.link
+          : type === "code"
+          ? item.item.code
+          : type === "file"
+          ? item.item.file
+          : null,
+      device: item.device_id,
     };
   };
 
@@ -160,11 +178,9 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
                 <ClipboardItem
                   key={item.id}
                   type={item.type}
-                  content={item.content}
-                  fileSize={item.contentSize}
                   time={item.time}
                   device={item.device}
-                  imageUrl={item.imageUrl}
+                  content={item.content}
                   isDownloaded={item.isDownloaded}
                   isFavorited={item.isFavorited}
                   onDelete={() => handleDeleteItem(item.id)}
