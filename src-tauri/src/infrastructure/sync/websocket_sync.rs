@@ -1,5 +1,5 @@
 use crate::config::Setting as Config;
-use crate::core::transfer_message::ClipboardTransferMessage;
+use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
 use crate::infrastructure::web::WebSocketMessageHandler;
 use crate::interface::RemoteClipboardSync;

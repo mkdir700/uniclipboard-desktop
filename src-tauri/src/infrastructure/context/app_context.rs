@@ -14,6 +14,9 @@ use crate::infrastructure::web::WebSocketHandler;
 use crate::infrastructure::web::WebSocketMessageHandler;
 use crate::interface::RemoteSyncManagerTrait;
 
+/// 应用上下文
+/// 
+/// 包含应用运行所需的所有核心组件实例
 pub struct AppContext {
     pub local_clipboard: Arc<LocalClipboard>,
     pub remote_sync_manager: Arc<RemoteSyncManager>,
@@ -30,15 +33,20 @@ pub struct AppContext {
     pub file_storage: Arc<FileStorageManager>,
 }
 
+/// 应用上下文构建器
+///
+/// 负责初始化和配置应用上下文的所有组件
 pub struct AppContextBuilder {
     user_setting: Setting,
 }
 
 impl AppContextBuilder {
+    /// 创建新的应用上下文构建器
     pub fn new(user_setting: Setting) -> Self {
         Self { user_setting }
     }
 
+    /// 构建应用上下文
     pub async fn build(self) -> Result<AppContext> {
         let local_clipboard = Arc::new(LocalClipboard::with_user_setting(
             self.user_setting.clone(),

@@ -2,12 +2,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, path::Path};
 
-use crate::core::content_detector::ContentDetector;
-use crate::core::content_type::ContentType;
-use crate::core::metadata_models::{ImageMetadata, TextMetadata};
+use crate::application::content_detector_service::ContentDetector;
+use crate::domain::content_type::ContentType;
 use crate::message::Payload;
 
-use super::metadata_models::FileMetadata;
+use super::metadata_models::{FileMetadata, ImageMetadata, TextMetadata};
 
 /// 剪贴板内容元数据
 #[derive(Debug, Clone, Serialize, Deserialize)]

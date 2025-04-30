@@ -1,4 +1,4 @@
-use crate::core::transfer_message::ClipboardTransferMessage;
+use crate::domain::transfer_message::ClipboardTransferMessage;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;

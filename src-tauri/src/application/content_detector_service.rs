@@ -3,9 +3,9 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use twox_hash::xxh3::hash64;
 
-use crate::core::clipboard_metadata::ClipboardMetadata;
-use crate::core::content_type::ContentType;
-use crate::core::metadata_models::TextMetadata;
+use crate::domain::clipboard_metadata::ClipboardMetadata;
+use crate::domain::content_type::ContentType;
+use crate::domain::metadata_models::TextMetadata;
 
 // 使用 lazy_static 初始化正则表达式，避免每次调用方法时都重新编译
 lazy_static! {

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
 
-use super::event_bus::publish_clipboard_new_content;
-use super::transfer_message::ClipboardTransferMessage;
+use crate::infrastructure::event::publish_clipboard_new_content;
+use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::application::device_service::get_device_manager;
 use crate::message::Payload;
 use anyhow::Result;
@@ -49,21 +49,6 @@ impl ClipboardContentReceiver {
                         response.status()
                     ));
                 }
-
-                // // 获取Content-Type头，确定内容类型
-                // let content_type = response
-                //     .headers()
-                //     .get("content-type")
-                //     .and_then(|h| h.to_str().ok())
-                //     .unwrap_or("application/octet-stream");
-
-                // // 获取Content-Length头，确定内容大小
-                // let content_length = response
-                //     .headers()
-                //     .get("content-length")
-                //     .and_then(|h| h.to_str().ok())
-                //     .and_then(|s| s.parse::<usize>().ok())
-                //     .unwrap_or(0);
 
                 // 读取响应体内容
                 let bytes = response.bytes().await?;

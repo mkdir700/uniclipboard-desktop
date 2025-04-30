@@ -1,5 +1,5 @@
-use crate::core::clipboard_metadata::ClipboardMetadata;
-use crate::core::transfer_message::ClipboardTransferMessage;
+use crate::domain::clipboard_metadata::ClipboardMetadata;
+use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::storage::db::schema::clipboard_records;
 use anyhow::Result;
 use chrono::Utc;

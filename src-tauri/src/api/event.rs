@@ -2,7 +2,8 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Runtime, State};
 use serde::Serialize;
 
-use crate::core::{event_bus::{subscribe_clipboard_new_content, ListenerId}, uniclipboard::UniClipboard};
+use crate::infrastructure::event::event_bus::{subscribe_clipboard_new_content, ListenerId};
+use crate::infrastructure::uniclipboard::UniClipboard;
 
 /// 剪贴板新内容事件数据
 #[derive(Clone, Serialize)]
@@ -70,6 +71,6 @@ pub fn stop_listen_clipboard_new_content(
 ) {
     let mut state = event_listener_state.lock().unwrap();
     if let Some(listener_id) = state.clipboard_new_content_listener_id.take() {
-        crate::core::event_bus::EVENT_BUS.unsubscribe(listener_id);
+        crate::infrastructure::event::event_bus::EVENT_BUS.unsubscribe(listener_id);
     }
 }

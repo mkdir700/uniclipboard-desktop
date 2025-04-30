@@ -1,6 +1,7 @@
-use crate::core::{content_type::ContentType, ClipboardMetadata, ClipboardTransferMessage};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::domain::{clipboard_metadata::ClipboardMetadata, content_type::ContentType};
 
 #[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = crate::infrastructure::storage::db::schema::clipboard_records)]
@@ -424,7 +425,6 @@ impl TryFrom<&ClipboardMetadata> for Option<ExtraInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn test_get_typed_extra() {

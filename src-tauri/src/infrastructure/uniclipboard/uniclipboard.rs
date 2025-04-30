@@ -7,12 +7,12 @@ use tokio::select;
 use tokio::signal::ctrl_c;
 use tokio::sync::{mpsc, RwLock};
 
+use crate::application::clipboard_content_receiver_service::ClipboardContentReceiver;
+use crate::application::download_decision_service::DownloadDecisionMaker;
 use crate::config::get_config_dir;
-use crate::core::clipboard_content_receiver::ClipboardContentReceiver;
-use crate::core::download_decision::DownloadDecisionMaker;
-use crate::core::event_bus::publish_clipboard_new_content;
-use crate::core::transfer_message::ClipboardTransferMessage;
+use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
+use crate::infrastructure::event::publish_clipboard_new_content;
 use crate::infrastructure::storage::db::models::clipboard_record::{Filter, OrderBy};
 use crate::infrastructure::storage::db::pool::DB_POOL;
 use crate::infrastructure::storage::file_storage::FileStorageManager;

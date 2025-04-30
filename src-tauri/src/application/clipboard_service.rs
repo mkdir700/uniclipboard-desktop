@@ -1,13 +1,13 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use crate::core::content_type::ContentType;
+use crate::domain::content_type::ContentType;
 use crate::infrastructure::storage::db::models::clipboard_record::{
-    DbClipboardRecord, FileExtra, Filter, ImageExtra, OrderBy,
+    DbClipboardRecord, Filter, OrderBy,
 };
 use crate::infrastructure::storage::record_manager::ClipboardStats;
 use crate::message::Payload;
-use crate::{application::file_service::ContentProcessorService, core::UniClipboard};
+use crate::{application::file_service::ContentProcessorService, infrastructure::uniclipboard::UniClipboard};
 use serde::{Deserialize, Serialize};
 
 /// 文本摘要的最大长度

@@ -1,6 +1,6 @@
 use crate::application::device_service::{get_device_manager, GLOBAL_DEVICE_MANAGER};
 use crate::config::Setting;
-use crate::core::transfer_message::ClipboardTransferMessage;
+use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::domain::device::Device;
 use crate::infrastructure::connection::connection_manager::ConnectionManager;
 use crate::infrastructure::connection::DeviceId;

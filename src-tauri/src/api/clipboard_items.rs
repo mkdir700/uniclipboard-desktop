@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::application::clipboard_service::{ClipboardItemResponse, ClipboardService};
-use crate::core::UniClipboard;
+use crate::infrastructure::uniclipboard::UniClipboard;
 use crate::infrastructure::storage::db::models::clipboard_record::{Filter, OrderBy};
 use crate::infrastructure::storage::record_manager::ClipboardStats;
 

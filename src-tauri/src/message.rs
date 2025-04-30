@@ -9,9 +9,9 @@ use tokio_tungstenite::tungstenite::Message;
 use twox_hash::xxh3::hash64;
 
 use crate::application::file_service::ContentProcessorService;
-use crate::core::transfer_message::ClipboardTransferMessage;
-use crate::core::ClipboardMetadata;
+use crate::domain::clipboard_metadata::ClipboardMetadata;
 use crate::domain::device::{Device, DeviceStatus};
+use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

@@ -2,7 +2,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-use crate::core::clipboard_metadata::ClipboardMetadata;
+use crate::domain::clipboard_metadata::ClipboardMetadata;
 
 /// 剪贴板传输消息
 ///

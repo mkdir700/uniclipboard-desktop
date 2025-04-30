@@ -6,9 +6,8 @@ use image::{GenericImageView, ImageFormat};
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
-use twox_hash::xxh3::hash64;
 
-use crate::core::content_type::ContentType;
+use crate::domain::content_type::ContentType;
 use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord;
 use crate::message::Payload;
 

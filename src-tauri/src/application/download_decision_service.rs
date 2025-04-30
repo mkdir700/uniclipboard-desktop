@@ -1,8 +1,7 @@
 use crate::config::Setting;
-use crate::core::clipboard_metadata::ClipboardMetadata;
-
-use super::content_type::ContentType;
-use super::transfer_message::ClipboardTransferMessage;
+use crate::domain::clipboard_metadata::ClipboardMetadata;
+use crate::domain::content_type::ContentType;
+use crate::domain::transfer_message::ClipboardTransferMessage;
 
 /// 下载决策器
 ///

@@ -5,3 +5,6 @@ pub mod connection;
 pub mod network;
 pub mod security;
 pub mod sync;
+pub mod event;
+pub mod context;
+pub mod uniclipboard;

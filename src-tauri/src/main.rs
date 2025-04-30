@@ -3,7 +3,6 @@
 mod api;
 mod application;
 mod config;
-mod core;
 mod domain;
 mod infrastructure;
 mod interface;
@@ -12,7 +11,8 @@ mod utils;
 
 use application::device_service::get_device_manager;
 use config::setting::{Setting, SETTING};
-use core::{context::AppContextBuilder, uniclipboard::UniClipboard, UniClipboardBuilder};
+use infrastructure::context::AppContextBuilder;
+use infrastructure::uniclipboard::{UniClipboard, UniClipboardBuilder};
 use infrastructure::storage::db::pool::DB_POOL;
 use log::error;
 use std::sync::Arc;

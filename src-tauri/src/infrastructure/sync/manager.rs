@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::config::Setting;
-use crate::core::transfer_message::ClipboardTransferMessage;
+use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::interface::{RemoteClipboardSync as RemoteClipboardSyncTrait, RemoteSyncManagerTrait};
 use anyhow::Result;
 use async_trait::async_trait;
