@@ -34,7 +34,7 @@ interface SyncSetting {
 // 安全设置接口
 interface SecuritySetting {
   end_to_end_encryption: boolean;
-  auto_clear_history: string;
+  password: string;
 }
 
 // 网络设置接口
@@ -49,6 +49,7 @@ interface NetworkSetting {
 
 // 存储设置接口
 interface StorageSetting {
+  auto_clear_history: string;
   history_retention_days: number;
   max_history_items: number;
 }

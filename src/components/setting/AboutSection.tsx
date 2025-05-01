@@ -22,8 +22,8 @@ const AboutSection: React.FC = () => {
             </svg>
           </div>
           <div className="ml-3">
-            <h4 className="text-white font-medium">ClipSync</h4>
-            <p className="text-xs text-gray-400">版本 2.4.1</p>
+            <h4 className="text-white font-medium">UniClipboard</h4>
+            <p className="text-xs text-gray-400">版本 0.1.0</p>
           </div>
         </div>
         <button className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 rounded-lg transition duration-150">
@@ -32,7 +32,7 @@ const AboutSection: React.FC = () => {
       </div>
 
       <div className="space-y-2 text-sm text-gray-400">
-        <p> 2023 ClipSync Team. </p>
+        <p> 2025 UniClipboard Team. </p>
         <div className="flex space-x-4">
           <a href="#" className="text-violet-400 hover:text-violet-300">
             隐私政策

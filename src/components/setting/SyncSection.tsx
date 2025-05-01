@@ -99,7 +99,7 @@ const SyncSection: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <>
       <div className="settings-item py-2 rounded-lg px-2">
         <Toggle
           checked={autoSync}
@@ -172,7 +172,7 @@ const SyncSection: React.FC = () => {
           ]}
         />
       </div>
-    </div>
+    </>
   );
 };
 

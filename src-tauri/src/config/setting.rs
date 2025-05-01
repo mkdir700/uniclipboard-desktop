@@ -38,8 +38,6 @@ pub struct SyncSetting {
 pub struct SecuritySetting {
     // 是否启用端到端加密
     pub end_to_end_encryption: bool,
-    // 自动清除历史记录: "never", "daily", "weekly", "monthly", "on_exit"
-    pub auto_clear_history: String,
 }
 
 // 网络设置
@@ -59,9 +57,24 @@ pub struct NetworkSetting {
     pub peer_device_port: Option<u16>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AutoClearHistory {
+    #[serde(rename = "never")]
+    Never,
+    #[serde(rename = "daily")]
+    Daily,
+    #[serde(rename = "weekly")]
+    Weekly,
+    #[serde(rename = "monthly")]
+    Monthly,
+    #[serde(rename = "on_exit")]
+    OnExit
+}
+
 // 存储管理
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageSetting {
+    pub auto_clear_history: AutoClearHistory,
     // 历史记录保留时间 (天)
     pub history_retention_days: u32,
     // 最大历史记录数: 100, 500, 1000, 5000, 0 (无限制)
@@ -112,7 +125,6 @@ impl Setting {
             },
             security: SecuritySetting {
                 end_to_end_encryption: true,
-                auto_clear_history: "never".to_string(),
             },
             network: NetworkSetting {
                 sync_method: "lan_first".to_string(),
@@ -123,6 +135,7 @@ impl Setting {
                 peer_device_port: None,
             },
             storage: StorageSetting {
+                auto_clear_history: AutoClearHistory::Never,
                 history_retention_days: 30,
                 max_history_items: 1000,
             },
@@ -181,19 +194,10 @@ impl Setting {
         // 写入文件
         fs::write(&_setting_path, setting_str)
             .with_context(|| format!("无法写入设置文件: {:?}", _setting_path))?;
-        
         // 更新全局设置
         SETTING.write().unwrap().clone_from(self);
         
         Ok(())
-    }
-
-    /// 更新设置
-    /// 
-    /// 更新设置并保存到文件
-    pub fn update(&mut self, new_setting: Setting) -> Result<()> {
-        *self = new_setting;
-        self.save(None)
     }
 
     pub fn get_device_id(&self) -> String {

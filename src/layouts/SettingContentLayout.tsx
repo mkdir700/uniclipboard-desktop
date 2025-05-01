@@ -17,7 +17,9 @@ const SettingContentLayout: React.FC<SettingContentLayoutProps> = ({
       </div>
       
       <div className="bg-gray-800 rounded-lg p-4 mb-4">
-        {children}
+        <div className="space-y-4">
+          {children}
+        </div>
       </div>
     </div>
   );

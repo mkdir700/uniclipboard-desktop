@@ -159,7 +159,7 @@ const NetworkSection: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <>
       {/* 同步方式 */}
       <div className="settings-item py-2 rounded-lg px-2">
         <Select
@@ -244,7 +244,7 @@ const NetworkSection: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

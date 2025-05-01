@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Slider from "../ui/Slider";
 import { useSetting } from "../../contexts/SettingContext";
+import { Select } from "../ui";
 
 const StorageSection: React.FC = () => {
   const { setting, error, updateStorageSetting } = useSetting();
@@ -8,19 +9,30 @@ const StorageSection: React.FC = () => {
   // 本地状态
   const [historyRetentionDays, setHistoryRetentionDays] = useState(30);
   const [maxHistoryItems, setMaxHistoryItems] = useState(1000);
+  const [autoClearHistory, setAutoClearHistory] = useState("never");
+
+  // 自动清除选项
+  const autoClearOptions = [
+    { value: "never", label: "从不" },
+    { value: "daily", label: "每天" },
+    { value: "weekly", label: "每周" },
+    { value: "monthly", label: "每月" },
+    { value: "on_exit", label: "每次退出" },
+  ];
 
   // 最大历史记录数选项
   const maxHistoryOptions = [
-    { value: 100, label: "100条" },
-    { value: 500, label: "500条" },
-    { value: 1000, label: "1000条" },
-    { value: 5000, label: "5000条" },
-    { value: 0, label: "无限制" },
+    { value: "100", label: "100条" },
+    { value: "500", label: "500条" },
+    { value: "1000", label: "1000条" },
+    { value: "5000", label: "5000条" },
+    { value: "0", label: "无限制" },
   ];
 
   // 当设置加载完成后，更新本地状态
   useEffect(() => {
     if (setting) {
+      setAutoClearHistory(setting.storage.auto_clear_history);
       setHistoryRetentionDays(setting.storage.history_retention_days);
       setMaxHistoryItems(setting.storage.max_history_items);
     }
@@ -33,12 +45,16 @@ const StorageSection: React.FC = () => {
   };
 
   // 处理最大历史记录数变化
-  const handleMaxHistoryItemsChange = (
-    event: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    const value = parseInt(event.target.value, 10);
-    setMaxHistoryItems(value);
-    updateStorageSetting({ max_history_items: value });
+  const handleMaxHistoryItemsChange = (value: string) => {
+    const numValue = parseInt(value, 10);
+    setMaxHistoryItems(numValue);
+    updateStorageSetting({ max_history_items: numValue });
+  };
+
+  // 处理自动清除历史记录选项变化
+  const handleAutoClearHistoryChange = (value: string) => {
+    setAutoClearHistory(value);
+    updateStorageSetting({ auto_clear_history: value });
   };
 
   // 处理清空历史记录
@@ -48,11 +64,6 @@ const StorageSection: React.FC = () => {
     alert("历史记录已清空");
   };
 
-  // 如果正在加载，显示加载状态
-  //   if (loading) {
-  //     return <div className="text-center py-4">正在加载设置...</div>;
-  //   }
-
   // 如果有错误，显示错误信息
   if (error) {
     return <div className="text-red-500 py-4">加载设置失败: {error}</div>;
@@ -60,6 +71,18 @@ const StorageSection: React.FC = () => {
 
   return (
     <>
+      {/* 自动清除规则 */}
+      <div className="settings-item py-2 rounded-lg px-2">
+        <Select
+          options={autoClearOptions}
+          width="w-36"
+          value={autoClearHistory}
+          onChange={handleAutoClearHistoryChange}
+          label="自动清除历史记录"
+          description="定期自动清除剪贴板历史记录"
+        />
+      </div>
+
       {/* 存储使用情况 */}
       <div className="settings-item py-2 rounded-lg px-2">
         <div className="flex items-center justify-between mb-1">
@@ -100,27 +123,14 @@ const StorageSection: React.FC = () => {
 
       {/* 最大历史记录数 */}
       <div className="settings-item py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h4 className="text-sm font-medium text-white">最大历史记录数</h4>
-            <p className="text-xs text-gray-400 mt-0.5">
-              限制保存的剪贴板历史记录数量
-            </p>
-          </div>
-          <div className="w-36">
-            <select
-              className="w-full bg-gray-700 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-400"
-              value={maxHistoryItems}
-              onChange={handleMaxHistoryItemsChange}
-            >
-              {maxHistoryOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <Select
+          options={maxHistoryOptions}
+          value={maxHistoryItems.toString()}
+          onChange={handleMaxHistoryItemsChange}
+          label="最大历史记录数"
+          description="限制保存的剪贴板历史记录数量"
+          width="w-36"
+        />
       </div>
 
       {/* 清空历史记录 */}

@@ -49,16 +49,14 @@ export default function GeneralSection() {
 
   return (
     <>
-      <div className="space-y-4">
-        <div className="settings-item py-2 rounded-lg px-2">
-          <Toggle
-            checked={autoStart}
-            onChange={handleAutoStartChange}
-            label="开机自启动"
-            description="系统启动时自动启动Uniclipboard"
-            disabled={isLoading}
-          />
-        </div>
+      <div className="settings-item py-2 rounded-lg px-2">
+        <Toggle
+          checked={autoStart}
+          onChange={handleAutoStartChange}
+          label="开机自启动"
+          description="系统启动时自动启动Uniclipboard"
+          disabled={isLoading}
+        />
       </div>
     </>
   );

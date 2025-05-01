@@ -18,6 +18,7 @@ use log::error;
 use std::sync::Arc;
 use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use utils::logging;
+use infrastructure::security::password::PasswordManager;
 
 // 初始化UniClipboard
 fn init_uniclipboard(user_setting: Setting) -> Arc<UniClipboard> {
@@ -114,6 +115,9 @@ fn main() {
     // 创建一个配置的克隆，用于初始化
     let user_setting_for_init = user_setting.clone();
 
+    // 初始化密码管理器
+    PasswordManager::init_salt_file_if_not_exists().unwrap();
+
     // 初始化数据库
     match DB_POOL.init() {
         Ok(_) => log::info!("Database initialized successfully"),
@@ -135,13 +139,17 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
     use std::sync::Mutex;
     use tauri::Builder;
     use tauri_plugin_autostart::MacosLauncher;
+    use tauri_plugin_stronghold;
+    use tauri_plugin_single_instance;
 
     Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
+        .plugin(tauri_plugin_stronghold::Builder::with_argon2(&PasswordManager::get_salt_file_path()).build())
         .manage(Arc::new(Mutex::new(Some(uniclipboard_app.clone()))))
         .manage(Arc::new(Mutex::new(
             api::event::EventListenerState::default(),
@@ -200,6 +208,9 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
         .invoke_handler(tauri::generate_handler![
             api::setting::save_setting,
             api::setting::get_setting,
+            api::setting::get_encryption_password,
+            api::setting::set_encryption_password,
+            api::setting::delete_encryption_password,
             api::autostart::enable_autostart,
             api::autostart::disable_autostart,
             api::autostart::is_autostart_enabled,
