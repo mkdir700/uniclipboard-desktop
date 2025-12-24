@@ -77,13 +77,13 @@ git clone https://github.com/mkdir700/uniclipboard-desktop.git
 cd uniclipboard-desktop
 
 # 安装依赖
-pnpm install
+bun install
 
 # 开发模式启动
-pnpm tauri dev
+bun tauri dev
 
 # 构建应用
-pnpm tauri build
+bun tauri build
 ```
 
 ## 🎮 使用说明
