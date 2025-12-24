@@ -9,11 +9,13 @@ import {
   Navigate,
   useLocation,
   useNavigate,
+  Outlet,
 } from "react-router-dom";
 import { SettingProvider } from "@/contexts/SettingContext";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
+import { MainLayout } from "@/layouts";
 import "./App.css";
 
 // 动画配置
@@ -72,6 +74,15 @@ const OnboardingWrapper = ({
   }
 
   return <OnboardingPage onComplete={handleComplete} />;
+};
+
+// 认证布局包装器 - 保持 Sidebar 持久化
+const AuthenticatedLayout = () => {
+  return (
+    <MainLayout>
+      <Outlet />
+    </MainLayout>
+  );
 };
 
 // 主应用程序内容
@@ -135,9 +146,13 @@ const AppContent = () => {
     <SettingProvider>
       <Routes>
         <Route
-          path="/"
           element={
-            isOnboarded ? (
+            isOnboarded ? <AuthenticatedLayout /> : <Navigate to="/onboarding" />
+          }
+        >
+          <Route
+            path="/"
+            element={
               showDashboardAnimation ? (
                 <motion.div
                   initial="initial"
@@ -157,13 +172,11 @@ const AppContent = () => {
                   <DashboardPage />
                 </div>
               )
-            ) : (
-              <Navigate to="/onboarding" />
-            )
-          }
-        />
-        <Route path="/devices" element={<DevicesPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+            }
+          />
+          <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
         <Route
           path="/onboarding"
           element={

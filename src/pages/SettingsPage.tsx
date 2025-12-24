@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { SettingsLayout } from "@/layouts";
+
 import { SettingContentLayout } from "@/layouts";
 import SyncSection from "@/components/setting/SyncSection";
 import SecuritySection from "@/components/setting/SecuritySection";
@@ -8,6 +8,7 @@ import StorageSection from "@/components/setting/StorageSection";
 import AboutSection from "@/components/setting/AboutSection";
 import { CategoryItem } from "@/components/setting/SettingHeader";
 import GeneralSection from "@/components/setting/GeneralSection";
+import SettingHeader from "@/components/setting/SettingHeader";
 
 // 集中定义所有设置类别
 const SETTING_CATEGORIES: CategoryItem[] = [
@@ -20,8 +21,8 @@ const SETTING_CATEGORIES: CategoryItem[] = [
 ];
 
 const SettingsPage: React.FC = () => {
-  const [activeCategory, setActiveCategory] = useState("sync");
-  const [scrolling, setScrolling] = useState(false);
+  const [activeCategory, setActiveCategory] = useState("general");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // 创建对各个section的引用
   const sectionRefs = {
@@ -35,7 +36,6 @@ const SettingsPage: React.FC = () => {
 
   // 处理类别点击事件
   const handleCategoryClick = (category: string) => {
-    setScrolling(true); // 标记为程序触发的滚动
     setActiveCategory(category);
 
     // 滚动到对应的section
@@ -46,93 +46,94 @@ const SettingsPage: React.FC = () => {
         block: "start",
       });
     }
-
-    // 滚动完成后重置标志
-    setTimeout(() => {
-      setScrolling(false);
-    }, 500);
   };
 
-  // 使用 Intersection Observer 监听各个部分的可见性
+  // 监听滚动更新 activeCategory
   useEffect(() => {
-    if (scrolling) return; // 如果是程序触发的滚动，不处理
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-    const observerOptions = {
-      root: null, // 使用视口作为根
-      rootMargin: "-10% 0px -80% 0px", // 顶部偏移10%，底部偏移80%，使顶部附近的元素被认为是可见的
-      threshold: 0, // 只要有一点进入视口就触发
-    };
+    const handleScroll = () => {
+      // 找到最近顶部的 section
+      let currentActive = activeCategory;
+      let minDistance = Infinity;
 
-    const observerCallback: IntersectionObserverCallback = (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const sectionId = entry.target.id.replace("-section", "");
-          if (SETTING_CATEGORIES.some((cat) => cat.id === sectionId)) {
-            setActiveCategory(sectionId);
+      Object.entries(sectionRefs).forEach(([id, ref]) => {
+        if (ref.current) {
+          const rect = ref.current.getBoundingClientRect();
+          // 我们关注那些接近顶部，或者已经在视口中的元素
+          // 使用绝对值来找最近的一个
+          const distance = Math.abs(rect.top - 150); // 150 offset for header
+          if (distance < minDistance) {
+            minDistance = distance;
+            currentActive = id;
           }
         }
       });
-    };
-
-    const observer = new IntersectionObserver(
-      observerCallback,
-      observerOptions
-    );
-
-    // 观察所有部分
-    Object.values(sectionRefs).forEach((ref) => {
-      if (ref.current) {
-        observer.observe(ref.current);
+      
+      if (currentActive !== activeCategory) {
+        setActiveCategory(currentActive);
       }
-    });
-
-    return () => {
-      observer.disconnect();
     };
-  }, [scrolling]);
+
+    container.addEventListener("scroll", handleScroll);
+    // Initial check
+    handleScroll();
+    
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [activeCategory]); // Add activeCategory dependency if needed, but actually we want to update it
 
   return (
-    <SettingsLayout
-      onCategoryClick={handleCategoryClick}
-      activeCategory={activeCategory}
-      categories={SETTING_CATEGORIES}
-    >
-      <div ref={sectionRefs.general} id="general-section">
-        <SettingContentLayout title="通用设置">
-          <GeneralSection />
-        </SettingContentLayout>
+
+      <div className="flex flex-col h-full relative">
+        <SettingHeader
+          onCategoryClick={handleCategoryClick}
+          activeCategory={activeCategory}
+          categories={SETTING_CATEGORIES}
+        />
+
+        <div 
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto scrollbar-thin px-8 pb-32 pt-6 scroll-smooth"
+        >
+          <div ref={sectionRefs.general} id="general-section" className="scroll-mt-32">
+            <SettingContentLayout title="通用设置">
+              <GeneralSection />
+            </SettingContentLayout>
+          </div>
+
+          <div ref={sectionRefs.sync} id="sync-section" className="scroll-mt-32">
+            <SettingContentLayout title="同步设置">
+              <SyncSection />
+            </SettingContentLayout>
+          </div>
+
+          <div ref={sectionRefs.security} id="security-section" className="scroll-mt-32">
+            <SettingContentLayout title="安全与隐私设置">
+              <SecuritySection />
+            </SettingContentLayout>
+          </div>
+
+          <div ref={sectionRefs.network} id="network-section" className="scroll-mt-32">
+             <SettingContentLayout title="网络设置">
+              <NetworkSection />
+            </SettingContentLayout>
+          </div>
+
+          <div ref={sectionRefs.storage} id="storage-section" className="scroll-mt-32">
+            <SettingContentLayout title="存储管理">
+              <StorageSection />
+            </SettingContentLayout>
+          </div>
+
+          <div ref={sectionRefs.about} id="about-section" className="scroll-mt-32">
+            <SettingContentLayout title="关于">
+              <AboutSection />
+            </SettingContentLayout>
+          </div>
+        </div>
       </div>
 
-      <div ref={sectionRefs.sync} id="sync-section">
-        <SettingContentLayout title="同步设置">
-          <SyncSection />
-        </SettingContentLayout>
-      </div>
-
-      <div ref={sectionRefs.security} id="security-section">
-        <SettingContentLayout title="安全与隐私设置">
-          <SecuritySection />
-        </SettingContentLayout>
-      </div>
-
-      <div ref={sectionRefs.network} id="network-section">
-        <SettingContentLayout title="网络设置">
-          <NetworkSection />
-        </SettingContentLayout>
-      </div>
-
-      <div ref={sectionRefs.storage} id="storage-section">
-        <SettingContentLayout title="存储管理">
-          <StorageSection />
-        </SettingContentLayout>
-      </div>
-
-      <div ref={sectionRefs.about} id="about-section">
-        <SettingContentLayout title="关于">
-          <AboutSection />
-        </SettingContentLayout>
-      </div>
-    </SettingsLayout>
   );
 };
 

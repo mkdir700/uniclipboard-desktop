@@ -1,56 +1,77 @@
 import React from "react";
+import { Plus } from "lucide-react";
+import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+
+export type DeviceTab = "connected" | "requests";
 
 interface HeaderProps {
   addDevice: () => void;
+  activeTab: DeviceTab;
+  onTabChange: (tab: DeviceTab) => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ addDevice }) => {
+const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) => {
+  const tabs: { id: DeviceTab; label: string }[] = [
+    { id: "requests", label: "配对请求" },
+    { id: "connected", label: "已连接设备" },
+  ];
+
   return (
-    <>
-      {" "}
-      <header className="bg-gray-900 border-b border-gray-800/50">
-        <div className="px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-white">设备管理</h1>
+    <header 
+      data-tauri-drag-region
+      className="sticky top-0 z-50 pt-6 pb-2 px-8 transition-all duration-300"
+    >
+      {/* Glass Background */}
+      <div className="absolute inset-0 bg-background/60 backdrop-blur-xl border-b border-white/5 shadow-sm" />
 
-          <div className="flex items-center space-x-3">
-            {/* 添加设备按钮 */}
-            <button
-              onClick={addDevice}
-              className="bg-violet-500 hover:bg-violet-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition duration-150 flex items-center"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 mr-1.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+      <div className="relative z-10 space-y-4">
+        {/* Top Row: Title & Action */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">设备管理</h1>
+
+          <Button 
+            onClick={addDevice}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 rounded-xl px-4 py-2 h-auto text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            添加新设备
+          </Button>
+        </div>
+
+        {/* Tabs Scroll Area */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 -mx-8 px-8 mask-linear-fade">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+
+            return (
+              <motion.button
+                key={tab.id}
+                onClick={() => onTabChange(tab.id)}
+                className={cn(
+                  "relative group flex items-center justify-center px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none",
+                  isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-              添加新设备
-            </button>
-          </div>
+                {isActive && (
+                  <motion.div
+                    layoutId="activeDeviceTab"
+                    className="absolute inset-0 bg-primary rounded-xl shadow-lg shadow-primary/25"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <span className="relative z-10">
+                  {tab.label}
+                </span>
+              </motion.button>
+            );
+          })}
         </div>
-
-        {/* 子导航 */}
-        <div className="px-4 pb-2 flex space-x-4 text-sm">
-          <button className="text-white border-b-2 border-violet-400 pb-2 font-medium">
-            已连接设备
-          </button>
-          <button className="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent">
-            配对请求
-          </button>
-          <button className="text-gray-400 hover:text-white pb-2 border-b-2 border-transparent">
-            全局规则
-          </button>
-        </div>
-      </header>
-    </>
+      </div>
+    </header>
   );
 };
 

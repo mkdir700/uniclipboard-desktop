@@ -150,57 +150,79 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     }
   }, [error, dispatch]);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   // 骨架屏加载状态
   if (loading && clipboardItems.length === 0) {
     return (
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-8 pb-24">
-        <div className="bg-muted/30 rounded-2xl p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-56 w-full rounded-2xl" />
-            ))}
-          </div>
+      <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
+        <div className="flex flex-col gap-1">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full rounded-lg" />
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-thin px-8 pb-24">
+    <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
       {error && (
-        <Alert variant="destructive" className="mx-8 mt-4">
+        <Alert variant="destructive" className="mb-4 mx-1">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="bg-muted/30 rounded-2xl p-6">
-        {clipboardItems.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {clipboardItems.map((item) => (
-              <ClipboardItem
-                key={item.id}
-                type={item.type}
-                time={item.time}
-                device={item.device}
-                content={item.content}
-                isDownloaded={item.isDownloaded}
-                isFavorited={item.isFavorited}
-                onDelete={() => handleDeleteItem(item.id)}
-                onCopy={() => handleCopyItem(item.id)}
-                toggleFavorite={(isFavorited) =>
-                  handleToggleFavorite(item.id, isFavorited)
-                }
-              />
-            ))}
+      {clipboardItems.length > 0 ? (
+        <div className="flex flex-col">
+          {clipboardItems.map((item, index) => (
+            <ClipboardItem
+              key={item.id}
+              index={index + 1}
+              type={item.type}
+              time={item.time}
+              device={item.device}
+              content={item.content}
+              isDownloaded={item.isDownloaded}
+              isFavorited={item.isFavorited}
+              isSelected={selectedIds.has(item.id)}
+              onSelect={() => handleToggleSelect(item.id)}
+              onDelete={() => handleDeleteItem(item.id)}
+              onCopy={() => handleCopyItem(item.id)}
+              toggleFavorite={(isFavorited) =>
+                handleToggleFavorite(item.id, isFavorited)
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="h-full flex flex-col items-center justify-center -mt-20">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
+            <div className="relative bg-card p-6 rounded-3xl border border-border/50 shadow-xl">
+               <Inbox className="h-12 w-12 text-primary/80" />
+            </div>
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <Inbox className="h-16 w-16 mb-4 opacity-50" />
-            <p className="text-lg font-medium">没有剪贴板项</p>
-            <p className="text-sm mt-1">复制内容后将显示在这里</p>
-          </div>
-        )}
-      </div>
+          <h3 className="text-xl font-bold text-foreground mb-2">没有剪贴板项</h3>
+          <p className="text-muted-foreground text-center max-w-xs">
+            当您复制内容时，它们会显示在这里。
+            <br />
+            试着复制一些文本或图片吧！
+          </p>
+        </div>
+      )}
     </div>
   );
 };

@@ -10,14 +10,14 @@ const SettingContentLayout: React.FC<SettingContentLayoutProps> = ({
   children 
 }) => {
   return (
-    <div className="mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-gray-400">{title}</h3>
-        <div className="flex-grow ml-3 border-t border-gray-800/50"></div>
+    <div className="mb-8">
+      <div className="flex items-center gap-4 mb-4">
+        <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">{title}</h3>
+        <div className="h-[1px] flex-1 bg-border/50"></div>
       </div>
       
-      <div className="bg-gray-800 rounded-lg p-4 mb-4">
-        <div className="space-y-4">
+      <div className="bg-card border border-border/50 rounded-xl p-6 shadow-sm">
+        <div className="space-y-6">
           {children}
         </div>
       </div>

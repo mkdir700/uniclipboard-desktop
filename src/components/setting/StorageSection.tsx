@@ -72,11 +72,11 @@ const StorageSection: React.FC = () => {
   return (
     <>
       {/* 自动清除规则 */}
-      <div className="settings-item py-2 rounded-lg px-2">
+      <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <h4 className="text-sm font-medium text-white">自动清除历史记录</h4>
-            <p className="text-xs text-gray-400 mt-0.5">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">自动清除历史记录</h4>
+            <p className="text-sm text-muted-foreground">
               定期自动清除剪贴板历史记录
             </p>
           </div>
@@ -99,33 +99,33 @@ const StorageSection: React.FC = () => {
       </div>
 
       {/* 存储使用情况 */}
-      <div className="settings-item py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between mb-1">
-          <h4 className="text-sm font-medium text-white">存储使用情况</h4>
-          <span className="text-xs text-gray-400">128MB / 1GB</span>
+      <div className="py-2 rounded-lg px-2">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-base font-medium">存储使用情况</h4>
+          <span className="text-sm text-muted-foreground">128MB / 1GB</span>
         </div>
-        <div className="w-full bg-gray-700 rounded-full h-2.5">
+        <div className="w-full bg-secondary rounded-full h-2.5">
           <div
-            className="bg-violet-500 h-2.5 rounded-full"
+            className="bg-primary h-2.5 rounded-full"
             style={{ width: "12.8%" }}
           ></div>
         </div>
-        <div className="flex justify-between mt-1 text-xs text-gray-400">
+        <div className="flex justify-between mt-1 text-xs text-muted-foreground">
           <span>已使用 12.8%</span>
         </div>
       </div>
 
       {/* 存储限制 */}
-      <div className="settings-item py-2 rounded-lg px-2">
-        <div className="w-full">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex-1">
-              <h4 className="text-sm font-medium text-white">历史记录保留时间</h4>
-              <p className="text-xs text-gray-400 mt-0.5">
+      <div className="py-2 rounded-lg px-2">
+        <div className="w-full space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <h4 className="text-base font-medium">历史记录保留时间</h4>
+              <p className="text-sm text-muted-foreground">
                 设置剪贴板历史记录的最长保留时间
               </p>
             </div>
-            <span className="text-sm text-gray-300">{historyRetentionDays} 天</span>
+            <span className="text-sm text-muted-foreground">{historyRetentionDays} 天</span>
           </div>
           <Slider
             min={1}
@@ -135,7 +135,7 @@ const StorageSection: React.FC = () => {
             onValueChange={handleHistoryRetentionChange}
             className="w-full"
           />
-          <div className="flex justify-between mt-2 text-xs text-gray-400">
+          <div className="flex justify-between text-xs text-muted-foreground">
             <span>7天</span>
             <span>30天</span>
             <span>60天</span>
@@ -145,11 +145,11 @@ const StorageSection: React.FC = () => {
       </div>
 
       {/* 最大历史记录数 */}
-      <div className="settings-item py-2 rounded-lg px-2">
+      <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <h4 className="text-sm font-medium text-white">最大历史记录数</h4>
-            <p className="text-xs text-gray-400 mt-0.5">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">最大历史记录数</h4>
+            <p className="text-sm text-muted-foreground">
               限制保存的剪贴板历史记录数量
             </p>
           </div>
@@ -172,16 +172,16 @@ const StorageSection: React.FC = () => {
       </div>
 
       {/* 清空历史记录 */}
-      <div className="settings-item py-2 rounded-lg px-2">
+      <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
-          <div>
-            <h4 className="text-sm font-medium text-white">历史记录</h4>
-            <p className="text-xs text-gray-400 mt-0.5">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">历史记录</h4>
+            <p className="text-sm text-muted-foreground">
               清空所有剪贴板历史记录并释放存储空间
             </p>
           </div>
           <button
-            className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-sm text-red-400 rounded-lg transition duration-150"
+            className="px-3 py-1.5 bg-destructive/10 hover:bg-destructive/20 text-sm text-destructive rounded-lg transition duration-150"
             onClick={handleClearHistory}
           >
             清空历史记录

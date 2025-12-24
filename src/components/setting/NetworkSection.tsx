@@ -163,11 +163,11 @@ const NetworkSection: React.FC = () => {
   return (
     <>
       {/* 同步方式 */}
-      <div className="settings-item py-2 rounded-lg px-2">
+      <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <h4 className="text-sm font-medium text-white">同步方式</h4>
-            <p className="text-xs text-gray-400 mt-0.5">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">同步方式</h4>
+            <p className="text-sm text-muted-foreground">
               选择同步方式
             </p>
           </div>
@@ -190,10 +190,10 @@ const NetworkSection: React.FC = () => {
       </div>
 
       {/* 本机开放端口 */}
-      <div className="settings-item py-2 rounded-lg px-2">
-        <div className="flex flex-col gap-2">
-          <h4 className="text-sm font-medium text-white">本机开放端口</h4>
-          <p className="text-xs text-gray-400">
+      <div className="py-2 rounded-lg px-2">
+        <div className="space-y-2">
+          <h4 className="text-base font-medium">本机开放端口</h4>
+          <p className="text-sm text-muted-foreground">
             设置本机开放端口 (1024-65535)
           </p>
           <Input
@@ -209,11 +209,11 @@ const NetworkSection: React.FC = () => {
       </div>
 
       {/* 是否自定义同步节点 */}
-      <div className="settings-item py-2 rounded-lg px-2">
+      <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <h4 className="text-sm font-medium text-white">自定义同步节点</h4>
-            <p className="text-xs text-gray-400 mt-0.5">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">自定义同步节点</h4>
+            <p className="text-sm text-muted-foreground">
               手动指定要同步的设备地址和端口
             </p>
           </div>
@@ -228,10 +228,10 @@ const NetworkSection: React.FC = () => {
       {customPeerDevice && (
         <>
           {/* 节点 IP */}
-          <div className="settings-item py-2 rounded-lg px-2 ml-4 border-l-2 border-gray-700">
-            <div className="flex flex-col gap-2">
-              <h4 className="text-sm font-medium text-white">节点 IP 地址</h4>
-              <p className="text-xs text-gray-400">
+          <div className="py-2 rounded-lg px-2 ml-4 border-l-2 border-muted pl-4">
+            <div className="space-y-2">
+              <h4 className="text-base font-medium">节点 IP 地址</h4>
+              <p className="text-sm text-muted-foreground">
                 输入要同步的设备 IPv4 地址
               </p>
               <Input
@@ -247,10 +247,10 @@ const NetworkSection: React.FC = () => {
           </div>
 
           {/* 节点端口 */}
-          <div className="settings-item py-2 rounded-lg px-2 ml-4 border-l-2 border-gray-700">
-            <div className="flex flex-col gap-2">
-              <h4 className="text-sm font-medium text-white">节点端口</h4>
-              <p className="text-xs text-gray-400">
+          <div className="py-2 rounded-lg px-2 ml-4 border-l-2 border-muted pl-4">
+            <div className="space-y-2">
+              <h4 className="text-base font-medium">节点端口</h4>
+              <p className="text-sm text-muted-foreground">
                 输入要同步的设备端口 (1024-65535)
               </p>
               <Input
@@ -268,23 +268,23 @@ const NetworkSection: React.FC = () => {
       )}
 
       {/* 云服务器配置 */}
-      <div className="settings-item py-2 rounded-lg px-2 opacity-60 cursor-not-allowed">
+      <div className="py-2 rounded-lg px-2 opacity-60 cursor-not-allowed">
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center">
-            <h4 className="text-sm font-medium text-white">云服务器配置</h4>
-            <span className="ml-2 px-1.5 py-0.5 bg-gray-700 text-xs text-gray-400 rounded">
+          <div className="flex items-center space-x-2">
+            <h4 className="text-base font-medium">云服务器配置</h4>
+            <span className="px-1.5 py-0.5 bg-muted text-xs text-muted-foreground rounded">
               即将推出
             </span>
           </div>
           <button
-            className="px-2 py-1 bg-gray-700 text-xs text-gray-300 rounded pointer-events-none"
+            className="px-2 py-1 bg-muted text-xs text-muted-foreground rounded pointer-events-none"
             disabled
           >
             高级选项
           </button>
         </div>
         <div className="flex">
-          <div className="px-2 py-1 bg-gray-700 rounded-lg text-sm text-gray-300 flex-1">
+          <div className="px-2 py-1 bg-muted rounded-lg text-sm text-muted-foreground flex-1">
             使用默认云服务器 ({cloudServer})
           </div>
         </div>

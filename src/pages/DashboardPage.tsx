@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Header from "@/components/layout/Header";
 import ClipboardContent from "@/components/clipboard/ClipboardContent";
-import ActionBar from "@/components/layout/ActionBar";
-import { MainLayout } from "@/layouts";
+
+
 import { Filter, OrderBy } from "@/api/clipboardItems";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { fetchStats } from "@/store/slices/statsSlice";
+import { useAppDispatch } from "@/store/hooks";
+
 import { fetchClipboardItems } from "@/store/slices/clipboardSlice";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -26,7 +26,7 @@ const globalListenerState: ListenerState = {
 
 const DashboardPage: React.FC = () => {
   const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.All);
-  const statsState = useAppSelector((state) => state.stats);
+
   const dispatch = useAppDispatch();
 
   // 使用ref保存最新的filter值
@@ -52,16 +52,12 @@ const DashboardPage: React.FC = () => {
         })
       );
 
-      dispatch(fetchStats());
+
     },
     [dispatch]
   );
 
-  // 处理同步按钮点击事件
-  const handleSync = useCallback(() => {
-    // 同步完成后立即加载最新数据
-    loadData(currentFilterRef.current);
-  }, [loadData]);
+
 
   // 防抖处理数据加载
   const debouncedLoadData = useCallback(
@@ -162,16 +158,19 @@ const DashboardPage: React.FC = () => {
   }, [debouncedLoadData]);
 
   return (
-    <MainLayout>
-      {/* 顶部搜索栏 */}
-      <Header onFilterChange={handleFilterChange} />
 
-      {/* 剪贴板内容区域 */}
-      <ClipboardContent filter={currentFilter} />
+      <div className="flex flex-col h-full relative">
+        {/* 顶部搜索栏 */}
+        <Header onFilterChange={handleFilterChange} />
 
-      {/* 底部快捷操作栏 */}
-      <ActionBar stats={statsState.stats} onSync={handleSync} />
-    </MainLayout>
+        {/* 剪贴板内容区域 - 使用 flex-1 让其占据剩余空间 */}
+        <div className="flex-1 overflow-hidden relative">
+          <ClipboardContent filter={currentFilter} />
+        </div>
+
+
+      </div>
+
   );
 };
 

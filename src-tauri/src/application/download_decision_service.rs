@@ -29,7 +29,6 @@ impl DownloadDecisionMaker {
             ContentType::File => self.setting.sync.content_types.file,
             ContentType::CodeSnippet => self.setting.sync.content_types.code_snippet,
             ContentType::RichText => self.setting.sync.content_types.rich_text,
-            _ => false, // 未知类型默认不下载
         }
     }
 
@@ -47,7 +46,6 @@ impl DownloadDecisionMaker {
             ContentType::RichText => 4,
             ContentType::Image => 5, // 图片优先级较低
             ContentType::File => 10, // 文件优先级最低
-            _ => 100,                // 未知类型最低优先级
         };
 
         // 根据文件大小调整优先级

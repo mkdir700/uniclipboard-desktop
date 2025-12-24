@@ -137,7 +137,6 @@ pub fn query_clipboard_records(
         Filter::File => {
             query = query.filter(clipboard_records::content_type.eq("file"));
         }
-        _ => {}
     }
 
     let records = query

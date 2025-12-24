@@ -12,13 +12,13 @@ mod utils;
 use application::device_service::get_device_manager;
 use config::setting::{Setting, SETTING};
 use infrastructure::context::AppContextBuilder;
-use infrastructure::uniclipboard::{UniClipboard, UniClipboardBuilder};
+use infrastructure::security::password::PasswordManager;
 use infrastructure::storage::db::pool::DB_POOL;
+use infrastructure::uniclipboard::{UniClipboard, UniClipboardBuilder};
 use log::error;
 use std::sync::Arc;
 use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use utils::logging;
-use infrastructure::security::password::PasswordManager;
 
 // 初始化UniClipboard
 fn init_uniclipboard(user_setting: Setting) -> Arc<UniClipboard> {
@@ -131,16 +131,16 @@ fn main() {
     let uniclipboard_app = init_uniclipboard(user_setting_for_init);
 
     // 运行应用
-    run_app(uniclipboard_app);
+    run_app(uniclipboard_app, user_setting);
 }
 
 // 运行应用程序
-fn run_app(uniclipboard_app: Arc<UniClipboard>) {
+fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
     use std::sync::Mutex;
     use tauri::Builder;
     use tauri_plugin_autostart::MacosLauncher;
-    use tauri_plugin_stronghold;
     use tauri_plugin_single_instance;
+    use tauri_plugin_stronghold;
 
     Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -149,7 +149,10 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
             MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
-        .plugin(tauri_plugin_stronghold::Builder::with_argon2(&PasswordManager::get_salt_file_path()).build())
+        .plugin(
+            tauri_plugin_stronghold::Builder::with_argon2(&PasswordManager::get_salt_file_path())
+                .build(),
+        )
         .manage(Arc::new(Mutex::new(Some(uniclipboard_app.clone()))))
         .manage(Arc::new(Mutex::new(
             api::event::EventListenerState::default(),
@@ -164,11 +167,17 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
 
             // set transparent title bar only when building for macOS
             #[cfg(target_os = "macos")]
-            let win_builder = win_builder.title_bar_style(TitleBarStyle::Transparent);
+            let win_builder = win_builder.title_bar_style(TitleBarStyle::Overlay);
+
+            // 如果启用了静默启动，则初始不可见
+            let win_builder = if user_setting.general.silent_start {
+                win_builder.visible(false)
+            } else {
+                win_builder
+            };
 
             let window = win_builder.build().unwrap();
 
-            // set background color only when building for macOS
             #[cfg(target_os = "macos")]
             {
                 use cocoa::appkit::{NSColor, NSWindow};
@@ -176,14 +185,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>) {
 
                 let ns_window = window.ns_window().unwrap() as id;
                 unsafe {
-                    // 101828 修改背景颜色
-                    let bg_color = NSColor::colorWithRed_green_blue_alpha_(
-                        nil,
-                        16.0 / 255.0,
-                        24.0 / 255.0,
-                        40.0 / 255.0,
-                        1.0,
-                    );
+                    let bg_color = NSColor::colorWithRed_green_blue_alpha_(nil, 0.0, 0.0, 0.0, 0.0);
                     ns_window.setBackgroundColor_(bg_color);
                 }
             }

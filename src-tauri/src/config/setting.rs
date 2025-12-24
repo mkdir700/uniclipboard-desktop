@@ -1,3 +1,4 @@
+use super::utils::get_setting_path;
 use anyhow::{Context, Result};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -5,7 +6,6 @@ use serde_json;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::RwLock;
-use super::utils::get_setting_path;
 
 // 全局设置实例
 pub static SETTING: Lazy<RwLock<Setting>> = Lazy::new(|| RwLock::new(Setting::default()));
@@ -18,6 +18,13 @@ pub struct AllowSyncContentTypes {
     pub file: bool,
     pub code_snippet: bool,
     pub rich_text: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeneralSetting {
+    pub auto_start: bool,
+    pub silent_start: bool,
+    pub auto_check_update: bool,
 }
 
 // 同步设置
@@ -68,7 +75,7 @@ pub enum AutoClearHistory {
     #[serde(rename = "monthly")]
     Monthly,
     #[serde(rename = "on_exit")]
-    OnExit
+    OnExit,
 }
 
 // 存储管理
@@ -92,7 +99,8 @@ pub struct AboutSetting {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Setting {
     #[serde(skip)]
-    device_id: String,  // 设备ID，仅在程序启动时被设置，不参与序列化
+    device_id: String, // 设备ID，仅在程序启动时被设置，不参与序列化
+    pub general: GeneralSetting,
     pub sync: SyncSetting,
     pub security: SecuritySetting,
     pub network: NetworkSetting,
@@ -110,6 +118,11 @@ impl Setting {
     pub fn default() -> Self {
         Self {
             device_id: String::new(),
+            general: GeneralSetting {
+                auto_start: false,
+                silent_start: false,
+                auto_check_update: true,
+            },
             sync: SyncSetting {
                 auto_sync: true,
                 sync_frequency: "realtime".to_string(),
@@ -146,7 +159,7 @@ impl Setting {
     }
 
     /// 加载设置
-    /// 
+    ///
     /// 如果指定了设置文件路径，则从该路径加载设置
     /// 否则从默认配置目录加载设置
     pub fn load(setting_path: Option<PathBuf>) -> Result<Self> {
@@ -157,12 +170,12 @@ impl Setting {
         };
 
         if let Some(setting_str) = fs::read_to_string(&_setting_path).ok() {
-            let setting: Setting = serde_json::from_str(&setting_str)
-                .with_context(|| "无法解析设置文件")?;
-            
+            let setting: Setting =
+                serde_json::from_str(&setting_str).with_context(|| "无法解析设置文件")?;
+
             // 更新全局设置
             SETTING.write().unwrap().clone_from(&setting);
-            
+
             Ok(setting)
         } else {
             // 如果设置文件不存在，则创建默认设置并保存
@@ -173,7 +186,7 @@ impl Setting {
     }
 
     /// 保存设置
-    /// 
+    ///
     /// 如果指定了设置文件路径，则保存到该路径
     /// 否则保存到默认配置目录
     pub fn save(&self, setting_path: Option<PathBuf>) -> Result<()> {
@@ -190,13 +203,13 @@ impl Setting {
 
         // 将设置序列化为 JSON 格式
         let setting_str = serde_json::to_string_pretty(self)?;
-        
+
         // 写入文件
         fs::write(&_setting_path, setting_str)
             .with_context(|| format!("无法写入设置文件: {:?}", _setting_path))?;
         // 更新全局设置
         SETTING.write().unwrap().clone_from(self);
-        
+
         Ok(())
     }
 
@@ -208,7 +221,6 @@ impl Setting {
         self.device_id = device_id;
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -241,8 +253,14 @@ mod tests {
 
         // 验证加载的设置与保存的设置一致
         assert_eq!(loaded_setting.sync.auto_sync, setting.sync.auto_sync);
-        assert_eq!(loaded_setting.sync.sync_frequency, setting.sync.sync_frequency);
-        assert_eq!(loaded_setting.network.cloud_server, setting.network.cloud_server);
+        assert_eq!(
+            loaded_setting.sync.sync_frequency,
+            setting.sync.sync_frequency
+        );
+        assert_eq!(
+            loaded_setting.network.cloud_server,
+            setting.network.cloud_server
+        );
 
         Ok(())
     }

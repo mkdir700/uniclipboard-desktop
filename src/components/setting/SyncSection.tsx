@@ -3,7 +3,7 @@ import {
   Switch,
   Label,
   Slider,
-  Checkbox,
+
   Select,
   SelectContent,
   SelectItem,
@@ -20,14 +20,7 @@ const SyncSection: React.FC = () => {
   // 本地状态，用于UI展示
   const [autoSync, setAutoSync] = useState(true);
   const [syncFrequency, setSyncFrequency] = useState("realtime");
-  const [contentTypes, setContentTypes] = useState({
-    text: true,
-    image: true,
-    link: true,
-    file: true,
-    codeSnippet: true,
-    richText: true,
-  });
+
   const [maxFileSize, setMaxFileSize] = useState([10]);
 
   // 同步频率选项
@@ -44,14 +37,7 @@ const SyncSection: React.FC = () => {
     if (setting) {
       setAutoSync(setting.sync.auto_sync);
       setSyncFrequency(setting.sync.sync_frequency);
-      setContentTypes({
-        text: setting.sync.content_types.text,
-        image: setting.sync.content_types.image,
-        link: setting.sync.content_types.link,
-        file: setting.sync.content_types.file,
-        codeSnippet: setting.sync.content_types.code_snippet,
-        richText: setting.sync.content_types.rich_text,
-      });
+
       setMaxFileSize([setting.sync.max_file_size]);
     }
   }, [setting]);
@@ -68,26 +54,7 @@ const SyncSection: React.FC = () => {
     updateSyncSetting({ sync_frequency: value });
   };
 
-  // 处理内容类型复选框变化
-  const handleContentTypeChange = (type: string, checked: boolean) => {
-    const newContentTypes = {
-      ...contentTypes,
-      [type]: checked,
-    };
-    setContentTypes(newContentTypes);
 
-    // 将前端的contentTypes转换为后端的content_types格式
-    updateSyncSetting({
-      content_types: {
-        text: newContentTypes.text,
-        image: newContentTypes.image,
-        link: newContentTypes.link,
-        file: newContentTypes.file,
-        code_snippet: newContentTypes.codeSnippet,
-        rich_text: newContentTypes.richText,
-      },
-    });
-  };
 
   // 处理最大文件大小变化
   const handleMaxFileSizeChange = (value: number[]) => {
@@ -120,13 +87,15 @@ const SyncSection: React.FC = () => {
       </div>
 
       {/* 同步频率选择 */}
-      <div className="py-2 rounded-lg px-2 space-y-2">
-        <Label htmlFor="sync-frequency" className="text-base">
-          同步频率
-        </Label>
-        <p className="text-sm text-muted-foreground mb-2">
-          控制 uniClipboard 检查新内容的频率
-        </p>
+      <div className="flex items-center justify-between py-2 rounded-lg px-2">
+        <div className="space-y-0.5">
+          <Label htmlFor="sync-frequency" className="text-base">
+            同步频率
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            控制 uniClipboard 检查新内容的频率
+          </p>
+        </div>
         <Select value={syncFrequency} onValueChange={handleSyncFrequencyChange}>
           <SelectTrigger className="w-[200px]">
             <SelectValue />
@@ -141,36 +110,7 @@ const SyncSection: React.FC = () => {
         </Select>
       </div>
 
-      {/* 同步内容类型 */}
-      <div className="py-2 rounded-lg px-2 space-y-3">
-        <Label className="text-base">同步内容类型</Label>
-        <div className="grid grid-cols-2 gap-3">
-          {Object.entries({
-            text: "文本",
-            image: "图片",
-            link: "链接",
-            file: "文件",
-            codeSnippet: "代码片段",
-            richText: "富文本",
-          }).map(([key, label]) => (
-            <div key={key} className="flex items-center space-x-2">
-              <Checkbox
-                id={`content-type-${key}`}
-                checked={contentTypes[key as keyof typeof contentTypes]}
-                onCheckedChange={(checked) =>
-                  handleContentTypeChange(key, checked as boolean)
-                }
-              />
-              <Label
-                htmlFor={`content-type-${key}`}
-                className="cursor-pointer"
-              >
-                {label}
-              </Label>
-            </div>
-          ))}
-        </div>
-      </div>
+
 
       {/* 最大文件大小滑块 */}
       <div className="py-2 rounded-lg px-2 space-y-4">

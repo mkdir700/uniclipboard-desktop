@@ -2,8 +2,7 @@ import React, { useState } from "react";
 import { Search, ClipboardCopy, Star, FileText, Image, Link as LinkIcon, Folder, Code } from "lucide-react";
 import { Filter } from "@/api/clipboardItems";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface HeaderProps {
@@ -11,7 +10,6 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
-  // 定义筛选类型
   const filterTypes = [
     { id: Filter.All, label: "全部", icon: ClipboardCopy },
     { id: Filter.Favorited, label: "收藏", icon: Star },
@@ -22,61 +20,91 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
     { id: Filter.Code, label: "代码", icon: Code },
   ];
 
-  // 当前选中的筛选类型
   const [activeFilter, setActiveFilter] = useState<Filter>(Filter.All);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  // 处理筛选器点击
   const handleFilterClick = (filterId: Filter) => {
     setActiveFilter(filterId);
-    // 调用父组件传入的回调函数
     onFilterChange?.(filterId);
   };
 
   return (
-    <header className="px-8 pt-6 pb-2 shrink-0">
-      {/* 搜索栏 */}
-      <div className="bg-card rounded-full shadow-sm border border-border flex items-center px-4 py-3">
-        <Search className="h-5 w-5 text-muted-foreground mr-3" />
-        <Input
-          type="text"
-          placeholder="搜索剪贴板内容..."
-          className="bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-sm w-full"
-        />
-        {/* 同步状态指示器 */}
-        <Badge
-          variant="secondary"
-          className="bg-success/10 text-success hover:bg-success/20 px-3 py-1 rounded-full text-xs font-medium ml-2 shrink-0"
-        >
-          <span>已同步</span>
-          <div className="w-2 h-2 rounded-full bg-success ml-2"></div>
-        </Badge>
-      </div>
+    <header 
+      data-tauri-drag-region
+      className="sticky top-0 z-50 pt-6 pb-2 px-8 transition-all duration-300"
+    >
+      {/* Glass Background */}
+      <div className="absolute inset-0 bg-background/60 backdrop-blur-xl border-b border-white/5 shadow-sm" />
 
-      {/* 内容类型筛选器 */}
-      <div className="mt-6 pb-2 flex gap-3 overflow-x-auto no-scrollbar shrink-0 items-center">
-        {filterTypes.map((filter) => {
-          const Icon = filter.icon;
-          const isActive = activeFilter === filter.id;
-          return (
-            <Button
-              key={filter.id}
-              variant={isActive ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => handleFilterClick(filter.id)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all shadow-sm",
-                isActive
-                  ? filter.id === Filter.Favorited
-                    ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
-                    : "bg-primary/10 text-primary hover:bg-primary/20 dark:bg-primary/20 border border-primary/20"
-                  : "bg-card text-muted-foreground hover:bg-accent hover:text-foreground border border-border"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {filter.label}
-            </Button>
-          );
-        })}
+      <div className="relative z-10 space-y-4">
+        {/* Top Row: Search & Status */}
+        <div className="flex items-center justify-between gap-4">
+          <motion.div 
+            className={cn(
+              "relative flex-1 group transition-all duration-300",
+              isSearchFocused ? "scale-[1.01]" : ""
+            )}
+            initial={false}
+          >
+            <div className={cn(
+              "absolute inset-0 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-2xl blur-md transition-opacity duration-500",
+              isSearchFocused ? "opacity-100" : "opacity-0"
+            )} />
+            <div className={cn(
+              "relative flex items-center px-4 py-3 bg-card/50 backdrop-blur-md rounded-2xl border transition-all duration-300",
+              isSearchFocused 
+                ? "border-transparent shadow-lg shadow-primary/5" 
+                : "border-border/50 shadow-sm hover:border-border/80 hover:bg-card/80"
+            )}>
+              <Search className={cn(
+                "h-5 w-5 mr-3 transition-colors duration-300",
+                isSearchFocused ? "text-primary" : "text-muted-foreground"
+              )} />
+              <Input
+                type="text"
+                placeholder="搜索剪贴板内容..."
+                className="bg-transparent border-none p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+              />
+            </div>
+          </motion.div>
+
+
+        </div>
+
+        {/* Filter Scroll Area */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 -mx-8 px-8 mask-linear-fade">
+          {filterTypes.map((filter) => {
+            const Icon = filter.icon;
+            const isActive = activeFilter === filter.id;
+
+            return (
+              <motion.button
+                key={filter.id}
+                onClick={() => handleFilterClick(filter.id)}
+                className={cn(
+                  "relative group flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none",
+                  isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.96 }}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="activeFilter"
+                    className="absolute inset-0 bg-primary rounded-xl shadow-lg shadow-primary/25"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-2">
+                  <Icon className={cn("h-4 w-4", isActive ? "text-primary-foreground" : "")} />
+                  {filter.label}
+                </span>
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
     </header>
   );

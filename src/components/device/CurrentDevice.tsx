@@ -1,73 +1,83 @@
-import React from "react";
+import React, { useState } from "react";
+import { Laptop, Settings } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import DeviceSettingsPanel from "./DeviceSettingsPanel";
 
 const CurrentDevice: React.FC = () => {
-  return (
-    <>
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-gray-400">当前设备</h3>
-          <div className="flex-grow ml-3 border-t border-gray-800/50"></div>
-        </div>
+  const [isExpanded, setIsExpanded] = useState(false);
 
-        <div className="bg-gray-700/80 rounded-lg border border-violet-500/30 p-4 flex items-center justify-between shadow-md">
-          <div className="flex items-center">
-            <div className="flex-shrink-0 h-12 w-12 bg-violet-500/20 rounded-lg flex items-center justify-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 text-violet-300"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                />
-              </svg>
+  return (
+    <div className="mb-8">
+      <div className="flex items-center gap-4 mb-4">
+        <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">当前设备</h3>
+        <div className="h-[1px] flex-1 bg-border/50"></div>
+      </div>
+
+      <div className="group relative overflow-hidden bg-card/50 hover:bg-card/80 border border-border/50 hover:border-primary/20 rounded-2xl transition-all duration-300 shadow-sm hover:shadow-md">
+        
+        {/* Abstract Background Gradient */}
+        <div className="absolute top-0 right-0 p-12 bg-primary/5 blur-[80px] rounded-full pointer-events-none" />
+
+        <div className="relative z-10 p-6">
+            <div className="flex items-center justify-between">
+            <div className="flex items-center gap-5">
+                {/* Icon Box */}
+                <div className="h-14 w-14 bg-primary/10 rounded-2xl flex items-center justify-center ring-1 ring-primary/20 shadow-inner">
+                <Laptop className="h-7 w-7 text-primary" />
+                </div>
+
+                {/* Info */}
+                <div>
+                <div className="flex items-center gap-3">
+                    <h4 className="text-lg font-semibold text-foreground tracking-tight">MacBook Pro</h4>
+                    <span className="px-2.5 py-0.5 bg-primary/15 text-primary text-xs font-medium rounded-full border border-primary/10">
+                    当前设备
+                    </span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">最后活动时间: 现在</p>
+                </div>
             </div>
-            <div className="ml-4">
-              <div className="flex items-center">
-                <h4 className="font-medium text-white">MacBook Pro</h4>
-                <span className="ml-2 text-xs px-2 py-0.5 bg-violet-500/30 rounded-full text-violet-300 font-medium">
-                  当前设备
-                </span>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">最后活动时间: 现在</p>
+
+            {/* Actions & Status */}
+            <div className="flex items-center gap-6">
+                {/* Status Indicator */}
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 text-green-500 rounded-full border border-green-500/20">
+                <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    <span className="text-xs font-medium">在线</span>
+                </div>
+
+                {/* Action Buttons */}
+                <button 
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className={`p-2 rounded-xl transition-all duration-300 ${isExpanded ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                >
+                <Settings className={`h-5 w-5 transition-transform duration-500 ${isExpanded ? "rotate-90" : ""}`} />
+                </button>
             </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            <span className="text-xs px-2 py-1 bg-green-500/20 rounded-full text-green-400 flex items-center">
-              <div className="h-1.5 w-1.5 rounded-full bg-green-500 mr-1 animate-pulse"></div>
-              在线
-            </span>
-            <button className="text-gray-400 hover:text-white">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-            </button>
-          </div>
+            </div>
+
+            {/* Expandable Settings Panel */}
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                         <div className="pt-6 border-t border-border/50 mt-6">
+                            <DeviceSettingsPanel deviceId="current" deviceName="MacBook Pro" />
+                         </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

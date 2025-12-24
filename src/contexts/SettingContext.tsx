@@ -20,6 +20,7 @@ interface ContentTypes {
 // 通用设置接口
 interface GeneralSetting {
   auto_start: boolean;
+  silent_start: boolean;
   auto_check_update: boolean;
 }
 

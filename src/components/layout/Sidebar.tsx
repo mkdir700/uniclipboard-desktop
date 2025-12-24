@@ -1,7 +1,7 @@
+
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Home, Monitor, Settings, Info } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Home, Monitor, Settings } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
 
 const Sidebar: React.FC = () => {
   const location = useLocation();
@@ -19,37 +20,45 @@ const Sidebar: React.FC = () => {
     { to: "/devices", icon: Monitor, label: "设备管理" },
   ];
 
-  const bottomItems = [
-    { to: "/about", icon: Info, label: "关于" },
-    { to: "/settings", icon: Settings, label: "设置" },
-  ];
+  const bottomItems = [{ to: "/settings", icon: Settings, label: "设置" }];
 
   const NavButton: React.FC<{
     to: string;
     icon: React.ComponentType<{ className?: string }>;
     label: string;
     isActive: boolean;
-  }> = ({ to, icon: Icon, label, isActive }) => {
+    layoutId: string;
+  }> = ({ to, icon: Icon, label, isActive, layoutId }) => {
     return (
       <TooltipProvider delayDuration={0}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Link to={to}>
-              <Button
-                variant="ghost"
-                size="icon"
+            <Link to={to} className="relative group">
+              {isActive && (
+                <motion.div
+                  layoutId={layoutId}
+                  className="absolute inset-0 bg-primary/10 dark:bg-primary/20 rounded-xl"
+                  initial={false}
+                  transition={{
+                    type: "spring",
+                    stiffness: 500,
+                    damping: 30,
+                  }}
+                />
+              )}
+              <div
                 className={cn(
-                  "h-12 w-12 rounded-2xl transition-all duration-200",
+                  "relative flex items-center justify-center w-12 h-12 rounded-xl transition-colors duration-200 z-10",
                   isActive
-                    ? "bg-primary/10 text-primary dark:bg-primary/20"
-                    : "text-muted-foreground hover:text-primary hover:bg-accent"
+                    ? "text-primary"
+                    : "text-muted-foreground group-hover:text-primary group-hover:bg-accent/50"
                 )}
               >
-                <Icon className="h-6 w-6" />
-              </Button>
+                <Icon className="w-5 h-5" />
+              </div>
             </Link>
           </TooltipTrigger>
-          <TooltipContent side="right">
+          <TooltipContent side="right" className="ml-2 font-medium">
             <p>{label}</p>
           </TooltipContent>
         </Tooltip>
@@ -58,12 +67,12 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside className="w-20 bg-card border-r border-border flex flex-col items-center py-6 gap-8 shrink-0 z-20">
-      {/* Logo / Home */}
-      <NavButton to="/" icon={Home} label="首页" isActive={path === "/"} />
-
+    <aside 
+      data-tauri-drag-region
+      className="w-[72px] h-screen sticky top-0 z-[100] flex flex-col items-center pt-10 pb-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl shrink-0"
+    >
       {/* Main Navigation */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3 w-full items-center pt-2">
         {navItems.map((item) => (
           <NavButton
             key={item.to}
@@ -71,14 +80,15 @@ const Sidebar: React.FC = () => {
             icon={item.icon}
             label={item.label}
             isActive={path === item.to}
+            layoutId="sidebar-nav-top"
           />
         ))}
       </div>
 
-      <div className="flex-1"></div>
+      <div className="flex-1" />
 
       {/* Bottom Navigation */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3 w-full items-center pb-2">
         {bottomItems.map((item) => (
           <NavButton
             key={item.to}
@@ -86,6 +96,7 @@ const Sidebar: React.FC = () => {
             icon={item.icon}
             label={item.label}
             isActive={path === item.to}
+            layoutId="sidebar-nav-bottom"
           />
         ))}
       </div>

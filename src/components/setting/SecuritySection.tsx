@@ -42,11 +42,11 @@ const SecuritySection: React.FC = () => {
   return (
     <>
       {/* 端到端加密 */}
-      <div className="settings-item py-2 rounded-lg px-2">
+      <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <h4 className="text-sm font-medium text-white">端到端加密</h4>
-            <p className="text-xs text-gray-400 mt-0.5">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">端到端加密</h4>
+            <p className="text-sm text-muted-foreground">
               启用后，所有同步内容将使用端到端加密传输
             </p>
           </div>
@@ -58,12 +58,12 @@ const SecuritySection: React.FC = () => {
       </div>
 
       {/* 加密口令 */}
-      <div className="settings-item py-2 rounded-lg px-2">
-        <div className="flex flex-col gap-2">
+      <div className="py-2 rounded-lg px-2">
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-white">加密口令</h4>
-              <p className="text-xs text-gray-400 mt-0.5">
+            <div className="space-y-0.5">
+              <h4 className="text-base font-medium">加密口令</h4>
+              <p className="text-sm text-muted-foreground">
                 用于加解密数据
               </p>
             </div>
