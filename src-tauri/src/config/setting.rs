@@ -36,6 +36,12 @@ pub struct GeneralSetting {
     pub silent_start: bool,
     pub auto_check_update: bool,
     pub theme: ThemeMode,
+    #[serde(default = "default_theme_color")]
+    pub theme_color: String,
+}
+
+fn default_theme_color() -> String {
+    "catppuccin".to_string()
 }
 
 // 同步设置
@@ -134,6 +140,7 @@ impl Setting {
                 silent_start: false,
                 auto_check_update: true,
                 theme: ThemeMode::System,
+                theme_color: "catppuccin".to_string(),
             },
             sync: SyncSetting {
                 auto_sync: true,

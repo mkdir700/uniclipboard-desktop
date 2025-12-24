@@ -1,109 +1,6 @@
 @import "tailwindcss";
 
-@theme {
-  /* Violet 主题色 */
-  --color-primary: oklch(0.66 0.19 303);
-  --color-primary-foreground: oklch(1 0 0);
-
-  /* 背景色 */
-  --color-background: oklch(0.97 0.01 247);
-  --color-foreground: oklch(0.2 0.02 247);
-
-  /* 表面色 */
-  --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.2 0.02 247);
-
-  /* 边框色 */
-  --color-border: oklch(0.91 0.01 247);
-  --color-input: oklch(0.91 0.01 247);
-  --color-ring: oklch(0.66 0.19 303);
-
-  /* 功能色 */
-  --color-secondary: oklch(0.96 0.01 247);
-  --color-secondary-foreground: oklch(0.2 0.02 247);
-
-  --color-destructive: oklch(0.55 0.22 27);
-  --color-destructive-foreground: oklch(1 0 0);
-
-  --color-muted: oklch(0.96 0.01 247);
-  --color-muted-foreground: oklch(0.5 0.02 247);
-
-  --color-accent: oklch(0.96 0.01 247);
-  --color-accent-foreground: oklch(0.2 0.02 247);
-
-  --color-popover: oklch(1 0 0);
-  --color-popover-foreground: oklch(0.2 0.02 247);
-
-  --color-success: oklch(0.45 0.12 142);
-  --color-warning: oklch(0.55 0.18 85);
-
-  /* 深色模式 */
-  --color-dark-primary: oklch(0.66 0.19 303);
-  --color-dark-primary-foreground: oklch(1 0 0);
-
-  --color-dark-background: oklch(0.2 0.02 247);
-  --color-dark-foreground: oklch(0.98 0.01 247);
-
-  --color-dark-card: oklch(0.25 0.02 247);
-  --color-dark-card-foreground: oklch(0.98 0.01 247);
-
-  --color-dark-border: oklch(0.35 0.02 247);
-  --color-dark-input: oklch(0.35 0.02 247);
-  --color-dark-ring: oklch(0.66 0.19 303);
-
-  --color-dark-secondary: oklch(0.25 0.02 247);
-  --color-dark-secondary-foreground: oklch(0.98 0.01 247);
-
-  --color-dark-destructive: oklch(0.35 0.12 27);
-  --color-dark-destructive-foreground: oklch(0.98 0.01 247);
-
-  --color-dark-muted: oklch(0.25 0.02 247);
-  --color-dark-muted-foreground: oklch(0.65 0.02 247);
-
-  --color-dark-accent: oklch(0.25 0.02 247);
-  --color-dark-accent-foreground: oklch(0.98 0.01 247);
-
-  --color-dark-popover: oklch(0.25 0.02 247);
-  --color-dark-popover-foreground: oklch(0.98 0.01 247);
-
-  --color-dark-success: oklch(0.50 0.12 142);
-  --color-dark-warning: oklch(0.55 0.18 85);
-}
-
-@layer base {
-  * {
-    border-color: var(--color-border);
-  }
-  body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-
-  .dark {
-    --color-border: var(--color-dark-border);
-    --color-input: var(--color-dark-input);
-    --color-ring: var(--color-dark-ring);
-    --color-background: var(--color-dark-background);
-    --color-foreground: var(--color-dark-foreground);
-    --color-card: var(--color-dark-card);
-    --color-card-foreground: var(--color-dark-card-foreground);
-    --color-primary: var(--color-dark-primary);
-    --color-primary-foreground: var(--color-dark-primary-foreground);
-    --color-secondary: var(--color-dark-secondary);
-    --color-secondary-foreground: var(--color-dark-secondary-foreground);
-    --color-destructive: var(--color-dark-destructive);
-    --color-destructive-foreground: var(--color-dark-destructive-foreground);
-    --color-muted: var(--color-dark-muted);
-    --color-muted-foreground: var(--color-dark-muted-foreground);
-    --color-accent: var(--color-dark-accent);
-    --color-accent-foreground: var(--color-dark-accent-foreground);
-    --color-popover: var(--color-dark-popover);
-    --color-popover-foreground: var(--color-dark-popover-foreground);
-    --color-success: var(--color-dark-success);
-    --color-warning: var(--color-dark-warning);
-  }
-}
+@custom-variant dark (&:is(.dark *));
 
 /* 自定义滚动条样式 */
 @layer utilities {
@@ -149,27 +46,6 @@
   }
 }
 
-/* 玻璃态效果 */
-@layer utilities {
-  .glass {
-    backdrop-filter: blur(12px);
-    background-color: rgb(255 255 255 / 0.8);
-  }
-
-  .dark .glass {
-    background-color: rgb(var(--color-dark-card) / 0.8);
-  }
-
-  .glass-strong {
-    backdrop-filter: blur(24px);
-    background-color: rgb(255 255 255 / 0.95);
-  }
-
-  .dark .glass-strong {
-    background-color: rgb(var(--color-dark-card) / 0.95);
-  }
-}
-
 /* 文本截断 */
 @layer utilities {
   .line-clamp-1 {
@@ -198,5 +74,83 @@
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 4;
+  }
+}
+
+@theme inline {
+  --font-sans: Montserrat, sans-serif;
+  --font-mono: Fira Code, monospace;
+  --font-serif: Georgia, serif;
+  --radius: 0.35rem;
+  --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
+  --tracking-tight: calc(var(--tracking-normal) - 0.025em);
+  --tracking-wide: calc(var(--tracking-normal) + 0.025em);
+  --tracking-wider: calc(var(--tracking-normal) + 0.05em);
+  --tracking-widest: calc(var(--tracking-normal) + 0.1em);
+  --tracking-normal: var(--tracking-normal);
+  --shadow-2xl: var(--shadow-2xl);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-md: var(--shadow-md);
+  --shadow: var(--shadow);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-2xs: var(--shadow-2xs);
+  --spacing: var(--spacing);
+  --letter-spacing: var(--letter-spacing);
+  --shadow-offset-y: var(--shadow-offset-y);
+  --shadow-offset-x: var(--shadow-offset-x);
+  --shadow-spread: var(--shadow-spread);
+  --shadow-blur: var(--shadow-blur);
+  --shadow-opacity: var(--shadow-opacity);
+  --color-shadow-color: var(--shadow-color);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+@import "./themes/catppuccin.css";
+@import "./themes/t3chat.css";
+@import "./themes/zinc.css";
+
+@layer base {
+  body {
+    letter-spacing: var(--tracking-normal);
   }
 }

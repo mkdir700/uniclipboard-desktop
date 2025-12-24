@@ -26,6 +26,7 @@ interface GeneralSetting {
   silent_start: boolean;
   auto_check_update: boolean;
   theme: ThemeMode;
+  theme_color: string;
 }
 
 // 同步设置接口
@@ -234,7 +235,9 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
 
     const applyTheme = () => {
       const theme = setting?.general.theme;
+      const themeColor = setting?.general.theme_color || "catppuccin";
 
+      // 1. Apply Mode (Light/Dark)
       root.classList.remove("light", "dark");
 
       if (theme === "system" || !theme) {
@@ -243,6 +246,9 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
       } else {
         root.classList.add(theme);
       }
+
+      // 2. Apply Theme Color
+      root.setAttribute("data-theme", themeColor);
     };
 
     applyTheme();
@@ -258,7 +264,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
     return () => {
       systemThemeMedia.removeEventListener("change", handleSystemThemeChange);
     };
-  }, [setting?.general.theme]);
+  }, [setting?.general.theme, setting?.general.theme_color]);
 
   return (
     <SettingContext.Provider

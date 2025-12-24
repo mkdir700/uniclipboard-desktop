@@ -6,13 +6,14 @@ import SecuritySection from "@/components/setting/SecuritySection";
 import NetworkSection from "@/components/setting/NetworkSection";
 import StorageSection from "@/components/setting/StorageSection";
 import AboutSection from "@/components/setting/AboutSection";
-import { CategoryItem } from "@/components/setting/SettingHeader";
 import GeneralSection from "@/components/setting/GeneralSection";
-import SettingHeader from "@/components/setting/SettingHeader";
+import AppearanceSection from "@/components/setting/AppearanceSection";
+import SettingHeader, { CategoryItem } from "@/components/setting/SettingHeader";
 
 // 集中定义所有设置类别
 const SETTING_CATEGORIES: CategoryItem[] = [
   { id: "general", name: "通用设置" },
+  { id: "appearance", name: "外观设置" },
   { id: "sync", name: "同步设置" },
   { id: "security", name: "安全与隐私" },
   { id: "network", name: "网络设置" },
@@ -27,6 +28,7 @@ const SettingsPage: React.FC = () => {
   // 创建对各个section的引用
   const sectionRefs = {
     general: useRef<HTMLDivElement>(null),
+    appearance: useRef<HTMLDivElement>(null),
     sync: useRef<HTMLDivElement>(null),
     security: useRef<HTMLDivElement>(null),
     network: useRef<HTMLDivElement>(null),
@@ -99,6 +101,12 @@ const SettingsPage: React.FC = () => {
           <div ref={sectionRefs.general} id="general-section" className="scroll-mt-32">
             <SettingContentLayout title="通用设置">
               <GeneralSection />
+            </SettingContentLayout>
+          </div>
+
+          <div ref={sectionRefs.appearance} id="appearance-section" className="scroll-mt-32">
+            <SettingContentLayout title="外观设置">
+              <AppearanceSection />
             </SettingContentLayout>
           </div>
 
