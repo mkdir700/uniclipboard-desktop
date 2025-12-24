@@ -85,7 +85,7 @@ const Sidebar: React.FC = () => {
         ))}
       </div>
 
-      <div className="flex-1" />
+      <div data-tauri-drag-region className="flex-1 w-full" />
 
       {/* Bottom Navigation */}
       <div className="flex flex-col gap-3 w-full items-center pb-2">
