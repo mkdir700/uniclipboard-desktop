@@ -51,7 +51,7 @@ const Sidebar: React.FC = () => {
                   "relative flex items-center justify-center w-12 h-12 rounded-xl transition-colors duration-200 z-10",
                   isActive
                     ? "text-primary"
-                    : "text-muted-foreground group-hover:text-primary group-hover:bg-accent/50"
+                    : "text-muted-foreground group-hover:text-primary group-hover:bg-muted"
                 )}
               >
                 <Icon className="w-5 h-5" />
