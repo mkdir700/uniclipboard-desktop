@@ -21,7 +21,7 @@ const DevicesPage: React.FC = () => {
 
       {/* 设备列表 */}
       <div className="flex-1 overflow-hidden mt-4">
-        <div className="h-full px-4 pb-3 overflow-auto hide-scrollbar">
+        <div className="h-full px-8 pb-3 overflow-auto scrollbar-thin">
           {/* 设备列表 */}
           <DeviceList />
 
@@ -37,7 +37,7 @@ const DevicesPage: React.FC = () => {
       <DeviceFooter />
 
       {/* 设备配对模态框 */}
-      {showPairingModal && <PairingModal onClose={handleClosePairingModal} />}
+      <PairingModal open={showPairingModal} onClose={handleClosePairingModal} />
     </MainLayout>
   );
 };

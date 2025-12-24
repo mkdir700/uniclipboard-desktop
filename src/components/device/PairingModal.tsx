@@ -1,10 +1,23 @@
 import React, { useState } from "react";
+import { Smartphone } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface DevicePairingModalProps {
   onClose: () => void;
+  open?: boolean;
 }
 
-const DevicePairingModal: React.FC<DevicePairingModalProps> = ({ onClose }) => {
+const DevicePairingModal: React.FC<DevicePairingModalProps> = ({
+  onClose,
+  open = true,
+}) => {
   const [step, setStep] = useState<number>(1);
   const [code, setCode] = useState<string>("");
 
@@ -19,81 +32,62 @@ const DevicePairingModal: React.FC<DevicePairingModalProps> = ({ onClose }) => {
     onClose();
   };
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-gray-950/90 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg shadow-lg w-full max-w-md mx-4">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-white">添加新设备</h3>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-white transition"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-
-          {step === 1 && (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>添加新设备</DialogTitle>
+          <DialogDescription asChild>
             <div>
-              <p className="text-gray-300 mb-6">
-                要添加新设备，请在新设备上安装 ClipSync
-                应用并选择"添加现有账户"选项。然后点击下方按钮生成配对码。
-              </p>
+              {step === 1 && (
+                <p className="text-muted-foreground">
+                  要添加新设备，请在新设备上安装 uniClipboard
+                  应用并选择"添加现有账户"选项。然后点击下方按钮生成配对码。
+                </p>
+              )}
+              {step === 2 && (
+                <p className="text-muted-foreground">
+                  请在新设备上输入以下配对码。此代码将在10分钟后过期。
+                </p>
+              )}
+            </div>
+          </DialogDescription>
+        </DialogHeader>
 
-              <div className="flex items-center justify-center mb-6">
-                <div className="h-32 w-32 bg-gray-700 rounded-lg flex items-center justify-center">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-16 w-16 text-violet-300"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"
-                    />
-                  </svg>
+        <div className="py-4">
+          {step === 1 && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-center">
+                <div className="h-32 w-32 bg-muted rounded-2xl flex items-center justify-center">
+                  <Smartphone className="h-16 w-16 text-primary" />
                 </div>
               </div>
 
-              <button
+              <Button
                 onClick={handleGenerateCode}
-                className="w-full py-3 bg-violet-500 hover:bg-violet-400 text-white rounded-lg font-medium transition duration-150"
+                className="w-full"
+                size="lg"
               >
                 生成配对码
-              </button>
+              </Button>
             </div>
           )}
 
           {step === 2 && (
-            <div>
-              <p className="text-gray-300 mb-6">
-                请在新设备上输入以下配对码。此代码将在10分钟后过期。
-              </p>
-
-              <div className="flex items-center justify-center mb-6">
-                <div className="bg-gray-700 rounded-lg p-6">
+            <div className="space-y-6">
+              <div className="flex items-center justify-center">
+                <div className="bg-muted rounded-2xl p-6">
                   <div className="flex space-x-3">
                     {code.split("").map((digit, index) => (
                       <div
                         key={index}
-                        className="w-10 h-12 bg-gray-600 rounded-md flex items-center justify-center text-xl font-bold text-white"
+                        className="w-12 h-14 bg-card rounded-xl flex items-center justify-center text-xl font-bold border border-border shadow-sm"
                       >
                         {digit}
                       </div>
@@ -102,29 +96,30 @@ const DevicePairingModal: React.FC<DevicePairingModalProps> = ({ onClose }) => {
                 </div>
               </div>
 
-              <p className="text-gray-400 text-sm text-center mb-6">
+              <p className="text-muted-foreground text-sm text-center">
                 配对码有效期：10:00
               </p>
 
-              <div className="flex space-x-3">
-                <button
+              <div className="flex gap-3">
+                <Button
                   onClick={() => setStep(1)}
-                  className="flex-1 py-3 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium transition duration-150"
+                  variant="outline"
+                  className="flex-1"
                 >
                   返回
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={handleFinish}
-                  className="flex-1 py-3 bg-violet-500 hover:bg-violet-400 text-white rounded-lg font-medium transition duration-150"
+                  className="flex-1"
                 >
                   完成
-                </button>
+                </Button>
               </div>
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 

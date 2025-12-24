@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { useSetting } from "../../contexts/SettingContext";
-import Input from "../ui/Input";
-import Select from "../ui/Select";
-import Toggle from "../ui/Toggle";
-import IPInput from "../ui/IPInput";
+import { useSetting } from "@/contexts/SettingContext";
+import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@/components/ui";
 
 const NetworkSection: React.FC = () => {
   const { setting, error, updateNetworkSetting } = useSetting();
@@ -49,7 +46,9 @@ const NetworkSection: React.FC = () => {
   };
 
   // 处理本机开放端口变化
-  const handleWebserverPortChange = (value: string) => {
+  const handleWebserverPortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
     // 如果输入为空，不做任何处理，允许用户继续输入
     if (!value.trim()) {
       setPortError(null);
@@ -79,8 +78,8 @@ const NetworkSection: React.FC = () => {
   };
 
   // 处理自定义同步节点开关变化
-  const handleCustomPeerDeviceChange = () => {
-    const newValue = !customPeerDevice;
+  const handleCustomPeerDeviceChange = (checked: boolean) => {
+    const newValue = checked;
     setCustomPeerDevice(newValue);
     updateNetworkSetting({ custom_peer_device: newValue });
 
@@ -99,7 +98,8 @@ const NetworkSection: React.FC = () => {
   };
 
   // 处理节点 IP 变化
-  const handlePeerDeviceAddrChange = (value: string) => {
+  const handlePeerDeviceAddrChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
     setPeerDeviceAddr(value);
 
     // 验证 IP 地址
@@ -119,7 +119,9 @@ const NetworkSection: React.FC = () => {
   };
 
   // 处理节点端口变化
-  const handlePeerDevicePortChange = (value: string) => {
+  const handlePeerDevicePortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
     // 如果输入为空，不做任何处理，允许用户继续输入
     if (!value.trim()) {
       setPeerPortError("端口号不能为空");
@@ -162,36 +164,64 @@ const NetworkSection: React.FC = () => {
     <>
       {/* 同步方式 */}
       <div className="settings-item py-2 rounded-lg px-2">
-        <Select
-          options={syncMethodOptions}
-          value={syncMethod}
-          onChange={handleSyncMethodChange}
-          label="同步方式"
-          description="选择同步方式"
-          width="w-64"
-        />
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-white">同步方式</h4>
+            <p className="text-xs text-gray-400 mt-0.5">
+              选择同步方式
+            </p>
+          </div>
+          <Select
+            value={syncMethod}
+            onValueChange={handleSyncMethodChange}
+          >
+            <SelectTrigger className="w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {syncMethodOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* 本机开放端口 */}
       <div className="settings-item py-2 rounded-lg px-2">
-        <Input
-          label="本机开放端口"
-          description="设置本机开放端口 (1024-65535)"
-          value={webserverPort.toString()}
-          onChange={handleWebserverPortChange}
-          type="text"
-          errorMessage={portError}
-        />
+        <div className="flex flex-col gap-2">
+          <h4 className="text-sm font-medium text-white">本机开放端口</h4>
+          <p className="text-xs text-gray-400">
+            设置本机开放端口 (1024-65535)
+          </p>
+          <Input
+            type="text"
+            value={webserverPort.toString()}
+            onChange={handleWebserverPortChange}
+            className={portError ? "border-red-500" : ""}
+          />
+          {portError && (
+            <p className="text-xs text-red-500">{portError}</p>
+          )}
+        </div>
       </div>
 
       {/* 是否自定义同步节点 */}
       <div className="settings-item py-2 rounded-lg px-2">
-        <Toggle
-          label="自定义同步节点"
-          description="手动指定要同步的设备地址和端口"
-          checked={customPeerDevice}
-          onChange={handleCustomPeerDeviceChange}
-        />
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-white">自定义同步节点</h4>
+            <p className="text-xs text-gray-400 mt-0.5">
+              手动指定要同步的设备地址和端口
+            </p>
+          </div>
+          <Switch
+            checked={customPeerDevice}
+            onCheckedChange={handleCustomPeerDeviceChange}
+          />
+        </div>
       </div>
 
       {/* 节点 IP 和端口（仅在启用自定义同步节点时显示） */}
@@ -199,25 +229,40 @@ const NetworkSection: React.FC = () => {
         <>
           {/* 节点 IP */}
           <div className="settings-item py-2 rounded-lg px-2 ml-4 border-l-2 border-gray-700">
-            <IPInput
-              label="节点 IP 地址"
-              description="输入要同步的设备 IPv4 地址"
-              value={peerDeviceAddr}
-              onChange={handlePeerDeviceAddrChange}
-              errorMessage={peerIpError}
-            />
+            <div className="flex flex-col gap-2">
+              <h4 className="text-sm font-medium text-white">节点 IP 地址</h4>
+              <p className="text-xs text-gray-400">
+                输入要同步的设备 IPv4 地址
+              </p>
+              <Input
+                type="text"
+                value={peerDeviceAddr}
+                onChange={handlePeerDeviceAddrChange}
+                className={peerIpError ? "border-red-500" : ""}
+              />
+              {peerIpError && (
+                <p className="text-xs text-red-500">{peerIpError}</p>
+              )}
+            </div>
           </div>
 
           {/* 节点端口 */}
           <div className="settings-item py-2 rounded-lg px-2 ml-4 border-l-2 border-gray-700">
-            <Input
-              label="节点端口"
-              description="输入要同步的设备端口 (1024-65535)"
-              value={peerDevicePort.toString()}
-              onChange={handlePeerDevicePortChange}
-              type="text"
-              errorMessage={peerPortError}
-            />
+            <div className="flex flex-col gap-2">
+              <h4 className="text-sm font-medium text-white">节点端口</h4>
+              <p className="text-xs text-gray-400">
+                输入要同步的设备端口 (1024-65535)
+              </p>
+              <Input
+                type="text"
+                value={peerDevicePort.toString()}
+                onChange={handlePeerDevicePortChange}
+                className={peerPortError ? "border-red-500" : ""}
+              />
+              {peerPortError && (
+                <p className="text-xs text-red-500">{peerPortError}</p>
+              )}
+            </div>
           </div>
         </>
       )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Inbox } from "lucide-react";
 import ClipboardItem from "./ClipboardItem";
 import {
   getDisplayType,
@@ -17,6 +18,8 @@ import {
   clearError as clearReduxError,
   toggleFavoriteItem,
 } from "@/store/slices/clipboardSlice";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface DisplayClipboardItem {
   id: string;
@@ -93,14 +96,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
       timeString = `${Math.floor(diffMins / 1440)}天前`;
     }
 
-    // 处理图片URL
-    let imageUrl = undefined;
-    if (item.item.image) {
-      imageUrl = item.item.image.thumbnail.startsWith("data:")
-        ? item.item.image.thumbnail
-        : `data:image/png;base64,${item.item.image.thumbnail}`;
-    }
-
     // 创建显示项目
     return {
       id: item.id,
@@ -155,46 +150,56 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     }
   }, [error, dispatch]);
 
+  // 骨架屏加载状态
   if (loading && clipboardItems.length === 0) {
     return (
-      <div className="flex-1 overflow-hidden flex items-center justify-center">
-        <div className="text-gray-500">加载中...</div>
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-8 pb-24">
+        <div className="bg-muted/30 rounded-2xl p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-56 w-full rounded-2xl" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-hidden">
+    <div className="flex-1 overflow-y-auto scrollbar-thin px-8 pb-24">
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mx-4 mt-2">
-          {error}
-        </div>
+        <Alert variant="destructive" className="mx-8 mt-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
-      <div className="h-full overflow-y-auto hide-scrollbar px-4 py-4">
-        <div className="space-y-4">
-          <div className="space-y-3">
-            {clipboardItems.length > 0 ? (
-              clipboardItems.map((item) => (
-                <ClipboardItem
-                  key={item.id}
-                  type={item.type}
-                  time={item.time}
-                  device={item.device}
-                  content={item.content}
-                  isDownloaded={item.isDownloaded}
-                  isFavorited={item.isFavorited}
-                  onDelete={() => handleDeleteItem(item.id)}
-                  onCopy={() => handleCopyItem(item.id)}
-                  toggleFavorite={(isFavorited) =>
-                    handleToggleFavorite(item.id, isFavorited)
-                  }
-                />
-              ))
-            ) : (
-              <div className="text-gray-500 text-center py-4">没有剪贴板项</div>
-            )}
+
+      <div className="bg-muted/30 rounded-2xl p-6">
+        {clipboardItems.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {clipboardItems.map((item) => (
+              <ClipboardItem
+                key={item.id}
+                type={item.type}
+                time={item.time}
+                device={item.device}
+                content={item.content}
+                isDownloaded={item.isDownloaded}
+                isFavorited={item.isFavorited}
+                onDelete={() => handleDeleteItem(item.id)}
+                onCopy={() => handleCopyItem(item.id)}
+                toggleFavorite={(isFavorited) =>
+                  handleToggleFavorite(item.id, isFavorited)
+                }
+              />
+            ))}
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <Inbox className="h-16 w-16 mb-4 opacity-50" />
+            <p className="text-lg font-medium">没有剪贴板项</p>
+            <p className="text-sm mt-1">复制内容后将显示在这里</p>
+          </div>
+        )}
       </div>
     </div>
   );

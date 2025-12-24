@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+@theme {
+  /* Violet 主题色 */
+  --color-primary: oklch(0.66 0.19 303);
+  --color-primary-foreground: oklch(1 0 0);
+
+  /* 背景色 */
+  --color-background: oklch(0.97 0.01 247);
+  --color-foreground: oklch(0.2 0.02 247);
+
+  /* 表面色 */
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.2 0.02 247);
+
+  /* 边框色 */
+  --color-border: oklch(0.91 0.01 247);
+  --color-input: oklch(0.91 0.01 247);
+  --color-ring: oklch(0.66 0.19 303);
+
+  /* 功能色 */
+  --color-secondary: oklch(0.96 0.01 247);
+  --color-secondary-foreground: oklch(0.2 0.02 247);
+
+  --color-destructive: oklch(0.55 0.22 27);
+  --color-destructive-foreground: oklch(1 0 0);
+
+  --color-muted: oklch(0.96 0.01 247);
+  --color-muted-foreground: oklch(0.5 0.02 247);
+
+  --color-accent: oklch(0.96 0.01 247);
+  --color-accent-foreground: oklch(0.2 0.02 247);
+
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.2 0.02 247);
+
+  --color-success: oklch(0.45 0.12 142);
+  --color-warning: oklch(0.55 0.18 85);
+
+  /* 深色模式 */
+  --color-dark-primary: oklch(0.66 0.19 303);
+  --color-dark-primary-foreground: oklch(1 0 0);
+
+  --color-dark-background: oklch(0.2 0.02 247);
+  --color-dark-foreground: oklch(0.98 0.01 247);
+
+  --color-dark-card: oklch(0.25 0.02 247);
+  --color-dark-card-foreground: oklch(0.98 0.01 247);
+
+  --color-dark-border: oklch(0.35 0.02 247);
+  --color-dark-input: oklch(0.35 0.02 247);
+  --color-dark-ring: oklch(0.66 0.19 303);
+
+  --color-dark-secondary: oklch(0.25 0.02 247);
+  --color-dark-secondary-foreground: oklch(0.98 0.01 247);
+
+  --color-dark-destructive: oklch(0.35 0.12 27);
+  --color-dark-destructive-foreground: oklch(0.98 0.01 247);
+
+  --color-dark-muted: oklch(0.25 0.02 247);
+  --color-dark-muted-foreground: oklch(0.65 0.02 247);
+
+  --color-dark-accent: oklch(0.25 0.02 247);
+  --color-dark-accent-foreground: oklch(0.98 0.01 247);
+
+  --color-dark-popover: oklch(0.25 0.02 247);
+  --color-dark-popover-foreground: oklch(0.98 0.01 247);
+
+  --color-dark-success: oklch(0.50 0.12 142);
+  --color-dark-warning: oklch(0.55 0.18 85);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  .dark {
+    --color-border: var(--color-dark-border);
+    --color-input: var(--color-dark-input);
+    --color-ring: var(--color-dark-ring);
+    --color-background: var(--color-dark-background);
+    --color-foreground: var(--color-dark-foreground);
+    --color-card: var(--color-dark-card);
+    --color-card-foreground: var(--color-dark-card-foreground);
+    --color-primary: var(--color-dark-primary);
+    --color-primary-foreground: var(--color-dark-primary-foreground);
+    --color-secondary: var(--color-dark-secondary);
+    --color-secondary-foreground: var(--color-dark-secondary-foreground);
+    --color-destructive: var(--color-dark-destructive);
+    --color-destructive-foreground: var(--color-dark-destructive-foreground);
+    --color-muted: var(--color-dark-muted);
+    --color-muted-foreground: var(--color-dark-muted-foreground);
+    --color-accent: var(--color-dark-accent);
+    --color-accent-foreground: var(--color-dark-accent-foreground);
+    --color-popover: var(--color-dark-popover);
+    --color-popover-foreground: var(--color-dark-popover-foreground);
+    --color-success: var(--color-dark-success);
+    --color-warning: var(--color-dark-warning);
+  }
+}
+
+/* 自定义滚动条样式 */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(203 213 225);
+    border-radius: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(148 163 184);
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(71 85 105);
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(100 116 139);
+  }
+
+  /* 隐藏滚动条但保留功能 */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* 玻璃态效果 */
+@layer utilities {
+  .glass {
+    backdrop-filter: blur(12px);
+    background-color: rgb(255 255 255 / 0.8);
+  }
+
+  .dark .glass {
+    background-color: rgb(var(--color-dark-card) / 0.8);
+  }
+
+  .glass-strong {
+    backdrop-filter: blur(24px);
+    background-color: rgb(255 255 255 / 0.95);
+  }
+
+  .dark .glass-strong {
+    background-color: rgb(var(--color-dark-card) / 0.95);
+  }
+}
+
+/* 文本截断 */
+@layer utilities {
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  .line-clamp-4 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+  }
+}

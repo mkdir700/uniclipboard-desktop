@@ -1,5 +1,5 @@
 import React, { ReactNode } from "react";
-import { Sidebar } from "../components";
+import { Sidebar } from "@/components";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -7,14 +7,14 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div className="h-screen flex overflow-hidden bg-background text-foreground transition-colors duration-200">
       {/* 侧边栏导航 */}
       <Sidebar />
 
       {/* 主内容区域 */}
-      <div className="bg-gray-900 flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
         {children}
-      </div>
+      </main>
     </div>
   );
 };

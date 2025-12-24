@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
-import Slider from "../ui/Slider";
-import { useSetting } from "../../contexts/SettingContext";
-import { Select } from "../ui";
+import { Slider, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui";
+import { useSetting } from "@/contexts/SettingContext";
 
 const StorageSection: React.FC = () => {
   const { setting, error, updateStorageSetting } = useSetting();
@@ -39,9 +38,10 @@ const StorageSection: React.FC = () => {
   }, [setting]);
 
   // 处理历史记录保留时间变化
-  const handleHistoryRetentionChange = (value: number) => {
-    setHistoryRetentionDays(value);
-    updateStorageSetting({ history_retention_days: value });
+  const handleHistoryRetentionChange = (value: number[]) => {
+    const newValue = value[0];
+    setHistoryRetentionDays(newValue);
+    updateStorageSetting({ history_retention_days: newValue });
   };
 
   // 处理最大历史记录数变化
@@ -73,14 +73,29 @@ const StorageSection: React.FC = () => {
     <>
       {/* 自动清除规则 */}
       <div className="settings-item py-2 rounded-lg px-2">
-        <Select
-          options={autoClearOptions}
-          width="w-36"
-          value={autoClearHistory}
-          onChange={handleAutoClearHistoryChange}
-          label="自动清除历史记录"
-          description="定期自动清除剪贴板历史记录"
-        />
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-white">自动清除历史记录</h4>
+            <p className="text-xs text-gray-400 mt-0.5">
+              定期自动清除剪贴板历史记录
+            </p>
+          </div>
+          <Select
+            value={autoClearHistory}
+            onValueChange={handleAutoClearHistoryChange}
+          >
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {autoClearOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* 存储使用情况 */}
@@ -103,34 +118,57 @@ const StorageSection: React.FC = () => {
       {/* 存储限制 */}
       <div className="settings-item py-2 rounded-lg px-2">
         <div className="w-full">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-white">历史记录保留时间</h4>
+              <p className="text-xs text-gray-400 mt-0.5">
+                设置剪贴板历史记录的最长保留时间
+              </p>
+            </div>
+            <span className="text-sm text-gray-300">{historyRetentionDays} 天</span>
+          </div>
           <Slider
             min={1}
             max={90}
-            value={historyRetentionDays}
-            onChange={handleHistoryRetentionChange}
-            label="历史记录保留时间"
-            description="设置剪贴板历史记录的最长保留时间"
-            unit="天"
-            keyPoints={[
-              { value: 7, label: "7D" },
-              { value: 30, label: "30D" },
-              { value: 60, label: "60D" },
-              { value: 90, label: "90D" },
-            ]}
+            step={1}
+            value={[historyRetentionDays]}
+            onValueChange={handleHistoryRetentionChange}
+            className="w-full"
           />
+          <div className="flex justify-between mt-2 text-xs text-gray-400">
+            <span>7天</span>
+            <span>30天</span>
+            <span>60天</span>
+            <span>90天</span>
+          </div>
         </div>
       </div>
 
       {/* 最大历史记录数 */}
       <div className="settings-item py-2 rounded-lg px-2">
-        <Select
-          options={maxHistoryOptions}
-          value={maxHistoryItems.toString()}
-          onChange={handleMaxHistoryItemsChange}
-          label="最大历史记录数"
-          description="限制保存的剪贴板历史记录数量"
-          width="w-36"
-        />
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-white">最大历史记录数</h4>
+            <p className="text-xs text-gray-400 mt-0.5">
+              限制保存的剪贴板历史记录数量
+            </p>
+          </div>
+          <Select
+            value={maxHistoryItems.toString()}
+            onValueChange={handleMaxHistoryItemsChange}
+          >
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {maxHistoryOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* 清空历史记录 */}

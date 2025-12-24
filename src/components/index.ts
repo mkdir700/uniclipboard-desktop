@@ -11,13 +11,5 @@ export * from './device';
 // 设置组件
 export * from './setting';
 
-// UI 组件
-export { 
-  IPInput,
-  Input,
-  Combobox,
-  Toggle,
-  Select,
-  Slider,
-  RadioCheckbox
-} from './ui';
+// UI 组件 (shadcn)
+export * from './ui';

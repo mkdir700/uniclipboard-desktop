@@ -1,4 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
+import {
+  Copy,
+  Check,
+  Star,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Image as ImageIcon,
+  Link as LinkIcon,
+  File,
+  Code,
+} from "lucide-react";
 import { formatFileSize } from "@/utils";
 import {
   ClipboardTextItem,
@@ -7,6 +20,9 @@ import {
   ClipboardCodeItem,
   ClipboardFileItem,
 } from "@/api/clipboardItems";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface ClipboardItemProps {
   type: "text" | "image" | "link" | "code" | "file" | "unknown";
@@ -30,7 +46,6 @@ interface ClipboardItemProps {
 const ClipboardItem: React.FC<ClipboardItemProps> = ({
   type,
   time,
-  device = "",
   content,
   isDownloaded = false,
   isFavorited = false,
@@ -42,7 +57,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [favorited, setFavorited] = useState(isFavorited);
-  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadProgress, setDownloadProgress] = useState(0); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [deleteConfirmation, setDeleteConfirmation] = useState(false);
   const [deleteTimer, setDeleteTimer] = useState<ReturnType<
     typeof setTimeout
@@ -59,11 +74,6 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
       }
     };
   }, [deleteTimer]);
-
-  // 获取卡片样式
-  const getCardStyle = () => {
-    return "bg-gray-800/60";
-  };
 
   // 计算内容字符数
   const getCharCount = () => {
@@ -219,176 +229,41 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     }
   };
 
-  // 渲染操作按钮
-  const renderActionButtons = () => {
-    return (
-      <div className="flex items-center space-x-1">
-        <button
-          className="p-1 rounded-full hover:bg-gray-700/50 relative"
-          onClick={handleCopy}
-          title="复制到剪贴板"
-          disabled={downloading}
-        >
-          {copySuccess ? (
-            // 成功图标 - 绿色对勾
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-green-500"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ) : downloading ? (
-            // 圆形进度条
-            <div className="relative h-4 w-4">
-              <svg className="h-4 w-4" viewBox="0 0 36 36">
-                {/* 背景圆 */}
-                <circle
-                  cx="18"
-                  cy="18"
-                  r="16"
-                  fill="none"
-                  stroke="#4B5563"
-                  strokeWidth="2"
-                  strokeOpacity="0.3"
-                />
-                {/* 进度圆 - 使用strokeDasharray和strokeDashoffset实现进度效果 */}
-                <circle
-                  cx="18"
-                  cy="18"
-                  r="16"
-                  fill="none"
-                  stroke="#3B82F6"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  transform="rotate(-90 18 18)"
-                  strokeDasharray="100"
-                  strokeDashoffset={100 - downloadProgress}
-                  style={{
-                    transition: "stroke-dashoffset 0.2s ease",
-                  }}
-                />
-              </svg>
-            </div>
-          ) : (
-            // 默认复制图标
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-              />
-            </svg>
-          )}
-        </button>
-
-        {/* 收藏按钮 */}
-        <button
-          className="p-1 rounded-full hover:bg-gray-700/50"
-          onClick={handleFavoriteClick}
-          title={favorited ? "取消收藏" : "收藏"}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className={`h-4 w-4 ${
-              favorited ? "text-yellow-400 fill-yellow-400" : "text-gray-400"
-            }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-            />
-          </svg>
-        </button>
-
-        {/* 删除按钮 */}
-        <button
-          className="p-1 rounded-full hover:bg-gray-700/50"
-          onClick={handleDeleteClick}
-          title={deleteConfirmation ? "再次点击确认删除" : "删除"}
-        >
-          {deleteConfirmation ? (
-            // 确认删除状态 - 红色X图标
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-red-500"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ) : (
-            // 默认删除图标
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          )}
-        </button>
-      </div>
-    );
-  };
+  const shouldUseExpand =
+    type === "image"
+      ? needsImageExpand(imageHeight)
+      : needsExpandCollapse(getContentText(), type);
+  const sizeInfo = getSizeInfo();
+  const contentNeedsExpand =
+    type === "image"
+      ? needsImageExpand(imageHeight)
+      : needsExpandCollapse(getContentText(), type);
 
   // 渲染内容
   const renderContent = () => {
-    const contentNeedsExpand =
-      type === "image"
-        ? needsImageExpand(imageHeight)
-        : needsExpandCollapse(getContentText(), type);
-
     // 渐变蒙版组件
     const renderGradientMask = () => {
       if (isExpanded || !contentNeedsExpand) return null;
 
       return (
-        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-gray-800/90 to-transparent pointer-events-none">
-          {/* 渐变蒙版，提示内容被截断 */}
-        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-card/90 to-transparent pointer-events-none" />
       );
     };
+
+    const contentClassName = cn(
+      "p-3 bg-muted/50 rounded-lg border border-border font-mono text-sm overflow-x-auto relative"
+    );
+
+    const textClassName = cn(
+      "whitespace-pre-wrap",
+      !isExpanded && "line-clamp-4"
+    );
 
     switch (type) {
       case "text":
         return (
-          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
-            <pre
-              className={`whitespace-pre-wrap ${
-                isExpanded ? "" : "line-clamp-2"
-              }`}
-            >
-              {getContentText()}
-            </pre>
+          <div className={contentClassName}>
+            <pre className={textClassName}>{getContentText()}</pre>
             {renderGradientMask()}
           </div>
         );
@@ -397,34 +272,33 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         const imageItem = content as ClipboardImageItem;
         return (
           <div
-            className={`relative overflow-hidden ${
-              isExpanded || !imageNeedsExpand ? "" : "max-h-[300px]"
-            }`}
+            className={cn(
+              "relative overflow-hidden rounded-lg bg-muted/30",
+              !isExpanded && imageNeedsExpand && "max-h-[200px]"
+            )}
           >
             <img
               ref={imageRef}
               src={imageItem.thumbnail}
-              className="w-full object-contain rounded-md"
+              className="w-full object-contain"
               alt="图片"
               onLoad={handleImageLoad}
             />
             {imageNeedsExpand && !isExpanded && (
-              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-800/90 to-transparent">
-                {/* 渐变蒙版，提示图片被截断 */}
-              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-card/90 to-transparent" />
             )}
           </div>
         );
       case "link":
         const linkUrl = (content as ClipboardLinkItem).url;
         return (
-          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
-            <div className={`${isExpanded ? "" : "line-clamp-2"} break-all`}>
+          <div className={contentClassName}>
+            <div className={cn("break-all", !isExpanded && "line-clamp-4")}>
               <a
                 href={linkUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
+                className="text-blue-600 dark:text-blue-400 hover:underline"
                 onClick={(e) => {
                   if (contentNeedsExpand && !isExpanded) {
                     e.preventDefault();
@@ -441,44 +315,18 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
       case "code":
         const codeContent = (content as ClipboardCodeItem).code;
         return (
-          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
-            <pre
-              className={`whitespace-pre-wrap ${
-                isExpanded ? "" : "line-clamp-2"
-              }`}
-            >
-              {codeContent}
-            </pre>
+          <div className={contentClassName}>
+            <pre className={textClassName}>{codeContent}</pre>
             {renderGradientMask()}
           </div>
         );
       case "file":
         const fileNames = (content as ClipboardFileItem).file_names.join(", ");
-        console.log("fileNames", fileNames);
         return (
-          <div className="p-2 bg-gray-800/50 rounded border border-gray-700/30 font-mono text-xs text-gray-300 overflow-x-auto relative">
-            <div className="flex items-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <pre
-                className={`whitespace-pre-wrap ${
-                  isExpanded ? "" : "line-clamp-2"
-                }`}
-              >
-                {fileNames}
-              </pre>
+          <div className={contentClassName}>
+            <div className="flex items-center gap-2">
+              <File className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <pre className={textClassName}>{fileNames}</pre>
             </div>
             {renderGradientMask()}
           </div>
@@ -488,60 +336,121 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     }
   };
 
-  const deviceInfo = device ? `${device} · ` : "";
-  const shouldUseExpand =
-    type === "image"
-      ? needsImageExpand(imageHeight)
-      : needsExpandCollapse(getContentText(), type);
-  const sizeInfo = getSizeInfo();
+  // 获取类型图标
+  const getTypeIcon = () => {
+    switch (type) {
+      case "text":
+        return <FileText className="h-4 w-4" />;
+      case "image":
+        return <ImageIcon className="h-4 w-4" />;
+      case "link":
+        return <LinkIcon className="h-4 w-4" />;
+      case "code":
+        return <Code className="h-4 w-4" />;
+      case "file":
+        return <File className="h-4 w-4" />;
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div
-      className={`${getCardStyle()} rounded-lg overflow-hidden hover:ring-1 hover:ring-violet-400/40 transition duration-150 group mb-3 relative`}
-    >
-      <div className="p-3">
-        {/* 右上角操作按钮 */}
-        <div className="absolute top-2 right-2 z-10">
-          <div className="flex items-center space-x-1 bg-gray-800/80 rounded-md p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            {renderActionButtons()}
-          </div>
+    <Card className="bg-card rounded-2xl p-5 border border-border shadow-sm hover:shadow-md transition-shadow group flex flex-col h-56">
+      <CardContent className="p-0 flex flex-col h-full">
+        {/* 时间戳 */}
+        <div className="text-xs text-muted-foreground font-medium mb-3">
+          {time}
         </div>
 
-        <div className="flex items-start">
-          <div className="flex-1">
-            {renderContent()}
-            <div className="flex justify-between items-center mt-2">
-              <div className="text-xs text-gray-400">{time}</div>
+        {/* 内容区域 */}
+        <div className="flex-1 overflow-hidden">
+          {renderContent()}
+        </div>
 
-              {shouldUseExpand && (
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="text-xs text-gray-400 hover:text-gray-300 flex items-center mx-2"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4 mr-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d={isExpanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"}
-                    />
-                  </svg>
-                  {isExpanded ? "收起" : "展开"}
-                </button>
+        {/* 底部操作栏 */}
+        <div className="mt-4 pt-3 border-t border-border flex justify-between items-center">
+          {/* 左侧：类型图标 + 大小信息 */}
+          <div className="flex items-center gap-2 text-muted-foreground">
+            {getTypeIcon()}
+            <span className="text-xs">{sizeInfo}</span>
+          </div>
+
+          {/* 右侧：操作按钮 */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 hover:text-primary transition-colors"
+              onClick={handleCopy}
+              disabled={downloading}
+              title="复制"
+            >
+              {copySuccess ? (
+                <Check className="h-4 w-4 text-success" />
+              ) : (
+                <Copy className="h-4 w-4" />
               )}
+            </Button>
 
-              <div className="text-xs text-gray-400">{sizeInfo}</div>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-8 w-8 transition-colors",
+                favorited
+                  ? "text-amber-500 hover:text-amber-600"
+                  : "hover:text-amber-500"
+              )}
+              onClick={handleFavoriteClick}
+              title={favorited ? "取消收藏" : "收藏"}
+            >
+              <Star className={cn("h-4 w-4", favorited && "fill-current")} />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-8 w-8 transition-colors",
+                deleteConfirmation
+                  ? "text-destructive"
+                  : "hover:text-destructive"
+              )}
+              onClick={handleDeleteClick}
+              title={deleteConfirmation ? "再次点击确认删除" : "删除"}
+            >
+              {deleteConfirmation ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+
+        {/* 展开/收起按钮 */}
+        {shouldUseExpand && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="absolute bottom-16 left-1/2 -translate-x-1/2 h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp className="h-3 w-3 mr-1" />
+                收起
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3 w-3 mr-1" />
+                展开
+              </>
+            )}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 

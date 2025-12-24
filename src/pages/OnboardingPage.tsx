@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChineseInput } from "@/components/ui";
+import { Input } from "@/components/ui";
+import { Clipboard } from "lucide-react";
 
 // 引导步骤枚举
 enum OnboardingStep {
@@ -121,22 +122,9 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete }) => {
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.2, duration: 0.5 }}
-        className="w-24 h-24 mb-6 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-400 flex items-center justify-center"
+        className="w-24 h-24 mb-6 rounded-2xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-12 w-12 text-white"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-          />
-        </svg>
+        <Clipboard className="h-12 w-12 text-white" />
       </motion.div>
       <motion.h1
         initial={{ y: 20, opacity: 0 }}
@@ -208,13 +196,13 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete }) => {
 
         <div className="mb-4">
           <h4 className="text-sm font-medium text-white mb-1">设备名称</h4>
-          <ChineseInput
+          <Input
             value={deviceName}
-            onChange={setDeviceName}
+            onChange={(e) => setDeviceName(e.target.value)}
             placeholder="我的设备"
-            className="bg-gray-700 border border-gray-700 hover:border-gray-600 focus:border-violet-400 outline-none rounded-lg px-3 py-2 text-sm text-white w-full transition-colors duration-200"
+            className="bg-muted border-border hover:border-primary focus:border-primary focus:ring-primary"
           />
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             为您的设备设置一个易于识别的名称
           </p>
         </div>

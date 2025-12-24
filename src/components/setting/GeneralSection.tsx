@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import Toggle from "../ui/Toggle";
-import { useSetting } from "../../contexts/SettingContext";
+import { Switch } from "@/components/ui";
+import { useSetting } from "@/contexts/SettingContext";
 import { invoke } from "@tauri-apps/api/core";
 
 export default function GeneralSection() {
@@ -26,10 +26,10 @@ export default function GeneralSection() {
   }, []);
 
   // 处理自启动开关变化
-  const handleAutoStartChange = async () => {
+  const handleAutoStartChange = async (checked: boolean) => {
     try {
       setIsLoading(true);
-      const newState = !autoStart;
+      const newState = checked;
 
       if (newState) {
         await invoke("enable_autostart");
@@ -50,13 +50,19 @@ export default function GeneralSection() {
   return (
     <>
       <div className="settings-item py-2 rounded-lg px-2">
-        <Toggle
-          checked={autoStart}
-          onChange={handleAutoStartChange}
-          label="开机自启动"
-          description="系统启动时自动启动Uniclipboard"
-          disabled={isLoading}
-        />
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-white">开机自启动</h4>
+            <p className="text-xs text-gray-400 mt-0.5">
+              系统启动时自动启动Uniclipboard
+            </p>
+          </div>
+          <Switch
+            checked={autoStart}
+            onCheckedChange={handleAutoStartChange}
+            disabled={isLoading}
+          />
+        </div>
       </div>
     </>
   );

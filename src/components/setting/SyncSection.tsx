@@ -1,9 +1,17 @@
 import React, { useEffect, useState } from "react";
-import RadioCheckbox from "../ui/RadioCheckbox";
-import Toggle from "../ui/Toggle";
-import Select from "../ui/Select";
-import Slider from "../ui/Slider";
+import {
+  Switch,
+  Label,
+  Slider,
+  Checkbox,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui";
 import { useSetting } from "../../contexts/SettingContext";
+import { cn } from "@/lib/utils";
 
 const SyncSection: React.FC = () => {
   // 使用设置上下文
@@ -20,7 +28,7 @@ const SyncSection: React.FC = () => {
     codeSnippet: true,
     richText: true,
   });
-  const [maxFileSize, setMaxFileSize] = useState(10);
+  const [maxFileSize, setMaxFileSize] = useState([10]);
 
   // 同步频率选项
   const syncFrequencyOptions = [
@@ -44,15 +52,14 @@ const SyncSection: React.FC = () => {
         codeSnippet: setting.sync.content_types.code_snippet,
         richText: setting.sync.content_types.rich_text,
       });
-      setMaxFileSize(setting.sync.max_file_size);
+      setMaxFileSize([setting.sync.max_file_size]);
     }
   }, [setting]);
 
   // 处理自动同步开关变化
-  const handleAutoSyncChange = () => {
-    const newValue = !autoSync;
-    setAutoSync(newValue);
-    updateSyncSetting({ auto_sync: newValue });
+  const handleAutoSyncChange = (checked: boolean) => {
+    setAutoSync(checked);
+    updateSyncSetting({ auto_sync: checked });
   };
 
   // 处理同步频率变化
@@ -62,10 +69,10 @@ const SyncSection: React.FC = () => {
   };
 
   // 处理内容类型复选框变化
-  const handleContentTypeChange = (type: string) => {
+  const handleContentTypeChange = (type: string, checked: boolean) => {
     const newContentTypes = {
       ...contentTypes,
-      [type]: !contentTypes[type as keyof typeof contentTypes],
+      [type]: checked,
     };
     setContentTypes(newContentTypes);
 
@@ -83,96 +90,123 @@ const SyncSection: React.FC = () => {
   };
 
   // 处理最大文件大小变化
-  const handleMaxFileSizeChange = (value: number) => {
+  const handleMaxFileSizeChange = (value: number[]) => {
     setMaxFileSize(value);
-    updateSyncSetting({ max_file_size: value });
+    updateSyncSetting({ max_file_size: value[0] });
   };
-
-  // 如果正在加载，显示加载状态
-  // if (loading) {
-  //   return <div className="text-center py-4">正在加载设置...</div>;
-  // }
 
   // 如果有错误，显示错误信息
   if (error) {
-    return <div className="text-red-500 py-4">加载设置失败: {error}</div>;
+    return <div className="text-destructive py-4">加载设置失败: {error}</div>;
   }
 
   return (
-    <>
-      <div className="settings-item py-2 rounded-lg px-2">
-        <Toggle
+    <div className="space-y-6">
+      {/* 自动同步开关 */}
+      <div className="flex items-center justify-between py-2 rounded-lg px-2">
+        <div className="space-y-0.5">
+          <Label htmlFor="auto-sync" className="text-base">
+            自动同步
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            启用后，uniClipboard将自动同步您复制的内容到所有设备
+          </p>
+        </div>
+        <Switch
+          id="auto-sync"
           checked={autoSync}
-          onChange={handleAutoSyncChange}
-          label="自动同步"
-          description="启用后，ClipSync将自动同步您复制的内容到所有设备"
+          onCheckedChange={handleAutoSyncChange}
         />
       </div>
 
-      <div className="settings-item py-2 rounded-lg px-2">
-        <Select
-          options={syncFrequencyOptions}
-          value={syncFrequency}
-          onChange={handleSyncFrequencyChange}
-          label="同步频率"
-          description="控制ClipSync检查新内容的频率"
-          width="w-36"
-        />
+      {/* 同步频率选择 */}
+      <div className="py-2 rounded-lg px-2 space-y-2">
+        <Label htmlFor="sync-frequency" className="text-base">
+          同步频率
+        </Label>
+        <p className="text-sm text-muted-foreground mb-2">
+          控制 uniClipboard 检查新内容的频率
+        </p>
+        <Select value={syncFrequency} onValueChange={handleSyncFrequencyChange}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {syncFrequencyOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="settings-item py-2 rounded-lg px-2">
-        <h4 className="text-sm font-medium text-white mb-2">同步内容类型</h4>
+      {/* 同步内容类型 */}
+      <div className="py-2 rounded-lg px-2 space-y-3">
+        <Label className="text-base">同步内容类型</Label>
         <div className="grid grid-cols-2 gap-3">
-          <RadioCheckbox
-            checked={contentTypes.text}
-            onChange={() => handleContentTypeChange("text")}
-            label="文本"
-          />
-          <RadioCheckbox
-            checked={contentTypes.image}
-            onChange={() => handleContentTypeChange("image")}
-            label="图片"
-          />
-          <RadioCheckbox
-            checked={contentTypes.link}
-            onChange={() => handleContentTypeChange("link")}
-            label="链接"
-          />
-          <RadioCheckbox
-            checked={contentTypes.file}
-            onChange={() => handleContentTypeChange("file")}
-            label="文件"
-          />
-          <RadioCheckbox
-            checked={contentTypes.codeSnippet}
-            onChange={() => handleContentTypeChange("codeSnippet")}
-            label="代码片段"
-          />
-          <RadioCheckbox
-            checked={contentTypes.richText}
-            onChange={() => handleContentTypeChange("richText")}
-            label="富文本"
-          />
+          {Object.entries({
+            text: "文本",
+            image: "图片",
+            link: "链接",
+            file: "文件",
+            codeSnippet: "代码片段",
+            richText: "富文本",
+          }).map(([key, label]) => (
+            <div key={key} className="flex items-center space-x-2">
+              <Checkbox
+                id={`content-type-${key}`}
+                checked={contentTypes[key as keyof typeof contentTypes]}
+                onCheckedChange={(checked) =>
+                  handleContentTypeChange(key, checked as boolean)
+                }
+              />
+              <Label
+                htmlFor={`content-type-${key}`}
+                className="cursor-pointer"
+              >
+                {label}
+              </Label>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="settings-item py-2 rounded-lg px-2">
+      {/* 最大文件大小滑块 */}
+      <div className="py-2 rounded-lg px-2 space-y-4">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-base">最大同步文件大小</Label>
+            <span className="text-sm text-muted-foreground">
+              {maxFileSize[0]} MB
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            限制单个文件的最大同步大小
+          </p>
+        </div>
         <Slider
           min={1}
           max={50}
+          step={1}
           value={maxFileSize}
-          onChange={handleMaxFileSizeChange}
-          label="最大同步文件大小"
-          description="限制单个文件的最大同步大小"
-          unit="MB"
-          keyPoints={[
-            { value: 10, label: "10MB" },
-            { value: 25, label: "25MB" },
-            { value: 50, label: "50MB" },
-          ]}
+          onValueChange={handleMaxFileSizeChange}
+          className="w-full"
         />
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>1MB</span>
+          <span className={cn(maxFileSize[0] >= 10 && "text-foreground font-medium")}>
+            10MB
+          </span>
+          <span className={cn(maxFileSize[0] >= 25 && "text-foreground font-medium")}>
+            25MB
+          </span>
+          <span className={cn(maxFileSize[0] >= 50 && "text-foreground font-medium")}>
+            50MB
+          </span>
+        </div>
       </div>
-    </>
+    </div>
   );
 };
 

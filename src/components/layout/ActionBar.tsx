@@ -1,9 +1,11 @@
 import React from "react";
+import { RefreshCw } from "lucide-react";
 import { ClipboardStats } from "@/api/clipboardItems";
 import { formatFileSize } from "@/utils";
 import { useAppDispatch } from "@/store/hooks";
 import { clearAllItems } from "@/store/slices/clipboardSlice";
 import { syncClipboardItems } from "@/api/clipboardItems";
+import { Button } from "@/components/ui/button";
 
 interface ActionBarProps {
   stats: ClipboardStats;
@@ -42,29 +44,30 @@ const ActionBar: React.FC<ActionBarProps> = ({ stats, onSync }) => {
   };
 
   return (
-    <footer className="bg-gray-900 border-t border-gray-800/50 px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex space-x-2 text-xs text-gray-400">
-          <span>
-            共 {stats.total_items} 项 · 已使用{" "}
-            {formatFileSize(stats.total_size)}
-          </span>
-        </div>
+    <footer className="absolute bottom-0 w-full glass-strong border-t border-border px-8 py-4 flex items-center justify-between z-10">
+      <div className="text-sm text-muted-foreground flex items-center gap-2">
+        <span className="font-medium text-foreground">已同步 {stats.total_items} 项</span>
+        <span>·</span>
+        <span>已使用 {formatFileSize(stats.total_size)}</span>
+      </div>
 
-        <div className="flex space-x-2">
-          <button
-            className="px-3 py-2 bg-gray-800 rounded text-sm text-gray-300 hover:bg-gray-700 transition-colors"
-            onClick={handleClearAll}
-          >
-            清理所有
-          </button>
-          <button
-            className="px-3 py-2 bg-violet-500 rounded text-sm text-white hover:bg-violet-400 transition-colors"
-            onClick={handleSync}
-          >
-            立即同步
-          </button>
-        </div>
+      <div className="flex items-center gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleClearAll}
+          className="rounded-lg"
+        >
+          清理所有
+        </Button>
+        <Button
+          size="sm"
+          onClick={handleSync}
+          className="rounded-lg bg-primary hover:bg-primary/90 shadow-lg shadow-primary/30"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          立即同步
+        </Button>
       </div>
     </footer>
   );
