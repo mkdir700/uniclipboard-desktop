@@ -36,7 +36,8 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
             设备管理
           </h1>
 
-          <Button 
+          <Button
+            data-tauri-drag-region="false"
             onClick={addDevice}
             className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 rounded-xl px-4 py-2 h-auto text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95"
           >
@@ -52,6 +53,7 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
 
             return (
               <motion.button
+                data-tauri-drag-region="false"
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className={cn(

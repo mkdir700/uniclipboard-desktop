@@ -30,14 +30,14 @@ const Sidebar: React.FC = () => {
     layoutId: string;
   }> = ({ to, icon: Icon, label, isActive, layoutId }) => {
     return (
-      <TooltipProvider delayDuration={0}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Link to={to} className="relative group">
-              {isActive && (
-                <motion.div
-                  layoutId={layoutId}
-                  className="absolute inset-0 bg-primary/10 dark:bg-primary/20 rounded-xl"
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link data-tauri-drag-region="false" to={to} className="relative group">
+                  {isActive && (
+                    <motion.div
+                      layoutId={layoutId}
+                      className="absolute inset-0 bg-primary/10 dark:bg-primary/20 rounded-xl"
                   initial={false}
                   transition={{
                     type: "spring",

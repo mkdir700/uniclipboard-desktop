@@ -44,6 +44,7 @@ const SettingHeader: React.FC<SettingHeaderProps> = ({
 
             return (
               <motion.button
+                data-tauri-drag-region="false"
                 key={category.id}
                 onClick={() => onCategoryClick(category.id)}
                 className={cn(

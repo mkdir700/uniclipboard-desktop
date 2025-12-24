@@ -64,6 +64,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                 isSearchFocused ? "text-primary" : "text-muted-foreground"
               )} />
               <Input
+                data-tauri-drag-region="false"
                 type="text"
                 placeholder="搜索剪贴板内容..."
                 className="bg-transparent border-none p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
@@ -84,6 +85,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
 
             return (
               <motion.button
+                data-tauri-drag-region="false"
                 key={filter.id}
                 onClick={() => handleFilterClick(filter.id)}
                 className={cn(
