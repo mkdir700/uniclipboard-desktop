@@ -194,9 +194,12 @@ const AppContent = () => {
   );
 };
 
+import { TitleBar } from "@/components";
+
 export default function App() {
   return (
     <Router>
+      <TitleBar />
       <AppContent />
     </Router>
   );

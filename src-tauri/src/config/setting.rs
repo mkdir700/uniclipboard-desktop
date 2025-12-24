@@ -21,10 +21,21 @@ pub struct AllowSyncContentTypes {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ThemeMode {
+    #[serde(rename = "light")]
+    Light,
+    #[serde(rename = "dark")]
+    Dark,
+    #[serde(rename = "system")]
+    System,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneralSetting {
     pub auto_start: bool,
     pub silent_start: bool,
     pub auto_check_update: bool,
+    pub theme: ThemeMode,
 }
 
 // 同步设置
@@ -122,6 +133,7 @@ impl Setting {
                 auto_start: false,
                 silent_start: false,
                 auto_check_update: true,
+                theme: ThemeMode::System,
             },
             sync: SyncSetting {
                 auto_sync: true,

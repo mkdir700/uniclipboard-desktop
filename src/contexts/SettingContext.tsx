@@ -17,11 +17,15 @@ interface ContentTypes {
   rich_text: boolean;
 }
 
+// 主题模式类型
+export type ThemeMode = "light" | "dark" | "system";
+
 // 通用设置接口
 interface GeneralSetting {
   auto_start: boolean;
   silent_start: boolean;
   auto_check_update: boolean;
+  theme: ThemeMode;
 }
 
 // 同步设置接口
@@ -222,6 +226,39 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
   useEffect(() => {
     loadSetting();
   }, []);
+
+  // 监听主题变化并应用
+  useEffect(() => {
+    const root = window.document.documentElement;
+    const systemThemeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const applyTheme = () => {
+      const theme = setting?.general.theme;
+
+      root.classList.remove("light", "dark");
+
+      if (theme === "system" || !theme) {
+        const systemTheme = systemThemeMedia.matches ? "dark" : "light";
+        root.classList.add(systemTheme);
+      } else {
+        root.classList.add(theme);
+      }
+    };
+
+    applyTheme();
+
+    const handleSystemThemeChange = () => {
+      if (setting?.general.theme === "system" || !setting?.general.theme) {
+        applyTheme();
+      }
+    };
+
+    systemThemeMedia.addEventListener("change", handleSystemThemeChange);
+
+    return () => {
+      systemThemeMedia.removeEventListener("change", handleSystemThemeChange);
+    };
+  }, [setting?.general.theme]);
 
   return (
     <SettingContext.Provider
