@@ -24,14 +24,20 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
       className="sticky top-0 z-50 pt-6 pb-2 px-8 transition-all duration-300"
     >
       {/* Glass Background */}
-      <div className="absolute inset-0 bg-background/60 backdrop-blur-xl border-b border-white/5 shadow-sm" />
+      <div
+        data-tauri-drag-region
+        className="absolute inset-0 bg-background/60 backdrop-blur-xl border-b border-white/5 shadow-sm"
+      />
 
-      <div className="relative z-10 space-y-4">
+      <div data-tauri-drag-region className="relative z-10 space-y-4">
         {/* Top Row: Title & Action */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">设备管理</h1>
+          <h1 data-tauri-drag-region className="text-2xl font-bold tracking-tight">
+            设备管理
+          </h1>
 
-          <Button 
+          <Button
+            data-tauri-drag-region="false"
             onClick={addDevice}
             className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 rounded-xl px-4 py-2 h-auto text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95"
           >
@@ -47,6 +53,7 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
 
             return (
               <motion.button
+                data-tauri-drag-region="false"
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className={cn(

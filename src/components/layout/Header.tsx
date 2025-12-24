@@ -34,9 +34,12 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
       className="sticky top-0 z-50 pt-6 pb-2 px-8 transition-all duration-300"
     >
       {/* Glass Background */}
-      <div className="absolute inset-0 bg-background/60 backdrop-blur-xl border-b border-white/5 shadow-sm" />
+      <div
+        data-tauri-drag-region
+        className="absolute inset-0 bg-background/60 backdrop-blur-xl border-b border-white/5 shadow-sm"
+      />
 
-      <div className="relative z-10 space-y-4">
+      <div data-tauri-drag-region className="relative z-10 space-y-4">
         {/* Top Row: Search & Status */}
         <div className="flex items-center justify-between gap-4">
           <motion.div 
@@ -61,6 +64,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                 isSearchFocused ? "text-primary" : "text-muted-foreground"
               )} />
               <Input
+                data-tauri-drag-region="false"
                 type="text"
                 placeholder="搜索剪贴板内容..."
                 className="bg-transparent border-none p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
@@ -81,6 +85,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
 
             return (
               <motion.button
+                data-tauri-drag-region="false"
                 key={filter.id}
                 onClick={() => handleFilterClick(filter.id)}
                 className={cn(
