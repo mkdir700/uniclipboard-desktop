@@ -1,7 +1,5 @@
+# 增大缓存大小 (incremental 已移至 profile.dev)
 [build]
-# 使用并行编译
-codegen-units = 16
-# 增大缓存大小
 incremental = true
 
 # macOS优化
