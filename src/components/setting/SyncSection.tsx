@@ -97,7 +97,7 @@ const SyncSection: React.FC = () => {
           </p>
         </div>
         <Select value={syncFrequency} onValueChange={handleSyncFrequencyChange}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-52">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

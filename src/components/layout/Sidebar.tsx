@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Home, Monitor, Settings } from "lucide-react";
@@ -34,14 +33,18 @@ const Sidebar: React.FC = () => {
     layoutId: string;
   }> = ({ to, icon: Icon, label, isActive, layoutId }) => {
     return (
-          <TooltipProvider delayDuration={0}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link data-tauri-drag-region="false" to={to} className="relative group">
-                  {isActive && (
-                    <motion.div
-                      layoutId={layoutId}
-                      className="absolute inset-0 bg-primary/10 dark:bg-primary/20 rounded-xl"
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link
+              data-tauri-drag-region="false"
+              to={to}
+              className="relative group"
+            >
+              {isActive && (
+                <motion.div
+                  layoutId={layoutId}
+                  className="absolute inset-0 bg-primary/10 dark:bg-primary/20 rounded-xl"
                   initial={false}
                   transition={{
                     type: "spring",
@@ -71,9 +74,9 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside 
+    <aside
       data-tauri-drag-region
-      className="w-[72px] h-screen sticky top-0 z-[100] flex flex-col items-center pt-10 pb-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl shrink-0"
+      className="w-16 h-screen sticky top-0 z-100 flex flex-col items-center pt-10 pb-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl shrink-0"
     >
       {/* Main Navigation */}
       <div className="flex flex-col gap-3 w-full items-center pt-2">

@@ -144,7 +144,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         {/* Footer Area */}
         <div className="flex items-center justify-between px-4 pb-2 pt-1 text-xs text-muted-foreground/60 select-none">
             {/* Left: Time */}
-            <div className="min-w-[80px]">
+            <div className="min-w-20">
                 {time}
             </div>
 
@@ -161,7 +161,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
             </div>
 
             {/* Right: Stats & Index */}
-            <div className="flex items-center gap-4 min-w-[80px] justify-end">
+            <div className="flex items-center gap-4 min-w-20 justify-end">
                 <span>{getSizeInfo()}</span>
                 <span className="font-mono text-muted-foreground/40">{index}</span>
             </div>

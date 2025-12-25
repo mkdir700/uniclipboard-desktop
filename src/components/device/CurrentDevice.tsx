@@ -10,7 +10,7 @@ const CurrentDevice: React.FC = () => {
     <div className="mb-8">
       <div className="flex items-center gap-4 mb-4">
         <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">当前设备</h3>
-        <div className="h-[1px] flex-1 bg-border/50"></div>
+        <div className="h-px flex-1 bg-border/50"></div>
       </div>
 
       <div className="group relative overflow-hidden bg-card/50 hover:bg-card/80 border border-border/50 hover:border-primary/20 rounded-2xl transition-all duration-300 shadow-sm hover:shadow-md">
