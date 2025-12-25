@@ -188,20 +188,24 @@ const NetworkSection: React.FC = () => {
 
       {/* Webserver Port */}
       <div className="py-2 rounded-lg px-2">
-        <div className="space-y-2">
-          <h4 className="text-base font-medium">{t("settings.sections.network.webserverPort.label")}</h4>
-          <p className="text-sm text-muted-foreground">
-            {t("settings.sections.network.webserverPort.description")}
-          </p>
-          <Input
-            type="text"
-            value={webserverPort.toString()}
-            onChange={handleWebserverPortChange}
-            className={portError ? "border-red-500" : ""}
-          />
-          {portError && (
-            <p className="text-xs text-red-500">{portError}</p>
-          )}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">{t("settings.sections.network.webserverPort.label")}</h4>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.sections.network.webserverPort.description")}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <Input
+              type="text"
+              value={webserverPort.toString()}
+              onChange={handleWebserverPortChange}
+              className={portError ? "border-red-500 w-64" : "w-64"}
+            />
+            {portError && (
+              <p className="text-xs text-red-500">{portError}</p>
+            )}
+          </div>
         </div>
       </div>
 

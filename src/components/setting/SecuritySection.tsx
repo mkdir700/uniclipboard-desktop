@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Switch, Input, Button } from "@/components/ui";
+import { Switch, Input } from "@/components/ui";
 import { useSetting } from "@/contexts/SettingContext";
 import { setEncryptionPassword, getEncryptionPassword } from "@/api/security";
 import { useTranslation } from "react-i18next";
+import { Eye, EyeOff } from "lucide-react";
 
 const SecuritySection: React.FC = () => {
   const { t } = useTranslation();
@@ -11,7 +12,15 @@ const SecuritySection: React.FC = () => {
   // Local state
   const [endToEndEncryption, setEndToEndEncryption] = useState(true);
   const [encryptionPassword, setEncryptionPasswordInput] = useState("");
-  const [showPasswordInput, setShowPasswordInput] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Debounce save password
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setEncryptionPassword(encryptionPassword);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [encryptionPassword]);
 
   // Update local state when settings are loaded
   useEffect(() => {
@@ -28,12 +37,6 @@ const SecuritySection: React.FC = () => {
     const newValue = checked;
     setEndToEndEncryption(newValue);
     updateSecuritySetting({ end_to_end_encryption: newValue });
-  };
-
-  // Handle encryption password save
-  const handleSavePassword = () => {
-    setEncryptionPassword(encryptionPassword);
-    setShowPasswordInput(false);
   };
 
   // Display error message if there is an error
@@ -61,40 +64,29 @@ const SecuritySection: React.FC = () => {
 
       {/* Encryption password */}
       <div className="py-2 rounded-lg px-2">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <h4 className="text-base font-medium">{t("settings.sections.security.encryptionPassword.label")}</h4>
-              <p className="text-sm text-muted-foreground">
-                {t("settings.sections.security.encryptionPassword.description")}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPasswordInput(!showPasswordInput)}
-            >
-              {showPasswordInput ? t("settings.sections.security.encryptionPassword.cancel") : t("settings.sections.security.encryptionPassword.modify")}
-            </Button>
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">{t("settings.sections.security.encryptionPassword.label")}</h4>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.sections.security.encryptionPassword.description")}
+            </p>
           </div>
-
-          {showPasswordInput && (
-            <div className="flex gap-2 mt-2">
-              <Input
-                type="password"
-                value={encryptionPassword}
-                onChange={(e) => setEncryptionPasswordInput(e.target.value)}
-                placeholder={t("settings.sections.security.encryptionPassword.placeholder")}
-                className="flex-1"
-              />
-              <Button
-                size="sm"
-                onClick={handleSavePassword}
-              >
-                {t("settings.sections.security.encryptionPassword.save")}
-              </Button>
-            </div>
-          )}
+          <div className="relative flex items-center">
+            <Input
+              type={showPassword ? "text" : "password"}
+              value={encryptionPassword}
+              onChange={(e) => setEncryptionPasswordInput(e.target.value)}
+              placeholder={t("settings.sections.security.encryptionPassword.placeholder")}
+              className="w-64 pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </div>
       </div>
     </>
