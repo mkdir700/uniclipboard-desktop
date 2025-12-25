@@ -26,6 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useTranslation } from "react-i18next";
 
 interface ClipboardItemProps {
   index: number;
@@ -63,6 +64,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   toggleFavorite,
   fileSize,
 }) => {
+  const { t } = useTranslation();
   const [copySuccess, setCopySuccess] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -71,13 +73,13 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   const getSizeInfo = (): string => {
     if (!content) return "";
     switch(type) {
-        case "text": return `${(content as ClipboardTextItem).display_text.length} 字符`;
-        case "link": return "链接";
-        case "code": return `${(content as ClipboardCodeItem).code.length} 字符`;
+        case "text": return `${(content as ClipboardTextItem).display_text.length} ${t("clipboard.item.characters")}`;
+        case "link": return t("clipboard.item.link");
+        case "code": return `${(content as ClipboardCodeItem).code.length} ${t("clipboard.item.characters")}`;
         case "file": return formatFileSize(fileSize);
-        case "image": 
+        case "image":
             // Note: Use actual dimensions if available in API, otherwise placeholder or remove
-            return "图片"; 
+            return t("clipboard.item.image");
         default: return "";
     }
   };
@@ -133,7 +135,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                   "w-auto object-contain rounded-md shadow-sm transition-all duration-300",
                   isExpanded ? "max-h-[500px]" : "h-32"
               )}
-              alt="Clipboard Image"
+              alt={t("clipboard.item.altText.clipboardImage")}
               loading="lazy"
             />
           </div>
@@ -175,7 +177,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
           </div>
         );
       default:
-        return <p className="text-muted-foreground text-sm">未知内容</p>;
+        return <p className="text-muted-foreground text-sm">{t("clipboard.item.unknownContent")}</p>;
     }
   };
 
@@ -212,7 +214,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                 }}
             >
                 {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                <span>{isExpanded ? "收起" : "展开"}</span>
+                <span>{isExpanded ? t("clipboard.item.collapse") : t("clipboard.item.expand")}</span>
             </div>
 
             {/* Right: Stats & Index */}
@@ -239,15 +241,15 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                 <DropdownMenuContent align="end" className="w-40">
                     <DropdownMenuItem onClick={handleCopy}>
                         <Copy size={14} className="mr-2" />
-                        <span>复制</span>
+                        <span>{t("clipboard.item.actions.copy")}</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleFavoriteClick}>
                         <Star size={14} className={cn("mr-2", isFavorited && "fill-current text-amber-500")} />
-                        <span>{isFavorited ? "取消收藏" : "收藏"}</span>
+                        <span>{isFavorited ? t("clipboard.item.actions.unfavorite") : t("clipboard.item.actions.favorite")}</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleDeleteClick}>
                         <Trash2 size={14} className="mr-2" />
-                        <span>删除</span>
+                        <span>{t("clipboard.item.actions.delete")}</span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
              </DropdownMenu>
@@ -262,7 +264,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                     variant="ghost"
                     className="h-8 w-8 text-muted-foreground/50 hover:text-primary hover:bg-primary/10"
                     onClick={(e) => { e.stopPropagation(); handleCopy(e); }}
-                    title="复制"
+                    title={t("clipboard.item.actions.copy")}
                 >
                     {copySuccess ? <Check size={16} className="text-success" /> : <Copy size={16} />}
                 </Button>
@@ -274,7 +276,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                         isFavorited && "text-amber-500 opacity-100"
                     )}
                     onClick={handleFavoriteClick}
-                    title="收藏"
+                    title={t("clipboard.item.actions.favorite")}
                 >
                     <Star size={16} className={cn(isFavorited && "fill-current")} />
                 </Button>

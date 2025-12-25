@@ -38,10 +38,16 @@ pub struct GeneralSetting {
     pub theme: ThemeMode,
     #[serde(default = "default_theme_color")]
     pub theme_color: String,
+    #[serde(default = "default_language")]
+    pub language: String,
 }
 
 fn default_theme_color() -> String {
     "catppuccin".to_string()
+}
+
+fn default_language() -> String {
+    "zh-CN".to_string()
 }
 
 // 同步设置
@@ -141,6 +147,7 @@ impl Setting {
                 auto_check_update: true,
                 theme: ThemeMode::System,
                 theme_color: "catppuccin".to_string(),
+                language: default_language(),
             },
             sync: SyncSetting {
                 auto_sync: true,
