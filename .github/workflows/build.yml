@@ -21,31 +21,34 @@ on:
         default: '1.0.0'
 
 jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Generate matrix
+        id: set-matrix
+        run: |
+          if [ "${{ inputs.platform }}" == "all" ]; then
+            echo 'matrix=[{"platform":"macos-latest","target":"aarch64-apple-darwin","args":"--target aarch64-apple-darwin"},{"platform":"macos-latest","target":"x86_64-apple-darwin","args":"--target x86_64-apple-darwin"},{"platform":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","args":""},{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.platform }}" == "macos-aarch64" ]; then
+            echo 'matrix=[{"platform":"macos-latest","target":"aarch64-apple-darwin","args":"--target aarch64-apple-darwin"}]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.platform }}" == "macos-x86_64" ]; then
+            echo 'matrix=[{"platform":"macos-latest","target":"x86_64-apple-darwin","args":"--target x86_64-apple-darwin"}]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.platform }}" == "ubuntu-22.04" ]; then
+            echo 'matrix=[{"platform":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","args":""}]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.platform }}" == "windows-latest" ]; then
+            echo 'matrix=[{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
+          fi
+
   build-tauri:
     name: Build ${{ matrix.target }}
+    needs: setup-matrix
+    runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: 'macos-latest'
-            target: 'aarch64-apple-darwin'
-            args: '--target aarch64-apple-darwin'
-            enabled: ${{ inputs.platform == 'macos-aarch64' || inputs.platform == 'all' }}
-          - platform: 'macos-latest'
-            target: 'x86_64-apple-darwin'
-            args: '--target x86_64-apple-darwin'
-            enabled: ${{ inputs.platform == 'macos-x86_64' || inputs.platform == 'all' }}
-          - platform: 'ubuntu-22.04'
-            target: 'x86_64-unknown-linux-gnu'
-            args: ''
-            enabled: ${{ inputs.platform == 'ubuntu-22.04' || inputs.platform == 'all' }}
-          - platform: 'windows-latest'
-            target: 'x86_64-pc-windows-msvc'
-            args: ''
-            enabled: ${{ inputs.platform == 'windows-latest' || inputs.platform == 'all' }}
-    
-    runs-on: ${{ matrix.platform }}
-    if: matrix.enabled == 'true'
+        include: ${{ fromJSON(needs.setup-matrix.outputs.matrix) }}
     
     steps:
       - uses: actions/checkout@v4
