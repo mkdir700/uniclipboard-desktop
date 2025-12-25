@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Inbox } from "lucide-react";
 import ClipboardItem from "./ClipboardItem";
+import ClipboardSelectionActionBar from "./ClipboardSelectionActionBar";
 import {
   getDisplayType,
   ClipboardItemResponse,
@@ -55,14 +56,19 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     []
   );
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+
   // 监听 Redux 中的 items 变化，转换为显示项目
   useEffect(() => {
     console.log("筛选条件:", filter);
     console.log("查询结果:", reduxItems);
 
     if (reduxItems && reduxItems.length > 0) {
-      const items: DisplayClipboardItem[] =
-        reduxItems.map(convertToDisplayItem);
+      let items: DisplayClipboardItem[] = reduxItems.map(convertToDisplayItem);
+      if (filter === Filter.Favorited) {
+        items = items.filter((it) => it.isFavorited);
+      }
       setClipboardItems(items);
       console.log("转换后的显示项目:", items);
     } else {
@@ -119,11 +125,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     };
   };
 
-  // 处理删除剪贴板项
-  const handleDeleteItem = async (id: string) => {
-    dispatch(removeClipboardItem(id));
-  };
-
   // 处理复制到剪贴板
   const handleCopyItem = async (itemId: string) => {
     try {
@@ -136,10 +137,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     }
   };
 
-  const handleToggleFavorite = async (itemId: string, isFavorited: boolean) => {
-    dispatch(toggleFavoriteItem({ id: itemId, isFavorited }));
-  };
-
   // 清除错误信息
   useEffect(() => {
     if (error) {
@@ -150,18 +147,133 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     }
   }, [error, dispatch]);
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  const handleToggleSelect = (id: string) => {
+  // 当列表变化时，清理已经不存在的选择
+  useEffect(() => {
     setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
+      if (prev.size === 0) return prev;
+      const valid = new Set(clipboardItems.map((i) => i.id));
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (valid.has(id)) next.add(id);
       }
       return next;
     });
+    if (lastSelectedIndex !== null && lastSelectedIndex >= clipboardItems.length) {
+      setLastSelectedIndex(null);
+    }
+  }, [clipboardItems, lastSelectedIndex]);
+
+  const handleSelect = (
+    id: string,
+    index: number,
+    event: React.MouseEvent<HTMLDivElement>
+  ) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+
+      const isMultiToggle = event.metaKey || event.ctrlKey;
+      const isRange = event.shiftKey;
+
+      if (isRange && lastSelectedIndex !== null) {
+        const start = Math.min(lastSelectedIndex, index);
+        const end = Math.max(lastSelectedIndex, index);
+        const rangeIds = clipboardItems.slice(start, end + 1).map((i) => i.id);
+
+        if (!isMultiToggle) next.clear();
+        for (const rid of rangeIds) next.add(rid);
+        return next;
+      }
+
+      if (isMultiToggle) {
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }
+
+      // 默认：单选
+      if (next.size === 1 && next.has(id)) return next;
+      next.clear();
+      next.add(id);
+      return next;
+    });
+
+    setLastSelectedIndex(index);
+  };
+
+  const selectedItems = useMemo(() => {
+    if (selectedIds.size === 0) return [];
+    return clipboardItems.filter((it) => selectedIds.has(it.id));
+  }, [clipboardItems, selectedIds]);
+
+  const favoriteIntent: "favorite" | "unfavorite" = useMemo(() => {
+    if (selectedItems.length === 0) return "favorite";
+    const allFavorited = selectedItems.every((it) => Boolean(it.isFavorited));
+    return allFavorited ? "unfavorite" : "favorite";
+  }, [selectedItems]);
+
+  const handleBatchCopy = async (): Promise<boolean> => {
+    if (selectedItems.length === 0) return false;
+    if (selectedItems.length === 1) {
+      return handleCopyItem(selectedItems[0].id);
+    }
+
+    const toText = (it: DisplayClipboardItem): string => {
+      switch (it.type) {
+        case "text":
+          return (it.content as ClipboardTextItem)?.display_text ?? "";
+        case "code":
+          return (it.content as ClipboardCodeItem)?.code ?? "";
+        case "link":
+          return (it.content as ClipboardLinkItem)?.url ?? "";
+        case "file": {
+          const names = (it.content as ClipboardFileItem)?.file_names ?? [];
+          return names.length > 0 ? names.join("\n") : "[文件]";
+        }
+        case "image":
+          return "[图片]";
+        default:
+          return "";
+      }
+    };
+
+    const text = selectedItems.map(toText).filter(Boolean).join("\n\n");
+    if (!text) return false;
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      console.error("批量复制失败:", e);
+      return false;
+    }
+  };
+
+  const handleBatchToggleFavorite = async () => {
+    if (selectedItems.length === 0) return;
+    const targetFavorited = favoriteIntent === "favorite";
+    await Promise.all(
+      selectedItems.map((it) =>
+        dispatch(toggleFavoriteItem({ id: it.id, isFavorited: targetFavorited }))
+          .unwrap()
+          .catch((e) => console.error("设置收藏状态失败:", e))
+      )
+    );
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedItems.length === 0) return;
+    const count = selectedItems.length;
+    const ok = window.confirm(`确定要删除选中的 ${count} 项吗？`);
+    if (!ok) return;
+
+    for (const it of selectedItems) {
+      try {
+        await dispatch(removeClipboardItem(it.id)).unwrap();
+      } catch (e) {
+        console.error("删除失败:", e);
+      }
+    }
+    setSelectedIds(new Set());
+    setLastSelectedIndex(null);
   };
 
   // 骨架屏加载状态
@@ -178,7 +290,8 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   }
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
+    <div className="h-full relative">
+      <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
       {error && (
         <Alert variant="destructive" className="mb-4 mx-1">
           <AlertDescription>{error}</AlertDescription>
@@ -195,15 +308,8 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
               time={item.time}
               device={item.device}
               content={item.content}
-              isDownloaded={item.isDownloaded}
-              isFavorited={item.isFavorited}
               isSelected={selectedIds.has(item.id)}
-              onSelect={() => handleToggleSelect(item.id)}
-              onDelete={() => handleDeleteItem(item.id)}
-              onCopy={() => handleCopyItem(item.id)}
-              toggleFavorite={(isFavorited) =>
-                handleToggleFavorite(item.id, isFavorited)
-              }
+              onSelect={(e) => handleSelect(item.id, index, e)}
             />
           ))}
         </div>
@@ -223,6 +329,19 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
           </p>
         </div>
       )}
+      </div>
+
+      <ClipboardSelectionActionBar
+        selectedCount={selectedIds.size}
+        favoriteIntent={favoriteIntent}
+        onCopy={handleBatchCopy}
+        onToggleFavorite={handleBatchToggleFavorite}
+        onDelete={handleBatchDelete}
+        onClearSelection={() => {
+          setSelectedIds(new Set());
+          setLastSelectedIndex(null);
+        }}
+      />
     </div>
   );
 };
