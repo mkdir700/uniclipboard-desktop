@@ -2,6 +2,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+:root {
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+
+  --line-height-ui: 1.4;
+}
+
 /* 自定义滚动条样式 */
 @layer utilities {
   .scrollbar-thin {
@@ -78,7 +86,13 @@
 }
 
 @theme inline {
-  --font-sans: Montserrat, sans-serif;
+  --font-sans:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Microsoft YaHei UI",
+    system-ui,
+    sans-serif;
   --font-mono: Fira Code, monospace;
   --font-serif: Georgia, serif;
   --radius: 0.35rem;
@@ -165,7 +179,13 @@
 }
 
 @layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+
   body {
     letter-spacing: var(--tracking-normal);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-ui);
   }
 }
