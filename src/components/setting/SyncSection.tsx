@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   Switch,
   Label,
-  Slider,
+  Input,
 
   Select,
   SelectContent,
@@ -11,72 +11,98 @@ import {
   SelectValue,
 } from "@/components/ui";
 import { useSetting } from "../../contexts/SettingContext";
-import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const SyncSection: React.FC = () => {
-  // 使用设置上下文
+  const { t } = useTranslation();
+  // Use setting context
   const { setting, error, updateSyncSetting } = useSetting();
 
-  // 本地状态，用于UI展示
+  // Local state for UI display
   const [autoSync, setAutoSync] = useState(true);
   const [syncFrequency, setSyncFrequency] = useState("realtime");
 
-  const [maxFileSize, setMaxFileSize] = useState([10]);
+  const [maxFileSize, setMaxFileSize] = useState(10);
+  const [maxFileSizeError, setMaxFileSizeError] = useState<string | null>(null);
 
-  // 同步频率选项
+  // Sync frequency options
   const syncFrequencyOptions = [
-    { value: "realtime", label: "实时同步" },
-    { value: "30s", label: "每30秒" },
-    { value: "1m", label: "每分钟" },
-    { value: "5m", label: "每5分钟" },
-    { value: "15m", label: "每15分钟" },
+    { value: "realtime", label: t("settings.sections.sync.syncFrequency.realtime") },
+    { value: "30s", label: t("settings.sections.sync.syncFrequency.30s") },
+    { value: "1m", label: t("settings.sections.sync.syncFrequency.1m") },
+    { value: "5m", label: t("settings.sections.sync.syncFrequency.5m") },
+    { value: "15m", label: t("settings.sections.sync.syncFrequency.15m") },
   ];
 
-  // 当设置加载完成后，更新本地状态
+  // Update local state when settings are loaded
   useEffect(() => {
     if (setting) {
       setAutoSync(setting.sync.auto_sync);
       setSyncFrequency(setting.sync.sync_frequency);
 
-      setMaxFileSize([setting.sync.max_file_size]);
+      setMaxFileSize(setting.sync.max_file_size);
     }
   }, [setting]);
 
-  // 处理自动同步开关变化
+  // Handle auto sync switch change
   const handleAutoSyncChange = (checked: boolean) => {
     setAutoSync(checked);
     updateSyncSetting({ auto_sync: checked });
   };
 
-  // 处理同步频率变化
+  // Handle sync frequency change
   const handleSyncFrequencyChange = (value: string) => {
     setSyncFrequency(value);
     updateSyncSetting({ sync_frequency: value });
   };
 
+  // Handle max file size change
+  const handleMaxFileSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
 
+    // If input is empty, allow user to continue typing
+    if (!value.trim()) {
+      setMaxFileSizeError(null);
+      setMaxFileSize(0);
+      return;
+    }
 
-  // 处理最大文件大小变化
-  const handleMaxFileSizeChange = (value: number[]) => {
-    setMaxFileSize(value);
-    updateSyncSetting({ max_file_size: value[0] });
+    // Check if it's a number
+    if (!/^\d+$/.test(value)) {
+      setMaxFileSizeError(t("settings.sections.sync.maxFileSize.errors.invalid"));
+      setMaxFileSize(parseInt(value) || 0);
+      return;
+    }
+
+    const size = parseInt(value);
+    setMaxFileSize(size);
+
+    // Validate range (1-50 MB)
+    if (size < 1 || size > 50) {
+      setMaxFileSizeError(t("settings.sections.sync.maxFileSize.errors.range"));
+      return;
+    }
+
+    // Validation passed
+    setMaxFileSizeError(null);
+    updateSyncSetting({ max_file_size: size });
   };
 
-  // 如果有错误，显示错误信息
+  // Show error message if any
   if (error) {
-    return <div className="text-destructive py-4">加载设置失败: {error}</div>;
+    return <div className="text-destructive py-4">{t("settings.sections.sync.loadError")} {error}</div>;
   }
 
   return (
     <div className="space-y-6">
-      {/* 自动同步开关 */}
+      {/* Auto sync switch */}
       <div className="flex items-center justify-between py-2 rounded-lg px-2">
         <div className="space-y-0.5">
           <Label htmlFor="auto-sync" className="text-base">
-            自动同步
+            {t("settings.sections.sync.autoSync.label")}
           </Label>
           <p className="text-sm text-muted-foreground">
-            启用后，uniClipboard将自动同步您复制的内容到所有设备
+            {t("settings.sections.sync.autoSync.description")}
           </p>
         </div>
         <Switch
@@ -86,18 +112,18 @@ const SyncSection: React.FC = () => {
         />
       </div>
 
-      {/* 同步频率选择 */}
+      {/* Sync frequency selection */}
       <div className="flex items-center justify-between py-2 rounded-lg px-2">
         <div className="space-y-0.5">
           <Label htmlFor="sync-frequency" className="text-base">
-            同步频率
+            {t("settings.sections.sync.syncFrequency.label")}
           </Label>
           <p className="text-sm text-muted-foreground">
-            控制 uniClipboard 检查新内容的频率
+            {t("settings.sections.sync.syncFrequency.description")}
           </p>
         </div>
         <Select value={syncFrequency} onValueChange={handleSyncFrequencyChange}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-52">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -110,40 +136,29 @@ const SyncSection: React.FC = () => {
         </Select>
       </div>
 
-
-
-      {/* 最大文件大小滑块 */}
-      <div className="py-2 rounded-lg px-2 space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-base">最大同步文件大小</Label>
-            <span className="text-sm text-muted-foreground">
-              {maxFileSize[0]} MB
-            </span>
+      {/* Max file size input */}
+      <div className="py-2 rounded-lg px-2">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-base">{t("settings.sections.sync.maxFileSize.label")}</Label>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.sections.sync.maxFileSize.description")}
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            限制单个文件的最大同步大小
-          </p>
-        </div>
-        <Slider
-          min={1}
-          max={50}
-          step={1}
-          value={maxFileSize}
-          onValueChange={handleMaxFileSizeChange}
-          className="w-full"
-        />
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>1MB</span>
-          <span className={cn(maxFileSize[0] >= 10 && "text-foreground font-medium")}>
-            10MB
-          </span>
-          <span className={cn(maxFileSize[0] >= 25 && "text-foreground font-medium")}>
-            25MB
-          </span>
-          <span className={cn(maxFileSize[0] >= 50 && "text-foreground font-medium")}>
-            50MB
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
+              <Input
+                type="text"
+                value={maxFileSize.toString()}
+                onChange={handleMaxFileSizeChange}
+                className={maxFileSizeError ? "border-red-500 w-32" : "w-32"}
+              />
+              <span className="text-sm text-muted-foreground">MB</span>
+            </div>
+            {maxFileSizeError && (
+              <p className="text-xs text-red-500">{maxFileSizeError}</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

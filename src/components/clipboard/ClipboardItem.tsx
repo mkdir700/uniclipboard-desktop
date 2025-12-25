@@ -5,6 +5,7 @@ import {
   File,
   ExternalLink,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatFileSize } from "@/utils";
 import {
   ClipboardTextItem,
@@ -41,19 +42,20 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   onSelect,
   fileSize,
 }) => {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Calculate character count or size info
   const getSizeInfo = (): string => {
     if (!content) return "";
     switch(type) {
-        case "text": return `${(content as ClipboardTextItem).display_text.length} 字符`;
-        case "link": return "链接";
-        case "code": return `${(content as ClipboardCodeItem).code.length} 字符`;
+        case "text": return `${(content as ClipboardTextItem).display_text.length} ${t("clipboard.item.characters")}`;
+        case "link": return t("clipboard.item.link");
+        case "code": return `${(content as ClipboardCodeItem).code.length} ${t("clipboard.item.characters")}`;
         case "file": return formatFileSize(fileSize);
-        case "image": 
+        case "image":
             // Note: Use actual dimensions if available in API, otherwise placeholder or remove
-            return "图片"; 
+            return t("clipboard.item.image");
         default: return "";
     }
   };
@@ -78,7 +80,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                   "w-auto object-contain rounded-md shadow-sm transition-all duration-300",
                   isExpanded ? "max-h-[500px]" : "h-32"
               )}
-              alt="Clipboard Image"
+              alt={t("clipboard.item.altText.clipboardImage")}
               loading="lazy"
             />
           </div>
@@ -120,7 +122,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
           </div>
         );
       default:
-        return <p className="text-muted-foreground text-sm">未知内容</p>;
+        return <p className="text-muted-foreground text-sm">{t("clipboard.item.unknownContent")}</p>;
     }
   };
 
@@ -142,7 +144,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         {/* Footer Area */}
         <div className="flex items-center justify-between px-4 pb-2 pt-1 text-xs text-muted-foreground/60 select-none">
             {/* Left: Time */}
-            <div className="min-w-[80px]">
+            <div className="min-w-20">
                 {time}
             </div>
 
@@ -155,11 +157,11 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
                 }}
             >
                 {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                <span>{isExpanded ? "收起" : "展开"}</span>
+                <span>{isExpanded ? t("clipboard.item.collapse") : t("clipboard.item.expand")}</span>
             </div>
 
             {/* Right: Stats & Index */}
-            <div className="flex items-center gap-4 min-w-[80px] justify-end">
+            <div className="flex items-center gap-4 min-w-20 justify-end">
                 <span>{getSizeInfo()}</span>
                 <span className="font-mono text-muted-foreground/40">{index}</span>
             </div>

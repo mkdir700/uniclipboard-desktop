@@ -1,174 +1,171 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSetting } from "@/contexts/SettingContext";
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@/components/ui";
 
 const NetworkSection: React.FC = () => {
+  const { t } = useTranslation();
   const { setting, error, updateNetworkSetting } = useSetting();
 
-  // 本地状态
+  // Local state
   const [syncMethod, setSyncMethod] = useState("lan_first");
   const [cloudServer, setCloudServer] = useState("api.clipsync.com");
   const [webserverPort, setWebserverPort] = useState(29217);
   const [portError, setPortError] = useState<string | null>(null);
 
-  // 自定义同步节点状态
+  // Custom peer device state
   const [customPeerDevice, setCustomPeerDevice] = useState(false);
   const [peerDeviceAddr, setPeerDeviceAddr] = useState("192.168.1.100");
   const [peerDevicePort, setPeerDevicePort] = useState(29217);
   const [peerIpError, setPeerIpError] = useState<string | null>(null);
   const [peerPortError, setPeerPortError] = useState<string | null>(null);
 
-  // 同步方式选项
+  // Sync method options
   const syncMethodOptions = [
-    { value: "lan_first", label: "优先使用局域网同步 (推荐)" },
-    { value: "cloud_only", label: "仅使用云端同步" },
-    { value: "lan_only", label: "仅使用局域网同步" },
+    { value: "lan_first", label: t("settings.sections.network.syncMethod.lanFirst") },
+    { value: "cloud_only", label: t("settings.sections.network.syncMethod.cloudOnly") },
+    { value: "lan_only", label: t("settings.sections.network.syncMethod.lanOnly") },
   ];
 
-  // 当设置加载完成后，更新本地状态
+  // Update local state when settings are loaded
   useEffect(() => {
     if (setting) {
       setSyncMethod(setting.network.sync_method);
       setCloudServer(setting.network.cloud_server);
       setWebserverPort(setting.network.webserver_port);
 
-      // 加载自定义同步节点设置
+      // Load custom peer device settings
       setCustomPeerDevice(setting.network.custom_peer_device || false);
       setPeerDeviceAddr(setting.network.peer_device_addr || "192.168.1.100");
       setPeerDevicePort(setting.network.peer_device_port || 29217);
     }
   }, [setting]);
 
-  // 处理同步方式变化
+  // Handle sync method change
   const handleSyncMethodChange = (value: string) => {
     setSyncMethod(value);
     updateNetworkSetting({ sync_method: value });
   };
 
-  // 处理本机开放端口变化
+  // Handle webserver port change
   const handleWebserverPortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
 
-    // 如果输入为空，不做任何处理，允许用户继续输入
+    // If input is empty, allow user to continue typing
     if (!value.trim()) {
       setPortError(null);
-      setWebserverPort(0); // 临时设置为0，但不更新到设置中
+      setWebserverPort(0); // Temporarily set to 0, but don't update to settings
       return;
     }
 
-    // 检查是否为数字
+    // Check if it's a number
     if (!/^\d+$/.test(value)) {
-      setPortError("请输入有效的端口号");
-      setWebserverPort(parseInt(value) || 0); // 即使有错误也更新显示值
+      setPortError(t("settings.sections.network.webserverPort.errors.invalid"));
+      setWebserverPort(parseInt(value) || 0); // Update display value even with error
       return;
     }
 
     const port = parseInt(value);
-    setWebserverPort(port); // 无论如何都更新显示值
+    setWebserverPort(port); // Always update display value
 
-    // 验证端口范围
+    // Validate port range
     if (port < 1024 || port > 65535) {
-      setPortError("端口号必须在 1024-65535 之间");
+      setPortError(t("settings.sections.network.webserverPort.errors.range"));
       return;
     }
 
-    // 验证通过
+    // Validation passed
     setPortError(null);
     updateNetworkSetting({ webserver_port: port });
   };
 
-  // 处理自定义同步节点开关变化
+  // Handle custom peer device toggle change
   const handleCustomPeerDeviceChange = (checked: boolean) => {
     const newValue = checked;
     setCustomPeerDevice(newValue);
     updateNetworkSetting({ custom_peer_device: newValue });
 
-    // 如果关闭，清除错误状态
+    // If turned off, clear error states
     if (!newValue) {
       setPeerIpError(null);
       setPeerPortError(null);
     }
   };
 
-  // 验证 IPv4 地址
+  // Validate IPv4 address
   const validateIPv4 = (ip: string): boolean => {
     const ipv4Regex =
       /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
     return ipv4Regex.test(ip);
   };
 
-  // 处理节点 IP 变化
+  // Handle peer device IP change
   const handlePeerDeviceAddrChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setPeerDeviceAddr(value);
 
-    // 验证 IP 地址
+    // Validate IP address
     if (!value.trim()) {
-      setPeerIpError("IP 地址不能为空");
+      setPeerIpError(t("settings.sections.network.customPeerDevice.peerIp.errors.empty"));
       return;
     }
 
     if (!validateIPv4(value)) {
-      setPeerIpError("请输入有效的 IPv4 地址");
+      setPeerIpError(t("settings.sections.network.customPeerDevice.peerIp.errors.invalid"));
       return;
     }
 
-    // 验证通过
+    // Validation passed
     setPeerIpError(null);
     updateNetworkSetting({ peer_device_addr: value });
   };
 
-  // 处理节点端口变化
+  // Handle peer device port change
   const handlePeerDevicePortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
 
-    // 如果输入为空，不做任何处理，允许用户继续输入
+    // If input is empty, allow user to continue typing
     if (!value.trim()) {
-      setPeerPortError("端口号不能为空");
-      setPeerDevicePort(0); // 临时设置为0，但不更新到设置中
+      setPeerPortError(t("settings.sections.network.customPeerDevice.peerPort.errors.empty"));
+      setPeerDevicePort(0); // Temporarily set to 0, but don't update to settings
       return;
     }
 
-    // 检查是否为数字
+    // Check if it's a number
     if (!/^\d+$/.test(value)) {
-      setPeerPortError("请输入有效的端口号");
-      setPeerDevicePort(parseInt(value) || 0); // 即使有错误也更新显示值
+      setPeerPortError(t("settings.sections.network.customPeerDevice.peerPort.errors.invalid"));
+      setPeerDevicePort(parseInt(value) || 0); // Update display value even with error
       return;
     }
 
     const port = parseInt(value);
-    setPeerDevicePort(port); // 无论如何都更新显示值
+    setPeerDevicePort(port); // Always update display value
 
-    // 验证端口范围
+    // Validate port range
     if (port < 1024 || port > 65535) {
-      setPeerPortError("端口号必须在 1024-65535 之间");
+      setPeerPortError(t("settings.sections.network.customPeerDevice.peerPort.errors.range"));
       return;
     }
 
-    // 验证通过
+    // Validation passed
     setPeerPortError(null);
     updateNetworkSetting({ peer_device_port: port });
   };
 
-  // 如果正在加载，显示加载状态
-  //   if (loading) {
-  //     return <div className="text-center py-4">正在加载设置...</div>;
-  //   }
-
-  // 如果有错误，显示错误信息
+  // If there is an error, display error message
   if (error) {
-    return <div className="text-red-500 py-4">加载设置失败: {error}</div>;
+    return <div className="text-red-500 py-4">{t("settings.sections.network.loadError")}: {error}</div>;
   }
 
   return (
     <>
-      {/* 同步方式 */}
+      {/* Sync Method */}
       <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <h4 className="text-base font-medium">同步方式</h4>
+            <h4 className="text-base font-medium">{t("settings.sections.network.syncMethod.label")}</h4>
             <p className="text-sm text-muted-foreground">
-              选择同步方式
+              {t("settings.sections.network.syncMethod.description")}
             </p>
           </div>
           <Select
@@ -189,32 +186,36 @@ const NetworkSection: React.FC = () => {
         </div>
       </div>
 
-      {/* 本机开放端口 */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="space-y-2">
-          <h4 className="text-base font-medium">本机开放端口</h4>
-          <p className="text-sm text-muted-foreground">
-            设置本机开放端口 (1024-65535)
-          </p>
-          <Input
-            type="text"
-            value={webserverPort.toString()}
-            onChange={handleWebserverPortChange}
-            className={portError ? "border-red-500" : ""}
-          />
-          {portError && (
-            <p className="text-xs text-red-500">{portError}</p>
-          )}
-        </div>
-      </div>
-
-      {/* 是否自定义同步节点 */}
+      {/* Webserver Port */}
       <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <h4 className="text-base font-medium">自定义同步节点</h4>
+            <h4 className="text-base font-medium">{t("settings.sections.network.webserverPort.label")}</h4>
             <p className="text-sm text-muted-foreground">
-              手动指定要同步的设备地址和端口
+              {t("settings.sections.network.webserverPort.description")}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <Input
+              type="text"
+              value={webserverPort.toString()}
+              onChange={handleWebserverPortChange}
+              className={portError ? "border-red-500 w-64" : "w-64"}
+            />
+            {portError && (
+              <p className="text-xs text-red-500">{portError}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Custom Peer Device Toggle */}
+      <div className="py-2 rounded-lg px-2">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <h4 className="text-base font-medium">{t("settings.sections.network.customPeerDevice.label")}</h4>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.sections.network.customPeerDevice.description")}
             </p>
           </div>
           <Switch
@@ -224,15 +225,15 @@ const NetworkSection: React.FC = () => {
         </div>
       </div>
 
-      {/* 节点 IP 和端口（仅在启用自定义同步节点时显示） */}
+      {/* Peer IP and Port (only shown when custom peer device is enabled) */}
       {customPeerDevice && (
         <>
-          {/* 节点 IP */}
+          {/* Peer IP */}
           <div className="py-2 rounded-lg px-2 ml-4 border-l-2 border-muted pl-4">
             <div className="space-y-2">
-              <h4 className="text-base font-medium">节点 IP 地址</h4>
+              <h4 className="text-base font-medium">{t("settings.sections.network.customPeerDevice.peerIp.label")}</h4>
               <p className="text-sm text-muted-foreground">
-                输入要同步的设备 IPv4 地址
+                {t("settings.sections.network.customPeerDevice.peerIp.description")}
               </p>
               <Input
                 type="text"
@@ -246,12 +247,12 @@ const NetworkSection: React.FC = () => {
             </div>
           </div>
 
-          {/* 节点端口 */}
+          {/* Peer Port */}
           <div className="py-2 rounded-lg px-2 ml-4 border-l-2 border-muted pl-4">
             <div className="space-y-2">
-              <h4 className="text-base font-medium">节点端口</h4>
+              <h4 className="text-base font-medium">{t("settings.sections.network.customPeerDevice.peerPort.label")}</h4>
               <p className="text-sm text-muted-foreground">
-                输入要同步的设备端口 (1024-65535)
+                {t("settings.sections.network.customPeerDevice.peerPort.description")}
               </p>
               <Input
                 type="text"
@@ -267,25 +268,25 @@ const NetworkSection: React.FC = () => {
         </>
       )}
 
-      {/* 云服务器配置 */}
+      {/* Cloud Server Configuration */}
       <div className="py-2 rounded-lg px-2 opacity-60 cursor-not-allowed">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center space-x-2">
-            <h4 className="text-base font-medium">云服务器配置</h4>
+            <h4 className="text-base font-medium">{t("settings.sections.network.cloudServer.label")}</h4>
             <span className="px-1.5 py-0.5 bg-muted text-xs text-muted-foreground rounded">
-              即将推出
+              {t("settings.sections.network.cloudServer.badge")}
             </span>
           </div>
           <button
             className="px-2 py-1 bg-muted text-xs text-muted-foreground rounded pointer-events-none"
             disabled
           >
-            高级选项
+            {t("settings.sections.network.cloudServer.advanced")}
           </button>
         </div>
         <div className="flex">
           <div className="px-2 py-1 bg-muted rounded-lg text-sm text-muted-foreground flex-1">
-            使用默认云服务器 ({cloudServer})
+            {t("settings.sections.network.cloudServer.default")} ({cloudServer})
           </div>
         </div>
       </div>

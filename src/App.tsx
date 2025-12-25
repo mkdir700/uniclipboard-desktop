@@ -9,9 +9,11 @@ import {
   Outlet,
 } from "react-router-dom";
 import { SettingProvider } from "@/contexts/SettingContext";
+import { ShortcutProvider } from "@/contexts/ShortcutContext";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { MainLayout } from "@/layouts";
+import { useTranslation } from "react-i18next";
 import "./App.css";
 
 // 认证布局包装器 - 保持 Sidebar 持久化
@@ -25,6 +27,7 @@ const AuthenticatedLayout = () => {
 
 // 主应用程序内容
 const AppContent = () => {
+  const { t } = useTranslation();
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,7 +60,7 @@ const AppContent = () => {
   if (loading || isOnboarded === false) {
     return (
       <div className="h-screen w-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-pulse text-violet-400">加载中...</div>
+        <div className="animate-pulse text-violet-400">{t("common.loading")}</div>
       </div>
     );
   }

@@ -177,6 +177,36 @@ mod tests {
 
 **Rationale**: Explicit error handling prevents panics in production, provides better error messages, and makes failure modes visible to callers.
 
+### Frontend Styling (Tailwind CSS)
+**CRITICAL**: Avoid fixed pixel values (`w-[XXpx]`, `h-[XXpx]`) for cross-platform compatibility. Use Tailwind's built-in utilities or relative units (rem) instead:
+
+```tsx
+// ❌ FORBIDDEN - Fixed pixels don't scale across platforms/DPI
+<div className="w-[200px] h-[60px]" />
+<div className="min-w-[80px]" />
+<div className="h-[1px]" />
+
+// ✅ CORRECT - Use Tailwind utilities (rem-based)
+<div className="w-52 h-15" />           // w-52 = 13rem, h-15 = 3.75rem
+<div className="min-w-20" />            // min-w-20 = 5rem
+<div className="h-px" />                // 1px height (special case)
+
+// ✅ CORRECT - Use rem values directly when needed
+<div className="w-[3.75rem]" />         // 60px = 3.75rem
+<div className="h-[0.0625rem]" />       // 1px = 0.0625rem
+
+// ✅ ACCEPTABLE - For truly fixed sizes (borders, shadows, etc.)
+<div className="border shadow-lg" />
+```
+
+**Rationale**: Rem-based units scale with the root font size, providing better cross-platform consistency across different screen densities, DPI settings, and user accessibility preferences. Tailwind's default configuration uses `1rem = 16px`.
+
+**Common Tailwind Width Reference**:
+- `w-16` = 4rem (64px)
+- `w-20` = 5rem (80px)
+- `w-52` = 13rem (208px)
+- `h-px` = 1px (special utility)
+
 ## Testing
 
 No test framework currently configured. When adding tests:

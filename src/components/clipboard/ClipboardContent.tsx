@@ -1,7 +1,9 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Inbox } from "lucide-react";
 import ClipboardItem from "./ClipboardItem";
+import { useShortcut } from "@/hooks/useShortcut";
 import ClipboardSelectionActionBar from "./ClipboardSelectionActionBar";
+import DeleteConfirmDialog from "./DeleteConfirmDialog";
 import {
   getDisplayType,
   ClipboardItemResponse,
@@ -21,6 +23,7 @@ import {
 } from "@/store/slices/clipboardSlice";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTranslation } from "react-i18next";
 
 interface DisplayClipboardItem {
   id: string;
@@ -43,7 +46,9 @@ interface ClipboardContentProps {
 }
 
 const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
-  // 使用 Redux 状态和 dispatch
+  const { t } = useTranslation();
+
+  // Use Redux state and dispatch
   const dispatch = useAppDispatch();
   const {
     items: reduxItems,
@@ -51,18 +56,61 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     error,
   } = useAppSelector((state) => state.clipboard);
 
-  // 本地状态用于转换后的显示项目
+  // Local state for converted display items
   const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(
     []
   );
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // 注册 ESC 取消选择快捷键
+  useShortcut({
+    key: "esc",
+    scope: "clipboard",
+    enabled: selectedIds.size > 0, // 只在有选中时启用
+    handler: () => {
+      setSelectedIds(new Set());
+      setLastSelectedIndex(null);
+    },
+  });
+
+  // 选中状态下的快捷键：复制/收藏/删除
+  useShortcut({
+    key: "c",
+    scope: "clipboard",
+    enabled: selectedIds.size > 0,
+    handler: () => {
+      void handleBatchCopy();
+    },
+    preventDefault: false,
+  });
+
+  useShortcut({
+    key: "s",
+    scope: "clipboard",
+    enabled: selectedIds.size > 0,
+    handler: () => {
+      void handleBatchToggleFavorite();
+    },
+    preventDefault: false,
+  });
+
+  useShortcut({
+    key: "d",
+    scope: "clipboard",
+    enabled: selectedIds.size > 0,
+    handler: () => {
+      void handleBatchDelete();
+    },
+    preventDefault: false,
+  });
 
   // 监听 Redux 中的 items 变化，转换为显示项目
   useEffect(() => {
-    console.log("筛选条件:", filter);
-    console.log("查询结果:", reduxItems);
+    console.log(t("clipboard.content.filterCondition"), filter);
+    console.log(t("clipboard.content.queryResults"), reduxItems);
 
     if (reduxItems && reduxItems.length > 0) {
       let items: DisplayClipboardItem[] = reduxItems.map(convertToDisplayItem);
@@ -70,39 +118,39 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
         items = items.filter((it) => it.isFavorited);
       }
       setClipboardItems(items);
-      console.log("转换后的显示项目:", items);
+      console.log(t("clipboard.content.convertedItems"), items);
     } else {
       setClipboardItems([]);
-      console.log("没有查询到任何项目");
+      console.log(t("clipboard.content.noItemsFound"));
     }
-  }, [reduxItems, filter]);
+  }, [reduxItems, filter, t]);
 
-  // 将剪贴板项目转换为显示项目
+  // Convert clipboard item to display item
   const convertToDisplayItem = (
     item: ClipboardItemResponse
   ): DisplayClipboardItem => {
-    console.log("转换为显示项目:", item);
-    // 获取适合UI显示的类型
+    console.log(t("clipboard.content.logs.convertingItem"), item);
+    // Get type suitable for UI display
     const type = getDisplayType(item.item);
 
-    // 格式化时间
-    const activeTime = new Date(item.active_time * 1000); // 转换为毫秒
+    // Format time
+    const activeTime = new Date(item.active_time * 1000); // Convert to milliseconds
     const now = new Date();
     const diffMs = now.getTime() - activeTime.getTime();
     const diffMins = Math.round(diffMs / 60000);
 
     let timeString: string;
     if (diffMins < 1) {
-      timeString = "刚刚";
+      timeString = t("clipboard.time.justNow");
     } else if (diffMins < 60) {
-      timeString = `${diffMins}分钟前`;
+      timeString = t("clipboard.time.minutesAgo", { minutes: diffMins });
     } else if (diffMins < 1440) {
-      timeString = `${Math.floor(diffMins / 60)}小时前`;
+      timeString = t("clipboard.time.hoursAgo", { hours: Math.floor(diffMins / 60) });
     } else {
-      timeString = `${Math.floor(diffMins / 1440)}天前`;
+      timeString = t("clipboard.time.daysAgo", { days: Math.floor(diffMins / 1440) });
     }
 
-    // 创建显示项目
+    // Create display item
     return {
       id: item.id,
       type,
@@ -128,11 +176,11 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   // 处理复制到剪贴板
   const handleCopyItem = async (itemId: string) => {
     try {
-      console.log(`复制项目 ID: ${itemId}`);
+      console.log(`${t("clipboard.content.logs.copyItem")} ${itemId}`);
       const result = await dispatch(copyToClipboard(itemId)).unwrap();
       return result.success;
     } catch (err) {
-      console.error("复制到剪贴板失败", err);
+      console.error(t("clipboard.content.logs.copyToClipboardFailed"), err);
       return false;
     }
   };
@@ -261,10 +309,10 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
   const handleBatchDelete = async () => {
     if (selectedItems.length === 0) return;
-    const count = selectedItems.length;
-    const ok = window.confirm(`确定要删除选中的 ${count} 项吗？`);
-    if (!ok) return;
+    setDeleteDialogOpen(true);
+  };
 
+  const handleConfirmDelete = async () => {
     for (const it of selectedItems) {
       try {
         await dispatch(removeClipboardItem(it.id)).unwrap();
@@ -276,7 +324,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     setLastSelectedIndex(null);
   };
 
-  // 骨架屏加载状态
+  // Skeleton loading state
   if (loading && clipboardItems.length === 0) {
     return (
       <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
@@ -314,19 +362,18 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
           ))}
         </div>
       ) : (
-        <div className="h-full flex flex-col items-center justify-center -mt-20">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
-            <div className="relative bg-card p-6 rounded-3xl border border-border/50 shadow-xl">
-               <Inbox className="h-12 w-12 text-primary/80" />
-            </div>
+        <div className="h-full flex flex-col items-center justify-center gap-6">
+          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-2xl bg-muted/50 border border-dashed border-muted">
+            <Inbox className="h-8 w-8 text-muted-foreground/60" />
           </div>
-          <h3 className="text-xl font-bold text-foreground mb-2">没有剪贴板项</h3>
-          <p className="text-muted-foreground text-center max-w-xs">
-            当您复制内容时，它们会显示在这里。
-            <br />
-            试着复制一些文本或图片吧！
-          </p>
+          <div className="text-center">
+            <h3 className="text-base font-semibold text-foreground mb-1">
+              {t("clipboard.content.noClipboardItems")}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {t("clipboard.content.emptyDescription")}
+            </p>
+          </div>
         </div>
       )}
       </div>
@@ -341,6 +388,13 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
           setSelectedIds(new Set());
           setLastSelectedIndex(null);
         }}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        count={selectedItems.length}
       />
     </div>
   );

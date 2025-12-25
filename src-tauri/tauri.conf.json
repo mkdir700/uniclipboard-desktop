@@ -1,6 +1,6 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "uniclipboard",
+  "$schema": "https://schema.tauri.app/config",
+  "productName": "UniClipboard",
   "version": "0.1.0",
   "identifier": "dev.mkdir700.uniclipboard",
   "build": {

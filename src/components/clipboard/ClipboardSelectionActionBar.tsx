@@ -1,11 +1,19 @@
 import React, { useMemo, useState } from "react";
 import { Check, Copy, Star, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 interface ClipboardSelectionActionBarProps {
   selectedCount: number;
   favoriteIntent: "favorite" | "unfavorite";
+  showHotkeys?: boolean;
   onCopy: () => Promise<boolean> | boolean;
   onToggleFavorite: () => Promise<void> | void;
   onDelete: () => Promise<void> | void;
@@ -17,6 +25,7 @@ const ClipboardSelectionActionBar: React.FC<
 > = ({
   selectedCount,
   favoriteIntent,
+  showHotkeys = true,
   onCopy,
   onToggleFavorite,
   onDelete,
@@ -42,96 +51,115 @@ const ClipboardSelectionActionBar: React.FC<
   }
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pb-4 pt-8 bg-linear-to-t from-background via-background/95 to-transparent">
-      <div className="glass-strong border border-border/60 rounded-2xl shadow-lg max-w-2xl mx-auto">
-        <div className="flex items-center justify-between px-4 py-3">
-          {/* Left: Selection info */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {selectedCount === 1
-                  ? "已选择 1 项"
-                  : `已选择 ${selectedCount} 项`}
-              </span>
-            </div>
+    <TooltipProvider delayDuration={0}>
+      <div className="absolute bottom-6 left-0 right-0 z-20 px-4 flex justify-center">
+        <div className="glass-strong border border-border/60 rounded-full shadow-lg inline-flex items-center gap-1 px-2 py-1.5">
+          {/* Selection count badge */}
+          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-semibold mr-1">
+            {selectedCount}
           </div>
 
-          {/* Right: Action buttons */}
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "h-9 px-3 gap-2 rounded-lg transition-all duration-200",
-                "hover:bg-primary/10 hover:text-primary"
-              )}
-              title={selectedCount > 1 ? `复制（${selectedCount} 项）` : "复制"}
-              onClick={handleCopyClick}
-            >
-              {copySuccess ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  <span className="text-xs">已复制</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span className="text-xs">复制</span>
-                </>
-              )}
-            </Button>
+          <div className="w-px h-5 bg-border/50 mx-1" />
 
-            <Button
-              size="sm"
-              variant="ghost"
-              className={cn(
-                "h-9 px-3 gap-2 rounded-lg transition-all duration-200",
-                favoriteIntent === "unfavorite"
-                  ? "text-amber-500 hover:bg-amber-500/10 hover:text-amber-500"
-                  : "hover:bg-amber-500/10 hover:text-amber-500"
-              )}
-              title={
-                selectedCount > 1
-                  ? `${favoriteTitle}（${selectedCount} 项）`
-                  : favoriteTitle
-              }
-              onClick={onToggleFavorite}
-            >
-              <Star
+          {/* Action buttons */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
                 className={cn(
-                  "h-4 w-4",
-                  favoriteIntent === "unfavorite" && "fill-current"
+                  "h-8 w-8 p-0 rounded-full transition-all duration-200",
+                  "hover:bg-primary/10 hover:text-primary"
                 )}
-              />
-              <span className="text-xs">{favoriteTitle}</span>
-            </Button>
+                onClick={handleCopyClick}
+              >
+                {copySuccess ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="flex items-center gap-2">
+              <span>
+                {selectedCount > 1 ? `复制（${selectedCount} 项）` : "复制"}
+              </span>
+              {showHotkeys && <Kbd>C</Kbd>}
+            </TooltipContent>
+          </Tooltip>
 
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-9 px-3 gap-2 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
-              title={selectedCount > 1 ? `删除（${selectedCount} 项）` : "删除"}
-              onClick={onDelete}
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="text-xs">删除</span>
-            </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className={cn(
+                  "h-8 w-8 p-0 rounded-full transition-all duration-200",
+                  favoriteIntent === "unfavorite"
+                    ? "text-amber-500 hover:bg-amber-500/10 hover:text-amber-500"
+                    : "hover:bg-amber-500/10 hover:text-amber-500"
+                )}
+                onClick={onToggleFavorite}
+              >
+                <Star
+                  className={cn(
+                    "h-4 w-4",
+                    favoriteIntent === "unfavorite" && "fill-current"
+                  )}
+                />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="flex items-center gap-2">
+              <span>
+                {selectedCount > 1
+                  ? `${favoriteTitle}（${selectedCount} 项）`
+                  : favoriteTitle}
+              </span>
+              {showHotkeys && <Kbd>S</Kbd>}
+            </TooltipContent>
+          </Tooltip>
 
-            <div className="w-px h-6 bg-border/50 mx-1" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="flex items-center gap-2">
+              <span>
+                {selectedCount > 1 ? `删除（${selectedCount} 项）` : "删除"}
+              </span>
+              {showHotkeys && <Kbd>D</Kbd>}
+            </TooltipContent>
+          </Tooltip>
 
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-9 w-9 p-0 rounded-lg hover:bg-muted transition-all duration-200"
-              title="取消选择"
-              onClick={onClearSelection}
-            >
-              <X className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </div>
+          <div className="w-px h-5 bg-border/50 mx-1" />
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 rounded-full hover:bg-muted transition-all duration-200"
+                aria-label="取消选择"
+                onClick={onClearSelection}
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="flex items-center gap-2">
+              <span>取消选择</span>
+              {showHotkeys && <Kbd>Esc</Kbd>}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 };
 
