@@ -7,6 +7,14 @@ export default {
   ],
   theme: {
     extend: {
+      fontSize: {
+        sm: "var(--font-size-sm)",
+        base: "var(--font-size-base)",
+        lg: "var(--font-size-lg)",
+      },
+      lineHeight: {
+        ui: "var(--line-height-ui)",
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

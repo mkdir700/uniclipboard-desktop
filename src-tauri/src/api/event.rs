@@ -35,7 +35,7 @@ impl Default for EventListenerState {
 #[tauri::command]
 pub fn listen_clipboard_new_content<R: Runtime>(
     app_handle: AppHandle<R>,
-    uniclipboard_app: State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
+    _uniclipboard_app: State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
     event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>,
 ) {
     // 如果已经在监听，则不再重复监听

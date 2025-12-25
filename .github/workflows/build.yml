@@ -1,0 +1,93 @@
+name: 'Build Tauri App'
+run-name: 'build-${{ inputs.platform }}-v${{ inputs.version }}'
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: '选择构建平台'
+        required: true
+        type: choice
+        options:
+          - 'macos-aarch64'
+          - 'macos-x86_64'
+          - 'ubuntu-22.04'
+          - 'windows-latest'
+          - 'all'
+        default: 'all'
+      version:
+        description: '版本号 (例如: 1.0.0)'
+        required: true
+        type: string
+        default: '1.0.0'
+
+jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Generate matrix
+        id: set-matrix
+        run: |
+          if [ "${{ inputs.platform }}" == "all" ]; then
+            echo 'matrix=[{"platform":"macos-latest","target":"aarch64-apple-darwin","args":"--target aarch64-apple-darwin"},{"platform":"macos-latest","target":"x86_64-apple-darwin","args":"--target x86_64-apple-darwin"},{"platform":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","args":""},{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.platform }}" == "macos-aarch64" ]; then
+            echo 'matrix=[{"platform":"macos-latest","target":"aarch64-apple-darwin","args":"--target aarch64-apple-darwin"}]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.platform }}" == "macos-x86_64" ]; then
+            echo 'matrix=[{"platform":"macos-latest","target":"x86_64-apple-darwin","args":"--target x86_64-apple-darwin"}]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.platform }}" == "ubuntu-22.04" ]; then
+            echo 'matrix=[{"platform":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","args":""}]' >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.platform }}" == "windows-latest" ]; then
+            echo 'matrix=[{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
+          fi
+
+  build-tauri:
+    name: Build ${{ matrix.target }}
+    needs: setup-matrix
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup-matrix.outputs.matrix) }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      
+      - name: install Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      
+      - name: install frontend dependencies
+        run: bun install
+      
+      - name: build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        with:
+          args: ${{ matrix.args }}
+      
+      - name: upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-app-${{ matrix.target }}-v${{ inputs.version }}
+          path: |
+            src-tauri/target/release/bundle/
+            src-tauri/target/${{ matrix.target }}/release/bundle/
+          if-no-files-found: warn
+          retention-days: 30

@@ -17,6 +17,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/layouts";
+import { useTranslation } from "react-i18next";
 import "./App.css";
 
 // 动画配置
@@ -47,6 +48,7 @@ const OnboardingWrapper = ({
 }: {
   onOnboardingComplete: () => void;
 }) => {
+  const { t } = useTranslation();
   const [isComplete, setIsComplete] = useState(false);
 
   const handleComplete = () => {
@@ -67,7 +69,7 @@ const OnboardingWrapper = ({
         >
           <div className="w-16 h-16 border-t-4 border-violet-500 border-solid rounded-full animate-spin mb-4"></div>
           <div className="text-violet-400 text-lg font-medium">
-            准备您的仪表板...
+            {t("onboarding.preparingDashboard")}
           </div>
         </motion.div>
       </div>
@@ -88,6 +90,7 @@ const AuthenticatedLayout = () => {
 
 // 主应用程序内容
 const AppContent = () => {
+  const { t } = useTranslation();
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
@@ -138,7 +141,7 @@ const AppContent = () => {
   if (loading) {
     return (
       <div className="h-screen w-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-pulse text-violet-400">加载中...</div>
+        <div className="animate-pulse text-violet-400">{t("common.loading")}</div>
       </div>
     );
   }

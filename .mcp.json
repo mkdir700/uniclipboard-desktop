@@ -13,6 +13,13 @@
         "lucide-icons-mcp",
         "--stdio"
       ]
+    },
+    "mcp-deepwiki": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-deepwiki@latest"
+      ]
     }
   }
 }

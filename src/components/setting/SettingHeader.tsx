@@ -1,6 +1,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 export interface CategoryItem {
   id: string;
@@ -18,6 +19,7 @@ const SettingHeader: React.FC<SettingHeaderProps> = ({
   activeCategory,
   categories,
 }) => {
+  const { t } = useTranslation();
   return (
     <header 
       data-tauri-drag-region
@@ -33,7 +35,7 @@ const SettingHeader: React.FC<SettingHeaderProps> = ({
         {/* Top Row: Title */}
         <div className="flex items-center justify-between">
           <h1 data-tauri-drag-region className="text-2xl font-bold tracking-tight">
-            设置
+            {t("settings.title")}
           </h1>
         </div>
 

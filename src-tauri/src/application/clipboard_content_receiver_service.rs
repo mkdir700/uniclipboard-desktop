@@ -9,7 +9,7 @@ use crate::application::device_service::get_device_manager;
 use crate::message::Payload;
 use anyhow::Result;
 use log::info;
-use reqwest_dav::re_exports::reqwest;
+use reqwest;
 
 pub struct ClipboardContentReceiver {
     file_storage: Arc<FileStorageManager>,

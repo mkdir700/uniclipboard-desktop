@@ -3,8 +3,6 @@
 codegen-units = 16
 # 增大缓存大小
 incremental = true
-# 使用sccache
-rustc-wrapper = "sccache"
 
 # macOS优化
 [target.aarch64-apple-darwin]
@@ -16,6 +14,7 @@ codegen-units = 16
 
 # 依赖优化
 [profile.dev.package."*"]
+
 # 对第三方包使用发布优化但保留调试信息
 opt-level = 1
 debug = false

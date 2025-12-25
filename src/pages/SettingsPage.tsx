@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 
 import { SettingContentLayout } from "@/layouts";
 import SyncSection from "@/components/setting/SyncSection";
@@ -9,21 +9,22 @@ import AboutSection from "@/components/setting/AboutSection";
 import GeneralSection from "@/components/setting/GeneralSection";
 import AppearanceSection from "@/components/setting/AppearanceSection";
 import SettingHeader, { CategoryItem } from "@/components/setting/SettingHeader";
-
-// 集中定义所有设置类别
-const SETTING_CATEGORIES: CategoryItem[] = [
-  { id: "general", name: "通用设置" },
-  { id: "appearance", name: "外观设置" },
-  { id: "sync", name: "同步设置" },
-  { id: "security", name: "安全与隐私" },
-  { id: "network", name: "网络设置" },
-  { id: "storage", name: "存储管理" },
-  { id: "about", name: "关于" },
-];
+import { useTranslation } from "react-i18next";
 
 const SettingsPage: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const [activeCategory, setActiveCategory] = useState("general");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const SETTING_CATEGORIES: CategoryItem[] = useMemo(() => [
+    { id: "general", name: t("settings.categories.general") },
+    { id: "appearance", name: t("settings.categories.appearance") },
+    { id: "sync", name: t("settings.categories.sync") },
+    { id: "security", name: t("settings.categories.security") },
+    { id: "network", name: t("settings.categories.network") },
+    { id: "storage", name: t("settings.categories.storage") },
+    { id: "about", name: t("settings.categories.about") },
+  ], [i18n.language]);
 
   // 创建对各个section的引用
   const sectionRefs = {
@@ -99,43 +100,43 @@ const SettingsPage: React.FC = () => {
           className="flex-1 overflow-y-auto scrollbar-thin px-8 pb-32 pt-6 scroll-smooth"
         >
           <div ref={sectionRefs.general} id="general-section" className="scroll-mt-32">
-            <SettingContentLayout title="通用设置">
+            <SettingContentLayout title={t("settings.sections.general.title")}>
               <GeneralSection />
             </SettingContentLayout>
           </div>
 
           <div ref={sectionRefs.appearance} id="appearance-section" className="scroll-mt-32">
-            <SettingContentLayout title="外观设置">
+            <SettingContentLayout title={t("settings.sections.appearance.title")}>
               <AppearanceSection />
             </SettingContentLayout>
           </div>
 
           <div ref={sectionRefs.sync} id="sync-section" className="scroll-mt-32">
-            <SettingContentLayout title="同步设置">
+            <SettingContentLayout title={t("settings.sections.sync.title")}>
               <SyncSection />
             </SettingContentLayout>
           </div>
 
           <div ref={sectionRefs.security} id="security-section" className="scroll-mt-32">
-            <SettingContentLayout title="安全与隐私设置">
+            <SettingContentLayout title={t("settings.sections.security.title")}>
               <SecuritySection />
             </SettingContentLayout>
           </div>
 
           <div ref={sectionRefs.network} id="network-section" className="scroll-mt-32">
-             <SettingContentLayout title="网络设置">
+             <SettingContentLayout title={t("settings.sections.network.title")}>
               <NetworkSection />
             </SettingContentLayout>
           </div>
 
           <div ref={sectionRefs.storage} id="storage-section" className="scroll-mt-32">
-            <SettingContentLayout title="存储管理">
+            <SettingContentLayout title={t("settings.sections.storage.title")}>
               <StorageSection />
             </SettingContentLayout>
           </div>
 
           <div ref={sectionRefs.about} id="about-section" className="scroll-mt-32">
-            <SettingContentLayout title="关于">
+            <SettingContentLayout title={t("settings.sections.about.title")}>
               <AboutSection />
             </SettingContentLayout>
           </div>

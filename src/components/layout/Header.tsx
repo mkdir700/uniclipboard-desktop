@@ -4,20 +4,23 @@ import { Filter } from "@/api/clipboardItems";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 interface HeaderProps {
   onFilterChange?: (filterId: Filter) => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
+  const { t } = useTranslation();
+
   const filterTypes = [
-    { id: Filter.All, label: "全部", icon: ClipboardCopy },
-    { id: Filter.Favorited, label: "收藏", icon: Star },
-    { id: Filter.Text, label: "文本", icon: FileText },
-    { id: Filter.Image, label: "图片", icon: Image },
-    { id: Filter.Link, label: "链接", icon: LinkIcon },
-    { id: Filter.File, label: "文件", icon: Folder },
-    { id: Filter.Code, label: "代码", icon: Code },
+    { id: Filter.All, label: "header.filters.all", icon: ClipboardCopy },
+    { id: Filter.Favorited, label: "header.filters.favorited", icon: Star },
+    { id: Filter.Text, label: "header.filters.text", icon: FileText },
+    { id: Filter.Image, label: "header.filters.image", icon: Image },
+    { id: Filter.Link, label: "header.filters.link", icon: LinkIcon },
+    { id: Filter.File, label: "header.filters.file", icon: Folder },
+    { id: Filter.Code, label: "header.filters.code", icon: Code },
   ];
 
   const [activeFilter, setActiveFilter] = useState<Filter>(Filter.All);
@@ -66,7 +69,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
               <Input
                 data-tauri-drag-region="false"
                 type="text"
-                placeholder="搜索剪贴板内容..."
+                placeholder={t("header.searchPlaceholder")}
                 className="bg-transparent border-none p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setIsSearchFocused(false)}
@@ -104,7 +107,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                 )}
                 <span className="relative z-10 flex items-center gap-2">
                   <Icon className={cn("h-4 w-4", isActive ? "text-primary-foreground" : "")} />
-                  {filter.label}
+                  {t(filter.label)}
                 </span>
               </motion.button>
             );
