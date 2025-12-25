@@ -5,6 +5,7 @@ import {
   File,
   ExternalLink,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatFileSize } from "@/utils";
 import {
   ClipboardTextItem,
@@ -42,7 +43,6 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   fileSize,
 }) => {
   const { t } = useTranslation();
-  const [copySuccess, setCopySuccess] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Calculate character count or size info
