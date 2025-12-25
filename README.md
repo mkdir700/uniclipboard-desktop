@@ -1,5 +1,3 @@
-![uniclipboard-desktop](https://socialify.git.ci/mkdir700/uniclipboard-desktop/image?description=1&descriptionEditable=%E4%B8%80%E4%B8%AA%E8%B7%A8%E5%B9%B3%E5%8F%B0%E5%89%AA%E5%88%87%E6%9D%BF%E5%85%B1%E4%BA%AB%E5%B7%A5%E5%85%B7%EF%BC%8C%E6%97%A8%E5%9C%A8%E6%89%93%E9%80%A0%E6%97%A0%E7%BC%9D%E7%9A%84%E5%89%AA%E5%88%87%E6%9D%BF%E4%BD%93%E9%AA%8C&font=Raleway&language=1&name=1&owner=1&pattern=Circuit%20Board&theme=Auto)
-
 <div align="center">
   <br/>
     
@@ -36,32 +34,29 @@
     <a href="https://codecov.io/gh/mkdir700/uniclipboard-desktop">
       <img src="https://img.shields.io/codecov/c/github/mkdir700/uniclipboard-desktop/master?style=flat-square" />
     </a>
-    <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
-      <img
-        src="https://img.shields.io/github/downloads/mkdir700/uniclipboard-desktop/total?style=flat-square"
-      />  
-    </a >
   </div>
 
 </div>
 
 > [!WARNING]
-> uniclipboard-desktop 目前处于积极开发阶段，可能存在功能不稳定或缺失的情况。欢迎体验并提供反馈！
+> UniClipboard 目前处于积极开发阶段，可能存在功能不稳定或缺失的情况。欢迎体验并提供反馈！
+
+[English](./README_EN.md) | 简体中文
 
 ## 📝 项目介绍
 
-uniclipboard-desktop 是一个功能强大的跨平台剪切板同步工具，旨在为用户提供无缝的剪切板共享体验。无论您使用的是 Windows、macOS 还是 Linux，uniclipboard-desktop 都能让您在不同设备间即时共享文本、图片和文件，提升工作效率。
+UniClipboard 是一个剪切板同步工具，旨在为用户提供无缝的剪切板共享体验，让您在不同设备间即时共享文本、图片和文件。
 
-![Image](https://github.com/user-attachments/assets/6bc63e44-d11c-4675-9f4c-c8c8368453a0)
+![Image](./assets/demo.png)
 
 ## ✨ 功能特点
 
-- 🌐 **跨平台支持**: 支持 Windows、macOS 和 Linux 操作系统
-- 🔄 **实时同步**: 在连接的设备间即时共享剪切板内容
-- 📊 **丰富内容类型**: 支持文本、图片、文件等多种内容类型
-- 🔐 **安全加密**: 使用 AES-GCM 加密算法确保数据传输安全
-- 📱 **多设备管理**: 便捷添加和管理多台设备
-- ⚙️ **灵活配置**: 提供丰富的自定义设置选项
+- **跨平台支持**: 支持 Windows、macOS 和 Linux 操作系统
+- **实时同步**: 在连接的设备间即时共享剪切板内容
+- **丰富内容类型**: 支持文本、图片、文件等多种内容类型
+- **安全加密**: 使用 AES-GCM 加密算法确保数据传输安全
+- **多设备管理**: 便捷添加和管理多台设备
+- **灵活配置**: 提供丰富的自定义设置选项
 
 ## 🚀 安装方法
 
@@ -103,10 +98,10 @@ bun tauri build
 
 ### 网络配置
 
-uniclipboard-desktop 支持多种网络连接模式，可根据您的网络环境进行配置：
+支持多种网络连接模式，可根据您的网络环境进行配置：
 
 - **局域网同步**: 默认使用局域网直接同步
-- **WebDAV 同步**: 支持通过 WebDAV 服务器同步数据
+- **WebDAV 同步**: 开发中
 
 ### 安全功能
 
@@ -115,7 +110,7 @@ uniclipboard-desktop 支持多种网络连接模式，可根据您的网络环�
 
 ## 🤝 参与贡献
 
-非常欢迎各种形式的贡献！如果您对改进 uniclipboard-desktop 感兴趣，请：
+非常欢迎各种形式的贡献！如果您对改进 UniClipboard 感兴趣，请：
 
 1. Fork 本仓库
 2. 创建您的特性分支 (`git checkout -b feature/amazing-feature`)
