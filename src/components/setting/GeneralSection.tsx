@@ -3,14 +3,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch }
 import { useSetting } from "@/contexts/SettingContext";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/i18n";
+import { SUPPORTED_LANGUAGES, type SupportedLanguage, getInitialLanguage } from "@/i18n";
 
 export default function GeneralSection() {
   const { t } = useTranslation();
   const { setting, updateGeneralSetting } = useSetting();
   const [autoStart, setAutoStart] = useState(false);
   const [silentStart, setSilentStart] = useState(false);
-  const [language, setLanguage] = useState<SupportedLanguage>("zh-CN");
+  const [language, setLanguage] = useState<SupportedLanguage>(getInitialLanguage());
   const [isLoading, setIsLoading] = useState(true);
 
   // 初始化时检查自启动状态和设置
@@ -25,7 +25,7 @@ export default function GeneralSection() {
         // 从配置中读取静默启动状态
         if (setting?.general) {
           setSilentStart(setting.general.silent_start);
-          setLanguage((setting.general.language as SupportedLanguage) || "zh-CN");
+          setLanguage((setting.general.language as SupportedLanguage) || getInitialLanguage());
         }
       } catch (error) {
         console.error("初始化设置失败:", error);
@@ -72,7 +72,7 @@ export default function GeneralSection() {
 
   const handleLanguageChange = async (next: string) => {
     try {
-      const normalized = (next as SupportedLanguage) || "zh-CN";
+      const normalized = (next as SupportedLanguage) || getInitialLanguage();
       await updateGeneralSetting({ language: normalized });
       setLanguage(normalized);
     } catch (error) {

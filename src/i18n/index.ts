@@ -11,7 +11,10 @@ const STORAGE_KEY = "uniclipboard.language";
 export function normalizeLanguage(
   language: string | null | undefined
 ): SupportedLanguage {
-  if (!language) return "zh-CN";
+  if (!language) {
+    // Fallback to system language
+    language = navigator.language;
+  }
   const lower = language.toLowerCase();
   if (lower.startsWith("zh")) return "zh-CN";
   return "en-US";

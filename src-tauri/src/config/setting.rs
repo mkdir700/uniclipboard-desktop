@@ -47,7 +47,8 @@ fn default_theme_color() -> String {
 }
 
 fn default_language() -> String {
-    "zh-CN".to_string()
+    // Empty string means "use system language" - the frontend will handle this
+    String::new()
 }
 
 // 同步设置
