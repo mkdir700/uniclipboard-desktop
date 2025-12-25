@@ -51,6 +51,12 @@ interface NetworkSetting {
   custom_peer_device: boolean;
   peer_device_addr: string | null;
   peer_device_port: number | null;
+  webdav_enabled: boolean;
+  webdav_url: string;
+  webdav_username: string;
+  webdav_password_key: string | null;
+  webdav_base_path: string;
+  webdav_polling_ms: number;
 }
 
 // 存储设置接口

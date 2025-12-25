@@ -79,6 +79,48 @@ pub struct NetworkSetting {
     pub peer_device_addr: Option<String>,
     // 对等设备端口
     pub peer_device_port: Option<u16>,
+    // 是否启用 WebDAV
+    #[serde(default = "default_webdav_enabled")]
+    pub webdav_enabled: bool,
+    // WebDAV 服务地址
+    #[serde(default = "default_webdav_url")]
+    pub webdav_url: String,
+    // WebDAV 用户名
+    #[serde(default = "default_webdav_username")]
+    pub webdav_username: String,
+    // WebDAV 密码的存储 key（不直接存储密码）
+    #[serde(default = "default_webdav_password_key")]
+    pub webdav_password_key: Option<String>,
+    // WebDAV 同步根目录
+    #[serde(default = "default_webdav_base_path")]
+    pub webdav_base_path: String,
+    // WebDAV 轮询间隔（毫秒）
+    #[serde(default = "default_webdav_polling_ms")]
+    pub webdav_polling_ms: u64,
+}
+
+fn default_webdav_enabled() -> bool {
+    false
+}
+
+fn default_webdav_url() -> String {
+    String::new()
+}
+
+fn default_webdav_username() -> String {
+    String::new()
+}
+
+fn default_webdav_password_key() -> Option<String> {
+    None
+}
+
+fn default_webdav_base_path() -> String {
+    "/uniclipboard".to_string()
+}
+
+fn default_webdav_polling_ms() -> u64 {
+    30_000
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,6 +207,12 @@ impl Setting {
                 custom_peer_device: false,
                 peer_device_addr: None,
                 peer_device_port: None,
+                webdav_enabled: false,
+                webdav_url: String::new(),
+                webdav_username: String::new(),
+                webdav_password_key: None,
+                webdav_base_path: "/uniclipboard".to_string(),
+                webdav_polling_ms: 30_000,
             },
             storage: StorageSetting {
                 auto_clear_history: AutoClearHistory::Never,
@@ -254,6 +302,12 @@ mod tests {
         assert_eq!(setting.sync.content_types.text, true);
         assert_eq!(setting.security.end_to_end_encryption, true);
         assert_eq!(setting.network.sync_method, "lan_first");
+        assert_eq!(setting.network.webdav_enabled, false);
+        assert_eq!(setting.network.webdav_url, "");
+        assert_eq!(setting.network.webdav_username, "");
+        assert_eq!(setting.network.webdav_password_key, None);
+        assert_eq!(setting.network.webdav_base_path, "/uniclipboard");
+        assert_eq!(setting.network.webdav_polling_ms, 30_000);
         assert_eq!(setting.storage.history_retention_days, 30);
     }
 
