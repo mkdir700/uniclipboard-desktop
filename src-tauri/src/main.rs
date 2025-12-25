@@ -17,7 +17,7 @@ use infrastructure::storage::db::pool::DB_POOL;
 use infrastructure::uniclipboard::{UniClipboard, UniClipboardBuilder};
 use log::error;
 use std::sync::Arc;
-use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{WebviewUrl, WebviewWindowBuilder};
 use utils::logging;
 
 // 初始化UniClipboard
@@ -165,14 +165,9 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
                 .title("")
                 .inner_size(800.0, 600.0);
 
-            // set transparent title bar only when building for macOS
-            #[cfg(target_os = "macos")]
-            let win_builder = win_builder.title_bar_style(TitleBarStyle::Overlay);
-
             // Use a custom title bar on Windows to match the frameless design in the frontend
             #[cfg(target_os = "windows")]
             let win_builder = win_builder
-                .title_bar_style(TitleBarStyle::Overlay)
                 .decorations(false)
                 .shadow(true);
 
