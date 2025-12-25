@@ -1,0 +1,89 @@
+name: 'build-${{ github.event.inputs.platform }}-v${{ github.event.inputs.version }}'
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: '选择构建平台'
+        required: true
+        type: choice
+        options:
+          - 'macos-aarch64'
+          - 'macos-x86_64'
+          - 'ubuntu-22.04'
+          - 'windows-latest'
+          - 'all'
+        default: 'all'
+      version:
+        description: '版本号 (例如: 1.0.0)'
+        required: true
+        type: string
+        default: '1.0.0'
+
+jobs:
+  build-tauri:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            target: 'aarch64-apple-darwin'
+            args: '--target aarch64-apple-darwin'
+            enabled: ${{ github.event.inputs.platform == 'macos-aarch64' || github.event.inputs.platform == 'all' }}
+          - platform: 'macos-latest'
+            target: 'x86_64-apple-darwin'
+            args: '--target x86_64-apple-darwin'
+            enabled: ${{ github.event.inputs.platform == 'macos-x86_64' || github.event.inputs.platform == 'all' }}
+          - platform: 'ubuntu-22.04'
+            target: 'x86_64-unknown-linux-gnu'
+            args: ''
+            enabled: ${{ github.event.inputs.platform == 'ubuntu-22.04' || github.event.inputs.platform == 'all' }}
+          - platform: 'windows-latest'
+            target: 'x86_64-pc-windows-msvc'
+            args: ''
+            enabled: ${{ github.event.inputs.platform == 'windows-latest' || github.event.inputs.platform == 'all' }}
+    
+    runs-on: ${{ matrix.platform }}
+    if: matrix.enabled == 'true'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      
+      - name: install Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      
+      - name: install frontend dependencies
+        run: bun install
+      
+      - name: build Tauri app
+        uses: tauri-apps/tauri-action@v1
+        with:
+          args: ${{ matrix.args }}
+      
+      - name: upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-app-${{ matrix.target }}-v${{ github.event.inputs.version }}
+          path: |
+            src-tauri/target/release/bundle/
+            src-tauri/target/${{ matrix.target }}/release/bundle/
+          if-no-files-found: warn
+          retention-days: 30
