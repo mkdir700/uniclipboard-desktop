@@ -361,7 +361,7 @@ impl WebDAVClient {
             self.base_path.clone()
         } else {
             let base_trimmed = self.base_path.trim_matches('/');
-            if relative.starts_with(base_trimmed) {
+            if relative == base_trimmed || relative.starts_with(&format!("{}/", base_trimmed)) {
                 format!("/{}", relative)
             } else {
                 format!("{}/{}", self.base_path.trim_end_matches('/'), relative)
