@@ -139,6 +139,44 @@ All frontend-backend communication through Tauri commands defined in [api/](src-
 - **Single instance**: Enforced via `tauri-plugin-single-instance`
 - **Autostart**: Managed via `tauri-plugin-autostart` (MacOS LaunchAgent on macOS)
 
+## Development Style
+
+### Rust Error Handling
+**CRITICAL**: Never use `unwrap()` or `expect()` in production code. Always handle errors explicitly:
+
+```rust
+// ❌ FORBIDDEN
+let value = some_option.unwrap();
+let result = some_result.expect("failed");
+
+// ✅ CORRECT - Use pattern matching
+match some_option {
+    Some(value) => { /* handle value */ },
+    None => { /* handle error case */ },
+}
+
+// ✅ CORRECT - Use ? operator with proper error propagation
+pub fn do_something() -> Result<(), MyError> {
+    let value = some_option.ok_or(MyError::NotFound)?;
+    // ...
+}
+
+// ✅ CORRECT - Use unwrap_or/unwrap_or_default for non-critical defaults
+let value = some_option.unwrap_or_default();
+let config = config_option.unwrap_or_else(|| Config::default());
+
+// ✅ ACCEPTABLE in tests only
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_something() {
+        let value = some_option.unwrap(); // OK in tests
+    }
+}
+```
+
+**Rationale**: Explicit error handling prevents panics in production, provides better error messages, and makes failure modes visible to callers.
+
 ## Testing
 
 No test framework currently configured. When adding tests:
