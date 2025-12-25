@@ -29,7 +29,7 @@ pub struct WebDavSync {
 impl WebDavSync {
     #[allow(dead_code)]
     pub fn new(client: WebDAVClient) -> Self {
-        let base_path = format!("/uniclipboard");
+        let base_path = String::new();
         Self {
             client: Arc::new(client),
             base_path,
@@ -44,7 +44,7 @@ impl WebDavSync {
     /// 创建一个新的 WebDavSync 实例，使用指定的配置
     #[allow(dead_code)]
     pub fn with_config(client: WebDAVClient, config: Config) -> Self {
-        let base_path = format!("/uniclipboard");
+        let base_path = String::new();
         Self {
             client: Arc::new(client),
             base_path,
@@ -69,7 +69,11 @@ impl WebDavSync {
     /// 推送并返回文件路径, 仅测试时使用
     #[allow(dead_code)]
     pub async fn push_and_return_path(&self, payload: Payload) -> Result<String> {
-        let path = self.client.upload(self.base_path.clone(), payload).await?;
+        let path = self
+            .client
+            .upload(self.base_path.clone(), payload)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
         Ok(path)
     }
 }
@@ -124,16 +128,25 @@ impl RemoteClipboardSync for WebDavSync {
         let _path = self
             .client
             .upload(self.base_path.clone(), message.payload.unwrap())
-            .await?;
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
         // 删除旧的文件
         let max_history = self.config.storage.max_history_items;
-        let count = self.client.count_files(self.base_path.clone()).await?;
+        let count = self
+            .client
+            .count_files(self.base_path.clone())
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
         if count > max_history as usize {
             let oldest_file = self
                 .client
                 .fetch_oldest_file_meta(self.base_path.clone())
-                .await?;
-            self.client.delete(oldest_file.get_path()).await?;
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+            self.client
+                .delete(oldest_file.get_path())
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
             debug!(
                 "Delete oldest file, path: {}, count: {}",
                 oldest_file.get_path(),
@@ -185,7 +198,8 @@ impl RemoteClipboardSync for WebDavSync {
             latest_file_meta = self
                 .client
                 .fetch_latest_file_meta(self.base_path.clone())
-                .await?;
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
 
             let file_path = latest_file_meta.get_path();
             let modified = latest_file_meta.last_modified;
@@ -206,7 +220,11 @@ impl RemoteClipboardSync for WebDavSync {
                 }
             };
             if should_update {
-                let payload = self.client.download(file_path).await?;
+                let payload = self
+                    .client
+                    .download(file_path)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))?;
                 {
                     let mut last_modified = self.last_modified.write().unwrap();
                     *last_modified = Some(modified);
