@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Inbox } from "lucide-react";
 import ClipboardItem from "./ClipboardItem";
+import { useShortcut } from "@/hooks/useShortcut";
 import ClipboardSelectionActionBar from "./ClipboardSelectionActionBar";
 import {
   getDisplayType,
@@ -58,6 +59,48 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+
+  // 注册 ESC 取消选择快捷键
+  useShortcut({
+    key: "esc",
+    scope: "clipboard",
+    enabled: selectedIds.size > 0, // 只在有选中时启用
+    handler: () => {
+      setSelectedIds(new Set());
+      setLastSelectedIndex(null);
+    },
+  });
+
+  // 选中状态下的快捷键：复制/收藏/删除
+  useShortcut({
+    key: "c",
+    scope: "clipboard",
+    enabled: selectedIds.size > 0,
+    handler: () => {
+      void handleBatchCopy();
+    },
+    preventDefault: false,
+  });
+
+  useShortcut({
+    key: "s",
+    scope: "clipboard",
+    enabled: selectedIds.size > 0,
+    handler: () => {
+      void handleBatchToggleFavorite();
+    },
+    preventDefault: false,
+  });
+
+  useShortcut({
+    key: "d",
+    scope: "clipboard",
+    enabled: selectedIds.size > 0,
+    handler: () => {
+      void handleBatchDelete();
+    },
+    preventDefault: false,
+  });
 
   // 监听 Redux 中的 items 变化，转换为显示项目
   useEffect(() => {

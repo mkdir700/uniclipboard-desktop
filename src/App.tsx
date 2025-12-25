@@ -12,6 +12,7 @@ import {
   Outlet,
 } from "react-router-dom";
 import { SettingProvider } from "@/contexts/SettingContext";
+import { ShortcutProvider } from "@/contexts/ShortcutContext";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
@@ -143,8 +144,9 @@ const AppContent = () => {
   }
 
   return (
-    <SettingProvider>
-      <Routes>
+    <ShortcutProvider>
+      <SettingProvider>
+        <Routes>
         <Route
           element={
             isOnboarded ? <AuthenticatedLayout /> : <Navigate to="/onboarding" />
@@ -189,8 +191,9 @@ const AppContent = () => {
             )
           }
         />
-      </Routes>
-    </SettingProvider>
+        </Routes>
+      </SettingProvider>
+    </ShortcutProvider>
   );
 };
 
