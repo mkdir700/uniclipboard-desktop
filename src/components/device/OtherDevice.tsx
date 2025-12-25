@@ -68,7 +68,7 @@ const OtherDevice: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center gap-4 mb-4 mt-8">
         <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">其他已连接设备</h3>
-        <div className="h-[1px] flex-1 bg-border/50"></div>
+        <div className="h-px flex-1 bg-border/50"></div>
       </div>
 
       {devices.map((device) => {
