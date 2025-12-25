@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 
 import { SettingContentLayout } from "@/layouts";
 import SyncSection from "@/components/setting/SyncSection";
@@ -12,11 +12,11 @@ import SettingHeader, { CategoryItem } from "@/components/setting/SettingHeader"
 import { useTranslation } from "react-i18next";
 
 const SettingsPage: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeCategory, setActiveCategory] = useState("general");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const SETTING_CATEGORIES: CategoryItem[] = [
+  const SETTING_CATEGORIES: CategoryItem[] = useMemo(() => [
     { id: "general", name: t("settings.categories.general") },
     { id: "appearance", name: t("settings.categories.appearance") },
     { id: "sync", name: t("settings.categories.sync") },
@@ -24,7 +24,7 @@ const SettingsPage: React.FC = () => {
     { id: "network", name: t("settings.categories.network") },
     { id: "storage", name: t("settings.categories.storage") },
     { id: "about", name: t("settings.categories.about") },
-  ];
+  ], [i18n.language]);
 
   // 创建对各个section的引用
   const sectionRefs = {
