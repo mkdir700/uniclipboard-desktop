@@ -57,24 +57,43 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      - name: Cache cargo-chef binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-chef
+          key: ${{ runner.os }}-cargo-chef-${{ hashFiles('src-tauri/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-chef-
+
+      - name: Install cargo-chef
+        run: cargo install cargo-chef
+
+      - name: Create cargo chef recipe
+        working-directory: src-tauri
+        run: cargo chef prepare --recipe-path recipe.json
+
       - name: Cache Rust dependencies
         uses: actions/cache@v4
         with:
           path: |
+            src-tauri/target
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-chef-${{ matrix.target }}-${{ hashFiles('src-tauri/recipe.json') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-chef-${{ matrix.target }}-
+            ${{ runner.os }}-chef-
+
+      - name: Cook Rust dependencies
+        working-directory: src-tauri
+        run: cargo chef cook --release --recipe-path recipe.json
 
       - name: Cache Tauri CLI
         uses: actions/cache@v4
         with:
           path: |
             ~/.local/share/tauri
-          key: ${{ runner.os }}-tauri-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ runner.os }}-tauri-${{ hashFiles('src-tauri/Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-tauri-
 
