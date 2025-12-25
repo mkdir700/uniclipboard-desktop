@@ -17,7 +17,7 @@ use infrastructure::storage::db::pool::DB_POOL;
 use infrastructure::uniclipboard::{UniClipboard, UniClipboardBuilder};
 use log::error;
 use std::sync::Arc;
-use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{LogicalSize, Size, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 use utils::logging;
 
 // 初始化UniClipboard
@@ -163,7 +163,8 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
 
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("")
-                .inner_size(800.0, 600.0);
+                .inner_size(800.0, 600.0)
+                .min_inner_size(Size::Logical(LogicalSize::new(800.0, 600.0)));
 
             // set transparent title bar only when building for macOS
             #[cfg(target_os = "macos")]
