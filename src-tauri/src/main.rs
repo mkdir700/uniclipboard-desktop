@@ -18,6 +18,8 @@ use infrastructure::uniclipboard::{UniClipboard, UniClipboardBuilder};
 use log::error;
 use std::sync::Arc;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 use utils::logging;
 
 // 初始化UniClipboard
@@ -166,11 +168,12 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
                 .inner_size(800.0, 600.0)
                 .min_inner_size(800.0, 600.0);
 
-            // Use a custom title bar on Windows to match the frameless design in the frontend
+            // Use platform-specific title bar settings
+            #[cfg(target_os = "macos")]
+            let win_builder = win_builder.title_bar_style(TitleBarStyle::Overlay);
+
             #[cfg(target_os = "windows")]
-            let win_builder = win_builder
-                .decorations(false)
-                .shadow(true);
+            let win_builder = win_builder.decorations(false).shadow(true);
 
             // 如果启用了静默启动，则初始不可见
             let win_builder = if user_setting.general.silent_start {
