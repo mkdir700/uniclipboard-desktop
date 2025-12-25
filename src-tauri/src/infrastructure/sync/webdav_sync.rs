@@ -125,9 +125,12 @@ impl RemoteClipboardSync for WebDavSync {
     ///
     /// This function will return an error if the upload to the WebDAV server fails.
     async fn push(&self, message: ClipboardTransferMessage) -> Result<()> {
+        let payload = message
+            .payload
+            .ok_or_else(|| anyhow::anyhow!("Payload is missing"))?;
         let _path = self
             .client
-            .upload(self.base_path.clone(), message.payload.unwrap())
+            .upload(self.base_path.clone(), payload)
             .await
             .map_err(|e| anyhow::anyhow!(e))?;
         // 删除旧的文件

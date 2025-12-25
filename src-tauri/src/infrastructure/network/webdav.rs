@@ -269,7 +269,7 @@ impl WebDAVClient {
 
     #[allow(dead_code)]
     pub async fn fetch_latest_file(&self, dir: String) -> WebDavResult<Payload> {
-        let entries = self.list(&dir, Depth::Number(0)).await?;
+        let entries = self.list(&dir, Depth::Number(1)).await?;
         let latest_file = entries
             .iter()
             .filter_map(|entity| match entity {
@@ -295,7 +295,11 @@ impl WebDAVClient {
                 .bytes()
                 .await
                 .map_err(|e| WebDavError::Network(format!("读取响应失败: {}", e)))?;
-            let payload = serde_json::from_slice(&content)
+            let decrypted_payload = self
+                .encryptor
+                .decrypt(&content)
+                .map_err(|e| WebDavError::Encryption(e.to_string()))?;
+            let payload = serde_json::from_slice(&decrypted_payload)
                 .map_err(|e| WebDavError::Serialization(e.to_string()))?;
             Ok(payload)
         } else {
@@ -357,7 +361,7 @@ impl WebDAVClient {
             self.base_path.clone()
         } else {
             let base_trimmed = self.base_path.trim_matches('/');
-            if relative.starts_with(base_trimmed) {
+            if relative == base_trimmed || relative.starts_with(&format!("{}/", base_trimmed)) {
                 format!("/{}", relative)
             } else {
                 format!("{}/{}", self.base_path.trim_end_matches('/'), relative)
