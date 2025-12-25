@@ -360,19 +360,18 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
           ))}
         </div>
       ) : (
-        <div className="h-full flex flex-col items-center justify-center -mt-20">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 bg-primary/20 blur-2xl rounded-full" />
-            <div className="relative bg-card p-6 rounded-3xl border border-border/50 shadow-xl">
-               <Inbox className="h-12 w-12 text-primary/80" />
-            </div>
+        <div className="h-full flex flex-col items-center justify-center gap-6">
+          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-2xl bg-muted/50 border border-dashed border-muted">
+            <Inbox className="h-8 w-8 text-muted-foreground/60" />
           </div>
-          <h3 className="text-xl font-bold text-foreground mb-2">{t("clipboard.content.noClipboardItems")}</h3>
-          <p className="text-muted-foreground text-center max-w-xs">
-            {t("clipboard.content.emptyDescription")}
-            <br />
-            {t("clipboard.content.emptyHint")}
-          </p>
+          <div className="text-center">
+            <h3 className="text-base font-semibold text-foreground mb-1">
+              {t("clipboard.content.noClipboardItems")}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {t("clipboard.content.emptyDescription")}
+            </p>
+          </div>
         </div>
       )}
       </div>
