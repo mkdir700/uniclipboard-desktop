@@ -10,17 +10,21 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 const Sidebar: React.FC = () => {
+  const { t } = useTranslation();
   const location = useLocation();
   const path = location.pathname;
 
   const navItems = [
-    { to: "/", icon: Home, label: "仪表板" },
-    { to: "/devices", icon: Monitor, label: "设备管理" },
+    { to: "/", icon: Home, label: t("nav.dashboard") },
+    { to: "/devices", icon: Monitor, label: t("nav.devices") },
   ];
 
-  const bottomItems = [{ to: "/settings", icon: Settings, label: "设置" }];
+  const bottomItems = [
+    { to: "/settings", icon: Settings, label: t("nav.settings") },
+  ];
 
   const NavButton: React.FC<{
     to: string;

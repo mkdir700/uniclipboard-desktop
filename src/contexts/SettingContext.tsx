@@ -6,6 +6,7 @@ import React, {
   ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import i18n, { normalizeLanguage, persistLanguage } from "@/i18n";
 
 // 内容类型接口
 interface ContentTypes {
@@ -27,6 +28,7 @@ interface GeneralSetting {
   auto_check_update: boolean;
   theme: ThemeMode;
   theme_color: string;
+  language: string;
 }
 
 // 同步设置接口
@@ -265,6 +267,15 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
       systemThemeMedia.removeEventListener("change", handleSystemThemeChange);
     };
   }, [setting?.general.theme, setting?.general.theme_color]);
+
+  // 监听语言变化并应用
+  useEffect(() => {
+    const next = normalizeLanguage(setting?.general?.language);
+    if (i18n.language !== next) {
+      i18n.changeLanguage(next);
+    }
+    persistLanguage(next);
+  }, [setting?.general?.language]);
 
   return (
     <SettingContext.Provider

@@ -2,16 +2,18 @@ import React, { useEffect, useState } from "react";
 import { Switch, Input, Button } from "@/components/ui";
 import { useSetting } from "@/contexts/SettingContext";
 import { setEncryptionPassword, getEncryptionPassword } from "@/api/security";
+import { useTranslation } from "react-i18next";
 
 const SecuritySection: React.FC = () => {
+  const { t } = useTranslation();
   const { setting, error, updateSecuritySetting } = useSetting();
 
-  // 本地状态
+  // Local state
   const [endToEndEncryption, setEndToEndEncryption] = useState(true);
   const [encryptionPassword, setEncryptionPasswordInput] = useState("");
   const [showPasswordInput, setShowPasswordInput] = useState(false);
 
-  // 当设置加载完成后，更新本地状态
+  // Update local state when settings are loaded
   useEffect(() => {
     if (setting) {
       setEndToEndEncryption(setting.security.end_to_end_encryption);
@@ -21,33 +23,33 @@ const SecuritySection: React.FC = () => {
     }
   }, [setting]);
 
-  // 处理端到端加密开关变化
+  // Handle end-to-end encryption toggle change
   const handleEndToEndEncryptionChange = (checked: boolean) => {
     const newValue = checked;
     setEndToEndEncryption(newValue);
     updateSecuritySetting({ end_to_end_encryption: newValue });
   };
 
-  // 处理加密密码保存
+  // Handle encryption password save
   const handleSavePassword = () => {
     setEncryptionPassword(encryptionPassword);
     setShowPasswordInput(false);
   };
 
-  // 如果有错误，显示错误信息
+  // Display error message if there is an error
   if (error) {
-    return <div className="text-red-500 py-4">加载设置失败: {error}</div>;
+    return <div className="text-red-500 py-4">{t("settings.sections.security.loadError")}: {error}</div>;
   }
 
   return (
     <>
-      {/* 端到端加密 */}
+      {/* End-to-end encryption */}
       <div className="py-2 rounded-lg px-2">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <h4 className="text-base font-medium">端到端加密</h4>
+            <h4 className="text-base font-medium">{t("settings.sections.security.endToEndEncryption.label")}</h4>
             <p className="text-sm text-muted-foreground">
-              启用后，所有同步内容将使用端到端加密传输
+              {t("settings.sections.security.endToEndEncryption.description")}
             </p>
           </div>
           <Switch
@@ -57,14 +59,14 @@ const SecuritySection: React.FC = () => {
         </div>
       </div>
 
-      {/* 加密口令 */}
+      {/* Encryption password */}
       <div className="py-2 rounded-lg px-2">
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <h4 className="text-base font-medium">加密口令</h4>
+              <h4 className="text-base font-medium">{t("settings.sections.security.encryptionPassword.label")}</h4>
               <p className="text-sm text-muted-foreground">
-                用于加解密数据
+                {t("settings.sections.security.encryptionPassword.description")}
               </p>
             </div>
             <Button
@@ -72,7 +74,7 @@ const SecuritySection: React.FC = () => {
               size="sm"
               onClick={() => setShowPasswordInput(!showPasswordInput)}
             >
-              {showPasswordInput ? "取消" : "修改"}
+              {showPasswordInput ? t("settings.sections.security.encryptionPassword.cancel") : t("settings.sections.security.encryptionPassword.modify")}
             </Button>
           </div>
 
@@ -82,14 +84,14 @@ const SecuritySection: React.FC = () => {
                 type="password"
                 value={encryptionPassword}
                 onChange={(e) => setEncryptionPasswordInput(e.target.value)}
-                placeholder="输入新的加密口令"
+                placeholder={t("settings.sections.security.encryptionPassword.placeholder")}
                 className="flex-1"
               />
               <Button
                 size="sm"
                 onClick={handleSavePassword}
               >
-                保存
+                {t("settings.sections.security.encryptionPassword.save")}
               </Button>
             </div>
           )}

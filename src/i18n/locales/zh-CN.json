@@ -1,0 +1,265 @@
+{
+  "common": {
+    "loading": "加载中..."
+  },
+  "nav": {
+    "dashboard": "仪表板",
+    "devices": "设备管理",
+    "settings": "设置"
+  },
+  "settings": {
+    "title": "设置",
+    "categories": {
+      "general": "通用设置",
+      "appearance": "外观设置",
+      "sync": "同步设置",
+      "security": "安全与隐私",
+      "network": "网络设置",
+      "storage": "存储管理",
+      "about": "关于"
+    },
+    "sections": {
+      "general": {
+        "title": "通用设置",
+        "startupTitle": "启动设置",
+        "autoStart": {
+          "label": "开机自启动",
+          "description": "系统启动时自动启动 Uniclipboard"
+        },
+        "silentStart": {
+          "label": "静默启动",
+          "description": "启动时不显示主界面，在后台运行"
+        },
+        "language": {
+          "title": "语言",
+          "label": "界面语言",
+          "description": "切换后立即生效"
+        }
+      },
+      "appearance": {
+        "title": "外观设置",
+        "themeMode": {
+          "title": "外观设置",
+          "light": "浅色",
+          "dark": "深色",
+          "system": "跟随系统"
+        },
+        "themeColor": {
+          "title": "主题色"
+        }
+      },
+      "sync": {
+        "title": "同步设置",
+        "autoSync": {
+          "label": "自动同步",
+          "description": "启用后，uniClipboard将自动同步您复制的内容到所有设备"
+        },
+        "syncFrequency": {
+          "label": "同步频率",
+          "description": "控制 uniClipboard 检查新内容的频率",
+          "realtime": "实时同步",
+          "30s": "每30秒",
+          "1m": "每分钟",
+          "5m": "每5分钟",
+          "15m": "每15分钟"
+        },
+        "maxFileSize": {
+          "label": "最大同步文件大小",
+          "description": "限制单个文件的最大同步大小",
+          "unit": "MB"
+        },
+        "loadError": "加载设置失败:"
+      },
+      "security": {
+        "title": "安全与隐私设置",
+        "endToEndEncryption": {
+          "label": "端到端加密",
+          "description": "启用后，所有同步内容将使用端到端加密传输"
+        },
+        "encryptionPassword": {
+          "label": "加密口令",
+          "description": "用于加解密数据",
+          "modify": "修改",
+          "cancel": "取消",
+          "save": "保存",
+          "placeholder": "输入新的加密口令"
+        },
+        "loadError": "加载设置失败:"
+      },
+      "network": {
+        "title": "网络设置",
+        "syncMethod": {
+          "label": "同步方式",
+          "description": "选择同步方式",
+          "lanFirst": "优先使用局域网同步 (推荐)",
+          "cloudOnly": "仅使用云端同步",
+          "lanOnly": "仅使用局域网同步"
+        },
+        "webserverPort": {
+          "label": "本机开放端口",
+          "description": "设置本机开放端口 (1024-65535)",
+          "errors": {
+            "invalid": "请输入有效的端口号",
+            "range": "端口号必须在 1024-65535 之间"
+          }
+        },
+        "customPeerDevice": {
+          "label": "自定义同步节点",
+          "description": "手动指定要同步的设备地址和端口",
+          "peerIp": {
+            "label": "节点 IP 地址",
+            "description": "输入要同步的设备 IPv4 地址",
+            "errors": {
+              "empty": "IP 地址不能为空",
+              "invalid": "请输入有效的 IPv4 地址"
+            }
+          },
+          "peerPort": {
+            "label": "节点端口",
+            "description": "输入要同步的设备端口 (1024-65535)",
+            "errors": {
+              "empty": "端口号不能为空",
+              "invalid": "请输入有效的端口号",
+              "range": "端口号必须在 1024-65535 之间"
+            }
+          }
+        },
+        "cloudServer": {
+          "label": "云服务器配置",
+          "badge": "即将推出",
+          "advanced": "高级选项",
+          "default": "使用默认云服务器"
+        },
+        "loadError": "加载设置失败:"
+      },
+      "storage": {
+        "title": "存储管理",
+        "autoClearHistory": {
+          "label": "自动清除历史记录",
+          "description": "定期自动清除剪贴板历史记录",
+          "never": "从不",
+          "daily": "每天",
+          "weekly": "每周",
+          "monthly": "每月",
+          "onExit": "每次退出"
+        },
+        "storageUsage": {
+          "label": "存储使用情况",
+          "usage": "已使用 {{percentage}}%"
+        },
+        "historyRetention": {
+          "label": "历史记录保留时间",
+          "description": "设置剪贴板历史记录的最长保留时间",
+          "days": "{{days}} 天"
+        },
+        "maxHistoryItems": {
+          "label": "最大历史记录数",
+          "description": "限制保存的剪贴板历史记录数量",
+          "items": "{{count}}条",
+          "unlimited": "无限制"
+        },
+        "clearHistory": {
+          "label": "历史记录",
+          "description": "清空所有剪贴板历史记录并释放存储空间",
+          "button": "清空历史记录",
+          "cleared": "历史记录已清空"
+        },
+        "loadError": "加载设置失败:"
+      },
+      "about": {
+        "title": "关于",
+        "appName": "UniClipboard",
+        "version": "版本 0.1.0",
+        "checkUpdate": "检查更新",
+        "copyright": "© 2025 UniClipboard Team. All rights reserved.",
+        "links": {
+          "privacyPolicy": "隐私政策",
+          "termsOfService": "使用条款",
+          "helpCenter": "帮助中心"
+        }
+      }
+    }
+  },
+  "onboarding": {
+    "preparingDashboard": "准备您的仪表板..."
+  },
+  "language": {
+    "zh-CN": "简体中文",
+    "en-US": "English"
+  },
+  "dashboard": {
+    "logs": {
+      "loadingClipboard": "开始加载剪贴板记录和统计数据...",
+      "filterChanged": "filter变化，更新ref值:",
+      "settingGlobalListener": "设置全局监听器...",
+      "startingBackendListener": "启动后端剪贴板新内容监听...",
+      "backendListenerStarted": "后端剪贴板新内容监听已启动",
+      "listeningToClipboardEvents": "开始监听剪贴板新内容事件...",
+      "clearingPreviousListener": "清除之前的监听器",
+      "newClipboardEvent": "收到新剪贴板内容事件:",
+      "ignoringDuplicateEvent": "忽略短时间内的重复事件",
+      "listenerAlreadyActive": "监听器已经处于活跃状态，跳过设置",
+      "globalListenerExists": "全局监听器已存在，无需再次设置",
+      "setupListenerFailed": "设置监听器失败:",
+      "componentUnmounting": "组件卸载，但保持全局监听器活跃"
+    },
+    "constants": {
+      "debounceDelay": "防抖延迟时间（毫秒）"
+    }
+  },
+  "header": {
+    "searchPlaceholder": "搜索剪贴板内容...",
+    "filters": {
+      "all": "全部",
+      "favorited": "收藏",
+      "text": "文本",
+      "image": "图片",
+      "link": "链接",
+      "file": "文件",
+      "code": "代码"
+    }
+  },
+  "clipboard": {
+    "content": {
+      "filterCondition": "筛选条件:",
+      "queryResults": "查询结果:",
+      "convertedItems": "转换后的显示项目:",
+      "noItemsFound": "没有查询到任何项目",
+      "noClipboardItems": "没有剪贴板项",
+      "emptyDescription": "当您复制内容时，它们会显示在这里。",
+      "emptyHint": "试着复制一些文本或图片吧！",
+      "logs": {
+        "copyItem": "复制项目 ID:",
+        "copyToClipboardFailed": "复制到剪贴板失败",
+        "convertingItem": "转换为显示项目:"
+      }
+    },
+    "item": {
+      "characters": "字符",
+      "link": "链接",
+      "image": "图片",
+      "unknownContent": "未知内容",
+      "expand": "展开",
+      "collapse": "收起",
+      "actions": {
+        "copy": "复制",
+        "favorite": "收藏",
+        "unfavorite": "取消收藏",
+        "delete": "删除",
+        "more": "更多"
+      },
+      "altText": {
+        "clipboardImage": "剪贴板图片",
+        "copyButton": "复制",
+        "favoriteButton": "收藏"
+      }
+    },
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{minutes}}分钟前",
+      "hoursAgo": "{{hours}}小时前",
+      "daysAgo": "{{days}}天前"
+    }
+  }
+}
+

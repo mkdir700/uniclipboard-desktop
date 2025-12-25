@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { useSetting, ThemeMode } from "@/contexts/SettingContext";
 import { Sun, Moon, Monitor, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 export default function AppearanceSection() {
+  const { t } = useTranslation();
   const { setting, updateGeneralSetting } = useSetting();
   const [theme, setTheme] = useState<ThemeMode>("system");
 
@@ -18,7 +20,7 @@ export default function AppearanceSection() {
       await updateGeneralSetting({ theme: newTheme });
       setTheme(newTheme);
     } catch (error) {
-      console.error("更改主题失败:", error);
+      console.error("Failed to change theme:", error);
     }
   };
 
@@ -69,16 +71,16 @@ export default function AppearanceSection() {
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        <h4 className="text-base font-medium px-2">外观设置</h4>
+        <h4 className="text-base font-medium px-2">{t("settings.sections.appearance.themeMode.title")}</h4>
         <div className="grid grid-cols-3 gap-4 px-2">
-          <ThemeOption value="light" icon={Sun} label="浅色" />
-          <ThemeOption value="dark" icon={Moon} label="深色" />
-          <ThemeOption value="system" icon={Monitor} label="跟随系统" />
+          <ThemeOption value="light" icon={Sun} label={t("settings.sections.appearance.themeMode.light")} />
+          <ThemeOption value="dark" icon={Moon} label={t("settings.sections.appearance.themeMode.dark")} />
+          <ThemeOption value="system" icon={Monitor} label={t("settings.sections.appearance.themeMode.system")} />
         </div>
       </div>
 
       <div className="space-y-4">
-        <h4 className="text-base font-medium px-2">主题色</h4>
+        <h4 className="text-base font-medium px-2">{t("settings.sections.appearance.themeColor.title")}</h4>
         <div className="grid grid-cols-5 gap-4 px-2">
           {[
             { name: "catppuccin", color: "#cba6f7" },

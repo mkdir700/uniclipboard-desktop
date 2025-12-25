@@ -21,6 +21,7 @@ import {
 } from "@/store/slices/clipboardSlice";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTranslation } from "react-i18next";
 
 interface DisplayClipboardItem {
   id: string;
@@ -43,7 +44,9 @@ interface ClipboardContentProps {
 }
 
 const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
-  // 使用 Redux 状态和 dispatch
+  const { t } = useTranslation();
+
+  // Use Redux state and dispatch
   const dispatch = useAppDispatch();
   const {
     items: reduxItems,
@@ -51,7 +54,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     error,
   } = useAppSelector((state) => state.clipboard);
 
-  // 本地状态用于转换后的显示项目
+  // Local state for converted display items
   const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(
     []
   );
@@ -61,8 +64,8 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
   // 监听 Redux 中的 items 变化，转换为显示项目
   useEffect(() => {
-    console.log("筛选条件:", filter);
-    console.log("查询结果:", reduxItems);
+    console.log(t("clipboard.content.filterCondition"), filter);
+    console.log(t("clipboard.content.queryResults"), reduxItems);
 
     if (reduxItems && reduxItems.length > 0) {
       let items: DisplayClipboardItem[] = reduxItems.map(convertToDisplayItem);
@@ -70,39 +73,39 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
         items = items.filter((it) => it.isFavorited);
       }
       setClipboardItems(items);
-      console.log("转换后的显示项目:", items);
+      console.log(t("clipboard.content.convertedItems"), items);
     } else {
       setClipboardItems([]);
-      console.log("没有查询到任何项目");
+      console.log(t("clipboard.content.noItemsFound"));
     }
-  }, [reduxItems, filter]);
+  }, [reduxItems, filter, t]);
 
-  // 将剪贴板项目转换为显示项目
+  // Convert clipboard item to display item
   const convertToDisplayItem = (
     item: ClipboardItemResponse
   ): DisplayClipboardItem => {
-    console.log("转换为显示项目:", item);
-    // 获取适合UI显示的类型
+    console.log(t("clipboard.content.logs.convertingItem"), item);
+    // Get type suitable for UI display
     const type = getDisplayType(item.item);
 
-    // 格式化时间
-    const activeTime = new Date(item.active_time * 1000); // 转换为毫秒
+    // Format time
+    const activeTime = new Date(item.active_time * 1000); // Convert to milliseconds
     const now = new Date();
     const diffMs = now.getTime() - activeTime.getTime();
     const diffMins = Math.round(diffMs / 60000);
 
     let timeString: string;
     if (diffMins < 1) {
-      timeString = "刚刚";
+      timeString = t("clipboard.time.justNow");
     } else if (diffMins < 60) {
-      timeString = `${diffMins}分钟前`;
+      timeString = t("clipboard.time.minutesAgo", { minutes: diffMins });
     } else if (diffMins < 1440) {
-      timeString = `${Math.floor(diffMins / 60)}小时前`;
+      timeString = t("clipboard.time.hoursAgo", { hours: Math.floor(diffMins / 60) });
     } else {
-      timeString = `${Math.floor(diffMins / 1440)}天前`;
+      timeString = t("clipboard.time.daysAgo", { days: Math.floor(diffMins / 1440) });
     }
 
-    // 创建显示项目
+    // Create display item
     return {
       id: item.id,
       type,
@@ -128,11 +131,11 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   // 处理复制到剪贴板
   const handleCopyItem = async (itemId: string) => {
     try {
-      console.log(`复制项目 ID: ${itemId}`);
+      console.log(`${t("clipboard.content.logs.copyItem")} ${itemId}`);
       const result = await dispatch(copyToClipboard(itemId)).unwrap();
       return result.success;
     } catch (err) {
-      console.error("复制到剪贴板失败", err);
+      console.error(t("clipboard.content.logs.copyToClipboardFailed"), err);
       return false;
     }
   };
@@ -276,7 +279,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     setLastSelectedIndex(null);
   };
 
-  // 骨架屏加载状态
+  // Skeleton loading state
   if (loading && clipboardItems.length === 0) {
     return (
       <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
@@ -321,11 +324,11 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
                <Inbox className="h-12 w-12 text-primary/80" />
             </div>
           </div>
-          <h3 className="text-xl font-bold text-foreground mb-2">没有剪贴板项</h3>
+          <h3 className="text-xl font-bold text-foreground mb-2">{t("clipboard.content.noClipboardItems")}</h3>
           <p className="text-muted-foreground text-center max-w-xs">
-            当您复制内容时，它们会显示在这里。
+            {t("clipboard.content.emptyDescription")}
             <br />
-            试着复制一些文本或图片吧！
+            {t("clipboard.content.emptyHint")}
           </p>
         </div>
       )}
