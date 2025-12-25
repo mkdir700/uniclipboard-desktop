@@ -321,16 +321,16 @@ const PairingModal: React.FC<PairingModalProps> = ({
                       : "max-h-0 opacity-0"
                   }`}
                 >
-                  <div className="flex items-start gap-3 p-3 bg-destructive/10 rounded-lg">
+                  <div className="flex items-start gap-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
                     <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-destructive">
+                      <p className="text-sm text-destructive font-medium">
                         {connectionState.message || "连接失败"}
                       </p>
                     </div>
                     <button
                       onClick={() => setShowErrorMessage(false)}
-                      className="flex-shrink-0 text-destructive/60 hover:text-destructive transition-colors"
+                      className="flex-shrink-0 text-destructive/70 hover:text-destructive transition-colors"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -407,7 +407,7 @@ const PairingModal: React.FC<PairingModalProps> = ({
                             disabled={connectionState.status === "connecting"}
                             className={`w-full px-3 py-2 bg-background border rounded-lg text-center font-mono focus:outline-none focus:ring-2 ${
                               index < 3 && selectedInterfaceIndex >= 0
-                                ? "border-muted text-muted-foreground cursor-default"
+                                ? "border-border text-foreground bg-muted/50 cursor-default"
                                 : "border-input text-foreground focus:ring-ring"
                             } ${
                               connectionState.status === "connecting"
