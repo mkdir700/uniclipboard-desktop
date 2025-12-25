@@ -149,6 +149,21 @@
 @import "./themes/t3chat.css";
 @import "./themes/zinc.css";
 
+/* 玻璃态效果 */
+@layer utilities {
+  .glass-weak {
+    @apply bg-background/60 backdrop-blur-sm;
+  }
+
+  .glass {
+    @apply bg-background/70 backdrop-blur-md;
+  }
+
+  .glass-strong {
+    @apply bg-background/80 backdrop-blur-lg;
+  }
+}
+
 @layer base {
   body {
     letter-spacing: var(--tracking-normal);

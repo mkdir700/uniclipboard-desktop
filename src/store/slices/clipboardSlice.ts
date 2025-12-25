@@ -142,17 +142,17 @@ const clipboardSlice = createSlice({
       state.error = action.payload as string;
     });
 
-    // 处理收藏状态切换 - 暂时注释掉
-    // builder.addCase(toggleFavoriteItem.fulfilled, (state, action) => {
-    //   const { id, isFavorited } = action.payload;
-    //   const item = state.items.find(item => item.id === id);
-    //   if (item) {
-    //     item.is_favorited = isFavorited;
-    //   }
-    // });
-    // builder.addCase(toggleFavoriteItem.rejected, (state, action) => {
-    //   state.error = action.payload as string;
-    // });
+    // 处理收藏状态切换
+    builder.addCase(toggleFavoriteItem.fulfilled, (state, action) => {
+      const { id, isFavorited } = action.payload;
+      const item = state.items.find(item => item.id === id);
+      if (item) {
+        item.is_favorited = isFavorited;
+      }
+    });
+    builder.addCase(toggleFavoriteItem.rejected, (state, action) => {
+      state.error = action.payload as string;
+    });
 
     // 处理清空剪贴板
     builder.addCase(clearAllItems.fulfilled, (state) => {
