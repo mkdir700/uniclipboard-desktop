@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +27,7 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   onConfirm,
   count,
 }) => {
+  const { t } = useTranslation();
   const [isDeleting, setIsDeleting] = useState(false);
 
   // 当对话框打开时，激活 modal 作用域
@@ -78,17 +80,15 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>确认删除</AlertDialogTitle>
+          <AlertDialogTitle>{t("clipboard:confirmDeleteTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {count > 1
-              ? `确定要删除选中的 ${count} 项吗？此操作无法撤销。`
-              : "确定要删除选中的项目吗？此操作无法撤销。"}
+            {t("clipboard:confirmDeleteDescription", { count })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting} onClick={handleCancel}>
             <span className="flex items-center gap-1.5">
-              取消
+              {t("clipboard:cancelLabel")}
               <Kbd>ESC</Kbd>
             </span>
           </AlertDialogCancel>
@@ -101,10 +101,10 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             {isDeleting ? (
-              "删除中..."
+              t("clipboard:deletingLabel")
             ) : (
               <span className="flex items-center gap-1.5">
-                删除
+                {t("clipboard:deleteLabel")}
                 <span className="flex items-center gap-0.5">
                   <Kbd>D</Kbd>
                   <span className="text-xs text-destructive-foreground/70 mx-0.5">/</span>
