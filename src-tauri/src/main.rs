@@ -169,6 +169,13 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
             #[cfg(target_os = "macos")]
             let win_builder = win_builder.title_bar_style(TitleBarStyle::Overlay);
 
+            // Use a custom title bar on Windows to match the frameless design in the frontend
+            #[cfg(target_os = "windows")]
+            let win_builder = win_builder
+                .title_bar_style(TitleBarStyle::Overlay)
+                .decorations(false)
+                .shadow(true);
+
             // 如果启用了静默启动，则初始不可见
             let win_builder = if user_setting.general.silent_start {
                 win_builder.visible(false)
