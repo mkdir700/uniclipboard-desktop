@@ -38,6 +38,7 @@ async-trait = "0.1.82"  # 异步特性支持
 reqwest_dav = "0.1.13"  # WebDAV客户端
 warp = "0.3.7"  # Web服务器框架
 local-ip-address = "0.6.4"  # 获取本地IP地址
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }  # HTTP客户端，用于内容下载
 
 # ===== 加密/安全 =====
 sha2 = "0.10.8"  # SHA-2哈希函数
