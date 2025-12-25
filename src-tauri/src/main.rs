@@ -163,7 +163,8 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
 
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("")
-                .inner_size(800.0, 600.0);
+                .inner_size(800.0, 600.0)
+                .min_inner_size(800.0, 600.0);
 
             // Use a custom title bar on Windows to match the frameless design in the frontend
             #[cfg(target_os = "windows")]
