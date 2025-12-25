@@ -42,6 +42,7 @@
     "lucide-react": "^0.562.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hotkeys-hook": "^5.2.1",
     "react-i18next": "^16.5.0",
     "react-icons": "^5.5.0",
     "react-redux": "^9.2.0",

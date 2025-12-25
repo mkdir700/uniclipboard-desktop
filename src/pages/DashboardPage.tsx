@@ -4,6 +4,7 @@ import ClipboardContent from "@/components/clipboard/ClipboardContent";
 import { Filter, OrderBy } from "@/api/clipboardItems";
 import { useAppDispatch } from "@/store/hooks";
 import { fetchClipboardItems } from "@/store/slices/clipboardSlice";
+import { useShortcutScope } from "@/hooks/useShortcutScope";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
@@ -26,6 +27,9 @@ const DashboardPage: React.FC = () => {
   const { t } = useTranslation();
   const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.All);
   const dispatch = useAppDispatch();
+
+  // 设置当前页面作用域为 clipboard
+  useShortcutScope("clipboard");
 
   // Use ref to store the latest filter value
   const currentFilterRef = useRef<Filter>(currentFilter);
