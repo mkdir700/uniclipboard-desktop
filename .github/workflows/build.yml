@@ -78,7 +78,7 @@ jobs:
         run: bun install
       
       - name: build Tauri app
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v0
         with:
           args: ${{ matrix.args }}
       
