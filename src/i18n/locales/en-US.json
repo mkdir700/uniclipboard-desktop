@@ -66,7 +66,11 @@
         "maxFileSize": {
           "label": "Max file size",
           "description": "Limit the maximum size of a single file to sync",
-          "unit": "MB"
+          "unit": "MB",
+          "errors": {
+            "invalid": "Please enter a valid number",
+            "range": "Must be between 1 and 50 MB"
+          }
         },
         "loadError": "Failed to load settings:"
       },

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   Switch,
   Label,
-  Slider,
+  Input,
 
   Select,
   SelectContent,
@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui";
 import { useSetting } from "../../contexts/SettingContext";
-import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 
 const SyncSection: React.FC = () => {
@@ -23,7 +22,8 @@ const SyncSection: React.FC = () => {
   const [autoSync, setAutoSync] = useState(true);
   const [syncFrequency, setSyncFrequency] = useState("realtime");
 
-  const [maxFileSize, setMaxFileSize] = useState([10]);
+  const [maxFileSize, setMaxFileSize] = useState(10);
+  const [maxFileSizeError, setMaxFileSizeError] = useState<string | null>(null);
 
   // Sync frequency options
   const syncFrequencyOptions = [
@@ -40,7 +40,7 @@ const SyncSection: React.FC = () => {
       setAutoSync(setting.sync.auto_sync);
       setSyncFrequency(setting.sync.sync_frequency);
 
-      setMaxFileSize([setting.sync.max_file_size]);
+      setMaxFileSize(setting.sync.max_file_size);
     }
   }, [setting]);
 
@@ -57,9 +57,35 @@ const SyncSection: React.FC = () => {
   };
 
   // Handle max file size change
-  const handleMaxFileSizeChange = (value: number[]) => {
-    setMaxFileSize(value);
-    updateSyncSetting({ max_file_size: value[0] });
+  const handleMaxFileSizeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    // If input is empty, allow user to continue typing
+    if (!value.trim()) {
+      setMaxFileSizeError(null);
+      setMaxFileSize(0);
+      return;
+    }
+
+    // Check if it's a number
+    if (!/^\d+$/.test(value)) {
+      setMaxFileSizeError(t("settings.sections.sync.maxFileSize.errors.invalid"));
+      setMaxFileSize(parseInt(value) || 0);
+      return;
+    }
+
+    const size = parseInt(value);
+    setMaxFileSize(size);
+
+    // Validate range (1-50 MB)
+    if (size < 1 || size > 50) {
+      setMaxFileSizeError(t("settings.sections.sync.maxFileSize.errors.range"));
+      return;
+    }
+
+    // Validation passed
+    setMaxFileSizeError(null);
+    updateSyncSetting({ max_file_size: size });
   };
 
   // Show error message if any
@@ -110,38 +136,29 @@ const SyncSection: React.FC = () => {
         </Select>
       </div>
 
-      {/* Max file size slider */}
-      <div className="py-2 rounded-lg px-2 space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
+      {/* Max file size input */}
+      <div className="py-2 rounded-lg px-2">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
             <Label className="text-base">{t("settings.sections.sync.maxFileSize.label")}</Label>
-            <span className="text-sm text-muted-foreground">
-              {maxFileSize[0]} {t("settings.sections.sync.maxFileSize.unit")}
-            </span>
+            <p className="text-sm text-muted-foreground">
+              {t("settings.sections.sync.maxFileSize.description")}
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {t("settings.sections.sync.maxFileSize.description")}
-          </p>
-        </div>
-        <Slider
-          min={1}
-          max={50}
-          step={1}
-          value={maxFileSize}
-          onValueChange={handleMaxFileSizeChange}
-          className="w-full"
-        />
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>1MB</span>
-          <span className={cn(maxFileSize[0] >= 10 && "text-foreground font-medium")}>
-            10MB
-          </span>
-          <span className={cn(maxFileSize[0] >= 25 && "text-foreground font-medium")}>
-            25MB
-          </span>
-          <span className={cn(maxFileSize[0] >= 50 && "text-foreground font-medium")}>
-            50MB
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
+              <Input
+                type="text"
+                value={maxFileSize.toString()}
+                onChange={handleMaxFileSizeChange}
+                className={maxFileSizeError ? "border-red-500 w-32" : "w-32"}
+              />
+              <span className="text-sm text-muted-foreground">MB</span>
+            </div>
+            {maxFileSizeError && (
+              <p className="text-xs text-red-500">{maxFileSizeError}</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
