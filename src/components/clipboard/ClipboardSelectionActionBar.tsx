@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 interface ClipboardSelectionActionBarProps {
@@ -18,12 +19,6 @@ interface ClipboardSelectionActionBarProps {
   onDelete: () => Promise<void> | void;
   onClearSelection?: () => void;
 }
-
-const Kbd: React.FC<React.PropsWithChildren> = ({ children }) => (
-  <kbd className="inline-flex h-5 items-center justify-center rounded border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
-    {children}
-  </kbd>
-);
 
 const ClipboardSelectionActionBar: React.FC<
   ClipboardSelectionActionBarProps

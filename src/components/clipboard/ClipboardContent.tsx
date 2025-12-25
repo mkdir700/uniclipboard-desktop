@@ -3,6 +3,7 @@ import { Inbox } from "lucide-react";
 import ClipboardItem from "./ClipboardItem";
 import { useShortcut } from "@/hooks/useShortcut";
 import ClipboardSelectionActionBar from "./ClipboardSelectionActionBar";
+import DeleteConfirmDialog from "./DeleteConfirmDialog";
 import {
   getDisplayType,
   ClipboardItemResponse,
@@ -62,6 +63,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // 注册 ESC 取消选择快捷键
   useShortcut({
@@ -307,10 +309,10 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
   const handleBatchDelete = async () => {
     if (selectedItems.length === 0) return;
-    const count = selectedItems.length;
-    const ok = window.confirm(`确定要删除选中的 ${count} 项吗？`);
-    if (!ok) return;
+    setDeleteDialogOpen(true);
+  };
 
+  const handleConfirmDelete = async () => {
     for (const it of selectedItems) {
       try {
         await dispatch(removeClipboardItem(it.id)).unwrap();
@@ -386,6 +388,13 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
           setSelectedIds(new Set());
           setLastSelectedIndex(null);
         }}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        count={selectedItems.length}
       />
     </div>
   );

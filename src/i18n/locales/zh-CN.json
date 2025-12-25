@@ -263,7 +263,13 @@
       "minutesAgo": "{{minutes}}分钟前",
       "hoursAgo": "{{hours}}小时前",
       "daysAgo": "{{days}}天前"
-    }
+    },
+    "confirmDeleteTitle": "确认删除",
+    "confirmDeleteDescription_one": "确定要删除选中的项目吗？此操作无法撤销。",
+    "confirmDeleteDescription_other": "确定要删除选中的 {{count}} 项吗？此操作无法撤销。",
+    "cancelLabel": "取消",
+    "deleteLabel": "删除",
+    "deletingLabel": "删除中..."
   }
 }
 
