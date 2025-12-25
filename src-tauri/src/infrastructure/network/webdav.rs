@@ -521,3 +521,116 @@ fn map_status_code(code: StatusCode) -> WebDavError {
         _ => WebDavError::UnexpectedStatus(code),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+    use mockito::Server;
+
+    fn build_client(host: String, base_path: &str) -> WebDAVClient {
+        let agent = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let client = ClientBuilder::new()
+            .set_agent(agent)
+            .set_host(host)
+            .set_auth(Auth::Anonymous)
+            .build()
+            .unwrap();
+        WebDAVClient {
+            client,
+            encryptor: Encryptor::from_key(&[0u8; 32]),
+            base_path: base_path.to_string(),
+            retry_attempts: 0,
+            retry_backoff: Duration::from_millis(1),
+        }
+    }
+
+    fn sample_propfind_response() -> String {
+        r#"<?xml version="1.0" encoding="utf-8"?>
+        <D:multistatus xmlns:D="DAV:">
+            <D:response>
+                <D:href>/folder</D:href>
+                <D:propstat>
+                    <D:status>HTTP/1.1 200 OK</D:status>
+                    <D:prop>
+                        <D:getlastmodified>Wed, 10 Apr 2019 14:00:00 GMT</D:getlastmodified>
+                        <D:resourcetype>
+                            <D:collection/>
+                        </D:resourcetype>
+                        <D:getetag>"root-etag"</D:getetag>
+                        <D:getcontenttype>httpd/unix-directory</D:getcontenttype>
+                    </D:prop>
+                </D:propstat>
+            </D:response>
+            <D:response>
+                <D:href>/folder/latest.bin</D:href>
+                <D:propstat>
+                    <D:status>HTTP/1.1 200 OK</D:status>
+                    <D:prop>
+                        <D:getlastmodified>Thu, 11 Apr 2019 14:00:00 GMT</D:getlastmodified>
+                        <D:resourcetype/>
+                        <D:getetag>"latest-etag"</D:getetag>
+                        <D:getcontenttype>application/octet-stream</D:getcontenttype>
+                        <D:getcontentlength>5</D:getcontentlength>
+                    </D:prop>
+                </D:propstat>
+            </D:response>
+        </D:multistatus>
+        "#
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn fetch_latest_file_uses_depth_one_and_decrypts_response() {
+        let mut server = Server::new_async().await;
+        let propfind_body = sample_propfind_response();
+        let list_mock = server
+            .mock("PROPFIND", "/folder")
+            .match_header("depth", "1")
+            .with_status(207)
+            .with_header("content-type", "application/xml; charset=utf-8")
+            .with_body(propfind_body)
+            .create_async()
+            .await;
+
+        let key = [42u8; 32];
+        let encryptor = Encryptor::from_key(&key);
+        let payload = Payload::new_text(
+            Bytes::from_static(b"hello"),
+            "device".to_string(),
+            Utc::now(),
+        );
+        let encrypted_body = encryptor.encrypt(payload.to_json().as_bytes()).unwrap();
+        let get_mock = server
+            .mock("GET", "/folder/latest.bin")
+            .with_status(200)
+            .with_body(encrypted_body)
+            .create_async()
+            .await;
+
+        let mut client = build_client(server.url(), "/");
+        client.encryptor = Encryptor::from_key(&key);
+
+        let result = client
+            .fetch_latest_file("folder".to_string())
+            .await
+            .expect("latest file should be fetched");
+
+        list_mock.assert_async().await;
+        get_mock.assert_async().await;
+        assert_eq!(payload, result);
+    }
+
+    #[test]
+    fn full_path_respects_segment_boundaries() {
+        let client = build_client("http://example.com".to_string(), "/foo");
+        let unrelated = client.full_path("foobar/file.bin");
+        assert_eq!(unrelated, "/foo/foobar/file.bin");
+
+        let already_prefixed = client.full_path("foo/bar.bin");
+        assert_eq!(already_prefixed, "/foo/bar.bin");
+    }
+}
