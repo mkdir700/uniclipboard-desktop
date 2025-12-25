@@ -5,6 +5,7 @@ use crate::config::Setting;
 use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::domain::device::Device;
 use crate::infrastructure::web::handlers::message_handler::MessageSource;
+use crate::infrastructure::connection::PendingConnectionsManager;
 use crate::message::WebSocketMessage;
 use anyhow::Result;
 use futures::future::join_all;
@@ -31,33 +32,43 @@ pub struct ConnectionManager {
     listen_new_devices_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     try_connect_offline_devices_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     user_setting: Setting,
+    /// 待处理连接请求管理器
+    pub pending_connections: Arc<PendingConnectionsManager>,
 }
 
 impl ConnectionManager {
     pub fn new() -> Self {
         let (clipboard_message_sync_sender, _) = broadcast::channel(100);
+        let pending_connections = Arc::new(PendingConnectionsManager::new());
         Self {
             incoming: IncomingConnectionManager::new(),
-            outgoing: OutgoingConnectionManager::new(),
+            outgoing: OutgoingConnectionManager::with_pending_connections(
+                pending_connections.clone(),
+            ),
             addr_device_id_map: Arc::new(RwLock::new(HashMap::new())),
             clipboard_message_sync_sender: Arc::new(clipboard_message_sync_sender),
             listen_new_devices_handle: Arc::new(RwLock::new(None)),
             try_connect_offline_devices_handle: Arc::new(RwLock::new(None)),
             user_setting: Setting::get_instance(),
+            pending_connections,
         }
     }
 
     /// 创建一个新的 ConnectionManager 实例，使用指定的配置
     pub fn with_user_setting(user_setting: Setting) -> Self {
         let (clipboard_message_sync_sender, _) = broadcast::channel(100);
+        let pending_connections = Arc::new(PendingConnectionsManager::new());
         Self {
             incoming: IncomingConnectionManager::new(),
-            outgoing: OutgoingConnectionManager::new(),
+            outgoing: OutgoingConnectionManager::with_pending_connections(
+                pending_connections.clone(),
+            ),
             addr_device_id_map: Arc::new(RwLock::new(HashMap::new())),
             clipboard_message_sync_sender: Arc::new(clipboard_message_sync_sender),
             listen_new_devices_handle: Arc::new(RwLock::new(None)),
             try_connect_offline_devices_handle: Arc::new(RwLock::new(None)),
             user_setting,
+            pending_connections,
         }
     }
 
@@ -211,9 +222,25 @@ impl ConnectionManager {
         *self.try_connect_offline_devices_handle.write().await =
             Some(self.try_connect_offline_devices().await);
 
+        // 启动待处理连接清理任务
+        self.start_pending_connections_cleanup().await;
+
         info!("Connection manager started");
 
         Ok(())
+    }
+
+    /// 启动待处理连接清理任务
+    async fn start_pending_connections_cleanup(&self) {
+        let pending_connections = self.pending_connections.clone();
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                // 清理超过 60 秒的过期出站请求
+                pending_connections.cleanup_expired_outgoing(60).await;
+            }
+        });
     }
 
     /// 停止
@@ -228,6 +255,9 @@ impl ConnectionManager {
         if let Some(handle) = self.try_connect_offline_devices_handle.write().await.take() {
             handle.abort();
         }
+
+        // 清空所有待处理连接
+        self.pending_connections.clear_all().await;
 
         self.outgoing.disconnect_all().await;
         self.incoming.disconnect_all().await;

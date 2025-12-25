@@ -147,6 +147,82 @@ where
     EVENT_BUS.subscribe(callback)
 }
 
+/// 连接请求事件
+#[derive(Clone)]
+pub struct ConnectionRequestEvent {
+    /// 请求方设备 ID
+    pub requester_device_id: String,
+    /// 请求方 IP 地址
+    pub requester_ip: String,
+    /// 请求方设备别名（可选）
+    pub requester_alias: Option<String>,
+    /// 请求方平台（可选）
+    pub requester_platform: Option<String>,
+}
+
+/// 便捷函数：发布连接请求事件
+pub fn publish_connection_request(
+    requester_device_id: String,
+    requester_ip: String,
+    requester_alias: Option<String>,
+    requester_platform: Option<String>,
+) {
+    let event = ConnectionRequestEvent {
+        requester_device_id,
+        requester_ip,
+        requester_alias,
+        requester_platform,
+    };
+
+    EVENT_BUS.publish(event);
+}
+
+/// 便捷函数：订阅连接请求事件
+pub fn subscribe_connection_request<F>(callback: F) -> ListenerId
+where
+    F: Fn(&ConnectionRequestEvent) + Send + Sync + 'static,
+{
+    EVENT_BUS.subscribe(callback)
+}
+
+/// 连接响应事件
+#[derive(Clone)]
+pub struct ConnectionResponseEvent {
+    /// 是否接受连接
+    pub accepted: bool,
+    /// 响应方设备 ID
+    pub responder_device_id: String,
+    /// 响应方 IP 地址（可选）
+    pub responder_ip: Option<String>,
+    /// 响应方设备别名（可选）
+    pub responder_alias: Option<String>,
+}
+
+/// 便捷函数：发布连接响应事件
+pub fn publish_connection_response(
+    accepted: bool,
+    responder_device_id: String,
+    responder_ip: Option<String>,
+    responder_alias: Option<String>,
+) {
+    let event = ConnectionResponseEvent {
+        accepted,
+        responder_device_id,
+        responder_ip,
+        responder_alias,
+    };
+
+    EVENT_BUS.publish(event);
+}
+
+/// 便捷函数：订阅连接响应事件
+pub fn subscribe_connection_response<F>(callback: F) -> ListenerId
+where
+    F: Fn(&ConnectionResponseEvent) + Send + Sync + 'static,
+{
+    EVENT_BUS.subscribe(callback)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

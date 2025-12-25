@@ -491,4 +491,8 @@ impl UniClipboard {
     pub fn get_local_clipboard(&self) -> Arc<dyn LocalClipboardTrait> {
         self.local_manager.clipboard.clone()
     }
+
+    pub fn get_connection_manager(&self) -> Arc<ConnectionManager> {
+        self.connection_manager.clone()
+    }
 }

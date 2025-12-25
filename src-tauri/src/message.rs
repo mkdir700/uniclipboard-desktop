@@ -11,6 +11,7 @@ use twox_hash::xxh3::hash64;
 use crate::application::file_service::ContentProcessorService;
 use crate::domain::clipboard_metadata::ClipboardMetadata;
 use crate::domain::device::{Device, DeviceStatus};
+use crate::domain::network::{ConnectionRequestMessage, ConnectionResponseMessage};
 use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord;
 
@@ -349,6 +350,8 @@ pub enum WebSocketMessage {
     DeviceListSync(DevicesSyncMessage),
     Register(RegisterDeviceMessage),
     Unregister(String),
+    ConnectionRequest(ConnectionRequestMessage),
+    ConnectionResponse(ConnectionResponseMessage),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

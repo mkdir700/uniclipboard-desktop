@@ -2,8 +2,29 @@ use chrono::Local;
 use env_logger::{Builder, Env};
 use std::io::Write;
 
+/// 判断是否为开发环境
+fn is_development() -> bool {
+    // 通过环境变量或编译时特性来判断
+    // 1. 优先检查环境变量 UNICLIPBOARD_ENV
+    if let Ok(env_val) = std::env::var("UNICLIPBOARD_ENV") {
+        return env_val == "development";
+    }
+    // 2. 检查 debug_assertions 是否启用（编译时特性）
+    #[cfg(debug_assertions)]
+    {
+        return true;
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        return false;
+    }
+}
+
 pub fn init() {
-    Builder::from_env(Env::default().default_filter_or("debug"))
+    // 根据环境设置默认日志级别
+    let default_log_level = if is_development() { "debug" } else { "info" };
+
+    Builder::from_env(Env::default().default_filter_or(default_log_level))
         .format(|buf, record| {
             let mut style = buf.style();
             let level_style = match record.level() {

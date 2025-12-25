@@ -1,17 +1,48 @@
 import React, { useState, useRef, useEffect } from "react";
 import { DeviceList, DeviceHeader } from "@/components";
 import { DeviceTab } from "@/components/device/Header";
-import { PairingModal } from "@/components/device";
-
+import { PairingModal, ConnectionRequestModal } from "@/components/device";
+import {
+  onConnectionRequest,
+  type ConnectionRequestInfo,
+} from "@/api/deviceConnection";
 
 const DevicesPage: React.FC = () => {
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [activeTab, setActiveTab] = useState<DeviceTab>("connected");
-  
+
+  // 连接请求相关状态
+  const [pendingRequest, setPendingRequest] = useState<ConnectionRequestInfo | null>(null);
+  const unlistenRefRef = useRef<(() => void) | null>(null);
+
   // Refs for scrolling
   const connectedRef = useRef<HTMLDivElement>(null);
   const requestsRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // 设置连接请求监听
+    setupConnectionRequestListener();
+
+    return () => {
+      // 清理事件监听
+      if (unlistenRefRef.current) {
+        unlistenRefRef.current();
+      }
+    };
+  }, []);
+
+  const setupConnectionRequestListener = async () => {
+    try {
+      const unlisten = await onConnectionRequest((request) => {
+        console.log("Received connection request:", request);
+        setPendingRequest(request);
+      });
+      unlistenRefRef.current = unlisten;
+    } catch (error) {
+      console.error("Failed to setup connection request listener:", error);
+    }
+  };
 
   const handleAddDevice = () => {
     setShowPairingModal(true);
@@ -19,6 +50,15 @@ const DevicesPage: React.FC = () => {
 
   const handleClosePairingModal = () => {
     setShowPairingModal(false);
+  };
+
+  const handleConnectSuccess = () => {
+    // 连接成功后刷新设备列表
+    // TODO: 可以添加刷新设备列表的逻辑
+  };
+
+  const handleCloseConnectionRequest = () => {
+    setPendingRequest(null);
   };
 
   const handleTabChange = (tab: DeviceTab) => {
@@ -54,7 +94,7 @@ const DevicesPage: React.FC = () => {
         if (ref.current) {
           const rect = ref.current.getBoundingClientRect();
           // If the element is near the top of the viewport (with some offset for header)
-          if (rect.top >= 0 && rect.top < 300) { 
+          if (rect.top >= 0 && rect.top < 300) {
              setActiveTab(id);
              break;
           }
@@ -71,15 +111,15 @@ const DevicesPage: React.FC = () => {
 
       <div className="flex flex-col h-full relative">
         {/* 顶部标题栏 */}
-        <DeviceHeader 
-          addDevice={handleAddDevice} 
+        <DeviceHeader
+          addDevice={handleAddDevice}
           activeTab={activeTab}
           onTabChange={handleTabChange}
         />
 
         {/* 内容区域 */}
         <div className="flex-1 overflow-hidden relative">
-          <div 
+          <div
             ref={scrollContainerRef}
             className="h-full overflow-y-auto scrollbar-thin px-8 pb-32 pt-2 scroll-smooth"
           >
@@ -102,10 +142,21 @@ const DevicesPage: React.FC = () => {
         </div>
 
         {/* 设备配对模态框 */}
-        <PairingModal open={showPairingModal} onClose={handleClosePairingModal} />
+        <PairingModal
+          open={showPairingModal}
+          onClose={handleClosePairingModal}
+          onConnectSuccess={handleConnectSuccess}
+        />
+
+        {/* 连接请求确认模态框 */}
+        <ConnectionRequestModal
+          open={pendingRequest !== null}
+          onClose={handleCloseConnectionRequest}
+          request={pendingRequest}
+        />
       </div>
 
-  );
+    );
 };
 
 export default DevicesPage;

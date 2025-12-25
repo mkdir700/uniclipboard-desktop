@@ -1,5 +1,7 @@
-use local_ip_address::local_ip;
+use local_ip_address::{local_ip, list_afinet_netifas};
 use sha2::{Digest, Sha256};
+
+use crate::domain::network::NetworkInterface;
 
 pub fn string_to_32_bytes(input: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
@@ -42,6 +44,37 @@ pub fn get_local_ip() -> String {
             "127.0.0.1".to_string()
         }
     }
+}
+
+/// 获取所有网络接口的 IP 地址
+///
+/// 返回所有非回环的 IPv4 地址，用于显示本机可用的网络接口
+pub fn get_local_network_interfaces() -> Vec<NetworkInterface> {
+    let mut interfaces = Vec::new();
+
+    match list_afinet_netifas() {
+        Ok(network_interfaces) => {
+            for (name, ip) in network_interfaces {
+                let is_loopback = ip.is_loopback();
+                let is_ipv4 = matches!(ip, std::net::IpAddr::V4(_));
+
+                // 过滤掉 IPv6 和回环地址
+                if is_ipv4 && !is_loopback {
+                    interfaces.push(NetworkInterface {
+                        name,
+                        ip: ip.to_string(),
+                        is_loopback,
+                        is_ipv4,
+                    });
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to get network interfaces: {}", e);
+        }
+    }
+
+    interfaces
 }
 
 /// 当前时间
@@ -99,5 +132,22 @@ mod tests {
         let ip = get_local_ip();
         println!("local ip: {}", ip);
         assert!(is_valid_ip(&ip));
+    }
+
+    #[test]
+    fn test_get_local_network_interfaces() {
+        let interfaces = get_local_network_interfaces();
+        println!("Found {} network interfaces:", interfaces.len());
+        for iface in &interfaces {
+            println!("  - {}: {}", iface.name, iface.ip);
+        }
+
+        // 至少应该有一个非回环的 IPv4 地址（如果设备有网络连接）
+        // 但在某些环境下（如 CI），可能没有网络接口
+        for iface in &interfaces {
+            assert!(is_valid_ip(&iface.ip), "Invalid IP: {}", iface.ip);
+            assert!(!iface.is_loopback, "Loopback address should be filtered");
+            assert!(iface.is_ipv4, "Only IPv4 addresses should be included");
+        }
     }
 }
