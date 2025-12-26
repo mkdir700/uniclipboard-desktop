@@ -186,7 +186,7 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
             'pr-4',
             // On macOS, add left padding to avoid traffic lights
             // On other platforms, use default padding
-            isMac ? `pl-[4rem]` : 'px-3',
+            isMac ? `pl-16` : 'px-3',
             isDashboardPage ? 'justify-center' : ''
           )}
           onDoubleClick={isWindows ? handleToggleMaximize : undefined}
@@ -232,9 +232,7 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
                 onBlur={() => setIsSearchFocused(false)}
               />
             </div>
-          ) : (
-            <></>
-          )}
+          ) : null}
         </div>
         {isWindows && (
           <div className="flex items-center h-full" data-tauri-drag-region="false">
