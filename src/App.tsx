@@ -10,10 +10,7 @@ import {
 } from "react-router-dom";
 import { SettingProvider } from "@/contexts/SettingContext";
 import { ShortcutProvider } from "@/contexts/ShortcutContext";
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { MainLayout } from "@/layouts";
-import { useTranslation } from "react-i18next";
 import { TitleBar } from "@/components";
 import "./App.css";
 
@@ -28,50 +25,6 @@ const AuthenticatedLayout = () => {
 
 // 主应用程序内容
 const AppContent = () => {
-  const { t } = useTranslation();
-  const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const checkOnboardingStatus = async () => {
-      try {
-        const status = await invoke("check_onboarding_status");
-        console.log("引导状态检查结果:", status);
-        setIsOnboarded(!!status);
-      } catch (error) {
-        console.error("检查引导状态失败:", error);
-        setIsOnboarded(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkOnboardingStatus();
-  }, []);
-
-  // 自动完成引导（如果未完成）
-  useEffect(() => {
-    if (isOnboarded === false) {
-      invoke("complete_onboarding")
-        .then(() => {
-          setIsOnboarded(true);
-        })
-        .catch((error) => {
-          console.error("自动完成引导失败:", error);
-        });
-    }
-  }, [isOnboarded]);
-
-  if (loading) {
-    return (
-      <div className="h-screen w-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-pulse text-violet-400">
-          {t("common.loading")}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <ShortcutProvider>
       <SettingProvider>
