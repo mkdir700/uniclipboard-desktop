@@ -59,6 +59,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [copySuccess, setCopySuccess] = useState(false)
 
   // 注册 ESC 取消选择快捷键
   useShortcut({
@@ -174,6 +175,10 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     try {
       console.log(`${t('clipboard.content.logs.copyItem')} ${itemId}`)
       const result = await dispatch(copyToClipboard(itemId)).unwrap()
+      if (result.success) {
+        setCopySuccess(true)
+        setTimeout(() => setCopySuccess(false), 1500)
+      }
       return result.success
     } catch (err) {
       console.error(t('clipboard.content.logs.copyToClipboardFailed'), err)
@@ -286,6 +291,9 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
     if (!text) return false
     try {
       await navigator.clipboard.writeText(text)
+      // 批量复制成功后高亮第一个选中项并显示复制成功反馈
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 1500)
       return true
     } catch (e) {
       console.error('批量复制失败:', e)
@@ -379,6 +387,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
       <ClipboardSelectionActionBar
         selectedCount={selectedIds.size}
         favoriteIntent={favoriteIntent}
+        copySuccess={copySuccess}
         onCopy={handleBatchCopy}
         onToggleFavorite={handleBatchToggleFavorite}
         onDelete={handleBatchDelete}
