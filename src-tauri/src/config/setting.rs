@@ -43,7 +43,7 @@ pub struct GeneralSetting {
 }
 
 fn default_theme_color() -> String {
-    "catppuccin".to_string()
+    "inc".to_string()
 }
 
 fn default_language() -> String {
@@ -147,7 +147,7 @@ impl Setting {
                 silent_start: false,
                 auto_check_update: true,
                 theme: ThemeMode::System,
-                theme_color: "catppuccin".to_string(),
+                theme_color: "inc".to_string(),
                 language: default_language(),
             },
             sync: SyncSetting {
