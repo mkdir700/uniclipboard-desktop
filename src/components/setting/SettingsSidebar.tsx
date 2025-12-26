@@ -100,7 +100,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
                       onClick={() => onCategoryChange(item.id)}
                       className={`flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 ${
                         isActive
-                          ? 'bg-muted/50 font-medium text-foreground'
+                          ? 'bg-primary/10 font-medium text-primary'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                       }`}
                     >
