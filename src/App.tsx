@@ -14,6 +14,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { MainLayout } from "@/layouts";
 import { useTranslation } from "react-i18next";
+import { TitleBar } from "@/components";
 import "./App.css";
 
 // 认证布局包装器 - 保持 Sidebar 持久化
@@ -51,13 +52,17 @@ const AppContent = () => {
   // 自动完成引导（如果未完成）
   useEffect(() => {
     if (isOnboarded === false) {
-      invoke("complete_onboarding").catch((error) => {
-        console.error("自动完成引导失败:", error);
-      });
+      invoke("complete_onboarding")
+        .then(() => {
+          setIsOnboarded(true);
+        })
+        .catch((error) => {
+          console.error("自动完成引导失败:", error);
+        });
     }
   }, [isOnboarded]);
 
-  if (loading || isOnboarded === false) {
+  if (loading) {
     return (
       <div className="h-screen w-screen bg-gray-900 flex items-center justify-center">
         <div className="animate-pulse text-violet-400">
@@ -89,8 +94,6 @@ const AppContent = () => {
     </ShortcutProvider>
   );
 };
-
-import { TitleBar } from "@/components";
 
 export default function App() {
   return (
