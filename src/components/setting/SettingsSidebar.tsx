@@ -1,6 +1,5 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import {
   Settings,
   Palette,
@@ -9,7 +8,6 @@ import {
   Wifi,
   HardDrive,
   Info,
-  ArrowLeft,
 } from "lucide-react";
 import {
   Sidebar,
@@ -18,7 +16,6 @@ import {
   SidebarGroupContent,
   SidebarMenu,
   SidebarMenuItem,
-  SidebarHeader,
 } from "@/components/ui/sidebar";
 
 interface SettingsSidebarProps {
@@ -31,11 +28,6 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   onCategoryChange,
 }) => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-
-  const handleBack = () => {
-    navigate(-1);
-  };
 
   const settingsNavItems = [
     {
@@ -77,15 +69,6 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 
   return (
     <Sidebar collapsible="none" className="border-r border-border/50 bg-muted/30">
-      <SidebarHeader className="border-b border-border/50">
-        <button
-          onClick={handleBack}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium outline-none ring-sidebar-ring transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 active:bg-primary/10 active:text-primary"
-        >
-          <ArrowLeft className="h-4 w-4 shrink-0" />
-          <span>{t("settings.title")}</span>
-        </button>
-      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>

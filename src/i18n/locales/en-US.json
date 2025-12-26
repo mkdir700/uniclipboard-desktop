@@ -5,7 +5,8 @@
   "nav": {
     "dashboard": "Dashboard",
     "devices": "Devices",
-    "settings": "Settings"
+    "settings": "Settings",
+    "back": "Back"
   },
   "settings": {
     "title": "Settings",

@@ -5,7 +5,8 @@
   "nav": {
     "dashboard": "仪表板",
     "devices": "设备管理",
-    "settings": "设置"
+    "settings": "设置",
+    "back": "返回"
   },
   "settings": {
     "title": "设置",
