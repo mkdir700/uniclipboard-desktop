@@ -56,7 +56,7 @@ pub async fn connect_to_device_manual(
     // 获取 UniClipboard 实例
     let uniclipboard = uniclipboard_app
         .lock()
-        .unwrap()
+        .map_err(|e| format!("Failed to acquire lock: {}", e))?
         .as_ref()
         .cloned()
         .ok_or("UniClipboard not initialized")?;
@@ -109,7 +109,7 @@ pub async fn respond_to_connection_request(
     // 获取 UniClipboard 实例
     let uniclipboard = uniclipboard_app
         .lock()
-        .unwrap()
+        .map_err(|e| format!("Failed to acquire lock: {}", e))?
         .as_ref()
         .cloned()
         .ok_or("UniClipboard not initialized")?;
@@ -185,7 +185,7 @@ pub async fn cancel_connection_request(
     // 获取 UniClipboard 实例
     let uniclipboard = uniclipboard_app
         .lock()
-        .unwrap()
+        .map_err(|e| format!("Failed to acquire lock: {}", e))?
         .as_ref()
         .cloned()
         .ok_or("UniClipboard not initialized")?;
