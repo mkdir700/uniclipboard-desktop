@@ -21,7 +21,7 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
   return (
     <header
       data-tauri-drag-region
-      className="sticky top-0 z-50 pt-6 pb-2 px-8 transition-all duration-300"
+      className="sticky top-10 z-40 pt-6 pb-2 px-8 transition-all duration-300"
     >
       {/* Glass Background */}
       <div

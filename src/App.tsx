@@ -3,6 +3,7 @@ import { TitleBar } from '@/components'
 import { Toaster } from '@/components/ui/sonner'
 import { SettingProvider } from '@/contexts/SettingContext'
 import { ShortcutProvider } from '@/contexts/ShortcutContext'
+import { SearchProvider, useSearch } from "@/contexts/SearchContext";
 import { MainLayout } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
 import DevicesPage from '@/pages/DevicesPage'
@@ -58,8 +59,16 @@ const AppContent = () => {
 export default function App() {
   return (
     <Router>
-      <TitleBar />
-      <AppContent />
+      <SearchProvider>
+        <TitleBarWithSearch />
+        <AppContent />
+      </SearchProvider>
     </Router>
-  )
+  );
 }
+
+// TitleBar wrapper with search context
+const TitleBarWithSearch = () => {
+  const { searchValue, setSearchValue } = useSearch();
+  return <TitleBar searchValue={searchValue} onSearchChange={setSearchValue} />;
+};

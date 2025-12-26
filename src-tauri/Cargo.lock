@@ -7614,6 +7614,7 @@ dependencies = [
  "log",
  "mockall",
  "mockito",
+ "objc",
  "once_cell",
  "png 0.17.16",
  "rand 0.9.2",

@@ -7,6 +7,7 @@ mod domain;
 mod infrastructure;
 mod interface;
 mod message;
+mod plugins;
 mod utils;
 
 use application::device_service::get_device_manager;
@@ -170,7 +171,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
 
             // Use platform-specific title bar settings
             #[cfg(target_os = "macos")]
-            let win_builder = win_builder.title_bar_style(TitleBarStyle::Overlay);
+            let win_builder = win_builder.decorations(false);
 
             #[cfg(target_os = "windows")]
             let win_builder = win_builder.decorations(false).shadow(true);
@@ -184,17 +185,8 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
 
             let window = win_builder.build().unwrap();
 
-            #[cfg(target_os = "macos")]
-            {
-                use cocoa::appkit::{NSColor, NSWindow};
-                use cocoa::base::{id, nil};
-
-                let ns_window = window.ns_window().unwrap() as id;
-                unsafe {
-                    let bg_color = NSColor::colorWithRed_green_blue_alpha_(nil, 0.0, 0.0, 0.0, 0.0);
-                    ns_window.setBackgroundColor_(bg_color);
-                }
-            }
+            // macOS specific window styling will be handled by the rounded corners plugin
+            // The plugin will set up rounded corners, traffic lights positioning, and transparency
 
             // 启动异步任务
             tauri::async_runtime::spawn(async move {
@@ -243,6 +235,9 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
             api::device_connection::connect_to_device_manual,
             api::device_connection::respond_to_connection_request,
             api::device_connection::cancel_connection_request,
+            plugins::mac_rounded_corners::enable_rounded_corners,
+            plugins::mac_rounded_corners::enable_modern_window_style,
+            plugins::mac_rounded_corners::reposition_traffic_lights,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

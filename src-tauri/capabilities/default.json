@@ -6,6 +6,9 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-is-maximized",
+    "core:event:allow-listen",
     "opener:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
