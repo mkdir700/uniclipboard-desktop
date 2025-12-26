@@ -9,7 +9,6 @@ import AboutSection from "@/components/setting/AboutSection";
 import GeneralSection from "@/components/setting/GeneralSection";
 import AppearanceSection from "@/components/setting/AppearanceSection";
 import SettingsSidebar from "@/components/setting/SettingsSidebar";
-import SettingsPageHeader from "@/components/setting/SettingsPageHeader";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTranslation } from "react-i18next";
@@ -86,7 +85,6 @@ const SettingsPage: React.FC = () => {
         onCategoryChange={handleCategoryClick}
       />
       <SidebarInset>
-        <SettingsPageHeader />
         <ScrollArea className="flex-1">
           <div className="flex-1 p-8">
             {renderActiveSection()}
