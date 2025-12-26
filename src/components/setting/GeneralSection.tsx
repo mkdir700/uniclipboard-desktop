@@ -6,6 +6,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { SUPPORTED_LANGUAGES, type SupportedLanguage, getInitialLanguage } from "@/i18n";
 
+/**
+ * Render the General settings section with controls for auto-start, silent start, and language selection.
+ *
+ * Initializes UI state from stored general settings and the system autostart status, and persists changes
+ * to settings when the user toggles auto-start or silent-start or selects a different language.
+ *
+ * @returns The React element containing startup and language configuration controls
+ */
 export default function GeneralSection() {
   const { t } = useTranslation();
   const { setting, updateGeneralSetting } = useSetting();

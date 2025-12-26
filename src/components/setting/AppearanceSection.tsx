@@ -5,6 +5,11 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { useTranslation } from "react-i18next";
 
+/**
+ * Renders the appearance settings section with controls for selecting theme mode and theme color.
+ *
+ * @returns A React element containing theme mode options (light, dark, system) and theme color swatches, wired to update the user's general settings.
+ */
 export default function AppearanceSection() {
   const { t } = useTranslation();
   const { setting, updateGeneralSetting } = useSetting();

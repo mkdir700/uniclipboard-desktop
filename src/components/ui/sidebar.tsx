@@ -42,6 +42,12 @@ type SidebarContextProps = {
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
 
+/**
+ * Accesses the SidebarContext and returns the current sidebar state and controls.
+ *
+ * @returns The sidebar context value containing state (e.g., open, isMobile) and control functions (e.g., setOpen, toggleSidebar).
+ * @throws Error if called outside of a SidebarProvider
+ */
 function useSidebar() {
   const context = React.useContext(SidebarContext)
   if (!context) {
