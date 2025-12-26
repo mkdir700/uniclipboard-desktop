@@ -17,7 +17,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
 } from "@/components/ui/sidebar";
 
 interface SettingsSidebarProps {
@@ -70,7 +69,10 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   ];
 
   return (
-    <Sidebar collapsible="none">
+    <Sidebar
+      collapsible="none"
+      className="border-r border-border/50 bg-muted/30"
+    >
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
@@ -98,7 +100,6 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarRail />
     </Sidebar>
   );
 };
