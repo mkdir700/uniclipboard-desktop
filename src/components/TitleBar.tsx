@@ -129,7 +129,7 @@ export const TitleBar = ({ className }: TitleBarProps) => {
           <button
             onClick={handleBack}
             data-tauri-drag-region="false"
-            className="flex items-center justify-center rounded-md p-1.5 transition-colors hover:bg-muted/70 active:bg-primary/10"
+            className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground active:bg-primary/10 active:text-primary"
             aria-label={t("nav.back")}
           >
             <ArrowLeft className="h-4 w-4" />
