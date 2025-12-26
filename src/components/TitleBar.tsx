@@ -8,9 +8,26 @@ interface TitleBarProps {
   className?: string;
 }
 
-const isTauriEnv = () =>
-  typeof window !== "undefined" &&
-  Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
+const isTauriEnv = () => {
+  if (typeof window === "undefined") return false;
+
+  const globalWindow = window as unknown as {
+    __TAURI_INTERNALS__?: unknown;
+    __TAURI__?: unknown;
+    __TAURI_METADATA__?: unknown;
+  };
+
+  if (globalWindow.__TAURI_INTERNALS__ || globalWindow.__TAURI__ || globalWindow.__TAURI_METADATA__) {
+    return true;
+  }
+
+  if (typeof navigator !== "undefined") {
+    const userAgent = navigator.userAgent?.toLowerCase?.();
+    if (userAgent?.includes("tauri")) return true;
+  }
+
+  return false;
+};
 
 const isWindowsPlatform = () => {
   if (typeof navigator === "undefined") return false;
