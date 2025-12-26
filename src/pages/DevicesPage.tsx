@@ -129,7 +129,7 @@ const DevicesPage: React.FC = () => {
                 <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">配对请求</h3>
                 <div className="h-px flex-1 bg-border/50"></div>
               </div>
-              <div className="flex flex-col items-center justify-center p-8 border border-dashed border-border/50 rounded-2xl bg-muted/5 text-muted-foreground">
+              <div className="flex flex-col items-center justify-center p-8 border border-dashed border-border/50 rounded-lg bg-muted/5 text-muted-foreground">
                 <p>暂无配对请求</p>
               </div>
             </div>

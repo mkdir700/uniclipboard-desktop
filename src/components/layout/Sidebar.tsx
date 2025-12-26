@@ -44,7 +44,7 @@ const Sidebar: React.FC = () => {
               {isActive && (
                 <motion.div
                   layoutId={layoutId}
-                  className="absolute inset-0 bg-primary/10 dark:bg-primary/20 rounded-xl"
+                  className="absolute inset-0 bg-primary/10 dark:bg-primary/20 rounded-lg"
                   initial={false}
                   transition={{
                     type: "spring",
@@ -55,7 +55,7 @@ const Sidebar: React.FC = () => {
               )}
               <div
                 className={cn(
-                  "relative flex items-center justify-center w-12 h-12 rounded-xl transition-colors duration-200 z-10",
+                  "relative flex items-center justify-center w-12 h-12 rounded-lg transition-colors duration-200 z-10",
                   isActive
                     ? "text-primary"
                     : "text-muted-foreground group-hover:text-primary group-hover:bg-muted"

@@ -76,12 +76,12 @@ const OtherDevice: React.FC = () => {
         const isExpanded = expandedDevices[device.id] || false;
         
         return (
-          <div key={device.id} className="group relative overflow-hidden bg-card/50 hover:bg-card/80 border border-border/50 hover:border-primary/20 rounded-2xl transition-all duration-300 shadow-sm hover:shadow-md">
+          <div key={device.id} className="group relative overflow-hidden bg-card/50 hover:bg-card/80 border border-border/50 hover:border-primary/20 rounded-lg transition-all duration-300 shadow-sm hover:shadow-md">
              <div className="relative z-10 p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-5">
                   {/* Icon Box */}
-                  <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ring-1 shadow-inner ${getIconColor(device.color)}`}>
+                  <div className={`h-14 w-14 rounded-md flex items-center justify-center ring-1 shadow-inner ${getIconColor(device.color)}`}>
                     <Icon className="h-7 w-7" />
                   </div>
 
