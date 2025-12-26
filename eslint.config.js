@@ -1,0 +1,68 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { includeIgnoreFile } from '@eslint/compat'
+import js from '@eslint/js'
+import prettier from 'eslint-config-prettier'
+import importX from 'eslint-plugin-import-x'
+import reactX from 'eslint-plugin-react'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import globals from 'globals'
+import tseslint from 'typescript-eslint'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const gitignorePath = path.join(__dirname, '.gitignore')
+
+export default tseslint.config(
+  includeIgnoreFile(gitignorePath),
+  { ignores: ['dist', 'node_modules', 'src-tauri/target'] },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    ...reactX.configs.flat.recommended,
+    ...reactX.configs.flat['jsx-runtime'],
+  },
+  reactHooks.configs.flat.recommended,
+  {
+    plugins: {
+      'react-refresh': reactRefresh,
+    },
+    rules: {
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'react/prop-types': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
+  {
+    plugins: {
+      'import-x': importX,
+    },
+    rules: {
+      'import-x/order': [
+        'error',
+        {
+          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+          'newlines-between': 'never',
+          alphabetize: { order: 'asc', caseInsensitive: true },
+        },
+      ],
+    },
+  },
+  {
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.es2021,
+      },
+    },
+  },
+  prettier
+)

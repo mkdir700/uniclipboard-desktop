@@ -2,24 +2,15 @@
   "mcpServers": {
     "shadcn": {
       "command": "npx",
-      "args": [
-        "shadcn@latest",
-        "mcp"
-      ]
+      "args": ["shadcn@latest", "mcp"]
     },
     "lucide-icons": {
       "command": "npx",
-      "args": [
-        "lucide-icons-mcp",
-        "--stdio"
-      ]
+      "args": ["lucide-icons-mcp", "--stdio"]
     },
     "mcp-deepwiki": {
       "command": "npx",
-      "args": [
-        "-y",
-        "mcp-deepwiki@latest"
-      ]
+      "args": ["-y", "mcp-deepwiki@latest"]
     }
   }
 }

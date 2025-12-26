@@ -1,13 +1,13 @@
 const MODIFIER_ALIASES: Record<string, string> = {
-  command: "cmd",
-  meta: "cmd",
-  mod: "cmd",
-  control: "ctrl",
-  option: "alt",
-  escape: "esc",
-};
+  command: 'cmd',
+  meta: 'cmd',
+  mod: 'cmd',
+  control: 'ctrl',
+  option: 'alt',
+  escape: 'esc',
+}
 
-const MODIFIER_ORDER = ["ctrl", "alt", "shift", "cmd"] as const;
+const MODIFIER_ORDER = ['ctrl', 'alt', 'shift', 'cmd'] as const
 
 /**
  * 规范化快捷键字符串，便于冲突检测与比较。
@@ -19,25 +19,24 @@ const MODIFIER_ORDER = ["ctrl", "alt", "shift", "cmd"] as const;
  */
 export const normalizeHotkey = (key: string): string => {
   const tokens = key
-    .split("+")
-    .map((t) => t.trim().toLowerCase())
+    .split('+')
+    .map(t => t.trim().toLowerCase())
     .filter(Boolean)
-    .map((t) => MODIFIER_ALIASES[t] ?? t);
+    .map(t => MODIFIER_ALIASES[t] ?? t)
 
-  const modifiers = new Set<string>();
-  const nonModifiers: string[] = [];
+  const modifiers = new Set<string>()
+  const nonModifiers: string[] = []
 
   for (const token of tokens) {
     if ((MODIFIER_ORDER as readonly string[]).includes(token)) {
-      modifiers.add(token);
-      continue;
+      modifiers.add(token)
+      continue
     }
-    nonModifiers.push(token);
+    nonModifiers.push(token)
   }
 
-  const orderedModifiers = MODIFIER_ORDER.filter((m) => modifiers.has(m));
-  const base = nonModifiers.join("+");
+  const orderedModifiers = MODIFIER_ORDER.filter(m => modifiers.has(m))
+  const base = nonModifiers.join('+')
 
-  return base ? [...orderedModifiers, base].join("+") : orderedModifiers.join("+");
-};
-
+  return base ? [...orderedModifiers, base].join('+') : orderedModifiers.join('+')
+}

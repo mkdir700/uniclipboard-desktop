@@ -1,28 +1,21 @@
-import React, { useMemo, useState } from "react";
-import { Check, Copy, Star, Trash2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Kbd } from "@/components/ui/kbd";
-import { cn } from "@/lib/utils";
+import { Check, Copy, Star, Trash2, X } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Kbd } from '@/components/ui/kbd'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
 interface ClipboardSelectionActionBarProps {
-  selectedCount: number;
-  favoriteIntent: "favorite" | "unfavorite";
-  showHotkeys?: boolean;
-  onCopy: () => Promise<boolean> | boolean;
-  onToggleFavorite: () => Promise<void> | void;
-  onDelete: () => Promise<void> | void;
-  onClearSelection?: () => void;
+  selectedCount: number
+  favoriteIntent: 'favorite' | 'unfavorite'
+  showHotkeys?: boolean
+  onCopy: () => Promise<boolean> | boolean
+  onToggleFavorite: () => Promise<void> | void
+  onDelete: () => Promise<void> | void
+  onClearSelection?: () => void
 }
 
-const ClipboardSelectionActionBar: React.FC<
-  ClipboardSelectionActionBarProps
-> = ({
+const ClipboardSelectionActionBar: React.FC<ClipboardSelectionActionBarProps> = ({
   selectedCount,
   favoriteIntent,
   showHotkeys = true,
@@ -31,23 +24,23 @@ const ClipboardSelectionActionBar: React.FC<
   onDelete,
   onClearSelection,
 }) => {
-  const [copySuccess, setCopySuccess] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false)
 
   const favoriteTitle = useMemo(() => {
-    if (favoriteIntent === "unfavorite") return "取消收藏";
-    return "收藏";
-  }, [favoriteIntent]);
+    if (favoriteIntent === 'unfavorite') return '取消收藏'
+    return '收藏'
+  }, [favoriteIntent])
 
   const handleCopyClick = async () => {
-    const ok = await onCopy();
+    const ok = await onCopy()
     if (ok) {
-      setCopySuccess(true);
-      window.setTimeout(() => setCopySuccess(false), 1500);
+      setCopySuccess(true)
+      window.setTimeout(() => setCopySuccess(false), 1500)
     }
-  };
+  }
 
   if (selectedCount === 0) {
-    return null;
+    return null
   }
 
   return (
@@ -68,22 +61,16 @@ const ClipboardSelectionActionBar: React.FC<
                 size="sm"
                 variant="ghost"
                 className={cn(
-                  "h-8 w-8 p-0 rounded-full transition-all duration-200",
-                  "hover:bg-primary/10 hover:text-primary"
+                  'h-8 w-8 p-0 rounded-full transition-all duration-200',
+                  'hover:bg-primary/10 hover:text-primary'
                 )}
                 onClick={handleCopyClick}
               >
-                {copySuccess ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
+                {copySuccess ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="flex items-center gap-2">
-              <span>
-                {selectedCount > 1 ? `复制（${selectedCount} 项）` : "复制"}
-              </span>
+              <span>{selectedCount > 1 ? `复制（${selectedCount} 项）` : '复制'}</span>
               {showHotkeys && <Kbd>C</Kbd>}
             </TooltipContent>
           </Tooltip>
@@ -94,26 +81,21 @@ const ClipboardSelectionActionBar: React.FC<
                 size="sm"
                 variant="ghost"
                 className={cn(
-                  "h-8 w-8 p-0 rounded-full transition-all duration-200",
-                  favoriteIntent === "unfavorite"
-                    ? "text-amber-500 hover:bg-amber-500/10 hover:text-amber-500"
-                    : "hover:bg-amber-500/10 hover:text-amber-500"
+                  'h-8 w-8 p-0 rounded-full transition-all duration-200',
+                  favoriteIntent === 'unfavorite'
+                    ? 'text-amber-500 hover:bg-amber-500/10 hover:text-amber-500'
+                    : 'hover:bg-amber-500/10 hover:text-amber-500'
                 )}
                 onClick={onToggleFavorite}
               >
                 <Star
-                  className={cn(
-                    "h-4 w-4",
-                    favoriteIntent === "unfavorite" && "fill-current"
-                  )}
+                  className={cn('h-4 w-4', favoriteIntent === 'unfavorite' && 'fill-current')}
                 />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="flex items-center gap-2">
               <span>
-                {selectedCount > 1
-                  ? `${favoriteTitle}（${selectedCount} 项）`
-                  : favoriteTitle}
+                {selectedCount > 1 ? `${favoriteTitle}（${selectedCount} 项）` : favoriteTitle}
               </span>
               {showHotkeys && <Kbd>S</Kbd>}
             </TooltipContent>
@@ -131,9 +113,7 @@ const ClipboardSelectionActionBar: React.FC<
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className="flex items-center gap-2">
-              <span>
-                {selectedCount > 1 ? `删除（${selectedCount} 项）` : "删除"}
-              </span>
+              <span>{selectedCount > 1 ? `删除（${selectedCount} 项）` : '删除'}</span>
               {showHotkeys && <Kbd>D</Kbd>}
             </TooltipContent>
           </Tooltip>
@@ -160,7 +140,7 @@ const ClipboardSelectionActionBar: React.FC<
         </div>
       </div>
     </TooltipProvider>
-  );
-};
+  )
+}
 
-export default ClipboardSelectionActionBar;
+export default ClipboardSelectionActionBar

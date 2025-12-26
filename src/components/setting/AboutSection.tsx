@@ -1,14 +1,14 @@
-import React from "react";
-import { useTranslation } from "react-i18next";
-import { Card, CardContent } from "@/components/ui/card";
+import React from 'react'
+import { useTranslation } from 'react-i18next'
+import { Card, CardContent } from '@/components/ui/card'
 
 const AboutSection: React.FC = () => {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <Card>
       <div className="flex items-center gap-4 mb-4 px-6 pt-6">
         <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-          {t("settings.sections.about.appName")}
+          {t('settings.sections.about.appName')}
         </h3>
         <div className="h-px flex-1 bg-border/50"></div>
       </div>
@@ -32,32 +32,34 @@ const AboutSection: React.FC = () => {
               </svg>
             </div>
             <div className="ml-4 space-y-0.5">
-              <h4 className="text-lg font-medium">{t("settings.sections.about.appName")}</h4>
-              <p className="text-sm text-muted-foreground">{t("settings.sections.about.version")}</p>
+              <h4 className="text-lg font-medium">{t('settings.sections.about.appName')}</h4>
+              <p className="text-sm text-muted-foreground">
+                {t('settings.sections.about.version')}
+              </p>
             </div>
           </div>
           <button className="px-4 py-2 bg-secondary hover:bg-secondary/80 text-sm font-medium transition duration-200 rounded-lg">
-            {t("settings.sections.about.checkUpdate")}
+            {t('settings.sections.about.checkUpdate')}
           </button>
         </div>
 
         <div className="space-y-4 pt-4 border-t border-border/50">
-          <p className="text-sm text-muted-foreground">{t("settings.sections.about.copyright")}</p>
+          <p className="text-sm text-muted-foreground">{t('settings.sections.about.copyright')}</p>
           <div className="flex space-x-6 text-sm">
             <a href="#" className="text-primary hover:text-primary/80 transition-colors">
-              {t("settings.sections.about.links.privacyPolicy")}
+              {t('settings.sections.about.links.privacyPolicy')}
             </a>
             <a href="#" className="text-primary hover:text-primary/80 transition-colors">
-              {t("settings.sections.about.links.termsOfService")}
+              {t('settings.sections.about.links.termsOfService')}
             </a>
             <a href="#" className="text-primary hover:text-primary/80 transition-colors">
-              {t("settings.sections.about.links.helpCenter")}
+              {t('settings.sections.about.links.helpCenter')}
             </a>
           </div>
         </div>
       </CardContent>
     </Card>
-  );
-};
+  )
+}
 
-export default AboutSection;
+export default AboutSection

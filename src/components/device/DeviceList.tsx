@@ -1,6 +1,6 @@
-import React from "react";
-import CurrentDevice from "./CurrentDevice";
-import OtherDevice from "./OtherDevice";
+import React from 'react'
+import CurrentDevice from './CurrentDevice'
+import OtherDevice from './OtherDevice'
 
 const DeviceList: React.FC = () => {
   return (
@@ -11,7 +11,7 @@ const DeviceList: React.FC = () => {
       {/* 其他已连接设备 */}
       <OtherDevice />
     </>
-  );
-};
+  )
+}
 
-export default DeviceList;
+export default DeviceList

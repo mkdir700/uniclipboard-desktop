@@ -1,21 +1,21 @@
-import { useHotkeys } from "react-hotkeys-hook";
-import { useShortcutContext } from "@/contexts/ShortcutContext";
-import { ShortcutScope } from "@/shortcuts/definitions";
+import { useHotkeys } from 'react-hotkeys-hook'
+import { useShortcutContext } from '@/contexts/ShortcutContext'
+import { ShortcutScope } from '@/shortcuts/definitions'
 
 /**
  * useShortcut Hook 选项
  */
 interface UseShortcutOptions {
   /** 快捷键组合，如 "esc", "cmd+a" */
-  key: string;
+  key: string
   /** 作用域 */
-  scope: ShortcutScope;
+  scope: ShortcutScope
   /** 是否启用（可选，默认 true） */
-  enabled?: boolean;
+  enabled?: boolean
   /** 触发时的处理函数 */
-  handler: () => void;
+  handler: () => void
   /** 是否阻止默认行为（可选，默认 true） */
-  preventDefault?: boolean;
+  preventDefault?: boolean
 }
 
 /**
@@ -40,10 +40,10 @@ export const useShortcut = ({
   handler,
   preventDefault = true,
 }: UseShortcutOptions): void => {
-  const { activeScope } = useShortcutContext();
+  const { activeScope } = useShortcutContext()
 
   // 只有当作用域匹配且启用时才注册快捷键
-  const isActive = activeScope === scope && enabled;
+  const isActive = activeScope === scope && enabled
 
   useHotkeys(
     key,
@@ -55,5 +55,5 @@ export const useShortcut = ({
       enableOnContentEditable: false,
     },
     [key, scope, enabled, activeScope, handler, preventDefault]
-  );
-};
+  )
+}

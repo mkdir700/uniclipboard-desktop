@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react'
 
 const Rules: React.FC = () => {
   return (
@@ -29,9 +29,7 @@ const Rules: React.FC = () => {
                   />
                 </svg>
               </div>
-              <h4 className="ml-3 font-medium text-white">
-                iPhone 13 同步规则
-              </h4>
+              <h4 className="ml-3 font-medium text-white">iPhone 13 同步规则</h4>
             </div>
             <button className="text-xs px-3 py-1 border border-gray-700 rounded-md text-gray-400 hover:bg-gray-700">
               恢复默认
@@ -44,9 +42,7 @@ const Rules: React.FC = () => {
             <div className="flex items-center justify-between bg-gray-800/70 rounded-md p-3">
               <div>
                 <h5 className="text-sm font-medium text-white">自动同步</h5>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  在设备解锁状态下自动同步剪贴板内容
-                </p>
+                <p className="text-xs text-gray-400 mt-0.5">在设备解锁状态下自动同步剪贴板内容</p>
               </div>
               <label className="flex items-center cursor-pointer">
                 <div className="relative">
@@ -93,9 +89,7 @@ const Rules: React.FC = () => {
             <div className="flex items-center justify-between bg-gray-800/70 rounded-md p-3">
               <div>
                 <h5 className="text-sm font-medium text-white">同步文件</h5>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  允许同步文件内容 (最大10MB)
-                </p>
+                <p className="text-xs text-gray-400 mt-0.5">允许同步文件内容 (最大10MB)</p>
               </div>
               <label className="flex items-center cursor-pointer">
                 <div className="relative">
@@ -212,7 +206,7 @@ const Rules: React.FC = () => {
         </div>
       </div>
     </>
-  );
-};
+  )
+}
 
-export default Rules;
+export default Rules

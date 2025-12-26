@@ -1,5 +1,6 @@
-import React from "react";
+import React from 'react'
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface DeviceStatusProps {}
 
 const DeviceStatus: React.FC<DeviceStatusProps> = () => {
@@ -40,7 +41,7 @@ const DeviceStatus: React.FC<DeviceStatusProps> = () => {
         </div>
       </div>
     </>
-  );
-};
+  )
+}
 
-export default DeviceStatus;
+export default DeviceStatus

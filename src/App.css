@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "./styles/globals.css";
+@import 'tailwindcss';
+@import './styles/globals.css';
 
 /* 隐藏滚动条但允许滚动 */
 .hide-scrollbar::-webkit-scrollbar {

@@ -1,20 +1,20 @@
-import React, { ReactNode } from "react";
-import { MainLayout } from "./index";
-import { SettingHeader } from "../components";
-import { CategoryItem } from "../components/setting/SettingHeader";
+import React, { ReactNode } from 'react'
+import { SettingHeader } from '../components'
+import { CategoryItem } from '../components/setting/SettingHeader'
+import { MainLayout } from './index'
 
 interface SettingsLayoutProps {
-  children: ReactNode;
-  onCategoryClick: (category: string) => void;
-  activeCategory: string;
-  categories: CategoryItem[];
+  children: ReactNode
+  onCategoryClick: (category: string) => void
+  activeCategory: string
+  categories: CategoryItem[]
 }
 
-const SettingsLayout: React.FC<SettingsLayoutProps> = ({ 
-  children, 
-  onCategoryClick, 
+const SettingsLayout: React.FC<SettingsLayoutProps> = ({
+  children,
+  onCategoryClick,
   activeCategory,
-  categories
+  categories,
 }) => {
   return (
     <MainLayout>
@@ -27,15 +27,13 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
 
       {/* 主内容区域 */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full px-4 py-3 overflow-auto hide-scrollbar">
-          {children}
-        </div>
+        <div className="h-full px-4 py-3 overflow-auto hide-scrollbar">{children}</div>
       </div>
 
       {/* 底部操作栏 */}
       {/* <SettingFooter /> */}
     </MainLayout>
-  );
-};
+  )
+}
 
-export default SettingsLayout;
+export default SettingsLayout

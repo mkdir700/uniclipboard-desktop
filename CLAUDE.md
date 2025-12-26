@@ -9,6 +9,7 @@ uniclipboard-desktop is a cross-platform clipboard synchronization tool built wi
 ## Architecture Documentation
 
 For detailed architecture design, interaction flows, and system overview, refer to the project's DeepWiki documentation:
+
 - **URL**: https://deepwiki.com/mkdir700/uniclipboard-desktop
 - **Access**: Use `mcp-deepwiki` MCP server to query the documentation programmatically
 
@@ -17,6 +18,7 @@ This resource provides comprehensive diagrams, flow explanations, and design dec
 ## Development Commands
 
 ### Core Development
+
 ```bash
 # Install dependencies (uses Bun)
 bun install
@@ -34,13 +36,16 @@ bun run preview    # Preview production build
 ```
 
 ### Cross-Platform Building
+
 Building is handled via GitHub Actions. Trigger manually from GitHub Actions tab with:
+
 - **platform**: macos-aarch64, macos-x86_64, ubuntu-22.04, windows-latest, or all
 - **version**: Version number (e.g., 1.0.0)
 
 ## Architecture
 
 ### Backend (Rust with Tauri 2)
+
 Follows **Clean Architecture** with clear separation of concerns:
 
 ```
@@ -61,6 +66,7 @@ src-tauri/src/
 ```
 
 **Key initialization flow** ([main.rs:89-135](src-tauri/src/main.rs#L89-L135)):
+
 1. Initialize logging
 2. Load `Setting` from config (fallback to defaults)
 3. Initialize `PasswordManager` salt file
@@ -70,11 +76,13 @@ src-tauri/src/
 7. Build `UniClipboard` instance and start async runtime
 
 **Concurrency patterns**:
+
 - Tokio async runtime for all I/O operations
 - `Arc<Mutex<T>>` for shared state across Tauri commands
 - Tauri's async runtime for background tasks (`tauri::async_runtime::spawn`)
 
 ### Frontend (React 18 + TypeScript + Vite)
+
 ```
 src/
 ├── pages/          # Route pages (Dashboard, Devices, Settings)
@@ -94,28 +102,35 @@ src/
 ## Key Technical Details
 
 ### Path Aliases
+
 TypeScript path aliases configured: `@/*` maps to `src/*` ([tsconfig.json:24-27](tsconfig.json#L24-L27))
 
 ### Database Migrations
+
 Diesel migrations in [src-tauri/src/infrastructure/storage/db/migrations.rs](src-tauri/src/infrastructure/storage/db/migrations.rs). Run with `diesel migration run` (requires Diesel CLI setup).
 
 ### Security Implementation
+
 - **Encryption**: AES-GCM for clipboard content ([infrastructure/security/encryption.rs](src-tauri/src/infrastructure/security/encryption.rs))
 - **Password hashing**: Argon2 via Tauri Stronghold plugin
 - **Key storage**: `PasswordManager` manages salt file ([infrastructure/security/password.rs](src-tauri/src/infrastructure/security/password.rs))
 
 ### Event System
+
 - Frontend listens to clipboard changes via `listen_clipboard_new_content` Tauri command
 - Backend publishes events through custom event bus
 - WebSocket events for cross-device sync
 
 ### Platform-Specific Code
+
 - macOS: Transparent title bar, cocoa background color ([main.rs:169-191](src-tauri/src/main.rs#L169-L191))
 - Windows/Unix: Standard window decorations
 - Clipboard: Platform implementations in [infrastructure/clipboard/](src-tauri/src/infrastructure/clipboard/)
 
 ### Configuration
+
 Settings stored in TOML, managed by global `SETTING` RwLock ([config/setting.rs](src-tauri/src/config/setting.rs)). Includes:
+
 - General (silent_start, etc.)
 - Network (webserver_port)
 - Sync (websocket/webdav settings)
@@ -125,6 +140,7 @@ Settings stored in TOML, managed by global `SETTING` RwLock ([config/setting.rs]
 ## Tauri Commands
 
 All frontend-backend communication through Tauri commands defined in [api/](src-tauri/src/api/). Key commands:
+
 - `save_setting`, `get_setting` - Configuration management
 - `get_clipboard_items`, `delete_clipboard_item` - Clipboard history CRUD
 - `listen_clipboard_new_content` - Event subscription for clipboard changes
@@ -142,6 +158,7 @@ All frontend-backend communication through Tauri commands defined in [api/](src-
 ## Development Style
 
 ### Rust Error Handling
+
 **CRITICAL**: Never use `unwrap()` or `expect()` in production code. Always handle errors explicitly:
 
 ```rust
@@ -178,6 +195,7 @@ mod tests {
 **Rationale**: Explicit error handling prevents panics in production, provides better error messages, and makes failure modes visible to callers.
 
 ### Frontend Styling (Tailwind CSS)
+
 **CRITICAL**: Avoid fixed pixel values (`w-[XXpx]`, `h-[XXpx]`) for cross-platform compatibility. Use Tailwind's built-in utilities or relative units (rem) instead:
 
 ```tsx
@@ -202,6 +220,7 @@ mod tests {
 **Rationale**: Rem-based units scale with the root font size, providing better cross-platform consistency across different screen densities, DPI settings, and user accessibility preferences. Tailwind's default configuration uses `1rem = 16px`.
 
 **Common Tailwind Width Reference**:
+
 - `w-16` = 4rem (64px)
 - `w-20` = 5rem (80px)
 - `w-52` = 13rem (208px)
@@ -210,6 +229,7 @@ mod tests {
 ## Testing
 
 No test framework currently configured. When adding tests:
+
 - Rust tests go in `src-tauri/tests/` or inline `#[cfg(test)]` modules
 - Frontend tests use Vitest (add to devDependencies)
 - Integration tests can use Cargo features: `integration_tests`, `network_tests`, `hardware_tests`
@@ -221,11 +241,13 @@ No test framework currently configured. When adding tests:
 **ALWAYS test components in both light and dark themes** to ensure proper contrast and visibility.
 
 **Container Components** (Dialog, Card, Popover, etc.):
+
 - Use `bg-card` + `text-card-foreground` for containers with content
 - Use `bg-background` only for page/base backgrounds
 - Use `bg-muted` for disabled/readonly states with `text-foreground` (not `text-muted-foreground`)
 
 **Common Pitfalls**:
+
 ```tsx
 // ❌ WRONG - Background color on containers makes them blend in
 <DialogContent className="bg-background" />
@@ -241,6 +263,7 @@ No test framework currently configured. When adding tests:
 ```
 
 **Status Messages**:
+
 - Add `border border-{color}/20` to banners for better visibility in light mode
 - Use `font-medium` on text for better readability
 - Ensure hover states use `/70` opacity (not `/60`) for visibility

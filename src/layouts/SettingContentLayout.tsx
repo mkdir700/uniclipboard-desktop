@@ -1,17 +1,11 @@
-import React, { ReactNode } from "react";
+import React, { ReactNode } from 'react'
 
 interface SettingContentLayoutProps {
-  children: ReactNode;
+  children: ReactNode
 }
 
-const SettingContentLayout: React.FC<SettingContentLayoutProps> = ({
-  children
-}) => {
-  return (
-    <div className="space-y-6">
-      {children}
-    </div>
-  );
-};
+const SettingContentLayout: React.FC<SettingContentLayoutProps> = ({ children }) => {
+  return <div className="space-y-6">{children}</div>
+}
 
-export default SettingContentLayout;
+export default SettingContentLayout

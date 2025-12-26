@@ -1,13 +1,13 @@
-import { useEffect } from "react";
-import { useShortcutContext } from "@/contexts/ShortcutContext";
-import { ShortcutScope } from "@/shortcuts/definitions";
-import { ShortcutLayer } from "@/shortcuts/layers";
+import { useEffect } from 'react'
+import { useShortcutContext } from '@/contexts/ShortcutContext'
+import { ShortcutScope } from '@/shortcuts/definitions'
+import { ShortcutLayer } from '@/shortcuts/layers'
 
 interface UseShortcutLayerOptions {
-  layer: ShortcutLayer;
-  scope: ShortcutScope;
-  priority?: number;
-  enabled?: boolean;
+  layer: ShortcutLayer
+  scope: ShortcutScope
+  priority?: number
+  enabled?: boolean
 }
 
 /**
@@ -22,13 +22,12 @@ export const useShortcutLayer = ({
   priority = 0,
   enabled = true,
 }: UseShortcutLayerOptions): void => {
-  const { pushLayer, popLayer } = useShortcutContext();
+  const { pushLayer, popLayer } = useShortcutContext()
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) return
 
-    const token = pushLayer({ layer, scope, priority });
-    return () => popLayer(token);
-  }, [enabled, layer, scope, priority, pushLayer, popLayer]);
-};
-
+    const token = pushLayer({ layer, scope, priority })
+    return () => popLayer(token)
+  }, [enabled, layer, scope, priority, pushLayer, popLayer])
+}
