@@ -209,6 +209,11 @@
     },
     "constants": {
       "debounceDelay": "防抖延迟时间（毫秒）"
+    },
+    "errors": {
+      "loadFailed": "加载剪贴板数据失败",
+      "listenerSetupFailed": "设置剪贴板监听器失败",
+      "unknown": "发生未知错误"
     }
   },
   "header": {
@@ -237,6 +242,10 @@
         "copyToClipboardFailed": "复制到剪贴板失败",
         "convertingItem": "转换为显示项目:"
       }
+    },
+    "errors": {
+      "copyFailed": "复制到剪贴板失败",
+      "unknown": "发生未知错误"
     },
     "item": {
       "characters": "字符",

@@ -12,6 +12,7 @@ import { SettingProvider } from "@/contexts/SettingContext";
 import { ShortcutProvider } from "@/contexts/ShortcutContext";
 import { MainLayout } from "@/layouts";
 import { TitleBar } from "@/components";
+import { Toaster } from "@/components/ui/sonner";
 import "./App.css";
 
 // 认证布局包装器 - 保持 Sidebar 持久化
@@ -43,6 +44,7 @@ const AppContent = () => {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <Toaster />
       </SettingProvider>
     </ShortcutProvider>
   );
