@@ -70,7 +70,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   ];
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="none">
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
