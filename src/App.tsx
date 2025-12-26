@@ -60,29 +60,33 @@ const AppContent = () => {
   if (loading || isOnboarded === false) {
     return (
       <div className="h-screen w-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-pulse text-violet-400">{t("common.loading")}</div>
+        <div className="animate-pulse text-violet-400">
+          {t("common.loading")}
+        </div>
       </div>
     );
   }
 
   return (
-    <SettingProvider>
-      <Routes>
-        <Route element={<AuthenticatedLayout />}>
-          <Route
-            path="/"
-            element={
-              <div className="w-full h-full">
-                <DashboardPage />
-              </div>
-            }
-          />
-          <Route path="/devices" element={<DevicesPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </SettingProvider>
+    <ShortcutProvider>
+      <SettingProvider>
+        <Routes>
+          <Route element={<AuthenticatedLayout />}>
+            <Route
+              path="/"
+              element={
+                <div className="w-full h-full">
+                  <DashboardPage />
+                </div>
+              }
+            />
+            <Route path="/devices" element={<DevicesPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </SettingProvider>
+    </ShortcutProvider>
   );
 };
 
