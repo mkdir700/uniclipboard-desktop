@@ -1,4 +1,13 @@
+## 📝 项目介绍
+
+[English](./README_EN.md) | 简体中文
+
+UniClipboard 是一个剪切板同步工具，旨在为用户提供无缝的剪切板共享体验，让您在不同设备间即时共享文本、图片和文件。
+
+![Image](./assets/demo.png)
+
 <div align="center">
+
   <br/>
     
   <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
@@ -40,14 +49,6 @@
 
 > [!WARNING]
 > UniClipboard 目前处于积极开发阶段，可能存在功能不稳定或缺失的情况。欢迎体验并提供反馈！
-
-[English](./README_EN.md) | 简体中文
-
-## 📝 项目介绍
-
-UniClipboard 是一个剪切板同步工具，旨在为用户提供无缝的剪切板共享体验，让您在不同设备间即时共享文本、图片和文件。
-
-![Image](./assets/demo.png)
 
 ## ✨ 功能特点
 
