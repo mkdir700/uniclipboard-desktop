@@ -4,6 +4,7 @@ import { useSetting } from "@/contexts/SettingContext";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { SUPPORTED_LANGUAGES, type SupportedLanguage, getInitialLanguage } from "@/i18n";
+import { logger } from "@/utils/logger";
 
 export default function GeneralSection() {
   const { t } = useTranslation();
@@ -28,7 +29,7 @@ export default function GeneralSection() {
           setLanguage((setting.general.language as SupportedLanguage) || getInitialLanguage());
         }
       } catch (error) {
-        console.error("初始化设置失败:", error);
+        await logger.error("初始化设置失败:", error);
       } finally {
         setIsLoading(false);
       }
@@ -53,7 +54,7 @@ export default function GeneralSection() {
       await updateGeneralSetting({ auto_start: newState });
       setAutoStart(newState);
     } catch (error) {
-      console.error("更改自启动状态失败:", error);
+      await logger.error("更改自启动状态失败:", error);
     } finally {
       setIsLoading(false);
     }
@@ -66,7 +67,7 @@ export default function GeneralSection() {
       await updateGeneralSetting({ silent_start: checked });
       setSilentStart(checked);
     } catch (error) {
-      console.error("更改静默启动状态失败:", error);
+      await logger.error("更改静默启动状态失败:", error);
     }
   };
 
@@ -76,7 +77,7 @@ export default function GeneralSection() {
       await updateGeneralSetting({ language: normalized });
       setLanguage(normalized);
     } catch (error) {
-      console.error("更改语言失败:", error);
+      await logger.error("更改语言失败:", error);
     }
   };
 

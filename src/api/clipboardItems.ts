@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { logger } from "@/utils/logger";
 
 /**
  * 排序选项枚举
@@ -88,7 +89,7 @@ export async function getClipboardStats(): Promise<ClipboardStats> {
   try {
     return await invoke('get_clipboard_stats');
   } catch (error) {
-    console.error('获取剪贴板统计信息失败:', error);
+    await logger.error('获取剪贴板统计信息失败:', error);
     throw error;
   }
 }
@@ -114,7 +115,7 @@ export async function getClipboardItems(
       filter,
     });
   } catch (error) {
-    console.error('获取剪贴板历史记录失败:', error);
+    await logger.error('获取剪贴板历史记录失败:', error);
     throw error;
   }
 }
@@ -129,7 +130,7 @@ export async function getClipboardItem(id: string, fullContent: boolean = false)
   try {
     return await invoke('get_clipboard_item', { id, fullContent });
   } catch (error) {
-    console.error('获取剪贴板条目失败:', error);
+    await logger.error('获取剪贴板条目失败:', error);
     throw error;
   }
 }
@@ -143,7 +144,7 @@ export async function deleteClipboardItem(id: string): Promise<boolean> {
   try {
     return await invoke('delete_clipboard_item', { id });
   } catch (error) {
-    console.error('删除剪贴板条目失败:', error);
+    await logger.error('删除剪贴板条目失败:', error);
     throw error;
   }
 }
@@ -156,7 +157,7 @@ export async function clearClipboardItems(): Promise<number> {
   try {
     return await invoke('clear_clipboard_items');
   } catch (error) {
-    console.error('清空剪贴板历史记录失败:', error);
+    await logger.error('清空剪贴板历史记录失败:', error);
     throw error;
   }
 }
@@ -169,7 +170,7 @@ export async function syncClipboardItems(): Promise<boolean> {
   try {
     return await invoke('sync_clipboard_items');
   } catch (error) {
-    console.error('同步剪贴板内容失败:', error);
+    await logger.error('同步剪贴板内容失败:', error);
     throw error;
   }
 }
@@ -183,7 +184,7 @@ export async function copyClipboardItem(id: string): Promise<boolean> {
   try {
     return await invoke('copy_clipboard_item', { id });
   } catch (error) {
-    console.error('复制剪贴板记录失败:', error);
+    await logger.error('复制剪贴板记录失败:', error);
     throw error;
   }
 }
@@ -236,7 +237,7 @@ export async function favoriteClipboardItem(id: string): Promise<boolean> {
   try {
     return await invoke('toggle_favorite_clipboard_item', { id, isFavorited: true });
   } catch (error) {
-    console.error('收藏剪贴板条目失败:', error);
+    await logger.error('收藏剪贴板条目失败:', error);
     throw error;
   }
 }
@@ -250,7 +251,7 @@ export async function unfavoriteClipboardItem(id: string): Promise<boolean> {
   try {
     return await invoke('toggle_favorite_clipboard_item', { id, isFavorited: false });
   } catch (error) {
-    console.error("取消收藏剪贴板条目失败:", error);
+    await logger.error("取消收藏剪贴板条目失败:", error);
     throw error;
   }
 }

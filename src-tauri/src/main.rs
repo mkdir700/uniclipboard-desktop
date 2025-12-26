@@ -17,10 +17,10 @@ use infrastructure::storage::db::pool::DB_POOL;
 use infrastructure::uniclipboard::{UniClipboard, UniClipboardBuilder};
 use log::error;
 use std::sync::Arc;
-use tauri::{WebviewUrl, WebviewWindowBuilder};
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
-use utils::logging;
+use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_logging::{Builder as LoggingBuilder, LogTarget};
 
 // 初始化UniClipboard
 fn init_uniclipboard(user_setting: Setting) -> Arc<UniClipboard> {
@@ -89,9 +89,6 @@ fn init_uniclipboard(user_setting: Setting) -> Arc<UniClipboard> {
 }
 
 fn main() {
-    // 初始化日志系统
-    logging::init();
-
     // 加载用户设置
     let user_setting = match Setting::load(None) {
         Ok(config) => config,
@@ -145,6 +142,12 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
     use tauri_plugin_stronghold;
 
     Builder::default()
+        .plugin(
+            LoggingBuilder::new()
+                .level(log::LevelFilter::Debug)
+                .targets([LogTarget::LogDir, LogTarget::Stdout, LogTarget::Webview])
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(

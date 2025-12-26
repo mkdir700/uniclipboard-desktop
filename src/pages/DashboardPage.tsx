@@ -8,6 +8,7 @@ import { useShortcutScope } from "@/hooks/useShortcutScope";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
+import { logger } from "@/utils/logger";
 
 // Debounce delay in milliseconds
 const DEBOUNCE_DELAY = 500;
@@ -44,7 +45,7 @@ const DashboardPage: React.FC = () => {
   const loadData = useCallback(
     async (specificFilter?: Filter) => {
       const filterToUse = specificFilter || currentFilterRef.current;
-      console.log(t("dashboard.logs.loadingClipboard"), filterToUse);
+      await logger.info(t("dashboard.logs.loadingClipboard"), filterToUse);
 
       dispatch(
         fetchClipboardItems({
@@ -75,7 +76,7 @@ const DashboardPage: React.FC = () => {
 
   // Update ref to track the latest filter
   useEffect(() => {
-    console.log(t("dashboard.logs.filterChanged"), currentFilter);
+    void logger.info(t("dashboard.logs.filterChanged"), currentFilter);
     currentFilterRef.current = currentFilter;
     loadData(currentFilter); // Load directly without debounce
   }, [currentFilter, loadData, t]);
@@ -86,18 +87,18 @@ const DashboardPage: React.FC = () => {
     const setupListener = async () => {
       // Only setup if there's no active listener yet
       if (!globalListenerState.isActive) {
-        console.log(t("dashboard.logs.settingGlobalListener"));
+        await logger.info(t("dashboard.logs.settingGlobalListener"));
         globalListenerState.isActive = true;
 
         try {
-          console.log(t("dashboard.logs.startingBackendListener"));
+          await logger.info(t("dashboard.logs.startingBackendListener"));
           await invoke("listen_clipboard_new_content");
-          console.log(t("dashboard.logs.backendListenerStarted"));
+          await logger.info(t("dashboard.logs.backendListenerStarted"));
 
-          console.log(t("dashboard.logs.listeningToClipboardEvents"));
+          await logger.info(t("dashboard.logs.listeningToClipboardEvents"));
           // Clear previously existing listener
           if (globalListenerState.unlisten) {
-            console.log(t("dashboard.logs.clearingPreviousListener"));
+            await logger.info(t("dashboard.logs.clearingPreviousListener"));
             globalListenerState.unlisten();
             globalListenerState.unlisten = undefined;
           }
@@ -107,7 +108,7 @@ const DashboardPage: React.FC = () => {
             record_id: string;
             timestamp: number;
           }>("clipboard-new-content", (event) => {
-            console.log(t("dashboard.logs.newClipboardEvent"), event);
+            void logger.info(t("dashboard.logs.newClipboardEvent"), event);
 
             // Check event timestamp to avoid processing duplicate events within short time
             const currentTime = Date.now();
@@ -116,7 +117,7 @@ const DashboardPage: React.FC = () => {
               currentTime - globalListenerState.lastEventTimestamp <
                 DEBOUNCE_DELAY
             ) {
-              console.log(t("dashboard.logs.ignoringDuplicateEvent"));
+              void logger.info(t("dashboard.logs.ignoringDuplicateEvent"));
               return;
             }
 
@@ -130,11 +131,11 @@ const DashboardPage: React.FC = () => {
           // Save unlisten function to global state
           globalListenerState.unlisten = unlisten;
         } catch (err) {
-          console.error(t("dashboard.logs.setupListenerFailed"), err);
+          await logger.error(t("dashboard.logs.setupListenerFailed"), err);
           globalListenerState.isActive = false;
         }
       } else {
-        console.log(t("dashboard.logs.listenerAlreadyActive"));
+        await logger.info(t("dashboard.logs.listenerAlreadyActive"));
       }
     };
 
@@ -142,7 +143,7 @@ const DashboardPage: React.FC = () => {
     if (!globalListenerState.isActive) {
       setupListener();
     } else {
-      console.log(t("dashboard.logs.globalListenerExists"));
+      void logger.info(t("dashboard.logs.globalListenerExists"));
     }
 
     // Cleanup function when component unmounts
@@ -152,7 +153,7 @@ const DashboardPage: React.FC = () => {
         clearTimeout(debouncedLoadRef.current);
       }
       // Don't clean up global listener, keep it active
-      console.log(t("dashboard.logs.componentUnmounting"));
+      void logger.info(t("dashboard.logs.componentUnmounting"));
     };
   }, [debouncedLoadData, t]);
 
