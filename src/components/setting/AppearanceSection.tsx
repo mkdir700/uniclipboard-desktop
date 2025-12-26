@@ -3,6 +3,7 @@ import { useSetting, ThemeMode } from "@/contexts/SettingContext";
 import { Sun, Moon, Monitor, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { logger } from "@/utils/logger";
 
 export default function AppearanceSection() {
   const { t } = useTranslation();
@@ -20,7 +21,7 @@ export default function AppearanceSection() {
       await updateGeneralSetting({ theme: newTheme });
       setTheme(newTheme);
     } catch (error) {
-      console.error("Failed to change theme:", error);
+      await logger.error("Failed to change theme:", error);
     }
   };
 

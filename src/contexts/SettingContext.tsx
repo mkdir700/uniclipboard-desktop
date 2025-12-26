@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import i18n, { normalizeLanguage, persistLanguage } from "@/i18n";
+import { logger } from "@/utils/logger";
 
 // 内容类型接口
 interface ContentTypes {
@@ -124,7 +125,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
       setSetting(settingObj);
       setError(null);
     } catch (err) {
-      console.error("加载设置失败:", err);
+      await logger.error("加载设置失败:", err);
       setError(`加载设置失败: ${err}`);
     } finally {
       setLoading(false);
@@ -139,7 +140,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({
       setSetting(newSetting);
       setError(null);
     } catch (err) {
-      console.error("保存设置失败:", err);
+      await logger.error("保存设置失败:", err);
       setError(`保存设置失败: ${err}`);
       throw err; // 重新抛出错误，让调用者可以处理
     } finally {

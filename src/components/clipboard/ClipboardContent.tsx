@@ -24,6 +24,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslation } from "react-i18next";
+import { logger } from "@/utils/logger";
 
 interface DisplayClipboardItem {
   id: string;
@@ -109,8 +110,8 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
 
   // 监听 Redux 中的 items 变化，转换为显示项目
   useEffect(() => {
-    console.log(t("clipboard.content.filterCondition"), filter);
-    console.log(t("clipboard.content.queryResults"), reduxItems);
+    void logger.info(t("clipboard.content.filterCondition"), filter);
+    void logger.info(t("clipboard.content.queryResults"), reduxItems);
 
     if (reduxItems && reduxItems.length > 0) {
       let items: DisplayClipboardItem[] = reduxItems.map(convertToDisplayItem);
@@ -118,10 +119,10 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
         items = items.filter((it) => it.isFavorited);
       }
       setClipboardItems(items);
-      console.log(t("clipboard.content.convertedItems"), items);
+      void logger.info(t("clipboard.content.convertedItems"), items);
     } else {
       setClipboardItems([]);
-      console.log(t("clipboard.content.noItemsFound"));
+      void logger.info(t("clipboard.content.noItemsFound"));
     }
   }, [reduxItems, filter, t]);
 
@@ -129,7 +130,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   const convertToDisplayItem = (
     item: ClipboardItemResponse
   ): DisplayClipboardItem => {
-    console.log(t("clipboard.content.logs.convertingItem"), item);
+    void logger.debug(t("clipboard.content.logs.convertingItem"), item);
     // Get type suitable for UI display
     const type = getDisplayType(item.item);
 
@@ -176,11 +177,11 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
   // 处理复制到剪贴板
   const handleCopyItem = async (itemId: string) => {
     try {
-      console.log(`${t("clipboard.content.logs.copyItem")} ${itemId}`);
+      await logger.info(`${t("clipboard.content.logs.copyItem")} ${itemId}`);
       const result = await dispatch(copyToClipboard(itemId)).unwrap();
       return result.success;
     } catch (err) {
-      console.error(t("clipboard.content.logs.copyToClipboardFailed"), err);
+      await logger.error(t("clipboard.content.logs.copyToClipboardFailed"), err);
       return false;
     }
   };
@@ -290,7 +291,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
       await navigator.clipboard.writeText(text);
       return true;
     } catch (e) {
-      console.error("批量复制失败:", e);
+      await logger.error("批量复制失败:", e);
       return false;
     }
   };
@@ -302,7 +303,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
       selectedItems.map((it) =>
         dispatch(toggleFavoriteItem({ id: it.id, isFavorited: targetFavorited }))
           .unwrap()
-          .catch((e) => console.error("设置收藏状态失败:", e))
+          .catch((e) => logger.error("设置收藏状态失败:", e))
       )
     );
   };
@@ -317,7 +318,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
       try {
         await dispatch(removeClipboardItem(it.id)).unwrap();
       } catch (e) {
-        console.error("删除失败:", e);
+        await logger.error("删除失败:", e);
       }
     }
     setSelectedIds(new Set());

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { Laptop, Copy, ArrowRight, Info, Edit } from "lucide-react";
+import { logger } from "@/utils/logger";
 
 interface OnboardingPageProps {
   onComplete?: () => void;
@@ -24,7 +25,7 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete }) => {
       const id = await invoke("get_device_id");
       setDeviceId(id as string);
     } catch (error) {
-      console.error("Failed to get device ID:", error);
+      await logger.error("Failed to get device ID:", error);
     } finally {
       setIsLoading(false);
     }
@@ -52,7 +53,7 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete }) => {
         navigate("/");
       }
     } catch (error) {
-      console.error("Failed to complete onboarding:", error);
+      await logger.error("Failed to complete onboarding:", error);
     } finally {
       setIsLoading(false);
     }

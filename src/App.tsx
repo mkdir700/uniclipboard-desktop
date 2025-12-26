@@ -19,6 +19,7 @@ import { motion } from "framer-motion";
 import { MainLayout } from "@/layouts";
 import { useTranslation } from "react-i18next";
 import "./App.css";
+import { logger } from "@/utils/logger";
 
 // 动画配置
 const pageVariants = {
@@ -53,7 +54,7 @@ const OnboardingWrapper = ({
 
   const handleComplete = () => {
     // 调用父组件的回调函数更新 isOnboarded 状态
-    console.log("引导完成，通知父组件");
+    void logger.info("引导完成，通知父组件");
     onOnboardingComplete();
     setIsComplete(true);
   };
@@ -102,10 +103,10 @@ const AppContent = () => {
     const checkOnboardingStatus = async () => {
       try {
         const status = await invoke("check_onboarding_status");
-        console.log("引导状态检查结果:", status);
+        await logger.info("引导状态检查结果:", status);
         setIsOnboarded(!!status);
       } catch (error) {
-        console.error("检查引导状态失败:", error);
+        await logger.error("检查引导状态失败:", error);
         setIsOnboarded(false);
       } finally {
         setLoading(false);
@@ -125,14 +126,14 @@ const AppContent = () => {
 
   // 添加函数来更新 isOnboarded 状态并导航
   const handleOnboardingComplete = () => {
-    console.log("引导完成，更新状态为 true");
+    void logger.info("引导完成，更新状态为 true");
     setIsOnboarded(true);
     setRedirecting(true);
     setShowDashboardAnimation(true); // 设置显示仪表盘动画
 
     // 使用 setTimeout 给过渡动画一些时间
     setTimeout(() => {
-      console.log("导航到主页");
+      void logger.info("导航到主页");
       navigate("/");
       setRedirecting(false);
     }, 600);
