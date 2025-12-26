@@ -57,7 +57,10 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeCategory, onCat
   ]
 
   return (
-    <Sidebar collapsible="none" className="border-r border-border/50 bg-muted/30 pt-10">
+    <Sidebar
+      collapsible="none"
+      className="min-w-[10.625rem] border-r border-border/50 bg-muted/30 pt-10"
+    >
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
