@@ -23,6 +23,17 @@ const AuthenticatedLayout = () => {
   );
 };
 
+// Settings 页面布局 - 不包含主 Sidebar
+const SettingsLayout = () => {
+  return (
+    <div className="h-screen flex overflow-hidden bg-background text-foreground transition-colors duration-200">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <Outlet />
+      </main>
+    </div>
+  );
+};
+
 // 主应用程序内容
 const AppContent = () => {
   return (
@@ -39,6 +50,8 @@ const AppContent = () => {
               }
             />
             <Route path="/devices" element={<DevicesPage />} />
+          </Route>
+          <Route element={<SettingsLayout />}>
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
