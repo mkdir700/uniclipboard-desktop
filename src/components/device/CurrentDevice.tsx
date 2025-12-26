@@ -13,8 +13,8 @@ const CurrentDevice: React.FC = () => {
         <div className="h-px flex-1 bg-border/50"></div>
       </div>
 
-      <div className="group relative overflow-hidden bg-card/50 hover:bg-card/80 border border-border/50 hover:border-primary/20 rounded-2xl transition-all duration-300 shadow-sm hover:shadow-md">
-        
+      <div className="group relative overflow-hidden bg-card/50 hover:bg-card/80 border border-border/50 hover:border-primary/20 rounded-lg transition-all duration-300 shadow-sm hover:shadow-md">
+
         {/* Abstract Background Gradient */}
         <div className="absolute top-0 right-0 p-12 bg-primary/5 blur-[80px] rounded-full pointer-events-none" />
 
@@ -22,7 +22,7 @@ const CurrentDevice: React.FC = () => {
             <div className="flex items-center justify-between">
             <div className="flex items-center gap-5">
                 {/* Icon Box */}
-                <div className="h-14 w-14 bg-primary/10 rounded-2xl flex items-center justify-center ring-1 ring-primary/20 shadow-inner">
+                <div className="h-14 w-14 bg-primary/10 rounded-md flex items-center justify-center ring-1 ring-primary/20 shadow-inner">
                 <Laptop className="h-7 w-7 text-primary" />
                 </div>
 
@@ -50,9 +50,9 @@ const CurrentDevice: React.FC = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <button 
+                <button
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className={`p-2 rounded-xl transition-all duration-300 ${isExpanded ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                  className={`p-2 rounded-lg transition-all duration-300 ${isExpanded ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
                 >
                 <Settings className={`h-5 w-5 transition-transform duration-500 ${isExpanded ? "rotate-90" : ""}`} />
                 </button>

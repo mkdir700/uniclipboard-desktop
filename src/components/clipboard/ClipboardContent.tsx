@@ -370,7 +370,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
         </div>
       ) : (
         <div className="h-full flex flex-col items-center justify-center gap-6">
-          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-2xl bg-muted/50 border border-dashed border-muted">
+          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-muted/50 border border-dashed border-muted">
             <Inbox className="h-8 w-8 text-muted-foreground/60" />
           </div>
           <div className="text-center">

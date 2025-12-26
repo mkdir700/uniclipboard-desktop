@@ -142,9 +142,9 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
           {status === "idle" && (
             <div className="space-y-4">
               {/* 设备信息卡片 */}
-              <div className="bg-muted rounded-2xl p-5 border border-border/50">
+              <div className="bg-muted rounded-lg p-5 border border-border/50">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-primary/10 rounded-xl">
+                  <div className="p-3 bg-primary/10 rounded-md">
                     <Smartphone className="w-6 h-6 text-primary" />
                   </div>
                   <div className="flex-1">

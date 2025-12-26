@@ -39,7 +39,7 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
           <Button
             data-tauri-drag-region="false"
             onClick={addDevice}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 rounded-xl px-4 py-2 h-auto text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 rounded-lg px-4 py-2 h-auto text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95"
           >
             <Plus className="h-4 w-4 mr-2" />
             添加新设备
@@ -57,7 +57,7 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className={cn(
-                  "relative group flex items-center justify-center px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none",
+                  "relative group flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none",
                   isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 )}
                 whileHover={{ scale: 1.02 }}
@@ -66,7 +66,7 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
                 {isActive && (
                   <motion.div
                     layoutId="activeDeviceTab"
-                    className="absolute inset-0 bg-primary rounded-xl shadow-lg shadow-primary/25"
+                    className="absolute inset-0 bg-primary rounded-lg shadow-lg shadow-primary/25"
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
                 )}

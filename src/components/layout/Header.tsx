@@ -53,13 +53,13 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
             initial={false}
           >
             <div className={cn(
-              "absolute inset-0 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-2xl blur-md transition-opacity duration-500",
+              "absolute inset-0 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-lg blur-md transition-opacity duration-500",
               isSearchFocused ? "opacity-100" : "opacity-0"
             )} />
             <div className={cn(
-              "relative flex items-center px-4 py-3 bg-card/50 backdrop-blur-md rounded-2xl border transition-all duration-300",
-              isSearchFocused 
-                ? "border-transparent shadow-lg shadow-primary/5" 
+              "relative flex items-center px-4 py-3 bg-card/50 backdrop-blur-md rounded-lg border transition-all duration-300",
+              isSearchFocused
+                ? "border-transparent shadow-lg shadow-primary/5"
                 : "border-border/50 shadow-sm hover:border-border/80 hover:bg-card/80"
             )}>
               <Search className={cn(
@@ -92,7 +92,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                 key={filter.id}
                 onClick={() => handleFilterClick(filter.id)}
                 className={cn(
-                  "relative group flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none",
+                  "relative group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none",
                   isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 )}
                 whileHover={{ scale: 1.02 }}
@@ -101,7 +101,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                 {isActive && (
                   <motion.div
                     layoutId="activeFilter"
-                    className="absolute inset-0 bg-primary rounded-xl shadow-lg shadow-primary/25"
+                    className="absolute inset-0 bg-primary rounded-lg shadow-lg shadow-primary/25"
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
                 )}
