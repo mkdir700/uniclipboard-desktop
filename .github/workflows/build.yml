@@ -59,6 +59,16 @@ jobs:
 
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.5
+
+      - name: Cache cargo registry + index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       
       - name: setup node
         uses: actions/setup-node@v4
