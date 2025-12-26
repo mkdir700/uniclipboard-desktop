@@ -19,6 +19,26 @@ function Toaster({ ...props }: ToasterProps) {
           cancelButton: 'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground',
         },
       }}
+      style={
+        {
+          '--normal-bg': 'var(--background)',
+          '--normal-text': 'var(--foreground)',
+          '--normal-border': 'var(--border)',
+          '--success-bg': 'var(--primary)',
+          '--success-border': 'var(--primary)',
+          '--success-text': 'var(--primary-foreground)',
+          '--error-bg': 'var(--destructive)',
+          '--error-border': 'var(--destructive)',
+          '--error-text': 'var(--destructive-foreground)',
+          '--warning-bg': 'var(--accent)',
+          '--warning-border': 'var(--accent)',
+          '--warning-text': 'var(--accent-foreground)',
+          '--info-bg': 'var(--primary)',
+          '--info-border': 'var(--primary)',
+          '--info-text': 'var(--primary-foreground)',
+          '--border-radius': 'var(--radius)',
+        } as React.CSSProperties
+      }
       {...props}
     />
   )
