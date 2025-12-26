@@ -66,7 +66,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         return (
           <p
             className={cn(
-              'whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground/90 break-words',
+              'whitespace-pre-wrap font-mono text-sm leading-relaxed text-foreground/90 wrap-break-word',
               !isExpanded && 'line-clamp-5'
             )}
           >
@@ -138,7 +138,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   return (
     <div
       className={cn(
-        'group relative flex flex-col border-b border-border/40 transition-colors duration-200 select-none',
+        'group relative flex flex-col border-b border-border/40 transition-all duration-300 select-none',
         isSelected
           ? 'bg-primary/5 border-l-4 border-l-primary'
           : 'hover:bg-muted/20 border-l-4 border-l-transparent hover:border-l-primary/30'
