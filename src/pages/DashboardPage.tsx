@@ -6,8 +6,8 @@ import { Filter, OrderBy } from '@/api/clipboardItems'
 import ClipboardContent from '@/components/clipboard/ClipboardContent'
 import Header from '@/components/layout/Header'
 import { toast } from '@/components/ui/sonner'
+import { useSearch } from '@/contexts/SearchContext'
 import { useShortcutScope } from '@/hooks/useShortcutScope'
-import { useSearch } from "@/contexts/SearchContext";
 import { useAppDispatch } from '@/store/hooks'
 import { fetchClipboardItems } from '@/store/slices/clipboardSlice'
 
@@ -27,7 +27,7 @@ const globalListenerState: ListenerState = {
 
 const DashboardPage: React.FC = () => {
   const { t } = useTranslation()
-  const { searchValue } = useSearch();
+  const { searchValue } = useSearch()
   const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.All)
   const dispatch = useAppDispatch()
 
@@ -64,7 +64,7 @@ const DashboardPage: React.FC = () => {
       }
     },
     [dispatch, t]
-  );
+  )
 
   // Debounced data loading
   const debouncedLoadData = useCallback(

@@ -43,12 +43,12 @@ interface DisplayClipboardItem {
 }
 
 interface ClipboardContentProps {
-  filter: Filter;
-  searchQuery?: string;
+  filter: Filter
+  searchQuery?: string
 }
 
-const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery = "" }) => {
-  const { t } = useTranslation();
+const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery = '' }) => {
+  const { t } = useTranslation()
 
   // Use Redux state and dispatch
   const dispatch = useAppDispatch()
@@ -101,58 +101,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
       void handleBatchDelete()
     },
     preventDefault: false,
-  });
-
-  // 监听 Redux 中的 items 变化,转换为显示项目
-  useEffect(() => {
-    console.log(t("clipboard.content.filterCondition"), filter);
-    console.log(t("clipboard.content.queryResults"), reduxItems);
-
-    if (reduxItems && reduxItems.length > 0) {
-      let items: DisplayClipboardItem[] = reduxItems.map(convertToDisplayItem);
-
-      // Apply filter
-      if (filter === Filter.Favorited) {
-        items = items.filter((it) => it.isFavorited);
-      }
-
-      // Apply search query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        items = items.filter((it) => {
-          // Search in text content
-          if (it.type === "text" && it.content) {
-            const textItem = it.content as ClipboardTextItem;
-            return textItem.display_text?.toLowerCase().includes(query);
-          }
-          // Search in code content
-          if (it.type === "code" && it.content) {
-            const codeItem = it.content as ClipboardCodeItem;
-            return codeItem.code?.toLowerCase().includes(query);
-          }
-          // Search in link URL
-          if (it.type === "link" && it.content) {
-            const linkItem = it.content as ClipboardLinkItem;
-            return linkItem.url?.toLowerCase().includes(query);
-          }
-          // Search in file names
-          if (it.type === "file" && it.content) {
-            const fileItem = it.content as ClipboardFileItem;
-            return fileItem.file_names?.some(name =>
-              name.toLowerCase().includes(query)
-            );
-          }
-          return false;
-        });
-      }
-
-      setClipboardItems(items);
-      console.log(t("clipboard.content.convertedItems"), items);
-    } else {
-      setClipboardItems([]);
-      console.log(t("clipboard.content.noItemsFound"));
-    }
-  }, [reduxItems, filter, searchQuery, t]);
+  })
 
   // Convert clipboard item to display item
   const convertToDisplayItem = useCallback(
@@ -203,23 +152,54 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
     [t]
   )
 
-  // 监听 Redux 中的 items 变化，转换为显示项目
+  // 监听 Redux 中的 items 变化,转换为显示项目
   useEffect(() => {
     console.log(t('clipboard.content.filterCondition'), filter)
     console.log(t('clipboard.content.queryResults'), reduxItems)
 
     if (reduxItems && reduxItems.length > 0) {
       let items: DisplayClipboardItem[] = reduxItems.map(convertToDisplayItem)
+
+      // Apply filter
       if (filter === Filter.Favorited) {
         items = items.filter(it => it.isFavorited)
       }
+
+      // Apply search query
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim()
+        items = items.filter(it => {
+          // Search in text content
+          if (it.type === 'text' && it.content) {
+            const textItem = it.content as ClipboardTextItem
+            return textItem.display_text?.toLowerCase().includes(query)
+          }
+          // Search in code content
+          if (it.type === 'code' && it.content) {
+            const codeItem = it.content as ClipboardCodeItem
+            return codeItem.code?.toLowerCase().includes(query)
+          }
+          // Search in link URL
+          if (it.type === 'link' && it.content) {
+            const linkItem = it.content as ClipboardLinkItem
+            return linkItem.url?.toLowerCase().includes(query)
+          }
+          // Search in file names
+          if (it.type === 'file' && it.content) {
+            const fileItem = it.content as ClipboardFileItem
+            return fileItem.file_names?.some(name => name.toLowerCase().includes(query))
+          }
+          return false
+        })
+      }
+
       setClipboardItems(items)
       console.log(t('clipboard.content.convertedItems'), items)
     } else {
       setClipboardItems([])
       console.log(t('clipboard.content.noItemsFound'))
     }
-  }, [reduxItems, filter, t, convertToDisplayItem])
+  }, [reduxItems, filter, searchQuery, t, convertToDisplayItem])
 
   // 处理复制到剪贴板
   const handleCopyItem = async (itemId: string) => {

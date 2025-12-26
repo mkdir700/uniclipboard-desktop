@@ -1,17 +1,9 @@
-import React, { useState } from "react";
-import {
-  ClipboardCopy,
-  Star,
-  FileText,
-  Image,
-  Link as LinkIcon,
-  Folder,
-  Code,
-} from "lucide-react";
-import { Filter } from "@/api/clipboardItems";
-import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
-import { useTranslation } from "react-i18next";
+import { motion } from 'framer-motion'
+import { ClipboardCopy, Star, FileText, Image, Link as LinkIcon, Folder, Code } from 'lucide-react'
+import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Filter } from '@/api/clipboardItems'
+import { cn } from '@/lib/utils'
 
 interface HeaderProps {
   onFilterChange?: (filterId: Filter) => void
@@ -30,7 +22,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
     { id: Filter.Code, label: 'header.filters.code', icon: Code },
   ]
 
-  const [activeFilter, setActiveFilter] = useState<Filter>(Filter.All);
+  const [activeFilter, setActiveFilter] = useState<Filter>(Filter.All)
 
   const handleFilterClick = (filterId: Filter) => {
     setActiveFilter(filterId)
@@ -38,10 +30,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
   }
 
   return (
-    <header
-      data-tauri-drag-region
-      className="shrink-0 px-6 transition-all duration-300"
-    >
+    <header data-tauri-drag-region className="shrink-0 px-6 transition-all duration-300">
       {/* Glass Background */}
       <div
         data-tauri-drag-region
@@ -51,9 +40,9 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
       <div data-tauri-drag-region className="relative z-10">
         {/* Filter Buttons */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2 -mx-6 px-6 mask-linear-fade">
-          {filterTypes.map((filter) => {
-            const Icon = filter.icon;
-            const isActive = activeFilter === filter.id;
+          {filterTypes.map(filter => {
+            const Icon = filter.icon
+            const isActive = activeFilter === filter.id
 
             return (
               <motion.button
@@ -61,10 +50,10 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                 key={filter.id}
                 onClick={() => handleFilterClick(filter.id)}
                 className={cn(
-                  "relative group flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none",
+                  'relative group flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none',
                   isActive
-                    ? "text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    ? 'text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
@@ -73,16 +62,11 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                   <motion.div
                     layoutId="activeFilter"
                     className="absolute inset-0 bg-primary rounded-lg shadow-md shadow-primary/20"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                   />
                 )}
                 <span className="relative z-10 flex items-center gap-2">
-                  <Icon
-                    className={cn(
-                      "h-4 w-4",
-                      isActive ? "text-primary-foreground" : ""
-                    )}
-                  />
+                  <Icon className={cn('h-4 w-4', isActive ? 'text-primary-foreground' : '')} />
                   {t(filter.label)}
                 </span>
               </motion.button>
