@@ -74,6 +74,25 @@ const PairingModal: React.FC<PairingModalProps> = ({ open, onClose, onConnectSuc
     useRef<HTMLInputElement>(null),
   ]
 
+  // 获取 IP 的网段前缀（前三个数字）
+  const getNetworkPrefix = (ip: string): string[] => {
+    const parts = ip.split('.')
+    if (parts.length >= 3) {
+      return [parts[0], parts[1], parts[2]]
+    }
+    return ['', '', '']
+  }
+
+  // 填充网段前缀到 IP 输入框
+  const fillNetworkPrefix = useCallback((ip: string) => {
+    const prefix = getNetworkPrefix(ip)
+    setIpSegments([...prefix, ''])
+    // 聚焦到最后一个输入框
+    setTimeout(() => {
+      ipInputRefs[3].current?.focus()
+    }, 0)
+  }, [])
+
   // 加载本机网卡信息
   const loadLocalInterfaces = useCallback(async () => {
     try {
@@ -87,12 +106,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ open, onClose, onConnectSuc
     } catch (error) {
       console.error('Failed to load local network interfaces:', error)
     }
-  }, [])
-
-  // 填充网段前缀到输入框
-  const fillNetworkPrefix = useCallback((prefix: string[]) => {
-    setIpSegments([prefix[0], prefix[1], prefix[2], ipSegments[3]])
-  }, [])
+  }, [fillNetworkPrefix])
 
   // 重置状态
   useEffect(() => {
@@ -116,25 +130,6 @@ const PairingModal: React.FC<PairingModalProps> = ({ open, onClose, onConnectSuc
       setShowErrorMessage(false)
     }
   }, [connectionState.status])
-
-  // 获取 IP 的网段前缀（前三个数字）
-  const getNetworkPrefix = (ip: string): string[] => {
-    const parts = ip.split('.')
-    if (parts.length >= 3) {
-      return [parts[0], parts[1], parts[2]]
-    }
-    return ['', '', '']
-  }
-
-  // 填充网段前缀到 IP 输入框
-  const fillNetworkPrefix = (ip: string) => {
-    const prefix = getNetworkPrefix(ip)
-    setIpSegments([...prefix, ''])
-    // 聚焦到最后一个输入框
-    setTimeout(() => {
-      ipInputRefs[3].current?.focus()
-    }, 0)
-  }
 
   // 处理网卡选择
   const handleInterfaceSelect = (index: number) => {
@@ -268,7 +263,7 @@ const PairingModal: React.FC<PairingModalProps> = ({ open, onClose, onConnectSuc
     } catch (error: unknown) {
       setConnectionState({
         status: 'failed',
-        message: error.toString() || '连接失败，请重试',
+        message: error instanceof Error ? error.message : '连接失败，请重试',
         canRetry: true,
       })
     }
