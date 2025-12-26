@@ -119,27 +119,31 @@ export const TitleBar = ({ className }: TitleBarProps) => {
       )}
     >
       <div
-        data-tauri-drag-region
-        className="h-full flex items-center justify-between px-3 cursor-default"
-        onDoubleClick={isWindows ? handleToggleMaximize : undefined}
+        className="h-full flex items-center justify-between cursor-default"
       >
-        {isSettingsPage ? (
-          <button
-            onClick={handleBack}
-            data-tauri-drag-region="false"
-            className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground active:bg-primary/10 active:text-primary"
-            aria-label={t('nav.back')}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="w-2 h-2 rounded-full bg-primary/80 shadow-sm" />
-            <span className="font-medium text-foreground">UniClipboard</span>
-          </div>
-        )}
+        <div
+          data-tauri-drag-region
+          className="flex-1 flex items-center px-3"
+          onDoubleClick={isWindows ? handleToggleMaximize : undefined}
+        >
+          {isSettingsPage ? (
+            <button
+              onClick={handleBack}
+              data-tauri-drag-region="false"
+              className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground active:bg-primary/10 active:text-primary"
+              aria-label={t("nav.back")}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="w-2 h-2 rounded-full bg-primary/80 shadow-sm" />
+              <span className="font-medium text-foreground">UniClipboard</span>
+            </div>
+          )}
+        </div>
         {isWindows && (
-          <div className="flex items-center h-full ml-auto" data-tauri-drag-region="false">
+          <div className="flex items-center h-full" data-tauri-drag-region="false">
             <TitleBarButton aria-label="最小化" onClick={handleMinimize}>
               <Minus className="h-4 w-4" />
             </TitleBarButton>
