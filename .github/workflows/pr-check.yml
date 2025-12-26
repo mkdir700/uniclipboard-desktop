@@ -116,10 +116,11 @@ jobs:
 
       - name: Upload build artifacts (Windows)
         if: success() && matrix.platform == 'windows-latest'
+        shell: bash
         run: |
           echo "Uploading Windows artifacts..."
-          ls -lh src-tauri/target/release/bundle/msi/
-          ls -lh src-tauri/target/release/bundle/nsis/
+          ls -lh src-tauri/target/release/bundle/msi/ || true
+          ls -lh src-tauri/target/release/bundle/nsis/ || true
 
       - name: Upload MSI installer
         if: success() && matrix.platform == 'windows-latest'
