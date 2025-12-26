@@ -114,15 +114,24 @@ jobs:
         with:
           args: ${{ matrix.args }}
 
-      - name: Upload build artifacts
+      - name: Upload build artifacts (Windows)
+        if: success() && matrix.platform == 'windows-latest'
         uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: pr-check-${{ matrix.target }}-${{ github.sha }}
           path: |
-            src-tauri/target/release/bundle/
-            src-tauri/target/${{ matrix.target }}/release/bundle/
-          if-no-files-found: warn
+            src-tauri/target/release/bundle/msi/*
+            src-tauri/target/release/bundle/nsis/*
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build artifacts (Unix)
+        if: success() && matrix.platform != 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-${{ matrix.target }}-${{ github.sha }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/*/*
+          if-no-files-found: error
           retention-days: 7
 
       - name: Get artifact download URL
