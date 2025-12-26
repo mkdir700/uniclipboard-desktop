@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   Switch,
-  Label,
   Input,
 
   Select,
@@ -10,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui";
+import { Card, CardContent } from "@/components/ui/card";
 import { useSetting } from "../../contexts/SettingContext";
 import { useTranslation } from "react-i18next";
 
@@ -94,74 +94,89 @@ const SyncSection: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <>
       {/* Auto sync switch */}
-      <div className="flex items-center justify-between py-2 rounded-lg px-2">
-        <div className="space-y-0.5">
-          <Label htmlFor="auto-sync" className="text-base">
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
             {t("settings.sections.sync.autoSync.label")}
-          </Label>
-          <p className="text-sm text-muted-foreground">
-            {t("settings.sections.sync.autoSync.description")}
-          </p>
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
         </div>
-        <Switch
-          id="auto-sync"
-          checked={autoSync}
-          onCheckedChange={handleAutoSyncChange}
-        />
-      </div>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between py-2">
+            <p className="text-sm text-muted-foreground">
+              {t("settings.sections.sync.autoSync.description")}
+            </p>
+            <Switch
+              id="auto-sync"
+              checked={autoSync}
+              onCheckedChange={handleAutoSyncChange}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Sync frequency selection */}
-      <div className="flex items-center justify-between py-2 rounded-lg px-2">
-        <div className="space-y-0.5">
-          <Label htmlFor="sync-frequency" className="text-base">
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
             {t("settings.sections.sync.syncFrequency.label")}
-          </Label>
-          <p className="text-sm text-muted-foreground">
-            {t("settings.sections.sync.syncFrequency.description")}
-          </p>
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
         </div>
-        <Select value={syncFrequency} onValueChange={handleSyncFrequencyChange}>
-          <SelectTrigger className="w-52">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {syncFrequencyOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between gap-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              {t("settings.sections.sync.syncFrequency.description")}
+            </p>
+            <Select value={syncFrequency} onValueChange={handleSyncFrequencyChange}>
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {syncFrequencyOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Max file size input */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label className="text-base">{t("settings.sections.sync.maxFileSize.label")}</Label>
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.sync.maxFileSize.label")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between gap-4 py-2">
             <p className="text-sm text-muted-foreground">
               {t("settings.sections.sync.maxFileSize.description")}
             </p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2">
-              <Input
-                type="text"
-                value={maxFileSize.toString()}
-                onChange={handleMaxFileSizeChange}
-                className={maxFileSizeError ? "border-red-500 w-32" : "w-32"}
-              />
-              <span className="text-sm text-muted-foreground">MB</span>
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  value={maxFileSize.toString()}
+                  onChange={handleMaxFileSizeChange}
+                  className={maxFileSizeError ? "border-red-500 w-32" : "w-32"}
+                />
+                <span className="text-sm text-muted-foreground">MB</span>
+              </div>
+              {maxFileSizeError && (
+                <p className="text-xs text-red-500">{maxFileSizeError}</p>
+              )}
             </div>
-            {maxFileSizeError && (
-              <p className="text-xs text-red-500">{maxFileSizeError}</p>
-            )}
           </div>
-        </div>
-      </div>
-    </div>
+        </CardContent>
+      </Card>
+    </>
   );
 };
 

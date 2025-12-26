@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSetting } from "@/contexts/SettingContext";
 import { Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@/components/ui";
+import { Card, CardContent } from "@/components/ui/card";
 
 const NetworkSection: React.FC = () => {
   const { t } = useTranslation();
@@ -160,123 +161,135 @@ const NetworkSection: React.FC = () => {
   return (
     <>
       {/* Sync Method */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h4 className="text-base font-medium">{t("settings.sections.network.syncMethod.label")}</h4>
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.network.syncMethod.label")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between gap-4 py-2">
             <p className="text-sm text-muted-foreground">
               {t("settings.sections.network.syncMethod.description")}
             </p>
+            <Select
+              value={syncMethod}
+              onValueChange={handleSyncMethodChange}
+            >
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {syncMethodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select
-            value={syncMethod}
-            onValueChange={handleSyncMethodChange}
-          >
-            <SelectTrigger className="w-64">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {syncMethodOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Webserver Port */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h4 className="text-base font-medium">{t("settings.sections.network.webserverPort.label")}</h4>
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.network.webserverPort.label")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between gap-4 py-2">
             <p className="text-sm text-muted-foreground">
               {t("settings.sections.network.webserverPort.description")}
             </p>
+            <div className="flex flex-col items-end gap-1">
+              <Input
+                type="text"
+                value={webserverPort.toString()}
+                onChange={handleWebserverPortChange}
+                className={portError ? "border-red-500 w-64" : "w-64"}
+              />
+              {portError && (
+                <p className="text-xs text-red-500">{portError}</p>
+              )}
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-1">
-            <Input
-              type="text"
-              value={webserverPort.toString()}
-              onChange={handleWebserverPortChange}
-              className={portError ? "border-red-500 w-64" : "w-64"}
-            />
-            {portError && (
-              <p className="text-xs text-red-500">{portError}</p>
-            )}
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Custom Peer Device Toggle */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h4 className="text-base font-medium">{t("settings.sections.network.customPeerDevice.label")}</h4>
+      {/* Custom Peer Device */}
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.network.customPeerDevice.label")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <CardContent className="pt-0 space-y-4">
+          <div className="flex items-center justify-between py-2">
             <p className="text-sm text-muted-foreground">
               {t("settings.sections.network.customPeerDevice.description")}
             </p>
-          </div>
-          <Switch
-            checked={customPeerDevice}
-            onCheckedChange={handleCustomPeerDeviceChange}
-          />
-        </div>
-      </div>
-
-      {/* Peer IP and Port (only shown when custom peer device is enabled) */}
-      {customPeerDevice && (
-        <>
-          {/* Peer IP */}
-          <div className="py-2 rounded-lg px-2 ml-4 border-l-2 border-muted pl-4">
-            <div className="space-y-2">
-              <h4 className="text-base font-medium">{t("settings.sections.network.customPeerDevice.peerIp.label")}</h4>
-              <p className="text-sm text-muted-foreground">
-                {t("settings.sections.network.customPeerDevice.peerIp.description")}
-              </p>
-              <Input
-                type="text"
-                value={peerDeviceAddr}
-                onChange={handlePeerDeviceAddrChange}
-                className={peerIpError ? "border-red-500" : ""}
-              />
-              {peerIpError && (
-                <p className="text-xs text-red-500">{peerIpError}</p>
-              )}
-            </div>
+            <Switch
+              checked={customPeerDevice}
+              onCheckedChange={handleCustomPeerDeviceChange}
+            />
           </div>
 
-          {/* Peer Port */}
-          <div className="py-2 rounded-lg px-2 ml-4 border-l-2 border-muted pl-4">
-            <div className="space-y-2">
-              <h4 className="text-base font-medium">{t("settings.sections.network.customPeerDevice.peerPort.label")}</h4>
-              <p className="text-sm text-muted-foreground">
-                {t("settings.sections.network.customPeerDevice.peerPort.description")}
-              </p>
-              <Input
-                type="text"
-                value={peerDevicePort.toString()}
-                onChange={handlePeerDevicePortChange}
-                className={peerPortError ? "border-red-500" : ""}
-              />
-              {peerPortError && (
-                <p className="text-xs text-red-500">{peerPortError}</p>
-              )}
+          {/* Peer IP and Port (only shown when custom peer device is enabled) */}
+          {customPeerDevice && (
+            <div className="space-y-4 pt-4 border-t border-border/50">
+              {/* Peer IP */}
+              <div className="ml-4 border-l-2 border-muted pl-4 space-y-2">
+                <h4 className="text-sm font-medium">{t("settings.sections.network.customPeerDevice.peerIp.label")}</h4>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.sections.network.customPeerDevice.peerIp.description")}
+                </p>
+                <Input
+                  type="text"
+                  value={peerDeviceAddr}
+                  onChange={handlePeerDeviceAddrChange}
+                  className={peerIpError ? "border-red-500" : ""}
+                />
+                {peerIpError && (
+                  <p className="text-xs text-red-500">{peerIpError}</p>
+                )}
+              </div>
+
+              {/* Peer Port */}
+              <div className="ml-4 border-l-2 border-muted pl-4 space-y-2">
+                <h4 className="text-sm font-medium">{t("settings.sections.network.customPeerDevice.peerPort.label")}</h4>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.sections.network.customPeerDevice.peerPort.description")}
+                </p>
+                <Input
+                  type="text"
+                  value={peerDevicePort.toString()}
+                  onChange={handlePeerDevicePortChange}
+                  className={peerPortError ? "border-red-500" : ""}
+                />
+                {peerPortError && (
+                  <p className="text-xs text-red-500">{peerPortError}</p>
+                )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       {/* Cloud Server Configuration */}
-      <div className="py-2 rounded-lg px-2 opacity-60 cursor-not-allowed">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-2">
-            <h4 className="text-base font-medium">{t("settings.sections.network.cloudServer.label")}</h4>
-            <span className="px-1.5 py-0.5 bg-muted text-xs text-muted-foreground rounded">
-              {t("settings.sections.network.cloudServer.badge")}
-            </span>
-          </div>
+      <Card className="opacity-60">
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.network.cloudServer.label")}
+          </h3>
+          <span className="px-1.5 py-0.5 bg-muted text-xs text-muted-foreground rounded">
+            {t("settings.sections.network.cloudServer.badge")}
+          </span>
+          <div className="h-px flex-1 bg-border/50"></div>
           <button
             className="px-2 py-1 bg-muted text-xs text-muted-foreground rounded pointer-events-none"
             disabled
@@ -284,12 +297,14 @@ const NetworkSection: React.FC = () => {
             {t("settings.sections.network.cloudServer.advanced")}
           </button>
         </div>
-        <div className="flex">
-          <div className="px-2 py-1 bg-muted rounded-lg text-sm text-muted-foreground flex-1">
-            {t("settings.sections.network.cloudServer.default")} ({cloudServer})
+        <CardContent className="pt-0">
+          <div className="py-2">
+            <div className="px-2 py-1 bg-muted rounded-lg text-sm text-muted-foreground">
+              {t("settings.sections.network.cloudServer.default")} ({cloudServer})
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </>
   );
 };

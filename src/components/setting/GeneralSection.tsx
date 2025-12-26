@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from "@/components/ui";
+import { Card, CardContent } from "@/components/ui/card";
 import { useSetting } from "@/contexts/SettingContext";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
@@ -81,14 +82,16 @@ export default function GeneralSection() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        <h4 className="text-base font-medium px-2">
-          {t("settings.sections.general.startupTitle")}
-        </h4>
-
-        <div className="py-2 rounded-lg px-2">
-          <div className="flex items-center justify-between">
+    <>
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.general.startupTitle")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <CardContent className="pt-0 space-y-4">
+          <div className="flex items-center justify-between py-2">
             <div className="space-y-0.5">
               <h4 className="text-sm font-medium">
                 {t("settings.sections.general.autoStart.label")}
@@ -103,10 +106,8 @@ export default function GeneralSection() {
               disabled={isLoading}
             />
           </div>
-        </div>
 
-        <div className="py-2 rounded-lg px-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between py-2">
             <div className="space-y-0.5">
               <h4 className="text-sm font-medium">
                 {t("settings.sections.general.silentStart.label")}
@@ -121,16 +122,18 @@ export default function GeneralSection() {
               disabled={isLoading}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.general.language.title")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
         </div>
-      </div>
-
-      <div className="space-y-4">
-        <h4 className="text-base font-medium px-2">
-          {t("settings.sections.general.language.title")}
-        </h4>
-
-        <div className="py-2 rounded-lg px-2">
-          <div className="flex items-center justify-between gap-4">
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between gap-4 py-2">
             <div className="space-y-0.5">
               <h4 className="text-sm font-medium">
                 {t("settings.sections.general.language.label")}
@@ -159,8 +162,8 @@ export default function GeneralSection() {
               </Select>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }

@@ -1,7 +1,9 @@
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Minus, Square, X } from "lucide-react";
+import { Minus, Square, X, ArrowLeft } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 interface TitleBarProps {
@@ -52,8 +54,14 @@ const TitleBarButton = ({
 export const TitleBar = ({ className }: TitleBarProps) => {
   const [isWindows, setIsWindows] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { t } = useTranslation();
 
   const isTauri = useMemo(isTauriEnv, []);
+
+  // 检测是否在 Settings 页面
+  const isSettingsPage = location.pathname.startsWith("/settings");
 
   useEffect(() => {
     if (!isTauri) return;
@@ -100,6 +108,10 @@ export const TitleBar = ({ className }: TitleBarProps) => {
     await getCurrentWindow().close();
   };
 
+  const handleBack = () => {
+    navigate(-1);
+  };
+
   return (
     <div
       className={cn(
@@ -113,10 +125,21 @@ export const TitleBar = ({ className }: TitleBarProps) => {
         className="h-full flex items-center justify-between px-3 cursor-default"
         onDoubleClick={isWindows ? handleToggleMaximize : undefined}
       >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="w-2 h-2 rounded-full bg-primary/80 shadow-sm" />
-          <span className="font-medium text-foreground">UniClipboard</span>
-        </div>
+        {isSettingsPage ? (
+          <button
+            onClick={handleBack}
+            data-tauri-drag-region="false"
+            className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground active:bg-primary/10 active:text-primary"
+            aria-label={t("nav.back")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="w-2 h-2 rounded-full bg-primary/80 shadow-sm" />
+            <span className="font-medium text-foreground">UniClipboard</span>
+          </div>
+        )}
         {isWindows && (
           <div className="flex items-center h-full ml-auto" data-tauri-drag-region="false">
             <TitleBarButton aria-label="最小化" onClick={handleMinimize}>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Slider, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui";
+import { Card, CardContent } from "@/components/ui/card";
 import { useSetting } from "@/contexts/SettingContext";
 import { useTranslation } from "react-i18next";
 
@@ -74,122 +75,147 @@ const StorageSection: React.FC = () => {
   return (
     <>
       {/* Auto clear rule */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h4 className="text-base font-medium">{t("settings.sections.storage.autoClearHistory.label")}</h4>
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.storage.autoClearHistory.label")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between gap-4 py-2">
             <p className="text-sm text-muted-foreground">
               {t("settings.sections.storage.autoClearHistory.description")}
             </p>
+            <Select
+              value={autoClearHistory}
+              onValueChange={handleAutoClearHistoryChange}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {autoClearOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select
-            value={autoClearHistory}
-            onValueChange={handleAutoClearHistoryChange}
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {autoClearOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Storage usage */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-base font-medium">{t("settings.sections.storage.storageUsage.label")}</h4>
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.storage.storageUsage.label")}
+          </h3>
           <span className="text-sm text-muted-foreground">128MB / 1GB</span>
+          <div className="h-px flex-1 bg-border/50"></div>
         </div>
-        <div className="w-full bg-secondary rounded-full h-2.5">
-          <div
-            className="bg-primary h-2.5 rounded-full"
-            style={{ width: "12.8%" }}
-          ></div>
-        </div>
-        <div className="flex justify-between mt-1 text-xs text-muted-foreground">
-          <span>{t("settings.sections.storage.storageUsage.usage", { percentage: "12.8" })}</span>
-        </div>
-      </div>
-
-      {/* Storage limit */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="w-full space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <h4 className="text-base font-medium">{t("settings.sections.storage.historyRetention.label")}</h4>
-              <p className="text-sm text-muted-foreground">
-                {t("settings.sections.storage.historyRetention.description")}
-              </p>
+        <CardContent className="pt-0">
+          <div className="space-y-2 py-2">
+            <div className="w-full bg-secondary rounded-full h-2.5">
+              <div
+                className="bg-primary h-2.5 rounded-full"
+                style={{ width: "12.8%" }}
+              ></div>
             </div>
-            <span className="text-sm text-muted-foreground">{t("settings.sections.storage.historyRetention.days", { days: historyRetentionDays })}</span>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{t("settings.sections.storage.storageUsage.usage", { percentage: "12.8" })}</span>
+            </div>
           </div>
-          <Slider
-            min={1}
-            max={90}
-            step={1}
-            value={[historyRetentionDays]}
-            onValueChange={handleHistoryRetentionChange}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{t("settings.sections.storage.historyRetention.days", { days: 7 })}</span>
-            <span>{t("settings.sections.storage.historyRetention.days", { days: 30 })}</span>
-            <span>{t("settings.sections.storage.historyRetention.days", { days: 60 })}</span>
-            <span>{t("settings.sections.storage.historyRetention.days", { days: 90 })}</span>
-          </div>
+        </CardContent>
+      </Card>
+
+      {/* History retention */}
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.storage.historyRetention.label")}
+          </h3>
+          <span className="text-sm text-muted-foreground">{t("settings.sections.storage.historyRetention.days", { days: historyRetentionDays })}</span>
+          <div className="h-px flex-1 bg-border/50"></div>
         </div>
-      </div>
+        <CardContent className="pt-0">
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              {t("settings.sections.storage.historyRetention.description")}
+            </p>
+            <Slider
+              min={1}
+              max={90}
+              step={1}
+              value={[historyRetentionDays]}
+              onValueChange={handleHistoryRetentionChange}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{t("settings.sections.storage.historyRetention.days", { days: 7 })}</span>
+              <span>{t("settings.sections.storage.historyRetention.days", { days: 30 })}</span>
+              <span>{t("settings.sections.storage.historyRetention.days", { days: 60 })}</span>
+              <span>{t("settings.sections.storage.historyRetention.days", { days: 90 })}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Max history items */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h4 className="text-base font-medium">{t("settings.sections.storage.maxHistoryItems.label")}</h4>
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.storage.maxHistoryItems.label")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between gap-4 py-2">
             <p className="text-sm text-muted-foreground">
               {t("settings.sections.storage.maxHistoryItems.description")}
             </p>
+            <Select
+              value={maxHistoryItems.toString()}
+              onValueChange={handleMaxHistoryItemsChange}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {maxHistoryOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select
-            value={maxHistoryItems.toString()}
-            onValueChange={handleMaxHistoryItemsChange}
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {maxHistoryOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Clear history */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <h4 className="text-base font-medium">{t("settings.sections.storage.clearHistory.label")}</h4>
+      <Card>
+        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+            {t("settings.sections.storage.clearHistory.label")}
+          </h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between gap-4 py-2">
             <p className="text-sm text-muted-foreground">
               {t("settings.sections.storage.clearHistory.description")}
             </p>
+            <button
+              className="px-3 py-1.5 bg-destructive/10 hover:bg-destructive/20 text-sm text-destructive rounded-lg transition duration-150"
+              onClick={handleClearHistory}
+            >
+              {t("settings.sections.storage.clearHistory.button")}
+            </button>
           </div>
-          <button
-            className="px-3 py-1.5 bg-destructive/10 hover:bg-destructive/20 text-sm text-destructive rounded-lg transition duration-150"
-            onClick={handleClearHistory}
-          >
-            {t("settings.sections.storage.clearHistory.button")}
-          </button>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </>
   );
 };
