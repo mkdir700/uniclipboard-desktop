@@ -31,6 +31,7 @@ pub struct ConnectionManager {
     clipboard_message_sync_sender: Arc<broadcast::Sender<ClipboardTransferMessage>>,
     listen_new_devices_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     try_connect_offline_devices_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
+    pending_connections_cleanup_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     user_setting: Setting,
     /// 待处理连接请求管理器
     pub pending_connections: Arc<PendingConnectionsManager>,
@@ -49,6 +50,7 @@ impl ConnectionManager {
             clipboard_message_sync_sender: Arc::new(clipboard_message_sync_sender),
             listen_new_devices_handle: Arc::new(RwLock::new(None)),
             try_connect_offline_devices_handle: Arc::new(RwLock::new(None)),
+            pending_connections_cleanup_handle: Arc::new(RwLock::new(None)),
             user_setting: Setting::get_instance(),
             pending_connections,
         }
@@ -67,6 +69,7 @@ impl ConnectionManager {
             clipboard_message_sync_sender: Arc::new(clipboard_message_sync_sender),
             listen_new_devices_handle: Arc::new(RwLock::new(None)),
             try_connect_offline_devices_handle: Arc::new(RwLock::new(None)),
+            pending_connections_cleanup_handle: Arc::new(RwLock::new(None)),
             user_setting,
             pending_connections,
         }
@@ -223,7 +226,8 @@ impl ConnectionManager {
             Some(self.try_connect_offline_devices().await);
 
         // 启动待处理连接清理任务
-        self.start_pending_connections_cleanup().await;
+        *self.pending_connections_cleanup_handle.write().await =
+            Some(self.start_pending_connections_cleanup().await);
 
         info!("Connection manager started");
 
@@ -231,7 +235,7 @@ impl ConnectionManager {
     }
 
     /// 启动待处理连接清理任务
-    async fn start_pending_connections_cleanup(&self) {
+    async fn start_pending_connections_cleanup(&self) -> JoinHandle<()> {
         let pending_connections = self.pending_connections.clone();
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(30));
@@ -240,7 +244,7 @@ impl ConnectionManager {
                 // 清理超过 60 秒的过期出站请求
                 pending_connections.cleanup_expired_outgoing(60).await;
             }
-        });
+        })
     }
 
     /// 停止
@@ -253,6 +257,14 @@ impl ConnectionManager {
             handle.abort();
         }
         if let Some(handle) = self.try_connect_offline_devices_handle.write().await.take() {
+            handle.abort();
+        }
+        if let Some(handle) = self
+            .pending_connections_cleanup_handle
+            .write()
+            .await
+            .take()
+        {
             handle.abort();
         }
 
