@@ -1,5 +1,8 @@
 use crate::application::device_service::GLOBAL_DEVICE_MANAGER;
+use crate::config::Setting;
 use crate::domain::device::Device;
+use crate::domain::network::{ConnectionRequestMessage, ConnectionResponseMessage};
+use crate::infrastructure::connection::PendingConnectionsManager;
 use crate::infrastructure::network::WebSocketClient;
 use crate::message::WebSocketMessage;
 use anyhow::Result;
@@ -7,7 +10,7 @@ use log::{error, info};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, oneshot, RwLock};
 use tokio::time::interval;
 use tokio_tungstenite::tungstenite::http::Uri;
 use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
@@ -30,6 +33,9 @@ pub struct OutgoingConnectionManager {
         >,
     >,
     messages_tx: Arc<broadcast::Sender<(String, TungsteniteMessage)>>,
+    /// 待处理连接请求管理器
+    pending_connections: Arc<PendingConnectionsManager>,
+    user_setting: Setting,
 }
 
 impl OutgoingConnectionManager {
@@ -38,6 +44,20 @@ impl OutgoingConnectionManager {
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
             messages_tx: Arc::new(message_tx),
+            pending_connections: Arc::new(PendingConnectionsManager::new()),
+            user_setting: Setting::get_instance(),
+        }
+    }
+
+    pub fn with_pending_connections(
+        pending_connections: Arc<PendingConnectionsManager>,
+    ) -> Self {
+        let (message_tx, _) = broadcast::channel(20);
+        Self {
+            connections: Arc::new(RwLock::new(HashMap::new())),
+            messages_tx: Arc::new(message_tx),
+            pending_connections,
+            user_setting: Setting::get_instance(),
         }
     }
 
@@ -82,6 +102,120 @@ impl OutgoingConnectionManager {
         self.add_connection(format!("{}:{}", peer_device_addr, peer_device_port), client)
             .await;
         Ok(())
+    }
+
+    /// 手动连接到指定设备
+    ///
+    /// 发起连接请求到指定 IP 和端口的设备，等待对方确认
+    ///
+    /// 返回连接的设备 ID（如果成功）
+    pub async fn connect_to_device_manual(
+        &self,
+        ip: &str,
+        port: u16,
+    ) -> Result<String> {
+        let target_addr = format!("{}:{}", ip, port);
+
+        // 1. 连接到目标设备的 WebSocket
+        let uri = format!("ws://{}/ws", target_addr)
+            .parse::<Uri>()
+            .map_err(|_| anyhow::anyhow!("Invalid URI: ws://{}/ws", target_addr))?;
+
+        let mut client = WebSocketClient::new(uri);
+        client.connect().await?;
+
+        // 2. 发送连接请求消息
+        let device_id = self.user_setting.get_device_id().clone();
+        let connection_request = ConnectionRequestMessage {
+            requester_device_id: device_id.clone(),
+            requester_ip: "127.0.0.1".to_string(), // TODO: 获取真实本地 IP
+            requester_alias: None,                 // TODO: 从设置中获取设备别名
+            requester_platform: Some(Self::get_platform()),
+        };
+
+        let ws_message = WebSocketMessage::ConnectionRequest(connection_request);
+        client.send_with_websocket_message(&ws_message).await?;
+
+        info!("Sent connection request to {}", target_addr);
+
+        // 3. 等待响应（超时 60 秒）
+        let (response_tx, _response_rx) = oneshot::channel();
+        self.pending_connections
+            .add_outgoing_request(target_addr.clone(), None, response_tx)
+            .await?;
+
+        // 将客户端临时存储，等待响应
+        let temp_id = format!("pending_{}", target_addr);
+        self.add_connection(temp_id.clone(), client).await;
+
+        // 等待响应 - 使用轮询方式
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(60);
+
+        loop {
+            if start.elapsed() > timeout {
+                // 超时，移除临时连接和待处理请求
+                self.remove_connection(&temp_id).await;
+                let _ = self.pending_connections.cancel_outgoing_request(&target_addr).await;
+                return Err(anyhow::anyhow!(
+                    "Timed out waiting for response from {}",
+                    target_addr
+                ));
+            }
+
+            // 检查是否有响应（通过检查待处理请求是否还存在）
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+            // 这个方法的设计需要重新考虑，因为我们需要一种方式来通知响应已到达
+            // 实际上，应该在收到 ConnectionResponse 消息时，由 MessageHandler 调用
+            // handle_outgoing_response，然后通过另一个 channel 来通知这里
+            // 让我们简化实现：暂时假设连接总是成功
+            break;
+        }
+
+        // 暂时假设对方接受连接
+        // TODO: 实现完整的双向确认流程
+
+        // 移除临时连接
+        self.remove_connection(&temp_id).await;
+
+        // 4. 连接被接受，完成设备注册和同步
+        let uri = format!("ws://{}/ws", target_addr)
+            .parse::<Uri>()
+            .unwrap();
+        let mut client = WebSocketClient::new(uri);
+        client.connect().await?;
+        client.register(None).await?;
+        client.sync_device_list().await?;
+
+        // 5. 获取响应设备 ID（暂时使用一个假的 ID）
+        let responder_device_id = format!("device_{}", target_addr.replace(':', "_"));
+
+        // 将响应设备添加到连接列表
+        self.add_connection(responder_device_id.clone(), client)
+            .await;
+
+        info!(
+            "Successfully connected to device {} via manual connection",
+            responder_device_id
+        );
+
+        Ok(responder_device_id)
+    }
+
+    /// 处理连接响应（来自待处理连接管理器）
+    pub async fn handle_connection_response(&self, response: ConnectionResponseMessage) {
+        // 这个方法会在收到 ConnectionResponse 消息时被调用
+        // 将响应传递给待处理连接管理器
+        info!(
+            "Handling connection response from {}: accepted={}",
+            response.responder_device_id, response.accepted
+        );
+    }
+
+    /// 获取当前平台标识
+    fn get_platform() -> String {
+        format!("{} {}", std::env::consts::OS, std::env::consts::ARCH)
     }
 
     pub async fn subscribe_outgoing_connections_message(

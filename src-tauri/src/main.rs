@@ -231,10 +231,18 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
             api::clipboard_items::get_clipboard_stats,
             api::event::listen_clipboard_new_content,
             api::event::stop_listen_clipboard_new_content,
+            api::event::listen_connection_request,
+            api::event::stop_listen_connection_request,
+            api::event::listen_connection_response,
+            api::event::stop_listen_connection_response,
             api::onboarding::check_onboarding_status,
             api::onboarding::complete_onboarding,
             api::onboarding::get_device_id,
             api::onboarding::save_device_info,
+            api::device_connection::get_local_network_interfaces,
+            api::device_connection::connect_to_device_manual,
+            api::device_connection::respond_to_connection_request,
+            api::device_connection::cancel_connection_request,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

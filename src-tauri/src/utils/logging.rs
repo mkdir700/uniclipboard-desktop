@@ -1,9 +1,13 @@
 use chrono::Local;
 use env_logger::{Builder, Env};
 use std::io::Write;
+use crate::utils::env::is_development;
 
 pub fn init() {
-    Builder::from_env(Env::default().default_filter_or("debug"))
+    // 根据环境设置默认日志级别
+    let default_log_level = if is_development() { "debug" } else { "info" };
+
+    Builder::from_env(Env::default().default_filter_or(default_log_level))
         .format(|buf, record| {
             let mut style = buf.style();
             let level_style = match record.level() {

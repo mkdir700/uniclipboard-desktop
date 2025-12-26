@@ -213,3 +213,34 @@ No test framework currently configured. When adding tests:
 - Rust tests go in `src-tauri/tests/` or inline `#[cfg(test)]` modules
 - Frontend tests use Vitest (add to devDependencies)
 - Integration tests can use Cargo features: `integration_tests`, `network_tests`, `hardware_tests`
+
+## UI/UX Guidelines
+
+### Theme Support Best Practices
+
+**ALWAYS test components in both light and dark themes** to ensure proper contrast and visibility.
+
+**Container Components** (Dialog, Card, Popover, etc.):
+- Use `bg-card` + `text-card-foreground` for containers with content
+- Use `bg-background` only for page/base backgrounds
+- Use `bg-muted` for disabled/readonly states with `text-foreground` (not `text-muted-foreground`)
+
+**Common Pitfalls**:
+```tsx
+// ❌ WRONG - Background color on containers makes them blend in
+<DialogContent className="bg-background" />
+
+// ✅ CORRECT - Card color creates proper visual hierarchy
+<DialogContent className="bg-card text-card-foreground" />
+
+// ❌ WRONG - Muted text on readonly inputs is hard to read
+<input className="bg-muted text-muted-foreground" readOnly />
+
+// ✅ CORRECT - Muted background with foreground text
+<input className="bg-muted/50 text-foreground" readOnly />
+```
+
+**Status Messages**:
+- Add `border border-{color}/20` to banners for better visibility in light mode
+- Use `font-medium` on text for better readability
+- Ensure hover states use `/70` opacity (not `/60`) for visibility

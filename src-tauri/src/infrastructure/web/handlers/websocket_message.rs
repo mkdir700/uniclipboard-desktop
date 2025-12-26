@@ -85,6 +85,28 @@ impl WebSocketMessageHandler {
                         WebSocketMessage::Unregister(device_id) => {
                             self.message_handler.handle_unregister(device_id).await;
                         }
+                        WebSocketMessage::ConnectionRequest(request) => {
+                            if let MessageSource::IpPort(addr) = message_source {
+                                debug!(
+                                    "Received connection request: {:?}, source: {:?}",
+                                    request, addr
+                                );
+                                self.message_handler
+                                    .handle_connection_request(request, addr)
+                                    .await;
+                            } else {
+                                error!("ConnectionRequest source is not IpPort");
+                            }
+                        }
+                        WebSocketMessage::ConnectionResponse(response) => {
+                            debug!(
+                                "Received connection response: {:?}, source: {:?}",
+                                response, message_source
+                            );
+                            self.message_handler
+                                .handle_connection_response(response, message_source)
+                                .await;
+                        }
                     },
                     Err(e) => {
                         error!(
