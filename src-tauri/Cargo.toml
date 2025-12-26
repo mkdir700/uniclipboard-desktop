@@ -100,6 +100,7 @@ testing = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"
+objc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = { version = "5.4.0" }

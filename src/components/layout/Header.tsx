@@ -1,18 +1,8 @@
 import { motion } from 'framer-motion'
-import {
-  Search,
-  ClipboardCopy,
-  Star,
-  FileText,
-  Image,
-  Link as LinkIcon,
-  Folder,
-  Code,
-} from 'lucide-react'
+import { ClipboardCopy, Star, FileText, Image, Link as LinkIcon, Folder, Code } from 'lucide-react'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Filter } from '@/api/clipboardItems'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 interface HeaderProps {
@@ -33,7 +23,6 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
   ]
 
   const [activeFilter, setActiveFilter] = useState<Filter>(Filter.All)
-  const [isSearchFocused, setIsSearchFocused] = useState(false)
 
   const handleFilterClick = (filterId: Filter) => {
     setActiveFilter(filterId)
@@ -41,60 +30,16 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
   }
 
   return (
-    <header
-      data-tauri-drag-region
-      className="sticky top-0 z-50 pt-6 pb-2 px-8 transition-all duration-300"
-    >
+    <header data-tauri-drag-region className="shrink-0 px-6 transition-all duration-300">
       {/* Glass Background */}
       <div
         data-tauri-drag-region
-        className="absolute inset-0 bg-background/60 backdrop-blur-xl border-b border-white/5 shadow-sm"
+        className="absolute inset-0 bg-background/60 backdrop-blur-xl border-b border-white/5 shadow-sm rounded-lg"
       />
 
-      <div data-tauri-drag-region className="relative z-10 space-y-4">
-        {/* Top Row: Search & Status */}
-        <div className="flex items-center justify-between gap-4">
-          <motion.div
-            className={cn(
-              'relative flex-1 group transition-all duration-300',
-              isSearchFocused ? 'scale-[1.01]' : ''
-            )}
-            initial={false}
-          >
-            <div
-              className={cn(
-                'absolute inset-0 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-lg blur-md transition-opacity duration-500',
-                isSearchFocused ? 'opacity-100' : 'opacity-0'
-              )}
-            />
-            <div
-              className={cn(
-                'relative flex items-center px-4 py-3 bg-card/50 backdrop-blur-md rounded-lg border transition-all duration-300',
-                isSearchFocused
-                  ? 'border-transparent shadow-lg shadow-primary/5'
-                  : 'border-border/50 shadow-sm hover:border-border/80 hover:bg-card/80'
-              )}
-            >
-              <Search
-                className={cn(
-                  'h-5 w-5 mr-3 transition-colors duration-300',
-                  isSearchFocused ? 'text-primary' : 'text-muted-foreground'
-                )}
-              />
-              <Input
-                data-tauri-drag-region="false"
-                type="text"
-                placeholder={t('header.searchPlaceholder')}
-                className="bg-transparent border-none p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/50"
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-              />
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Filter Scroll Area */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 -mx-8 px-8 mask-linear-fade">
+      <div data-tauri-drag-region className="relative z-10">
+        {/* Filter Buttons */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2 -mx-6 px-6 mask-linear-fade">
           {filterTypes.map(filter => {
             const Icon = filter.icon
             const isActive = activeFilter === filter.id
@@ -105,7 +50,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                 key={filter.id}
                 onClick={() => handleFilterClick(filter.id)}
                 className={cn(
-                  'relative group flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none',
+                  'relative group flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none',
                   isActive
                     ? 'text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -116,7 +61,7 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
                 {isActive && (
                   <motion.div
                     layoutId="activeFilter"
-                    className="absolute inset-0 bg-primary rounded-lg shadow-lg shadow-primary/25"
+                    className="absolute inset-0 bg-primary rounded-lg shadow-md shadow-primary/20"
                     transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                   />
                 )}

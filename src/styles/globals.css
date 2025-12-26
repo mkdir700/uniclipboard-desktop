@@ -190,6 +190,15 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    margin: 0;
+    padding: 0;
+    background-color: transparent;
+    overflow: hidden;
+  }
+
   html {
     font-family: var(--font-sans);
   }

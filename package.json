@@ -23,6 +23,7 @@
     ]
   },
   "dependencies": {
+    "@cloudworxx/tauri-plugin-mac-rounded-corners": "^1.1.1",
     "@headlessui/react": "^2.2.9",
     "@ltd/j-toml": "^1.38.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",

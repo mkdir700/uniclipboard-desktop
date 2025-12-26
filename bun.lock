@@ -5,6 +5,7 @@
     "": {
       "name": "uniclipboard",
       "dependencies": {
+        "@cloudworxx/tauri-plugin-mac-rounded-corners": "^1.1.1",
         "@headlessui/react": "^2.2.9",
         "@ltd/j-toml": "^1.38.0",
         "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -144,6 +145,8 @@
     "@babel/traverse": ["@babel/traverse@7.28.5", "", { "dependencies": { "@babel/code-frame": "^7.27.1", "@babel/generator": "^7.28.5", "@babel/helper-globals": "^7.28.0", "@babel/parser": "^7.28.5", "@babel/template": "^7.27.2", "@babel/types": "^7.28.5", "debug": "^4.3.1" } }, "sha512-TCCj4t55U90khlYkVV/0TfkJkAkUg3jZFA3Neb7unZT8CPok7iiRfaX0F+WnqWqt7OxhOn0uBKXCw4lbL8W0aQ=="],
 
     "@babel/types": ["@babel/types@7.28.5", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.28.5" } }, "sha512-qQ5m48eI/MFLQ5PxQj4PFaprjyCTLI37ElWMmNs0K8Lk3dVeOdNpB3ks8jc7yM5CDmVC73eMVk/trk3fgmrUpA=="],
+
+    "@cloudworxx/tauri-plugin-mac-rounded-corners": ["@cloudworxx/tauri-plugin-mac-rounded-corners@1.1.1", "", { "peerDependencies": { "@tauri-apps/api": "^2" }, "bin": { "tauri-plugin-mac-rounded-corners": "scripts/install.js" } }, "sha512-oF75CsaetpvqzMlbULMqGjpg4Y3GqdIIqU4+gbjtPEuLb2AYWGGprjL3UQfIm6Ew75pDFFgVxnL7rJBr5uttgg=="],
 
     "@dotenvx/dotenvx": ["@dotenvx/dotenvx@1.51.2", "", { "dependencies": { "commander": "^11.1.0", "dotenv": "^17.2.1", "eciesjs": "^0.4.10", "execa": "^5.1.1", "fdir": "^6.2.0", "ignore": "^5.3.0", "object-treeify": "1.1.33", "picomatch": "^4.0.2", "which": "^4.0.0" }, "bin": { "dotenvx": "src/cli/dotenvx.js" } }, "sha512-+693mNflujDZxudSEqSNGpn92QgFhJlBn9q2mDQ9yGWyHuz3hZ8B5g3EXCwdAz4DMJAI+OFCIbfEFZS+YRdrEA=="],
 

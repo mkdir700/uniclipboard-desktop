@@ -6,6 +6,7 @@ import { Filter, OrderBy } from '@/api/clipboardItems'
 import ClipboardContent from '@/components/clipboard/ClipboardContent'
 import Header from '@/components/layout/Header'
 import { toast } from '@/components/ui/sonner'
+import { useSearch } from '@/contexts/SearchContext'
 import { useShortcutScope } from '@/hooks/useShortcutScope'
 import { useAppDispatch } from '@/store/hooks'
 import { fetchClipboardItems } from '@/store/slices/clipboardSlice'
@@ -26,6 +27,7 @@ const globalListenerState: ListenerState = {
 
 const DashboardPage: React.FC = () => {
   const { t } = useTranslation()
+  const { searchValue } = useSearch()
   const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.All)
   const dispatch = useAppDispatch()
 
@@ -168,13 +170,13 @@ const DashboardPage: React.FC = () => {
   }, [debouncedLoadData, t])
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full relative pt-10">
       {/* Top search bar */}
       <Header onFilterChange={handleFilterChange} />
 
       {/* Clipboard content area - use flex-1 to make it take remaining space */}
       <div className="flex-1 overflow-hidden relative">
-        <ClipboardContent filter={currentFilter} />
+        <ClipboardContent filter={currentFilter} searchQuery={searchValue} />
       </div>
     </div>
   )
