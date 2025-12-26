@@ -26,10 +26,8 @@ const AuthenticatedLayout = () => {
 // Settings 页面布局 - 不包含主 Sidebar
 const SettingsLayout = () => {
   return (
-    <div className="h-screen flex overflow-hidden bg-background text-foreground transition-colors duration-200">
-      <main className="flex-1 flex flex-col overflow-hidden relative">
-        <Outlet />
-      </main>
+    <div className="h-screen w-full bg-background text-foreground transition-colors duration-200">
+      <Outlet />
     </div>
   );
 };

@@ -74,21 +74,25 @@ const SettingsPage: React.FC = () => {
   };
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <SettingsSidebar
-          activeCategory={activeCategory}
-          onCategoryChange={handleCategoryClick}
-        />
-        <SidebarInset>
-          <SettingsPageHeader />
-          <ScrollArea className="flex-1">
-            <div className="flex-1 p-8">
-              {renderActiveSection()}
-            </div>
-          </ScrollArea>
-        </SidebarInset>
-      </div>
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "20rem",
+        } as React.CSSProperties
+      }
+    >
+      <SettingsSidebar
+        activeCategory={activeCategory}
+        onCategoryChange={handleCategoryClick}
+      />
+      <SidebarInset>
+        <SettingsPageHeader />
+        <ScrollArea className="flex-1">
+          <div className="flex-1 p-8">
+            {renderActiveSection()}
+          </div>
+        </ScrollArea>
+      </SidebarInset>
     </SidebarProvider>
   );
 };
