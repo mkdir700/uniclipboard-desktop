@@ -27,43 +27,43 @@ const SettingsPage: React.FC = () => {
     switch (activeCategory) {
       case "general":
         return (
-          <SettingContentLayout title={t("settings.sections.general.title")}>
+          <SettingContentLayout>
             <GeneralSection />
           </SettingContentLayout>
         );
       case "appearance":
         return (
-          <SettingContentLayout title={t("settings.sections.appearance.title")}>
+          <SettingContentLayout>
             <AppearanceSection />
           </SettingContentLayout>
         );
       case "sync":
         return (
-          <SettingContentLayout title={t("settings.sections.sync.title")}>
+          <SettingContentLayout>
             <SyncSection />
           </SettingContentLayout>
         );
       case "security":
         return (
-          <SettingContentLayout title={t("settings.sections.security.title")}>
+          <SettingContentLayout>
             <SecuritySection />
           </SettingContentLayout>
         );
       case "network":
         return (
-          <SettingContentLayout title={t("settings.sections.network.title")}>
+          <SettingContentLayout>
             <NetworkSection />
           </SettingContentLayout>
         );
       case "storage":
         return (
-          <SettingContentLayout title={t("settings.sections.storage.title")}>
+          <SettingContentLayout>
             <StorageSection />
           </SettingContentLayout>
         );
       case "about":
         return (
-          <SettingContentLayout title={t("settings.sections.about.title")}>
+          <SettingContentLayout>
             <AboutSection />
           </SettingContentLayout>
         );

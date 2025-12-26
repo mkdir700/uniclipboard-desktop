@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Switch, Input } from "@/components/ui";
+import { Card, CardContent } from "@/components/ui/card";
 import { useSetting } from "@/contexts/SettingContext";
 import { setEncryptionPassword, getEncryptionPassword } from "@/api/security";
 import { useTranslation } from "react-i18next";
@@ -45,13 +46,13 @@ const SecuritySection: React.FC = () => {
   }
 
   return (
-    <>
-      {/* End-to-end encryption */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
+    <Card>
+      <CardContent className="pt-6 space-y-4">
+        {/* End-to-end encryption */}
+        <div className="flex items-center justify-between py-2">
           <div className="space-y-0.5">
-            <h4 className="text-base font-medium">{t("settings.sections.security.endToEndEncryption.label")}</h4>
-            <p className="text-sm text-muted-foreground">
+            <h4 className="text-sm font-medium">{t("settings.sections.security.endToEndEncryption.label")}</h4>
+            <p className="text-xs text-muted-foreground">
               {t("settings.sections.security.endToEndEncryption.description")}
             </p>
           </div>
@@ -60,14 +61,12 @@ const SecuritySection: React.FC = () => {
             onCheckedChange={handleEndToEndEncryptionChange}
           />
         </div>
-      </div>
 
-      {/* Encryption password */}
-      <div className="py-2 rounded-lg px-2">
-        <div className="flex items-center justify-between">
+        {/* Encryption password */}
+        <div className="flex items-center justify-between gap-4 py-2">
           <div className="space-y-0.5">
-            <h4 className="text-base font-medium">{t("settings.sections.security.encryptionPassword.label")}</h4>
-            <p className="text-sm text-muted-foreground">
+            <h4 className="text-sm font-medium">{t("settings.sections.security.encryptionPassword.label")}</h4>
+            <p className="text-xs text-muted-foreground">
               {t("settings.sections.security.encryptionPassword.description")}
             </p>
           </div>
@@ -88,8 +87,8 @@ const SecuritySection: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
-    </>
+      </CardContent>
+    </Card>
   );
 };
 
