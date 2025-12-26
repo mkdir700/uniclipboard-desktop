@@ -40,6 +40,24 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
 
+  // 判断是否应该显示展开按钮
+  const shouldShowExpandButton = (): boolean => {
+    if (!content) return false
+
+    switch (type) {
+      case 'text':
+        return (content as ClipboardTextItem).is_truncated === true
+      case 'image':
+        return true
+      case 'code':
+        return (content as ClipboardCodeItem).code.split('\n').length > 6
+      case 'link':
+      case 'file':
+      default:
+        return false
+    }
+  }
+
   // Calculate character count or size info
   const getSizeInfo = (): string => {
     if (!content) return ''
@@ -153,17 +171,19 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         {/* Left: Time */}
         <div className="min-w-20">{time}</div>
 
-        {/* Center: Expand Button (Visible if expandable content, or always visible logic) */}
-        <div
-          className="flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50"
-          onClick={e => {
-            e.stopPropagation()
-            setIsExpanded(!isExpanded)
-          }}
-        >
-          {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          <span>{isExpanded ? t('clipboard.item.collapse') : t('clipboard.item.expand')}</span>
-        </div>
+        {/* Center: Expand Button (仅在需要时显示) */}
+        {shouldShowExpandButton() && (
+          <div
+            className="flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50"
+            onClick={e => {
+              e.stopPropagation()
+              setIsExpanded(!isExpanded)
+            }}
+          >
+            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            <span>{isExpanded ? t('clipboard.item.collapse') : t('clipboard.item.expand')}</span>
+          </div>
+        )}
 
         {/* Right: Stats & Index */}
         <div className="flex items-center gap-4 min-w-20 justify-end">
