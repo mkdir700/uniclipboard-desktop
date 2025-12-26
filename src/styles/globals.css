@@ -170,9 +170,10 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+@import './themes/zinc.css';
 @import './themes/catppuccin.css';
 @import './themes/t3chat.css';
-@import './themes/zinc.css';
+@import './themes/claude.css';
 
 /* 玻璃态效果 */
 @layer utilities {
