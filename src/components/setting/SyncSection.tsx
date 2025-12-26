@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   Switch,
-  Label,
   Input,
 
   Select,

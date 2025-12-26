@@ -11,10 +11,8 @@ import AppearanceSection from "@/components/setting/AppearanceSection";
 import SettingsSidebar from "@/components/setting/SettingsSidebar";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useTranslation } from "react-i18next";
 
 const SettingsPage: React.FC = () => {
-  const { t } = useTranslation();
   const [activeCategory, setActiveCategory] = useState("general");
 
   // 处理类别点击事件
