@@ -1,14 +1,13 @@
 import { useSetting } from "@/contexts/SettingContext"
-import { toast } from "sonner"
-
-type ToasterProps = React.ComponentProps<typeof toast.Toaster>
+import { toast, Toaster as SonnerToaster } from "sonner"
+import type { ToasterProps } from "sonner"
 
 function Toaster({ ...props }: ToasterProps) {
   const { setting } = useSetting()
   const theme = setting?.general.theme || "system"
 
   return (
-    <toast.Toaster
+    <SonnerToaster
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       toastOptions={{
