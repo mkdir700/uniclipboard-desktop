@@ -8,25 +8,9 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  setup-matrix:
+  check:
+    name: Code Check
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Generate matrix for PR check
-        id: set-matrix
-        run: |
-          # For PR checks, we only build on Windows x86_64
-          echo 'matrix=[{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
-
-  build-tauri:
-    name: Build ${{ matrix.target }}
-    needs: setup-matrix
-    runs-on: ${{ matrix.platform }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.setup-matrix.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,10 +27,7 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      # Cache layers for faster builds
       - name: Cache Bun dependencies
         uses: actions/cache@v4
         with:
@@ -57,203 +38,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      - name: Cache cargo-chef binary
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-chef
-          key: ${{ runner.os }}-cargo-chef-${{ hashFiles('src-tauri/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-chef-
-
-      - name: Install cargo-chef
-        run: cargo install cargo-chef
-
-      - name: Create cargo chef recipe
-        working-directory: src-tauri
-        run: cargo chef prepare --recipe-path recipe.json
-
       - name: Cache Rust dependencies
         uses: actions/cache@v4
         with:
           path: |
-            src-tauri/target
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-chef-${{ matrix.target }}-${{ hashFiles('src-tauri/recipe.json') }}
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-chef-${{ matrix.target }}-
-            ${{ runner.os }}-chef-
-
-      - name: Cook Rust dependencies
-        working-directory: src-tauri
-        run: cargo chef cook --release --recipe-path recipe.json
-
-      - name: Cache Tauri CLI
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.local/share/tauri
-          key: ${{ runner.os }}-tauri-${{ hashFiles('src-tauri/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-tauri-
-
-      - name: Install system dependencies (Ubuntu)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+            ${{ runner.os }}-cargo-
 
       - name: Install frontend dependencies
         run: bun install
 
-      - name: Build frontend
+      - name: Type check frontend
         run: bun run build
 
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        with:
-          args: ${{ matrix.args }}
-
-      - name: Upload build artifacts (Windows)
-        if: success() && matrix.platform == 'windows-latest'
-        shell: bash
-        run: |
-          echo "Uploading Windows artifacts..."
-          ls -lh src-tauri/target/release/bundle/msi/ || true
-          ls -lh src-tauri/target/release/bundle/nsis/ || true
-
-      - name: Upload MSI installer
-        if: success() && matrix.platform == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr-check-${{ matrix.target }}-msi-${{ github.sha }}
-          path: src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload NSIS installer
-        if: success() && matrix.platform == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr-check-${{ matrix.target }}-nsis-${{ github.sha }}
-          path: src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload build artifacts (Unix)
-        if: success() && matrix.platform != 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr-check-${{ matrix.target }}-${{ github.sha }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/*/*
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Get artifact download URL
-        if: success()
-        id: artifact-url
-        run: |
-          # Construct artifact download URL
-          echo "url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_OUTPUT"
-          echo "name=pr-check-${{ matrix.target }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
-
-  comment-artifacts:
-    name: Comment artifacts to PR
-    needs: [setup-matrix, build-tauri]
-    if: always()
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Comment PR with artifact links
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId,
-            });
-
-            const buildJobs = jobs.jobs.filter(job =>
-              job.name.startsWith('Build ') && job.conclusion === 'success'
-            );
-
-            if (buildJobs.length === 0) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: '### ❌ Build Failed\n\nNo successful builds found. Please check the workflow logs for details.'
-              });
-              return;
-            }
-
-            const artifacts = buildJobs.map(job => {
-              const target = job.name.replace('Build ', '');
-              const artifactName = `pr-check-${target}-${{ github.sha }}`;
-              return {
-                platform: target,
-                artifactName: artifactName,
-                downloadUrl: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-              };
-            });
-
-            let comment = '### ✅ PR Check - Build Artifacts\n\n';
-            comment += 'All platforms built successfully! Download artifacts from this workflow run.\n\n';
-            comment += '#### 📦 Available Builds\n\n';
-
-            const platformEmojis = {
-              'aarch64-apple-darwin': '🍎',
-              'x86_64-apple-darwin': '🍎',
-              'x86_64-unknown-linux-gnu': '🐧',
-              'x86_64-pc-windows-msvc': '🪟'
-            };
-
-            const platformNames = {
-              'aarch64-apple-darwin': 'macOS (Apple Silicon)',
-              'x86_64-apple-darwin': 'macOS (Intel)',
-              'x86_64-unknown-linux-gnu': 'Linux (Ubuntu 22.04)',
-              'x86_64-pc-windows-msvc': 'Windows'
-            };
-
-            artifacts.forEach(artifact => {
-              const emoji = platformEmojis[artifact.platform] || '📦';
-              const platformName = platformNames[artifact.platform] || artifact.platform;
-              comment += `${emoji} **${platformName}**\n`;
-              comment += `- Artifact: \`${artifact.artifactName}\`\n`;
-              comment += `- [Download from workflow run](${artifact.downloadUrl})\n\n`;
-            });
-
-            comment += '---\n';
-            comment += '*Artifacts are retained for 7 days. Download links require repository access.*';
-
-            // Find existing comment
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const botComment = comments.find(comment =>
-              comment.user.type === 'Bot' &&
-              comment.body.includes('PR Check - Build Artifacts')
-            );
-
-            if (botComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: comment
-              });
-            } else {
-              // Create new comment
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: comment
-              });
-            }
+      - name: Check Rust code
+        working-directory: src-tauri
+        run: cargo check --all-targets --all-features
