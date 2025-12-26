@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -103,12 +103,7 @@
 
 @theme inline {
   --font-sans:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    "Microsoft YaHei UI",
-    system-ui,
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
   --font-mono: Fira Code, monospace;
   --font-serif: Georgia, serif;
   --radius: 0.35rem;
@@ -175,9 +170,9 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-@import "./themes/catppuccin.css";
-@import "./themes/t3chat.css";
-@import "./themes/zinc.css";
+@import './themes/catppuccin.css';
+@import './themes/t3chat.css';
+@import './themes/zinc.css';
 
 /* 玻璃态效果 */
 @layer utilities {

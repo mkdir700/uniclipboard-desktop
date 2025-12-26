@@ -1,9 +1,9 @@
-import React from "react";
+import React from 'react'
 
 const Permissions: React.FC = () => {
   return (
     <>
-      {" "}
+      {' '}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-gray-400">权限管理</h3>
@@ -23,21 +23,11 @@ const Permissions: React.FC = () => {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
-                  <th className="py-3 text-left text-gray-400 font-medium">
-                    设备
-                  </th>
-                  <th className="py-3 text-center text-gray-400 font-medium">
-                    读取剪贴板
-                  </th>
-                  <th className="py-3 text-center text-gray-400 font-medium">
-                    写入剪贴板
-                  </th>
-                  <th className="py-3 text-center text-gray-400 font-medium">
-                    访问历史
-                  </th>
-                  <th className="py-3 text-center text-gray-400 font-medium">
-                    文件传输
-                  </th>
+                  <th className="py-3 text-left text-gray-400 font-medium">设备</th>
+                  <th className="py-3 text-center text-gray-400 font-medium">读取剪贴板</th>
+                  <th className="py-3 text-center text-gray-400 font-medium">写入剪贴板</th>
+                  <th className="py-3 text-center text-gray-400 font-medium">访问历史</th>
+                  <th className="py-3 text-center text-gray-400 font-medium">文件传输</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,7 +187,7 @@ const Permissions: React.FC = () => {
         </div>
       </div>
     </>
-  );
-};
+  )
+}
 
-export default Permissions;
+export default Permissions

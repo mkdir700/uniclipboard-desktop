@@ -1,25 +1,25 @@
-import React from "react";
-import { Plus } from "lucide-react";
-import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { motion } from 'framer-motion'
+import { Plus } from 'lucide-react'
+import React from 'react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
-export type DeviceTab = "connected" | "requests";
+export type DeviceTab = 'connected' | 'requests'
 
 interface HeaderProps {
-  addDevice: () => void;
-  activeTab: DeviceTab;
-  onTabChange: (tab: DeviceTab) => void;
+  addDevice: () => void
+  activeTab: DeviceTab
+  onTabChange: (tab: DeviceTab) => void
 }
 
 const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) => {
   const tabs: { id: DeviceTab; label: string }[] = [
-    { id: "requests", label: "配对请求" },
-    { id: "connected", label: "已连接设备" },
-  ];
+    { id: 'requests', label: '配对请求' },
+    { id: 'connected', label: '已连接设备' },
+  ]
 
   return (
-    <header 
+    <header
       data-tauri-drag-region
       className="sticky top-0 z-50 pt-6 pb-2 px-8 transition-all duration-300"
     >
@@ -48,8 +48,8 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
 
         {/* Tabs Scroll Area */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 -mx-8 px-8 mask-linear-fade">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
+          {tabs.map(tab => {
+            const isActive = activeTab === tab.id
 
             return (
               <motion.button
@@ -57,8 +57,10 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className={cn(
-                  "relative group flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none",
-                  isActive ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  'relative group flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-300 outline-none select-none',
+                  isActive
+                    ? 'text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 )}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
@@ -67,19 +69,17 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
                   <motion.div
                     layoutId="activeDeviceTab"
                     className="absolute inset-0 bg-primary rounded-lg shadow-lg shadow-primary/25"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                   />
                 )}
-                <span className="relative z-10">
-                  {tab.label}
-                </span>
+                <span className="relative z-10">{tab.label}</span>
               </motion.button>
-            );
+            )
           })}
         </div>
       </div>
     </header>
-  );
-};
+  )
+}
 
-export default Header;
+export default Header

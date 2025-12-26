@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react'
 
 const SettingFooter: React.FC = () => {
   return (
@@ -67,7 +67,7 @@ const SettingFooter: React.FC = () => {
         </div>
       </footer>
     </>
-  );
-};
+  )
+}
 
-export default SettingFooter;
+export default SettingFooter

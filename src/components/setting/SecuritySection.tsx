@@ -1,48 +1,52 @@
-import React, { useEffect, useState } from "react";
-import { Switch, Input } from "@/components/ui";
-import { Card, CardContent } from "@/components/ui/card";
-import { useSetting } from "@/contexts/SettingContext";
-import { setEncryptionPassword, getEncryptionPassword } from "@/api/security";
-import { useTranslation } from "react-i18next";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { setEncryptionPassword, getEncryptionPassword } from '@/api/security'
+import { Switch, Input } from '@/components/ui'
+import { Card, CardContent } from '@/components/ui/card'
+import { useSetting } from '@/contexts/SettingContext'
 
 const SecuritySection: React.FC = () => {
-  const { t } = useTranslation();
-  const { setting, error, updateSecuritySetting } = useSetting();
+  const { t } = useTranslation()
+  const { setting, error, updateSecuritySetting } = useSetting()
 
   // Local state
-  const [endToEndEncryption, setEndToEndEncryption] = useState(true);
-  const [encryptionPassword, setEncryptionPasswordInput] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [endToEndEncryption, setEndToEndEncryption] = useState(true)
+  const [encryptionPassword, setEncryptionPasswordInput] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   // Debounce save password
   useEffect(() => {
     const timer = setTimeout(() => {
-      setEncryptionPassword(encryptionPassword);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [encryptionPassword]);
+      setEncryptionPassword(encryptionPassword)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [encryptionPassword])
 
   // Update local state when settings are loaded
   useEffect(() => {
     if (setting) {
-      setEndToEndEncryption(setting.security.end_to_end_encryption);
-      getEncryptionPassword().then((password) => {
-        setEncryptionPasswordInput(password || "");
-      });
+      setEndToEndEncryption(setting.security.end_to_end_encryption)
+      getEncryptionPassword().then(password => {
+        setEncryptionPasswordInput(password || '')
+      })
     }
-  }, [setting]);
+  }, [setting])
 
   // Handle end-to-end encryption toggle change
   const handleEndToEndEncryptionChange = (checked: boolean) => {
-    const newValue = checked;
-    setEndToEndEncryption(newValue);
-    updateSecuritySetting({ end_to_end_encryption: newValue });
-  };
+    const newValue = checked
+    setEndToEndEncryption(newValue)
+    updateSecuritySetting({ end_to_end_encryption: newValue })
+  }
 
   // Display error message if there is an error
   if (error) {
-    return <div className="text-red-500 py-4">{t("settings.sections.security.loadError")}: {error}</div>;
+    return (
+      <div className="text-red-500 py-4">
+        {t('settings.sections.security.loadError')}: {error}
+      </div>
+    )
   }
 
   return (
@@ -51,31 +55,32 @@ const SecuritySection: React.FC = () => {
         {/* End-to-end encryption */}
         <div className="flex items-center justify-between py-2">
           <div className="space-y-0.5">
-            <h4 className="text-sm font-medium">{t("settings.sections.security.endToEndEncryption.label")}</h4>
+            <h4 className="text-sm font-medium">
+              {t('settings.sections.security.endToEndEncryption.label')}
+            </h4>
             <p className="text-xs text-muted-foreground">
-              {t("settings.sections.security.endToEndEncryption.description")}
+              {t('settings.sections.security.endToEndEncryption.description')}
             </p>
           </div>
-          <Switch
-            checked={endToEndEncryption}
-            onCheckedChange={handleEndToEndEncryptionChange}
-          />
+          <Switch checked={endToEndEncryption} onCheckedChange={handleEndToEndEncryptionChange} />
         </div>
 
         {/* Encryption password */}
         <div className="flex items-center justify-between gap-4 py-2">
           <div className="space-y-0.5">
-            <h4 className="text-sm font-medium">{t("settings.sections.security.encryptionPassword.label")}</h4>
+            <h4 className="text-sm font-medium">
+              {t('settings.sections.security.encryptionPassword.label')}
+            </h4>
             <p className="text-xs text-muted-foreground">
-              {t("settings.sections.security.encryptionPassword.description")}
+              {t('settings.sections.security.encryptionPassword.description')}
             </p>
           </div>
           <div className="relative flex items-center">
             <Input
-              type={showPassword ? "text" : "password"}
+              type={showPassword ? 'text' : 'password'}
               value={encryptionPassword}
-              onChange={(e) => setEncryptionPasswordInput(e.target.value)}
-              placeholder={t("settings.sections.security.encryptionPassword.placeholder")}
+              onChange={e => setEncryptionPasswordInput(e.target.value)}
+              placeholder={t('settings.sections.security.encryptionPassword.placeholder')}
               className="w-64 pr-10"
             />
             <button
@@ -89,7 +94,7 @@ const SecuritySection: React.FC = () => {
         </div>
       </CardContent>
     </Card>
-  );
-};
+  )
+}
 
-export default SecuritySection;
+export default SecuritySection

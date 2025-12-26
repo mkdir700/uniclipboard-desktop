@@ -1,14 +1,6 @@
-import React from "react";
-import { useTranslation } from "react-i18next";
-import {
-  Settings,
-  Palette,
-  RefreshCw,
-  Shield,
-  Wifi,
-  HardDrive,
-  Info,
-} from "lucide-react";
+import { Settings, Palette, RefreshCw, Shield, Wifi, HardDrive, Info } from 'lucide-react'
+import React from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Sidebar,
   SidebarContent,
@@ -16,56 +8,53 @@ import {
   SidebarGroupContent,
   SidebarMenu,
   SidebarMenuItem,
-} from "@/components/ui/sidebar";
+} from '@/components/ui/sidebar'
 
 interface SettingsSidebarProps {
-  activeCategory: string;
-  onCategoryChange: (category: string) => void;
+  activeCategory: string
+  onCategoryChange: (category: string) => void
 }
 
-const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
-  activeCategory,
-  onCategoryChange,
-}) => {
-  const { t } = useTranslation();
+const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeCategory, onCategoryChange }) => {
+  const { t } = useTranslation()
 
   const settingsNavItems = [
     {
-      id: "general",
-      label: t("settings.categories.general"),
+      id: 'general',
+      label: t('settings.categories.general'),
       icon: Settings,
     },
     {
-      id: "appearance",
-      label: t("settings.categories.appearance"),
+      id: 'appearance',
+      label: t('settings.categories.appearance'),
       icon: Palette,
     },
     {
-      id: "sync",
-      label: t("settings.categories.sync"),
+      id: 'sync',
+      label: t('settings.categories.sync'),
       icon: RefreshCw,
     },
     {
-      id: "security",
-      label: t("settings.categories.security"),
+      id: 'security',
+      label: t('settings.categories.security'),
       icon: Shield,
     },
     {
-      id: "network",
-      label: t("settings.categories.network"),
+      id: 'network',
+      label: t('settings.categories.network'),
       icon: Wifi,
     },
     {
-      id: "storage",
-      label: t("settings.categories.storage"),
+      id: 'storage',
+      label: t('settings.categories.storage'),
       icon: HardDrive,
     },
     {
-      id: "about",
-      label: t("settings.categories.about"),
+      id: 'about',
+      label: t('settings.categories.about'),
       icon: Info,
     },
-  ];
+  ]
 
   return (
     <Sidebar collapsible="none" className="border-r border-border/50 bg-muted/30 pt-10">
@@ -73,9 +62,9 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {settingsNavItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeCategory === item.id;
+              {settingsNavItems.map(item => {
+                const Icon = item.icon
+                const isActive = activeCategory === item.id
 
                 return (
                   <SidebarMenuItem key={item.id}>
@@ -91,14 +80,14 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
                       <span>{item.label}</span>
                     </button>
                   </SidebarMenuItem>
-                );
+                )
               })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-  );
-};
+  )
+}
 
-export default SettingsSidebar;
+export default SettingsSidebar

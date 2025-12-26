@@ -1,19 +1,13 @@
-import DashboardPage from "@/pages/DashboardPage";
-import DevicesPage from "@/pages/DevicesPage";
-import SettingsPage from "@/pages/SettingsPage";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-  Outlet,
-} from "react-router-dom";
-import { SettingProvider } from "@/contexts/SettingContext";
-import { ShortcutProvider } from "@/contexts/ShortcutContext";
-import { MainLayout } from "@/layouts";
-import { TitleBar } from "@/components";
-import { Toaster } from "@/components/ui/sonner";
-import "./App.css";
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { TitleBar } from '@/components'
+import { Toaster } from '@/components/ui/sonner'
+import { SettingProvider } from '@/contexts/SettingContext'
+import { ShortcutProvider } from '@/contexts/ShortcutContext'
+import { MainLayout } from '@/layouts'
+import DashboardPage from '@/pages/DashboardPage'
+import DevicesPage from '@/pages/DevicesPage'
+import SettingsPage from '@/pages/SettingsPage'
+import './App.css'
 
 // 认证布局包装器 - 保持 Sidebar 持久化
 const AuthenticatedLayout = () => {
@@ -21,8 +15,8 @@ const AuthenticatedLayout = () => {
     <MainLayout>
       <Outlet />
     </MainLayout>
-  );
-};
+  )
+}
 
 // Settings 页面布局 - 不包含主 Sidebar
 const SettingsLayout = () => {
@@ -30,8 +24,8 @@ const SettingsLayout = () => {
     <div className="h-screen w-full flex bg-background text-foreground transition-colors duration-200">
       <Outlet />
     </div>
-  );
-};
+  )
+}
 
 // 主应用程序内容
 const AppContent = () => {
@@ -58,8 +52,8 @@ const AppContent = () => {
         <Toaster />
       </SettingProvider>
     </ShortcutProvider>
-  );
-};
+  )
+}
 
 export default function App() {
   return (
@@ -67,5 +61,5 @@ export default function App() {
       <TitleBar />
       <AppContent />
     </Router>
-  );
+  )
 }

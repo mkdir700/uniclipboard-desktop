@@ -1,8 +1,8 @@
-import React, { ReactNode } from "react";
-import { Sidebar } from "@/components";
+import React, { ReactNode } from 'react'
+import { Sidebar } from '@/components'
 
 interface MainLayoutProps {
-  children: ReactNode;
+  children: ReactNode
 }
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
@@ -17,7 +17,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         {children}
       </main>
     </div>
-  );
-};
+  )
+}
 
-export default MainLayout;
+export default MainLayout

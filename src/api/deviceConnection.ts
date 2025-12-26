@@ -4,21 +4,21 @@
  * 提供手动连接设备、获取网络接口等功能
  */
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 /**
  * 网络接口信息
  */
 export interface NetworkInterface {
   /** 接口名称 (如 "en0", "Wi-Fi", "以太网") */
-  name: string;
+  name: string
   /** IP 地址 */
-  ip: string;
+  ip: string
   /** 是否为回环地址 */
-  is_loopback: boolean;
+  is_loopback: boolean
   /** 是否为 IPv4 */
-  is_ipv4: boolean;
+  is_ipv4: boolean
 }
 
 /**
@@ -26,9 +26,9 @@ export interface NetworkInterface {
  */
 export interface ManualConnectionRequest {
   /** 目标设备 IP 地址 */
-  ip: string;
+  ip: string
   /** 目标设备端口 */
-  port: number;
+  port: number
 }
 
 /**
@@ -36,11 +36,11 @@ export interface ManualConnectionRequest {
  */
 export interface ManualConnectionResponse {
   /** 是否成功 */
-  success: boolean;
+  success: boolean
   /** 设备 ID（连接成功时返回） */
-  device_id?: string;
+  device_id?: string
   /** 响应消息 */
-  message: string;
+  message: string
 }
 
 /**
@@ -48,13 +48,13 @@ export interface ManualConnectionResponse {
  */
 export interface ConnectionRequestInfo {
   /** 请求方设备 ID */
-  requester_device_id: string;
+  requester_device_id: string
   /** 请求方 IP 地址 */
-  requester_ip: string;
+  requester_ip: string
   /** 请求方设备别名（可选） */
-  requester_alias?: string;
+  requester_alias?: string
   /** 请求方平台（可选） */
-  requester_platform?: string;
+  requester_platform?: string
 }
 
 /**
@@ -62,9 +62,9 @@ export interface ConnectionRequestInfo {
  */
 export interface ConnectionRequestDecision {
   /** 是否接受连接 */
-  accept: boolean;
+  accept: boolean
   /** 请求方设备 ID */
-  requester_device_id: string;
+  requester_device_id: string
 }
 
 /**
@@ -72,37 +72,37 @@ export interface ConnectionRequestDecision {
  */
 export interface ConnectionResponseEventData {
   /** 是否接受连接 */
-  accepted: boolean;
+  accepted: boolean
   /** 响应方设备 ID */
-  responder_device_id: string;
+  responder_device_id: string
   /** 响应方 IP 地址（可选） */
-  responder_ip?: string;
+  responder_ip?: string
   /** 响应方设备别名（可选） */
-  responder_alias?: string;
+  responder_alias?: string
 }
 
 /**
  * 连接状态
  */
 export type ConnectionStatus =
-  | "idle"          // 空闲状态
-  | "connecting"    // 连接中
-  | "awaiting_response"  // 等待对方确认
-  | "connected"     // 已连接
-  | "failed";       // 失败
+  | 'idle' // 空闲状态
+  | 'connecting' // 连接中
+  | 'awaiting_response' // 等待对方确认
+  | 'connected' // 已连接
+  | 'failed' // 失败
 
 /**
  * 连接状态信息
  */
 export interface ConnectionState {
   /** 状态 */
-  status: ConnectionStatus;
+  status: ConnectionStatus
   /** 消息 */
-  message?: string;
+  message?: string
   /** 设备 ID */
-  device_id?: string;
+  device_id?: string
   /** 是否可以重试 */
-  canRetry?: boolean;
+  canRetry?: boolean
 }
 
 /**
@@ -112,10 +112,10 @@ export interface ConnectionState {
  */
 export async function getLocalNetworkInterfaces(): Promise<NetworkInterface[]> {
   try {
-    return await invoke<NetworkInterface[]>("get_local_network_interfaces");
+    return await invoke<NetworkInterface[]>('get_local_network_interfaces')
   } catch (error) {
-    console.error("Failed to get local network interfaces:", error);
-    throw error;
+    console.error('Failed to get local network interfaces:', error)
+    throw error
   }
 }
 
@@ -131,12 +131,12 @@ export async function connectToDeviceManual(
   request: ManualConnectionRequest
 ): Promise<ManualConnectionResponse> {
   try {
-    return await invoke<ManualConnectionResponse>("connect_to_device_manual", {
+    return await invoke<ManualConnectionResponse>('connect_to_device_manual', {
       request,
-    });
+    })
   } catch (error) {
-    console.error("Failed to connect to device:", error);
-    throw error;
+    console.error('Failed to connect to device:', error)
+    throw error
   }
 }
 
@@ -152,12 +152,12 @@ export async function respondToConnectionRequest(
   decision: ConnectionRequestDecision
 ): Promise<ManualConnectionResponse> {
   try {
-    return await invoke<ManualConnectionResponse>("respond_to_connection_request", {
+    return await invoke<ManualConnectionResponse>('respond_to_connection_request', {
       decision,
-    });
+    })
   } catch (error) {
-    console.error("Failed to respond to connection request:", error);
-    throw error;
+    console.error('Failed to respond to connection request:', error)
+    throw error
   }
 }
 
@@ -166,10 +166,10 @@ export async function respondToConnectionRequest(
  */
 export async function cancelConnectionRequest(): Promise<void> {
   try {
-    await invoke("cancel_connection_request");
+    await invoke('cancel_connection_request')
   } catch (error) {
-    console.error("Failed to cancel connection request:", error);
-    throw error;
+    console.error('Failed to cancel connection request:', error)
+    throw error
   }
 }
 
@@ -186,28 +186,25 @@ export async function onConnectionRequest(
 ): Promise<() => void> {
   try {
     // 先调用后端命令启动监听
-    await invoke("listen_connection_request");
+    await invoke('listen_connection_request')
 
     // 然后监听 Tauri 事件
-    const unlisten = await listen<ConnectionRequestInfo>(
-      "connection-request",
-      (event) => {
-        callback(event.payload);
-      }
-    );
+    const unlisten = await listen<ConnectionRequestInfo>('connection-request', event => {
+      callback(event.payload)
+    })
 
     // 返回一个清理函数，同时停止后端监听和前端监听
     return async () => {
-      unlisten();
+      unlisten()
       try {
-        await invoke("stop_listen_connection_request");
+        await invoke('stop_listen_connection_request')
       } catch (e) {
-        console.error("Failed to stop listening to connection-request:", e);
+        console.error('Failed to stop listening to connection-request:', e)
       }
-    };
+    }
   } catch (error) {
-    console.error("Failed to setup connection-request listener:", error);
-    return () => {};
+    console.error('Failed to setup connection-request listener:', error)
+    return () => {}
   }
 }
 
@@ -224,27 +221,24 @@ export async function onConnectionResponse(
 ): Promise<() => void> {
   try {
     // 先调用后端命令启动监听
-    await invoke("listen_connection_response");
+    await invoke('listen_connection_response')
 
     // 然后监听 Tauri 事件
-    const unlisten = await listen<ConnectionResponseEventData>(
-      "connection-response",
-      (event) => {
-        callback(event.payload);
-      }
-    );
+    const unlisten = await listen<ConnectionResponseEventData>('connection-response', event => {
+      callback(event.payload)
+    })
 
     // 返回一个清理函数，同时停止后端监听和前端监听
     return async () => {
-      unlisten();
+      unlisten()
       try {
-        await invoke("stop_listen_connection_response");
+        await invoke('stop_listen_connection_response')
       } catch (e) {
-        console.error("Failed to stop listening to connection-response:", e);
+        console.error('Failed to stop listening to connection-response:', e)
       }
-    };
+    }
   } catch (error) {
-    console.error("Failed to setup connection-response listener:", error);
-    return () => {};
+    console.error('Failed to setup connection-response listener:', error)
+    return () => {}
   }
 }

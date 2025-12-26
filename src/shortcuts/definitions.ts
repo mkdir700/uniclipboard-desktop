@@ -2,31 +2,26 @@
  * 快捷键动作类型
  * 所有快捷键动作的联合类型
  */
-import { ShortcutLayer } from "./layers";
+import { ShortcutLayer } from './layers'
 
 export type ShortcutAction =
-  | "clipboard.clearSelection"
-  | "clipboard.selectAll"
-  | "clipboard.delete"
-  | "clipboard.favorite"
-  | "clipboard.copy"
-  | "navigation.dashboard"
-  | "navigation.devices"
-  | "navigation.settings"
-  | "search.focus"
-  | "modal.close"
-  | string;
+  | 'clipboard.clearSelection'
+  | 'clipboard.selectAll'
+  | 'clipboard.delete'
+  | 'clipboard.favorite'
+  | 'clipboard.copy'
+  | 'navigation.dashboard'
+  | 'navigation.devices'
+  | 'navigation.settings'
+  | 'search.focus'
+  | 'modal.close'
+  | string
 
 /**
  * 快捷键作用域
  * 用于隔离不同页面/组件的快捷键
  */
-export type ShortcutScope =
-  | "global"
-  | "clipboard"
-  | "settings"
-  | "devices"
-  | "modal";
+export type ShortcutScope = 'global' | 'clipboard' | 'settings' | 'devices' | 'modal'
 
 /**
  * 默认 scope -> layer 映射
@@ -36,29 +31,29 @@ export type ShortcutScope =
  * - modal: 模态层（打开模态框时）
  */
 export const DEFAULT_SCOPE_LAYER: Record<ShortcutScope, ShortcutLayer> = {
-  global: "global",
-  clipboard: "page",
-  settings: "page",
-  devices: "page",
-  modal: "modal",
-};
+  global: 'global',
+  clipboard: 'page',
+  settings: 'page',
+  devices: 'page',
+  modal: 'modal',
+}
 
 /**
  * 快捷键定义接口
  */
 export interface ShortcutDefinition {
   /** 唯一标识符 */
-  id: string;
+  id: string
   /** 快捷键组合，如 "esc", "cmd+a", "ctrl+shift+d" */
-  key: string;
+  key: string
   /** 动作类型 */
-  action: ShortcutAction;
+  action: ShortcutAction
   /** 作用域 */
-  scope: ShortcutScope;
+  scope: ShortcutScope
   /** 描述文本 */
-  description: string;
+  description: string
   /** 是否阻止默认行为 */
-  preventDefault?: boolean;
+  preventDefault?: boolean
 }
 
 /**
@@ -67,11 +62,11 @@ export interface ShortcutDefinition {
 export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
   // ===== 剪贴板操作 =====
   {
-    id: "clipboard.esc",
-    key: "esc",
-    action: "clipboard.clearSelection",
-    scope: "clipboard",
-    description: "取消选择",
+    id: 'clipboard.esc',
+    key: 'esc',
+    action: 'clipboard.clearSelection',
+    scope: 'clipboard',
+    description: '取消选择',
   },
   // 预留更多快捷键位置
   // {
@@ -136,4 +131,4 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
   //   scope: "modal",
   //   description: "关闭模态框",
   // },
-];
+]

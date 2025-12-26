@@ -1,53 +1,42 @@
-import React from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Home, Monitor, Settings } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
-import { useTranslation } from "react-i18next";
+import { motion } from 'framer-motion'
+import { Home, Monitor, Settings } from 'lucide-react'
+import React from 'react'
+import { useTranslation } from 'react-i18next'
+import { Link, useLocation } from 'react-router-dom'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
 const Sidebar: React.FC = () => {
-  const { t } = useTranslation();
-  const location = useLocation();
-  const path = location.pathname;
+  const { t } = useTranslation()
+  const location = useLocation()
+  const path = location.pathname
 
   const navItems = [
-    { to: "/", icon: Home, label: t("nav.dashboard") },
-    { to: "/devices", icon: Monitor, label: t("nav.devices") },
-  ];
+    { to: '/', icon: Home, label: t('nav.dashboard') },
+    { to: '/devices', icon: Monitor, label: t('nav.devices') },
+  ]
 
-  const bottomItems = [
-    { to: "/settings", icon: Settings, label: t("nav.settings") },
-  ];
+  const bottomItems = [{ to: '/settings', icon: Settings, label: t('nav.settings') }]
 
   const NavButton: React.FC<{
-    to: string;
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-    isActive: boolean;
-    layoutId: string;
+    to: string
+    icon: React.ComponentType<{ className?: string }>
+    label: string
+    isActive: boolean
+    layoutId: string
   }> = ({ to, icon: Icon, label, isActive, layoutId }) => {
     return (
       <TooltipProvider delayDuration={0}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Link
-              data-tauri-drag-region="false"
-              to={to}
-              className="relative group"
-            >
+            <Link data-tauri-drag-region="false" to={to} className="relative group">
               {isActive && (
                 <motion.div
                   layoutId={layoutId}
                   className="absolute inset-0 bg-primary/10 dark:bg-primary/20 rounded-lg"
                   initial={false}
                   transition={{
-                    type: "spring",
+                    type: 'spring',
                     stiffness: 500,
                     damping: 30,
                   }}
@@ -55,10 +44,10 @@ const Sidebar: React.FC = () => {
               )}
               <div
                 className={cn(
-                  "relative flex items-center justify-center w-12 h-12 rounded-lg transition-colors duration-200 z-10",
+                  'relative flex items-center justify-center w-12 h-12 rounded-lg transition-colors duration-200 z-10',
                   isActive
-                    ? "text-primary"
-                    : "text-muted-foreground group-hover:text-primary group-hover:bg-muted"
+                    ? 'text-primary'
+                    : 'text-muted-foreground group-hover:text-primary group-hover:bg-muted'
                 )}
               >
                 <Icon className="w-5 h-5" />
@@ -70,8 +59,8 @@ const Sidebar: React.FC = () => {
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-    );
-  };
+    )
+  }
 
   return (
     <aside
@@ -80,7 +69,7 @@ const Sidebar: React.FC = () => {
     >
       {/* Main Navigation */}
       <div className="flex flex-col gap-3 w-full items-center pt-2">
-        {navItems.map((item) => (
+        {navItems.map(item => (
           <NavButton
             key={item.to}
             to={item.to}
@@ -96,7 +85,7 @@ const Sidebar: React.FC = () => {
 
       {/* Bottom Navigation */}
       <div className="flex flex-col gap-3 w-full items-center pb-2">
-        {bottomItems.map((item) => (
+        {bottomItems.map(item => (
           <NavButton
             key={item.to}
             to={item.to}
@@ -108,7 +97,7 @@ const Sidebar: React.FC = () => {
         ))}
       </div>
     </aside>
-  );
-};
+  )
+}
 
-export default Sidebar;
+export default Sidebar

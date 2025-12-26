@@ -1,5 +1,5 @@
-import { ShortcutScope } from "@/shortcuts/definitions";
-import { useShortcutLayer } from "@/hooks/useShortcutLayer";
+import { useShortcutLayer } from '@/hooks/useShortcutLayer'
+import { ShortcutScope } from '@/shortcuts/definitions'
 
 /**
  * 快捷键作用域管理 Hook
@@ -19,9 +19,6 @@ import { useShortcutLayer } from "@/hooks/useShortcutLayer";
  *
  * @param scope - 要设置的作用域
  */
-export const useShortcutScope = (
-  scope: ShortcutScope,
-  priority?: number
-): void => {
-  useShortcutLayer({ layer: "page", scope, priority });
-};
+export const useShortcutScope = (scope: ShortcutScope, priority?: number): void => {
+  useShortcutLayer({ layer: 'page', scope, priority })
+}

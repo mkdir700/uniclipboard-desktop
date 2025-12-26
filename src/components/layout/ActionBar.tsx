@@ -1,47 +1,47 @@
-import React from "react";
-import { RefreshCw } from "lucide-react";
-import { ClipboardStats } from "@/api/clipboardItems";
-import { formatFileSize } from "@/utils";
-import { useAppDispatch } from "@/store/hooks";
-import { clearAllItems } from "@/store/slices/clipboardSlice";
-import { syncClipboardItems } from "@/api/clipboardItems";
-import { Button } from "@/components/ui/button";
+import { RefreshCw } from 'lucide-react'
+import React from 'react'
+import { ClipboardStats } from '@/api/clipboardItems'
+import { syncClipboardItems } from '@/api/clipboardItems'
+import { Button } from '@/components/ui/button'
+import { useAppDispatch } from '@/store/hooks'
+import { clearAllItems } from '@/store/slices/clipboardSlice'
+import { formatFileSize } from '@/utils'
 
 interface ActionBarProps {
-  stats: ClipboardStats;
-  onSync?: () => void;
+  stats: ClipboardStats
+  onSync?: () => void
 }
 
 const ActionBar: React.FC<ActionBarProps> = ({ stats, onSync }) => {
-  const dispatch = useAppDispatch();
+  const dispatch = useAppDispatch()
 
   // 处理清理所有剪贴板项
   const handleClearAll = async () => {
-    if (window.confirm("确定要清理所有剪贴板项吗？")) {
+    if (window.confirm('确定要清理所有剪贴板项吗？')) {
       try {
-        await dispatch(clearAllItems()).unwrap();
+        await dispatch(clearAllItems()).unwrap()
       } catch (err) {
-        console.error("清理剪贴板项失败:", err);
+        console.error('清理剪贴板项失败:', err)
       }
     }
-  };
+  }
 
   // 处理立即同步
   const handleSync = async () => {
     try {
-      console.log("开始同步剪贴板项...");
-      await syncClipboardItems();
-      console.log("剪贴板项同步完成");
+      console.log('开始同步剪贴板项...')
+      await syncClipboardItems()
+      console.log('剪贴板项同步完成')
 
       // 调用父组件传递的同步成功回调
       if (onSync) {
-        onSync();
+        onSync()
       }
     } catch (err) {
-      console.error("同步剪贴板项失败:", err);
-      alert("同步失败，请稍后重试。");
+      console.error('同步剪贴板项失败:', err)
+      alert('同步失败，请稍后重试。')
     }
-  };
+  }
 
   return (
     <footer className="absolute bottom-0 w-full glass-strong border-t border-border px-8 py-4 flex items-center justify-between z-10">
@@ -52,12 +52,7 @@ const ActionBar: React.FC<ActionBarProps> = ({ stats, onSync }) => {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleClearAll}
-          className="rounded-lg"
-        >
+        <Button variant="outline" size="sm" onClick={handleClearAll} className="rounded-lg">
           清理所有
         </Button>
         <Button
@@ -70,7 +65,7 @@ const ActionBar: React.FC<ActionBarProps> = ({ stats, onSync }) => {
         </Button>
       </div>
     </footer>
-  );
-};
+  )
+}
 
-export default ActionBar;
+export default ActionBar
