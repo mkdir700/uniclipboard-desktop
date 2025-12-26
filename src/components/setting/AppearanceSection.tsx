@@ -1,7 +1,8 @@
-import { type LucideIcon, Sun, Moon, Monitor, Check } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { type LucideIcon, Check, Monitor, Moon, Sun } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
+import { DEFAULT_THEME_COLOR, THEME_COLORS } from '@/constants/theme'
 import { useSetting, ThemeMode } from '@/contexts/SettingContext'
 import { cn } from '@/lib/utils'
 
@@ -114,11 +115,7 @@ export default function AppearanceSection() {
         </div>
         <CardContent className="pt-0">
           <div className="grid grid-cols-5 gap-4">
-            {[
-              { name: 'catppuccin', color: '#cba6f7' },
-              { name: 'zinc', color: '#52525b' },
-              { name: 't3chat', color: '#a3004c' },
-            ].map(item => (
+            {THEME_COLORS.map(item => (
               <div
                 key={item.name}
                 onClick={() => {
@@ -127,7 +124,7 @@ export default function AppearanceSection() {
                 className={cn(
                   'cursor-pointer group relative flex flex-col items-center gap-2 p-2 rounded-xl border-2 transition-all hover:bg-muted/50',
                   setting?.general?.theme_color === item.name ||
-                    (item.name === 'catppuccin' && !setting?.general?.theme_color)
+                    (item.name === DEFAULT_THEME_COLOR && !setting?.general?.theme_color)
                     ? 'border-primary bg-primary/5'
                     : 'border-transparent'
                 )}
@@ -140,7 +137,7 @@ export default function AppearanceSection() {
                   {item.name}
                 </span>
                 {(setting?.general?.theme_color === item.name ||
-                  (item.name === 'catppuccin' && !setting?.general?.theme_color)) && (
+                  (item.name === DEFAULT_THEME_COLOR && !setting?.general?.theme_color)) && (
                   <div className="absolute top-1 right-1 text-primary bg-background rounded-full p-0.5 shadow-sm">
                     <Check className="w-3 h-3" />
                   </div>
