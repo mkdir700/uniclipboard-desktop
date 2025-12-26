@@ -21,7 +21,6 @@ import {
   SidebarMenuItem,
   SidebarHeader,
 } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 
 interface SettingsSidebarProps {
   activeCategory: string;
@@ -78,20 +77,15 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   ];
 
   return (
-    <Sidebar
-      collapsible="none"
-      className="border-r border-border/50 bg-muted/30"
-    >
+    <Sidebar collapsible="none" className="border-r border-border/50 bg-muted/30">
       <SidebarHeader className="border-b border-border/50">
-        <Button
-          variant="ghost"
-          size="sm"
+        <button
           onClick={handleBack}
-          className="w-full justify-start gap-2 px-2"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground"
         >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="font-medium">{t("settings.title")}</span>
-        </Button>
+          <ArrowLeft className="h-4 w-4 shrink-0" />
+          <span>{t("settings.title")}</span>
+        </button>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
