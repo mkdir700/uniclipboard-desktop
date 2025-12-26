@@ -8,6 +8,7 @@ import { useShortcutScope } from "@/hooks/useShortcutScope";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
+import { toast } from "@/components/ui/sonner";
 
 // Debounce delay in milliseconds
 const DEBOUNCE_DELAY = 500;
@@ -46,12 +47,19 @@ const DashboardPage: React.FC = () => {
       const filterToUse = specificFilter || currentFilterRef.current;
       console.log(t("dashboard.logs.loadingClipboard"), filterToUse);
 
-      dispatch(
-        fetchClipboardItems({
-          orderBy: OrderBy.ActiveTimeDesc,
-          filter: filterToUse,
-        })
-      );
+      try {
+        await dispatch(
+          fetchClipboardItems({
+            orderBy: OrderBy.ActiveTimeDesc,
+            filter: filterToUse,
+          })
+        ).unwrap();
+      } catch (error) {
+        console.error("加载剪贴板数据失败:", error);
+        toast.error(t("dashboard.errors.loadFailed"), {
+          description: error instanceof Error ? error.message : t("dashboard.errors.unknown"),
+        });
+      }
     },
     [dispatch, t]
   );
@@ -132,6 +140,12 @@ const DashboardPage: React.FC = () => {
         } catch (err) {
           console.error(t("dashboard.logs.setupListenerFailed"), err);
           globalListenerState.isActive = false;
+
+          // 显示剪贴板监听失败错误
+          toast.error(t("dashboard.errors.listenerSetupFailed"), {
+            description: err instanceof Error ? err.message : t("dashboard.errors.unknown"),
+            duration: 5000,
+          });
         }
       } else {
         console.log(t("dashboard.logs.listenerAlreadyActive"));

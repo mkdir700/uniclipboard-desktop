@@ -210,6 +210,11 @@
     },
     "constants": {
       "debounceDelay": "Debounce delay (milliseconds)"
+    },
+    "errors": {
+      "loadFailed": "Failed to load clipboard data",
+      "listenerSetupFailed": "Failed to setup clipboard listener",
+      "unknown": "An unknown error occurred"
     }
   },
   "header": {
@@ -238,6 +243,10 @@
         "copyToClipboardFailed": "Failed to copy to clipboard",
         "convertingItem": "Converting to display item:"
       }
+    },
+    "errors": {
+      "copyFailed": "Failed to copy to clipboard",
+      "unknown": "An unknown error occurred"
     },
     "item": {
       "characters": "characters",

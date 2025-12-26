@@ -24,6 +24,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslation } from "react-i18next";
+import { toast } from "@/components/ui/sonner";
 
 interface DisplayClipboardItem {
   id: string;
@@ -181,6 +182,12 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter }) => {
       return result.success;
     } catch (err) {
       console.error(t("clipboard.content.logs.copyToClipboardFailed"), err);
+
+      // 显示复制失败的 toast 提示
+      toast.error(t("clipboard.errors.copyFailed"), {
+        description: err instanceof Error ? err.message : t("clipboard.errors.unknown"),
+      });
+
       return false;
     }
   };
