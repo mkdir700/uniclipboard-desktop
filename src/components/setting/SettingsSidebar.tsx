@@ -81,7 +81,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
       <SidebarHeader className="border-b border-border/50">
         <button
           onClick={handleBack}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium outline-none ring-sidebar-ring transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 active:bg-muted active:text-foreground"
         >
           <ArrowLeft className="h-4 w-4 shrink-0" />
           <span>{t("settings.title")}</span>
