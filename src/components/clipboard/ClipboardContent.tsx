@@ -14,7 +14,6 @@ import {
   ClipboardCodeItem,
   ClipboardFileItem,
 } from '@/api/clipboardItems'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/sonner'
 import { useShortcut } from '@/hooks/useShortcut'
@@ -22,7 +21,6 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import {
   removeClipboardItem,
   copyToClipboard,
-  clearError as clearReduxError,
   toggleFavoriteItem,
 } from '@/store/slices/clipboardSlice'
 
@@ -52,7 +50,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
 
   // Use Redux state and dispatch
   const dispatch = useAppDispatch()
-  const { items: reduxItems, loading, error } = useAppSelector(state => state.clipboard)
+  const { items: reduxItems, loading } = useAppSelector(state => state.clipboard)
 
   // Local state for converted display items
   const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>([])
@@ -224,16 +222,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
     }
   }
 
-  // 清除错误信息
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => {
-        dispatch(clearReduxError())
-      }, 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [error, dispatch])
-
   // 当列表变化时，清理已经不存在的选择
   useEffect(() => {
     setSelectedIds(prev => {
@@ -378,12 +366,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
   return (
     <div className="h-full relative">
       <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
-        {error && (
-          <Alert variant="destructive" className="mb-4 mx-1">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
         {clipboardItems.length > 0 ? (
           <div className="flex flex-col">
             {clipboardItems.map((item, index) => (
