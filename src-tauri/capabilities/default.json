@@ -13,6 +13,7 @@
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
-    "stronghold:default"
+    "stronghold:default",
+    "log:default"
   ]
 }
