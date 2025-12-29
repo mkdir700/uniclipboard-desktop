@@ -26,8 +26,8 @@ impl WebSocketMessageHandler {
     pub async fn start_handle_outgoing_connections_messages(&self) {
         let mut rx = self
             .connection_manager
-            .outgoing
-            .subscribe_outgoing_connections_message()
+            .unified
+            .subscribe_outgoing_connections_messages()
             .await;
         let self_clone = Arc::new(self.clone());
 

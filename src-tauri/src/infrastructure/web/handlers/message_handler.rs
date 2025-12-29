@@ -110,23 +110,23 @@ impl MessageHandler {
     }
 
     /// 处理设备注册消息
-    /// 建立 ip端口与设备id的映射关系
+    /// 使用统一连接管理器处理设备注册
     pub async fn handle_register(
         &self,
         register_device_message: RegisterDeviceMessage,
         addr: SocketAddr,
     ) {
         let device_id = register_device_message.id.clone();
-        let ip_port = format!("{}:{}", addr.ip(), addr.port());
 
-        // 设置设备在线
-        if let Err(e) = GLOBAL_DEVICE_MANAGER.set_online(&device_id) {
-            error!("Failed to set device {} online: {}", device_id, e);
+        // 使用统一连接管理器处理注册
+        if let Err(e) = self
+            .connection_manager
+            .unified
+            .handle_register(device_id, addr)
+            .await
+        {
+            error!("Failed to handle register: {}", e);
         }
-
-        self.connection_manager
-            .update_device_ip_port(device_id, ip_port)
-            .await;
     }
 
     /// 处理设备注销消息

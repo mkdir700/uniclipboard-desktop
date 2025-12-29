@@ -95,7 +95,7 @@ impl RemoteClipboardSync for WebSocketSync {
 
     /// 断开所有已连接的客户端
     async fn stop(&self) -> Result<()> {
-        self.connection_manager.outgoing.disconnect_all().await;
+        self.connection_manager.unified.disconnect_all().await;
         Ok(())
     }
 }

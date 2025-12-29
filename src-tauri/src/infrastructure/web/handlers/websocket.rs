@@ -7,10 +7,11 @@ use crate::infrastructure::{
 };
 
 use super::{
-    client::{IncommingWebsocketClient, WebSocketMessage},
+    client::WebSocketMessage,
     websocket_message::WebSocketMessageHandler,
 };
-use log::{error, info};
+use log::error;
+use log::info;
 use warp::ws::WebSocket;
 
 pub struct WebSocketHandler {
@@ -30,62 +31,26 @@ impl WebSocketHandler {
     }
 
     pub async fn client_connected(&self, ws: WebSocket, addr: Option<SocketAddr>) {
-        let client = match addr {
-            Some(addr) => IncommingWebsocketClient::new(addr, ws),
-            None => return,
-        };
-        match client.start().await {
-            Ok(_) => (),
-            Err(e) => {
-                error!("Failed to initialize client: {}", e);
-                return;
-            }
+        let Some(addr) = addr else {
+            error!("Client connected but addr is None");
+            return;
         };
 
-        let client_id = client.id();
-
-        let mut rx = client.subscribe_messages();
+        // 使用统一连接管理器处理入站连接
+        if let Err(e) = self
+            .connection_manager
+            .unified
+            .handle_incoming_connection(ws, addr)
+            .await
         {
-            let client_id = client.id();
-            self.connection_manager
-                .incoming
-                .add_connection(client)
-                .await;
-            let count = self.connection_manager.incoming.count().await;
-            info!("Client {} connected, current clients: {}", client_id, count);
+            error!("Failed to handle incoming connection from {}: {}", addr, e);
+            return;
         }
 
-        info!("Client [{}] connected", client_id);
-        loop {
-            let result = rx.recv().await;
-            let msg = match result {
-                Ok(msg) => msg,
-                Err(e) => {
-                    error!("Error receiving ws message: {}", e);
-                    break;
-                }
-            };
-            match msg {
-                WebSocketMessage::Message(msg) => {
-                    if let Some(addr) = addr {
-                        self.message_handler
-                            .handle_message(msg, MessageSource::IpPort(addr))
-                            .await;
-                    } else {
-                        error!("Client [{}] connected, but addr is None", client_id);
-                    }
-                }
-                WebSocketMessage::Close => {
-                    break;
-                }
-            }
-        }
-        if let Some(addr) = addr {
-            self.client_disconnected(addr).await;
-        }
+        info!("Client [{}] connected", addr);
     }
 
-    async fn client_disconnected(&self, addr: SocketAddr) {
+    pub async fn client_disconnected(&self, addr: SocketAddr) {
         info!("Client [{}] disconnected", addr);
         self.connection_manager
             .remove_connection(MessageSource::IpPort(addr))

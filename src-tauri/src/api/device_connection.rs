@@ -66,18 +66,18 @@ pub async fn connect_to_device_manual(
 
     // 执行手动连接
     match connection_manager
-        .outgoing
-        .connect_to_device_manual(&request.ip, request.port)
+        .unified
+        .connect_with_peer_device(&request.ip, request.port)
         .await
     {
-        Ok(device_id) => {
+        Ok(_) => {
             info!(
-                "Successfully connected to device {} via manual connection",
-                device_id
+                "Successfully connected to device {}:{} via manual connection",
+                request.ip, request.port
             );
             Ok(ManualConnectionResponse {
                 success: true,
-                device_id: Some(device_id),
+                device_id: Some(format!("{}:{}", request.ip, request.port)),
                 message: "连接成功".to_string(),
             })
         }

@@ -6,11 +6,11 @@ use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::domain::device::Device;
 use crate::infrastructure::web::handlers::message_handler::MessageSource;
 use crate::infrastructure::connection::PendingConnectionsManager;
+use crate::infrastructure::connection::unified_manager::UnifiedConnectionManager;
 use crate::message::WebSocketMessage;
 use anyhow::Result;
 use futures::future::join_all;
 use log::{error, info, warn};
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,40 +18,40 @@ use tokio::sync::{broadcast, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 
-use super::incoming_manager::IncomingConnectionManager;
-use super::outgoing_manager::OutgoingConnectionManager;
 use super::{DeviceId, IpPort};
 
 #[derive(Clone)]
 pub struct ConnectionManager {
-    pub incoming: IncomingConnectionManager,
-    pub outgoing: OutgoingConnectionManager,
-    addr_device_id_map: Arc<RwLock<HashMap<IpPort, DeviceId>>>,
-    // TODO: 需要解耦 clipboard_message_sync_sender
+    /// 统一连接管理器
+    pub unified: Arc<UnifiedConnectionManager>,
+
+    /// Clipboard 消息同步发送器
     clipboard_message_sync_sender: Arc<broadcast::Sender<ClipboardTransferMessage>>,
+
+    /// 后台任务句柄
     listen_new_devices_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     try_connect_offline_devices_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     pending_connections_cleanup_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
-    user_setting: Setting,
-    /// 待处理连接请求管理器
+
+    /// 待处理连接管理器
     pub pending_connections: Arc<PendingConnectionsManager>,
+
+    /// 配置
+    user_setting: Setting,
 }
 
 impl ConnectionManager {
     pub fn new() -> Self {
         let (clipboard_message_sync_sender, _) = broadcast::channel(100);
         let pending_connections = Arc::new(PendingConnectionsManager::new());
+        let user_setting = Setting::get_instance();
         Self {
-            incoming: IncomingConnectionManager::new(),
-            outgoing: OutgoingConnectionManager::with_pending_connections(
-                pending_connections.clone(),
-            ),
-            addr_device_id_map: Arc::new(RwLock::new(HashMap::new())),
+            unified: Arc::new(UnifiedConnectionManager::new(user_setting.clone())),
             clipboard_message_sync_sender: Arc::new(clipboard_message_sync_sender),
             listen_new_devices_handle: Arc::new(RwLock::new(None)),
             try_connect_offline_devices_handle: Arc::new(RwLock::new(None)),
             pending_connections_cleanup_handle: Arc::new(RwLock::new(None)),
-            user_setting: Setting::get_instance(),
+            user_setting,
             pending_connections,
         }
     }
@@ -61,11 +61,7 @@ impl ConnectionManager {
         let (clipboard_message_sync_sender, _) = broadcast::channel(100);
         let pending_connections = Arc::new(PendingConnectionsManager::new());
         Self {
-            incoming: IncomingConnectionManager::new(),
-            outgoing: OutgoingConnectionManager::with_pending_connections(
-                pending_connections.clone(),
-            ),
-            addr_device_id_map: Arc::new(RwLock::new(HashMap::new())),
+            unified: Arc::new(UnifiedConnectionManager::new(user_setting.clone())),
             clipboard_message_sync_sender: Arc::new(clipboard_message_sync_sender),
             listen_new_devices_handle: Arc::new(RwLock::new(None)),
             try_connect_offline_devices_handle: Arc::new(RwLock::new(None)),
@@ -80,16 +76,16 @@ impl ConnectionManager {
     /// 当有新设备上线且未连接时，尝试连接该设备
     async fn listen_new_devices(&self) -> JoinHandle<()> {
         let mut new_devices_rx = subscribe_new_devices();
-        let self_clone = self.clone();
+        let unified = self.unified.clone();
 
         tokio::spawn(async move {
             while let Ok(device) = new_devices_rx.recv().await {
-                let is_connected = self_clone.is_connected(&device).await;
+                let is_connected = unified.is_connected(&device.id).await;
                 if is_connected {
                     info!("Device {} is already connected, skip...", device);
                     continue;
                 }
-                match self_clone.outgoing.connect_device(&device).await {
+                match unified.connect_device(&device).await {
                     Ok(_) => info!("A new device connected: {}", device),
                     Err(e) => error!("Failed to connect to new device: {}, error: {}", device, e),
                 }
@@ -102,7 +98,7 @@ impl ConnectionManager {
     /// 1. 获取所有离线的设备
     /// 2. 尝试连接这些设备
     async fn try_connect_offline_devices(&self) -> JoinHandle<()> {
-        let outgoing_clone = self.outgoing.clone();
+        let unified = self.unified.clone();
 
         tokio::spawn(async move {
             // 暂时每分钟检查一次
@@ -116,18 +112,10 @@ impl ConnectionManager {
                         info!("Found {} offline devices, try to connect them", count);
                     }
 
-                    let mut connection_failed_devices = vec![];
                     for device in devices {
-                        if let Err(e) = outgoing_clone.connect_device(&device).await {
-                            connection_failed_devices.push((device, e));
+                        if let Err(e) = unified.connect_device(&device).await {
+                            error!("Failed to connect to device {}: {}", device, e);
                         }
-                    }
-
-                    if !connection_failed_devices.is_empty() {
-                        warn!(
-                            "Failed to connect to devices: {:?}",
-                            connection_failed_devices
-                        );
                     }
                 }
             }
@@ -137,9 +125,9 @@ impl ConnectionManager {
     /// 启动
     ///
     /// 1. 尝试连接设备列表中的所有设备
-    /// 2. 开启 outgoing 的监听新设备
+    /// 2. 开启监听新设备
     pub async fn start(&self) -> Result<()> {
-        info!("Start to connecat to devices");
+        info!("Start to connect to devices");
         // 获取设备管理器的锁
         let devices = get_device_manager()
             .get_all_devices_except_self()
@@ -159,7 +147,7 @@ impl ConnectionManager {
                     peer_device_addr, peer_device_port
                 );
                 match self
-                    .outgoing
+                    .unified
                     .connect_with_peer_device(&peer_device_addr, peer_device_port)
                     .await
                 {
@@ -183,7 +171,7 @@ impl ConnectionManager {
                 .map(|device| {
                     let device_clone = device.clone();
                     async move {
-                        match self.outgoing.connect_device(&device_clone).await {
+                        match self.unified.connect_device(&device_clone).await {
                             Ok(_) => {
                                 info!("Successfully connected to device: {}", device_clone);
                                 Ok(device_clone.id.clone())
@@ -219,7 +207,7 @@ impl ConnectionManager {
             }
         }
 
-        // 开启 outgoing 的监听新设备
+        // 开启监听新设备
         *self.listen_new_devices_handle.write().await = Some(self.listen_new_devices().await);
         // 尝试连接离线的设备
         *self.try_connect_offline_devices_handle.write().await =
@@ -271,28 +259,10 @@ impl ConnectionManager {
         // 清空所有待处理连接
         self.pending_connections.clear_all().await;
 
-        self.outgoing.disconnect_all().await;
-        self.incoming.disconnect_all().await;
-
-        for (ip_port, _) in self.addr_device_id_map.read().await.iter() {
-            if let Ok(addr) = ip_port.parse::<SocketAddr>() {
-                self.remove_connection(MessageSource::IpPort(addr)).await;
-            } else {
-                error!("Invalid ip_port: {}", ip_port);
-            }
-        }
-
-        for (device_id, _) in self.incoming.connections.read().await.iter() {
-            self.remove_connection(MessageSource::DeviceId(device_id.clone()))
-                .await;
-        }
+        // 断开所有连接
+        self.unified.disconnect_all().await;
 
         info!("Connection manager stopped");
-    }
-
-    pub async fn update_device_ip_port(&self, device_id: DeviceId, ip_port: IpPort) {
-        let mut map = self.addr_device_id_map.write().await;
-        map.insert(ip_port, device_id);
     }
 
     pub async fn broadcast(
@@ -300,22 +270,7 @@ impl ConnectionManager {
         message: &WebSocketMessage,
         excludes: &Option<Vec<String>>,
     ) -> Result<()> {
-        let mut errors: Vec<anyhow::Error> = Vec::new();
-
-        if let Err(e) = self.outgoing.broadcast(message, excludes).await {
-            errors.push(e);
-        }
-        if let Err(e) = self.incoming.broadcast(message, excludes).await {
-            errors.push(e);
-        }
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!(
-                "Failed to send message to some clients: {:?}",
-                errors
-            ))
-        }
+        self.unified.broadcast(message, excludes).await
     }
 
     // TODO: 需要解耦
@@ -329,39 +284,8 @@ impl ConnectionManager {
     }
 
     pub async fn is_connected(&self, device: &Device) -> bool {
-        let device_id = device.id.clone();
-        let ip_port = format!(
-            "{}:{}",
-            device.ip.as_ref().unwrap_or(&"".to_string()),
-            device.port.as_ref().unwrap_or(&0)
-        );
-        self.outgoing
-            .connections
-            .read()
-            .await
-            .contains_key(&device_id)
-            || self
-                .incoming
-                .connections
-                .read()
-                .await
-                .contains_key(&ip_port)
+        self.unified.is_connected(&device.id).await
     }
-
-    /// The `disconnect` function in Rust asynchronously disconnects a device based on its ID.
-    ///
-    /// Arguments:
-    ///
-    /// * `id`: The `id` parameter in the `disconnect` function is of type `DeviceId`, which is a reference
-    /// to the identifier of a device.
-    // pub async fn disconnect(&self, id: &String) {
-    //     let ip_port = self.device_ip_port_map.read().await.get(id).cloned();
-    //     if let Some(ip_port) = ip_port {
-    //         self.incoming.disconnect(&ip_port).await;
-    //     } else {
-    //         self.outgoing.disconnect(id).await;
-    //     }
-    // }
 
     /// 断开指定设备并移除连接
     ///
@@ -369,28 +293,10 @@ impl ConnectionManager {
     pub async fn remove_connection(&self, id: MessageSource) {
         match id {
             MessageSource::IpPort(addr) => {
-                self.remove_connection_by_addr(&format!("{}:{}", addr.ip(), addr.port()))
-                    .await
+                self.unified.remove_connection_by_addr(addr).await;
             }
             MessageSource::DeviceId(device_id) => {
-                self.remove_connection_by_device_id(&device_id).await
-            }
-        }
-    }
-
-    async fn remove_connection_by_device_id(&self, device_id: &DeviceId) {
-        self.outgoing.remove_connection(device_id).await;
-        if let Err(e) = GLOBAL_DEVICE_MANAGER.set_offline(device_id) {
-            error!("Failed to set device {} offline: {}", device_id, e);
-        }
-    }
-
-    async fn remove_connection_by_addr(&self, ip_port: &IpPort) {
-        let device_id = self.addr_device_id_map.read().await.get(ip_port).cloned();
-        self.incoming.remove_connection(ip_port).await;
-        if let Some(device_id) = device_id {
-            if let Err(e) = GLOBAL_DEVICE_MANAGER.set_offline(&device_id) {
-                error!("Failed to set device {} offline: {}", device_id, e);
+                self.unified.remove_connection(&device_id).await;
             }
         }
     }
