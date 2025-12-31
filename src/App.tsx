@@ -4,7 +4,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { SearchProvider, useSearch } from '@/contexts/SearchContext'
 import { SettingProvider } from '@/contexts/SettingContext'
 import { ShortcutProvider } from '@/contexts/ShortcutContext'
-import { MainLayout } from '@/layouts'
+import { MainLayout, SettingsWindowLayout } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
 import DevicesPage from '@/pages/DevicesPage'
 import SettingsPage from '@/pages/SettingsPage'
@@ -16,15 +16,6 @@ const AuthenticatedLayout = () => {
     <MainLayout>
       <Outlet />
     </MainLayout>
-  )
-}
-
-// Settings 页面布局 - 不包含主 Sidebar
-const SettingsLayout = () => {
-  return (
-    <div className="h-screen w-full flex bg-background text-foreground transition-colors duration-200">
-      <Outlet />
-    </div>
   )
 }
 
@@ -45,7 +36,7 @@ const AppContent = () => {
             />
             <Route path="/devices" element={<DevicesPage />} />
           </Route>
-          <Route element={<SettingsLayout />}>
+          <Route element={<SettingsWindowLayout />}>
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
