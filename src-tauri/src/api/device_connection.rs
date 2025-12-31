@@ -2,15 +2,12 @@
 //!
 //! 提供手动连接设备、获取网络接口等功能
 
-use std::sync::{Arc, Mutex};
-
-use tauri::{Runtime, State};
 use log::{error, info};
+use tauri::State;
+use tokio::sync::oneshot;
 
-use crate::config::Setting;
 use crate::domain::network::*;
-use crate::infrastructure::uniclipboard::UniClipboard;
-use crate::infrastructure::web::handlers::message_handler::MessageHandler;
+use crate::infrastructure::runtime::{AppRuntimeHandle, ConnectionCommand};
 use crate::utils::helpers;
 
 /// 获取所有本地网络接口
@@ -28,7 +25,7 @@ pub fn get_local_network_interfaces() -> Result<Vec<NetworkInterface>, String> {
 #[tauri::command]
 pub async fn connect_to_device_manual(
     request: ManualConnectionRequest,
-    uniclipboard_app: State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
+    app_handle: State<'_, AppRuntimeHandle>,
 ) -> Result<ManualConnectionResponse, String> {
     info!(
         "Manual connection request to {}:{}",
@@ -53,24 +50,25 @@ pub async fn connect_to_device_manual(
         });
     }
 
-    // 获取 UniClipboard 实例
-    let uniclipboard = uniclipboard_app
-        .lock()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?
-        .as_ref()
-        .cloned()
-        .ok_or("UniClipboard not initialized")?;
+    let (tx, rx) = oneshot::channel();
 
-    // 获取 connection_manager
-    let connection_manager = uniclipboard.get_connection_manager();
-
-    // 执行手动连接
-    match connection_manager
-        .outgoing
-        .connect_to_device_manual(&request.ip, request.port)
+    // 发送命令到 AppRuntime
+    if let Err(e) = app_handle
+        .connection_tx
+        .send(ConnectionCommand::ManualConnect {
+            ip: request.ip.clone(),
+            port: request.port,
+            respond_to: tx,
+        })
         .await
     {
-        Ok(device_id) => {
+        error!("Failed to send connection command: {}", e);
+        return Err("Internal service error".to_string());
+    }
+
+    // 等待结果
+    match rx.await {
+        Ok(Ok(device_id)) => {
             info!(
                 "Successfully connected to device {} via manual connection",
                 device_id
@@ -81,7 +79,7 @@ pub async fn connect_to_device_manual(
                 message: "连接成功".to_string(),
             })
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             error!("Manual connection failed: {}", e);
             Ok(ManualConnectionResponse {
                 success: false,
@@ -89,6 +87,7 @@ pub async fn connect_to_device_manual(
                 message: format!("连接失败: {}", e),
             })
         }
+        Err(_) => Err("Connection service did not respond".to_string()),
     }
 }
 
@@ -98,7 +97,7 @@ pub async fn connect_to_device_manual(
 #[tauri::command]
 pub async fn respond_to_connection_request(
     decision: ConnectionRequestDecision,
-    uniclipboard_app: State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
+    app_handle: State<'_, AppRuntimeHandle>,
 ) -> Result<ManualConnectionResponse, String> {
     info!(
         "Connection request decision for device {}: {}",
@@ -106,65 +105,32 @@ pub async fn respond_to_connection_request(
         if decision.accept { "accept" } else { "reject" }
     );
 
-    // 获取 UniClipboard 实例
-    let uniclipboard = uniclipboard_app
-        .lock()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?
-        .as_ref()
-        .cloned()
-        .ok_or("UniClipboard not initialized")?;
+    let (tx, rx) = oneshot::channel();
 
-    // 获取 connection_manager
-    let connection_manager = uniclipboard.get_connection_manager();
-
-    // 创建 MessageHandler
-    let message_handler = MessageHandler::new(connection_manager.clone());
-
-    // 响应入站请求
-    match message_handler
-        .respond_to_incoming_request(&decision.requester_device_id, decision.accept)
+    if let Err(e) = app_handle
+        .connection_tx
+        .send(ConnectionCommand::RespondConnection {
+            requester_device_id: decision.requester_device_id.clone(),
+            accept: decision.accept,
+            respond_to: tx,
+        })
         .await
     {
-        Ok(_) => {
-            info!(
-                "Successfully responded to connection request from {}",
-                decision.requester_device_id
-            );
+        error!("Failed to send respond connection command: {}", e);
+        return Err("Internal service error".to_string());
+    }
 
-            // 如果接受，发送 ConnectionResponseMessage
-            if decision.accept {
-                // 获取待处理请求信息
-                let pending_requests = connection_manager
-                    .pending_connections
-                    .get_incoming_requests()
-                    .await;
-
-                // 找到对应的请求（应该已经移除了，需要从其他地方获取）
-                // 这里需要发送响应消息到请求方
-                let user_setting = Setting::get_instance();
-                let response = ConnectionResponseMessage {
-                    accepted: true,
-                    responder_device_id: user_setting.get_device_id().clone(),
-                    responder_ip: None,     // TODO: 获取本地 IP
-                    responder_alias: None,  // TODO: 从设置中获取
-                };
-
-                // TODO: 发送响应到请求方
-                // 需要通过 incoming connections 发送
-                info!("Would send connection response: {:?}", response);
-            }
-
-            Ok(ManualConnectionResponse {
-                success: true,
-                device_id: None,
-                message: if decision.accept {
-                    "已接受连接".to_string()
-                } else {
-                    "已拒绝连接".to_string()
-                },
-            })
-        }
-        Err(e) => {
+    match rx.await {
+        Ok(Ok(_)) => Ok(ManualConnectionResponse {
+            success: true,
+            device_id: None,
+            message: if decision.accept {
+                "已接受连接".to_string()
+            } else {
+                "已拒绝连接".to_string()
+            },
+        }),
+        Ok(Err(e)) => {
             error!("Failed to respond to connection request: {}", e);
             Ok(ManualConnectionResponse {
                 success: false,
@@ -172,29 +138,29 @@ pub async fn respond_to_connection_request(
                 message: format!("响应失败: {}", e),
             })
         }
+        Err(_) => Err("Service did not respond".to_string()),
     }
 }
 
 /// 取消待处理的连接请求
 #[tauri::command]
 pub async fn cancel_connection_request(
-    uniclipboard_app: State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
+    app_handle: State<'_, AppRuntimeHandle>,
 ) -> Result<(), String> {
     info!("Cancel connection request");
 
-    // 获取 UniClipboard 实例
-    let uniclipboard = uniclipboard_app
-        .lock()
-        .map_err(|e| format!("Failed to acquire lock: {}", e))?
-        .as_ref()
-        .cloned()
-        .ok_or("UniClipboard not initialized")?;
+    let (tx, rx) = oneshot::channel();
 
-    // 获取 connection_manager
-    let connection_manager = uniclipboard.get_connection_manager();
+    if let Err(e) = app_handle
+        .connection_tx
+        .send(ConnectionCommand::CancelConnectionRequest { respond_to: tx })
+        .await
+    {
+        return Err(format!("Failed to send command: {}", e));
+    }
 
-    // 清空所有待处理连接
-    connection_manager.pending_connections.clear_all().await;
-
-    Ok(())
+    match rx.await {
+        Ok(result) => result,
+        Err(_) => Err("Service did not respond".to_string()),
+    }
 }

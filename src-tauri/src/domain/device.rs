@@ -105,6 +105,14 @@ pub struct Device {
     pub platform: Option<Platform>,
     /// 设备别名
     pub alias: Option<String>,
+    /// libp2p PeerId for P2P networking
+    pub peer_id: Option<String>,
+    /// Human-readable device name
+    pub device_name: Option<String>,
+    /// Whether device has completed P2P pairing
+    pub is_paired: bool,
+    /// Timestamp of last contact (Unix timestamp)
+    pub last_seen: Option<i32>,
 }
 
 impl Device {
@@ -124,6 +132,10 @@ impl Device {
             updated_at: None,
             platform: None,
             alias: None,
+            peer_id: None,
+            device_name: None,
+            is_paired: false,
+            last_seen: None,
         }
     }
 
@@ -140,6 +152,10 @@ impl Device {
                 Platform::from_str(&get_current_platform()).unwrap_or(Platform::Unknown),
             ),
             alias: None,
+            peer_id: None,
+            device_name: None,
+            is_paired: false,
+            last_seen: None,
         }
     }
 }
@@ -176,6 +192,10 @@ impl From<&Device> for DbDevice {
             updated_at: device.updated_at.unwrap_or(0) as i32,
             alias: device.alias.clone(),
             platform: device.platform.map(|p| p.to_string()),
+            peer_id: device.peer_id.clone(),
+            device_name: device.device_name.clone(),
+            is_paired: device.is_paired,
+            last_seen: device.last_seen,
         }
     }
 }
@@ -196,6 +216,10 @@ impl From<&DbDevice> for Device {
             .platform
             .as_ref()
             .map(|p| Platform::from_str(p).unwrap());
+        device.peer_id = db_device.peer_id.clone();
+        device.device_name = db_device.device_name.clone();
+        device.is_paired = db_device.is_paired;
+        device.last_seen = db_device.last_seen;
         device
     }
 }
@@ -211,6 +235,14 @@ impl From<DbDevice> for Device {
         device.self_device = db_device.self_device;
         device.status = DeviceStatus::try_from(db_device.status).unwrap_or(DeviceStatus::Unknown);
         device.updated_at = Some(db_device.updated_at);
+        device.alias = db_device.alias;
+        device.platform = db_device
+            .platform
+            .map(|p| Platform::from_str(&p).unwrap());
+        device.peer_id = db_device.peer_id;
+        device.device_name = db_device.device_name;
+        device.is_paired = db_device.is_paired;
+        device.last_seen = db_device.last_seen;
         device
     }
 }

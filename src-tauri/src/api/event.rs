@@ -1,12 +1,12 @@
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Runtime, State};
-use serde::Serialize;
 
 use crate::infrastructure::event::event_bus::{
     subscribe_clipboard_new_content, subscribe_connection_request, subscribe_connection_response,
     ListenerId,
 };
-use crate::infrastructure::uniclipboard::UniClipboard;
+use crate::infrastructure::uniclipboard::ClipboardSyncService;
 
 /// 剪贴板新内容事件数据
 #[derive(Clone, Serialize)]
@@ -67,12 +67,12 @@ impl Default for EventListenerState {
 }
 
 /// 监听剪贴板新内容事件
-/// 
+///
 /// 当有新的剪贴板内容时，会向前端发送 "clipboard-new-content" 事件
 #[tauri::command]
 pub fn listen_clipboard_new_content<R: Runtime>(
     app_handle: AppHandle<R>,
-    _uniclipboard_app: State<'_, Arc<Mutex<Option<Arc<UniClipboard>>>>>,
+    _uniclipboard_app: State<'_, Arc<Mutex<Option<Arc<ClipboardSyncService>>>>>,
     event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>,
 ) {
     // 如果已经在监听，则不再重复监听
@@ -136,7 +136,10 @@ pub fn listen_connection_request<R: Runtime>(
             requester_platform: event.requester_platform.clone(),
         };
 
-        log::info!("Received connection-request event from {}", event.requester_device_id);
+        log::info!(
+            "Received connection-request event from {}",
+            event.requester_device_id
+        );
 
         // 向前端发送事件
         if let Err(e) = app_handle_clone.emit("connection-request", event_data) {

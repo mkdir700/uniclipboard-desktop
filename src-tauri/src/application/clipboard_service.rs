@@ -7,7 +7,10 @@ use crate::infrastructure::storage::db::models::clipboard_record::{
 };
 use crate::infrastructure::storage::record_manager::ClipboardStats;
 use crate::message::Payload;
-use crate::{application::file_service::ContentProcessorService, infrastructure::uniclipboard::UniClipboard};
+use crate::{
+    application::file_service::ContentProcessorService,
+    infrastructure::uniclipboard::ClipboardSyncService,
+};
 use serde::{Deserialize, Serialize};
 
 /// 文本摘要的最大长度
@@ -241,11 +244,11 @@ impl From<(DbClipboardRecord, bool)> for ClipboardItemResponse {
     }
 }
 pub struct ClipboardService {
-    app: Arc<UniClipboard>,
+    app: Arc<ClipboardSyncService>,
 }
 
 impl ClipboardService {
-    pub fn new(app: Arc<UniClipboard>) -> Self {
+    pub fn new(app: Arc<ClipboardSyncService>) -> Self {
         Self { app }
     }
 
@@ -265,7 +268,7 @@ impl ClipboardService {
         filter: Option<Filter>,
     ) -> Result<Vec<ClipboardItemResponse>> {
         let record_manager = self.app.get_record_manager();
-        let records = record_manager
+        let records: Vec<DbClipboardRecord> = record_manager
             .get_records(order_by, limit, offset, filter)
             .await?;
         Ok(records
@@ -281,7 +284,7 @@ impl ClipboardService {
         full_content: bool,
     ) -> Result<Option<ClipboardItemResponse>> {
         let record_manager = self.app.get_record_manager();
-        let record = record_manager.get_record_by_id(id).await?;
+        let record: Option<DbClipboardRecord> = record_manager.get_record_by_id(id).await?;
 
         Ok(record.map(|r| ClipboardItemResponse::from((r, full_content))))
     }

@@ -13,82 +13,15 @@ mod utils;
 use application::device_service::get_device_manager;
 use tauri_plugin_decorum::WebviewWindowExt;
 use config::setting::{Setting, SETTING};
-use infrastructure::context::AppContextBuilder;
+use infrastructure::runtime::AppRuntime;
 use infrastructure::security::password::PasswordManager;
 use infrastructure::storage::db::pool::DB_POOL;
-use infrastructure::uniclipboard::{UniClipboard, UniClipboardBuilder};
 use log::error;
 use std::sync::Arc;
-use tauri::{WebviewUrl, WebviewWindowBuilder};
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
+use tauri::{WebviewUrl, WebviewWindowBuilder};
 use utils::logging;
-
-// 初始化UniClipboard
-fn init_uniclipboard(user_setting: Setting) -> Arc<UniClipboard> {
-    // 注册当前设备
-    {
-        let manager = get_device_manager();
-        match manager.get_current_device() {
-            Ok(Some(device)) => {
-                SETTING.write().unwrap().set_device_id(device.id.clone());
-                log::info!("Self device already exists: {}", device.id);
-            }
-            Ok(None) => {
-                // TODO: 获取本地IP地址
-                // 目前只支持一个 ip ，后续可能同时支持多个 ip
-                let local_ip = utils::helpers::get_local_ip();
-                let result =
-                    manager.register_self_device(local_ip, user_setting.network.webserver_port);
-                if let Err(e) = result {
-                    panic!("Failed to register self device: {}", e);
-                }
-                let device_id = result.unwrap();
-                log::info!("Registered self device with ID: {}", device_id);
-                SETTING.write().unwrap().set_device_id(device_id);
-            }
-            Err(e) => {
-                panic!("Failed to get self device: {}", e);
-            }
-        }
-    }
-
-    // 创建一个阻塞的运行时来执行异步初始化
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-
-    // 在运行时中执行异步初始化
-    let app = runtime.block_on(async {
-        // 创建AppContext，传递配置
-        let app_context = match AppContextBuilder::new(user_setting.clone()).build().await {
-            Ok(context) => context,
-            Err(e) => {
-                error!("创建AppContext失败: {}", e);
-                panic!("创建AppContext失败: {}", e);
-            }
-        };
-
-        // 构建UniClipboard实例
-        let app = match UniClipboardBuilder::new()
-            .set_webserver(app_context.webserver)
-            .set_local_clipboard(app_context.local_clipboard)
-            .set_remote_sync(app_context.remote_sync_manager)
-            .set_connection_manager(app_context.connection_manager)
-            .set_record_manager(app_context.record_manager)
-            .set_file_storage(app_context.file_storage)
-            .build()
-        {
-            Ok(app) => app,
-            Err(e) => {
-                error!("构建UniClipboard实例失败: {}", e);
-                panic!("构建UniClipboard实例失败: {}", e);
-            }
-        };
-
-        Arc::new(app)
-    });
-
-    app
-}
 
 fn main() {
     // 注意: 日志系统将在 Builder 插件注册时初始化
@@ -115,9 +48,6 @@ fn main() {
         *global_setting = user_setting.clone();
     }
 
-    // 创建一个配置的克隆，用于初始化
-    let user_setting_for_init = user_setting.clone();
-
     // 初始化密码管理器
     PasswordManager::init_salt_file_if_not_exists().unwrap();
 
@@ -130,33 +60,72 @@ fn main() {
         }
     };
 
-    // 初始化 UniClipboard
-    let uniclipboard_app = init_uniclipboard(user_setting_for_init);
+    // 注册当前设备
+    let (device_id, device_name) = {
+        let manager = get_device_manager();
+        match manager.get_current_device() {
+            Ok(Some(device)) => {
+                SETTING.write().unwrap().set_device_id(device.id.clone());
+                log::info!("Self device already exists: {}", device.id);
+                (device.id, device.alias)
+            }
+            Ok(None) => {
+                // TODO: 获取本地IP地址
+                // 目前只支持一个 ip ，后续可能同时支持多个 ip
+                let local_ip = utils::helpers::get_local_ip();
+                let result =
+                    manager.register_self_device(local_ip, user_setting.network.webserver_port);
+                if let Err(e) = result {
+                    panic!("Failed to register self device: {}", e);
+                }
+                let device_id = result.unwrap();
+                log::info!("Registered self device with ID: {}", device_id);
+                SETTING.write().unwrap().set_device_id(device_id.clone());
+
+                // Use hostname as default device name when registering
+                let device_name = hostname::get()
+                    .map(|h: std::ffi::OsString| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| "Unknown Device".to_string());
+
+                (device_id, Some(device_name))
+            }
+            Err(e) => {
+                panic!("Failed to get self device: {}", e);
+            }
+        }
+    };
+
+    // 创建 AppRuntime
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let app_runtime = runtime.block_on(async {
+        match AppRuntime::new(
+            user_setting.clone(),
+            device_id,
+            device_name.unwrap_or("Unknown Device".to_string()),
+        )
+        .await
+        {
+            Ok(runtime) => runtime,
+            Err(e) => {
+                error!("Failed to create AppRuntime: {}", e);
+                panic!("Failed to create AppRuntime: {}", e);
+            }
+        }
+    });
+
+    // 获取 runtime handle
+    let app_handle = app_runtime.handle();
 
     // 运行应用
-    run_app(uniclipboard_app, user_setting);
+    run_app(app_runtime, app_handle, user_setting);
 }
 
 // 运行应用程序
-/// Launches the Tauri application configured with the provided UniClipboard instance and user settings.
-///
-/// Configures plugins, creates the main window, registers managed state and IPC handlers, starts the UniClipboard background task, and enters the Tauri event loop.
-///
-/// # Parameters
-///
-/// - `uniclipboard_app`: The shared UniClipboard instance to manage and run in the application's background task.
-/// - `user_setting`: Application settings used to configure window behavior and plugins.
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::sync::Arc;
-/// // let uniclipboard = Arc::new(/* UniClipboard instance */);
-/// // let settings = /* Setting instance */;
-/// // run_app(uniclipboard, settings);
-/// ```
-fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
-    use std::sync::Mutex;
+fn run_app(
+    app_runtime: AppRuntime,
+    app_handle: infrastructure::runtime::AppRuntimeHandle,
+    user_setting: Setting,
+) {
     use tauri::Builder;
     use tauri_plugin_autostart::MacosLauncher;
     use tauri_plugin_single_instance;
@@ -175,15 +144,11 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
             tauri_plugin_stronghold::Builder::with_argon2(&PasswordManager::get_salt_file_path())
                 .build(),
         )
-        .plugin(tauri_plugin_decorum::init())
-        .manage(Arc::new(Mutex::new(Some(uniclipboard_app.clone()))))
-        .manage(Arc::new(Mutex::new(
+        .manage(app_handle)
+        .manage(Arc::new(std::sync::Mutex::new(
             api::event::EventListenerState::default(),
         )))
-        .setup(move |app| -> Result<(), Box<dyn std::error::Error>> {
-            // 获取应用句柄并克隆以便在异步任务中使用
-            let app_handle = app.handle().clone();
-
+        .setup(move |app| {
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("")
                 .inner_size(800.0, 600.0)
@@ -203,37 +168,19 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
                 win_builder
             };
 
-            let window = win_builder.build().map_err(|e| {
-                log::error!("Failed to create main window: {}", e);
-                e
-            })?;
-
-            // Windows: Create overlay titlebar for native window behaviors
-            // This enables Windows Snap Layout and proper window chrome while maintaining our custom titlebar design
-            #[cfg(target_os = "windows")]
-            {
-                if let Err(e) = window.create_overlay_titlebar() {
-                    log::error!("Failed to create overlay titlebar: {}", e);
-                } else {
-                    log::info!("Windows overlay titlebar created successfully");
-                }
-            }
+            let _window = win_builder.build().unwrap();
 
             // macOS specific window styling will be handled by the rounded corners plugin
             // The plugin will set up rounded corners, traffic lights positioning, and transparency
 
-            // 启动异步任务
+            // 启动 AppRuntime
             tauri::async_runtime::spawn(async move {
-                // 启动UniClipboard
-                match uniclipboard_app.start().await {
+                // 启动 AppRuntime
+                match app_runtime.start().await {
                     Ok(_) => {
-                        log::info!("UniClipboard started successfully");
-                        // 等待UniClipboard停止
-                        if let Err(e) = uniclipboard_app.wait_for_stop().await {
-                            log::error!("Error while waiting for UniClipboard to stop: {}", e);
-                        }
+                        log::info!("AppRuntime started successfully");
                     }
-                    Err(e) => log::error!("Failed to start UniClipboard: {}", e),
+                    Err(e) => log::error!("Failed to start AppRuntime: {}", e),
                 }
             });
 
@@ -270,6 +217,12 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
             api::device_connection::connect_to_device_manual,
             api::device_connection::respond_to_connection_request,
             api::device_connection::cancel_connection_request,
+            api::p2p::get_local_peer_id,
+            api::p2p::get_p2p_peers,
+            api::p2p::initiate_p2p_pairing,
+            api::p2p::verify_p2p_pairing_pin,
+            api::p2p::reject_p2p_pairing,
+            api::p2p::unpair_p2p_device,
             plugins::mac_rounded_corners::enable_rounded_corners,
             plugins::mac_rounded_corners::enable_modern_window_style,
             plugins::mac_rounded_corners::reposition_traffic_lights,

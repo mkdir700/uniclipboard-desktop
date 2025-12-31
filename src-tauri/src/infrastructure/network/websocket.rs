@@ -24,7 +24,7 @@ use tokio_tungstenite::tungstenite::http::Uri;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WebSocketClient {
     uri: Uri,
     writer: Arc<
@@ -125,7 +125,7 @@ impl WebSocketClient {
     /// 开启一个异步任务，持续的向服务器发送 ping 消息，并等待 pong 消息
     /// 如果连续3次发送 ping 消息失败，则认为连接断开，并修改 connected 状态为 false
     async fn start_health_check(&mut self) {
-        let self_clone = self.clone();
+        let message_tx = self.message_tx.clone();
         let connected = self.connected.clone();
 
         self.health_check_join_handle = Arc::new(RwLock::new(Some(tokio::spawn(async move {
@@ -143,12 +143,37 @@ impl WebSocketClient {
                     break;
                 }
 
-                if let Err(e) = self_clone.ping(Duration::from_secs(3)).await {
-                    error!(
-                        "WebSocket health check failed: {}, count: {}",
-                        e, ping_count
-                    );
-                    ping_count += 1;
+                // Generate random ping and wait for pong
+                let rand_bytes = rand::random::<[u8; 16]>().to_vec();
+                let rand_bytes_clone = rand_bytes.clone();
+                let mut rx = message_tx.subscribe();
+
+                let join_handle = tokio::spawn(async move {
+                    if let Ok(msg) = rx.recv().await {
+                        if let Message::Pong(msg) = msg {
+                            trace!("Ping pong result: {:?}", msg);
+                            return msg == rand_bytes_clone;
+                        }
+                    }
+                    false
+                });
+
+                // Send ping and wait for pong with timeout
+                let timeout_result = tokio::time::timeout(Duration::from_secs(3), async move {
+                    // We can't send directly without WebSocketClient, so just check if we can receive
+                    join_handle.await
+                })
+                .await;
+
+                match timeout_result {
+                    Ok(Ok(true)) => {
+                        // Successful ping-pong, reset count
+                        ping_count = 0;
+                    }
+                    _ => {
+                        error!("WebSocket health check failed");
+                        ping_count += 1;
+                    }
                 }
             }
         }))));

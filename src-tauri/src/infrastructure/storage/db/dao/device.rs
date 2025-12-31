@@ -23,6 +23,10 @@ pub fn insert_device(conn: &mut SqliteConnection, device: &DbDevice) -> Result<(
         updated_at: device.updated_at,
         alias: device.alias.as_deref(),
         platform: device.platform.as_deref(),
+        peer_id: device.peer_id.as_deref(),
+        device_name: device.device_name.as_deref(),
+        is_paired: device.is_paired,
+        last_seen: device.last_seen,
     };
 
     diesel::insert_into(devices::table)
@@ -82,6 +86,10 @@ pub fn update_device(conn: &mut SqliteConnection, device: &DbDevice) -> Result<(
         updated_at: device.updated_at,
         alias: device.alias.as_deref(),
         platform: device.platform.as_deref(),
+        peer_id: device.peer_id.as_deref(),
+        device_name: device.device_name.as_deref(),
+        is_paired: Some(device.is_paired),
+        last_seen: device.last_seen,
     };
 
     diesel::update(devices::table.find(&device.id))

@@ -28,6 +28,10 @@ diesel::table! {
         updated_at -> Integer,
         alias -> Nullable<Text>,
         platform -> Nullable<Text>,
+        peer_id -> Nullable<Text>,
+        device_name -> Nullable<Text>,
+        is_paired -> Bool,
+        last_seen -> Nullable<Integer>,
     }
 }
 

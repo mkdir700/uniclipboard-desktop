@@ -14,6 +14,7 @@ use crate::message::Payload;
 /// 文件存储管理器
 ///
 /// 负责将剪贴板内容持久化到文件系统
+#[derive(Clone)]
 pub struct FileStorageManager {
     storage_dir: PathBuf,
 }
