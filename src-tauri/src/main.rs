@@ -206,6 +206,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            api::setting::open_settings_window,
             api::setting::save_setting,
             api::setting::get_setting,
             api::setting::get_encryption_password,

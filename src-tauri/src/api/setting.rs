@@ -1,6 +1,48 @@
 use crate::config::Setting;
 use crate::infrastructure::security::password::{PASSWORD_SENDER, PasswordRequest};
+use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc;
+
+/// 打开设置窗口
+#[tauri::command]
+pub fn open_settings_window(app_handle: AppHandle) -> Result<(), String> {
+    // 检查设置窗口是否已存在
+    if let Some(_settings_window) = app_handle.get_webview_window("settings") {
+        // 如果窗口已存在，将其显示并聚焦
+        return app_handle
+            .get_webview_window("settings")
+            .ok_or("Settings window not found".to_string())
+            .and_then(|window| {
+                window.set_focus().map_err(|e| format!("Failed to focus settings window: {}", e))?;
+                window.show().map_err(|e| format!("Failed to show settings window: {}", e))
+            });
+    }
+
+    // 创建新的设置窗口
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    #[cfg(target_os = "macos")]
+    let decorations = false;
+
+    #[cfg(not(target_os = "macos"))]
+    let decorations = false;
+
+    WebviewWindowBuilder::new(
+        &app_handle,
+        "settings",
+        WebviewUrl::App("/settings".into()),
+    )
+    .title("Settings")
+    .inner_size(900.0, 700.0)
+    .min_inner_size(800.0, 600.0)
+    .resizable(true)
+    .center()
+    .decorations(decorations)
+    .build()
+    .map_err(|e| format!("Failed to create settings window: {}", e))?;
+
+    Ok(())
+}
 
 /// 保存设置的Tauri命令
 #[tauri::command]
