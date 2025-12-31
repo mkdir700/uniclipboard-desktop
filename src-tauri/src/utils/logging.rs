@@ -14,6 +14,25 @@ pub fn get_builder() -> tauri_plugin_log::Builder {
     let mut builder = tauri_plugin_log::Builder::new()
         .timezone_strategy(TimezoneStrategy::UseLocal)
         .level(default_log_level)
+        // 过滤掉 tauri-plugin-log 自己的日志，避免无限循环
+        // 因为 Webview 目标会通过 log://log 事件发送日志，而这些事件的日志
+        // 会再次触发 log://log 事件，形成死循环
+        .filter(move |metadata| {
+            // 跳过 tauri 内部的日志事件（比如 app::emit, window::emit 等）
+            // 跳过 wry 库的噪音日志（底层 WebView 库）
+            let is_basic_noise = metadata.target().starts_with("tauri::")
+                || metadata.target().starts_with("tracing::")
+                || metadata.target().contains("tauri-")
+                || metadata.target().starts_with("wry::");
+
+            if is_dev {
+                // 开发环境：保留 ipc::request 日志用于调试
+                !is_basic_noise
+            } else {
+                // 生产环境：过滤掉 ipc::request 日志
+                !is_basic_noise && !metadata.target().contains("ipc::request")
+            }
+        })
         .format(|out, message, record| {
             // 保持现有格式: 时间戳 级别 [文件:行号] [模块] 消息
             let level_color = match record.level() {
