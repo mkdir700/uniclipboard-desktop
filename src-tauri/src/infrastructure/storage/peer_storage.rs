@@ -27,8 +27,8 @@ impl From<PairedPeerLegacy> for PairedPeer {
             device_name: legacy.device_name,
             shared_secret: legacy.shared_secret,
             paired_at: chrono::DateTime::parse_from_rfc3339(&legacy.paired_at)
-                .unwrap_or_else(|_| chrono::Utc::now())
-                .with_timezone(&chrono::Utc),
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|_| chrono::Utc::now()),
             last_seen: legacy.last_seen.and_then(|s| {
                 chrono::DateTime::parse_from_rfc3339(&s)
                     .ok()
