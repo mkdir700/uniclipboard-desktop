@@ -3,6 +3,7 @@
 //! Provides a thread-safe, cloneable handle to the application runtime.
 //! This handle is managed by Tauri and satisfies Clone + Send + Sync + 'static.
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -71,6 +72,14 @@ pub enum P2PCommand {
             Result<Vec<crate::infrastructure::p2p::DiscoveredPeer>, String>,
         >,
     },
+    /// Get local device info (peer_id + device_name)
+    GetLocalDeviceInfo {
+        respond_to: tokio::sync::oneshot::Sender<Result<LocalDeviceInfo, String>>,
+    },
+    /// Get paired peers from storage
+    GetPairedPeers {
+        respond_to: tokio::sync::oneshot::Sender<Result<Vec<crate::domain::pairing::PairedPeer>, String>>,
+    },
     /// Initiate pairing with a peer
     InitiatePairing {
         peer_id: String,
@@ -99,6 +108,14 @@ pub enum P2PCommand {
         session_id: String,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
+}
+
+/// Local device info
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalDeviceInfo {
+    pub peer_id: String,
+    pub device_name: String,
 }
 
 /// Thread-safe handle to the application runtime

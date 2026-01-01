@@ -13,6 +13,8 @@ import { DeviceList, DeviceHeader } from '@/components'
 import { DeviceTab } from '@/components/device/Header'
 import PairingDialog from '@/components/PairingDialog'
 import PairingPinDialog from '@/components/PairingPinDialog'
+import { useAppDispatch } from '@/store/hooks'
+import { fetchPairedDevices } from '@/store/slices/devicesSlice'
 
 // P2P配对请求状态
 interface P2PPairingRequestWithPin extends P2PPairingRequestEvent {
@@ -22,6 +24,7 @@ interface P2PPairingRequestWithPin extends P2PPairingRequestEvent {
 
 const DevicesPage: React.FC = () => {
   const { t } = useTranslation()
+  const dispatch = useAppDispatch()
   const [showPairingDialog, setShowPairingDialog] = useState(false)
   const [activeTab, setActiveTab] = useState<DeviceTab>('connected')
 
@@ -68,7 +71,8 @@ const DevicesPage: React.FC = () => {
         console.log('P2P pairing completed')
         setShowPinDialog(false)
         setPendingP2PRequest(null)
-        // TODO: 刷新设备列表
+        // 刷新设备列表
+        dispatch(fetchPairedDevices())
       })
       cleanupRefs.current.push(unlistenComplete)
 
@@ -82,7 +86,7 @@ const DevicesPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to setup P2P pairing request listener:', error)
     }
-  }, [t])
+  }, [t, dispatch])
 
   useEffect(() => {
     // 设置P2P配对请求监听

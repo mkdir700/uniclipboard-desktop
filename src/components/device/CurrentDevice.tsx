@@ -1,10 +1,73 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { Laptop, Settings } from 'lucide-react'
-import React, { useState } from 'react'
+import { Laptop, Settings, RefreshCw } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
 import DeviceSettingsPanel from './DeviceSettingsPanel'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { fetchLocalDeviceInfo, clearLocalDeviceError } from '@/store/slices/devicesSlice'
 
 const CurrentDevice: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false)
+  const dispatch = useAppDispatch()
+  const { localDevice, localDeviceLoading, localDeviceError } = useAppSelector(
+    state => state.devices
+  )
+
+  useEffect(() => {
+    // 组件挂载时获取当前设备信息
+    dispatch(fetchLocalDeviceInfo())
+  }, [dispatch])
+
+  const handleRetry = () => {
+    dispatch(clearLocalDeviceError())
+    dispatch(fetchLocalDeviceInfo())
+  }
+
+  // 加载状态
+  if (localDeviceLoading) {
+    return (
+      <div className="mb-8">
+        <div className="flex items-center gap-4 mb-4">
+          <h3 className="text-sm font-medium text-muted-foreground">当前设备</h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <div className="border border-border/50 rounded-lg bg-card p-6">
+          <div className="animate-pulse flex items-center gap-5">
+            <div className="h-14 w-14 bg-muted rounded-md"></div>
+            <div className="space-y-2">
+              <div className="h-5 bg-muted rounded w-32"></div>
+              <div className="h-4 bg-muted rounded w-24"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // 错误状态
+  if (localDeviceError || !localDevice) {
+    return (
+      <div className="mb-8">
+        <div className="flex items-center gap-4 mb-4">
+          <h3 className="text-sm font-medium text-muted-foreground">当前设备</h3>
+          <div className="h-px flex-1 bg-border/50"></div>
+        </div>
+        <div className="border border-destructive/50 rounded-lg bg-card p-6">
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-destructive">{localDeviceError || '无法获取当前设备信息'}</p>
+            {localDeviceError && (
+              <button
+                onClick={handleRetry}
+                className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                title="重试"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mb-8">
@@ -29,13 +92,15 @@ const CurrentDevice: React.FC = () => {
               <div>
                 <div className="flex items-center gap-3">
                   <h4 className="text-lg font-semibold text-foreground tracking-tight">
-                    MacBook Pro
+                    {localDevice.deviceName}
                   </h4>
                   <span className="px-2.5 py-0.5 bg-primary/15 text-primary text-xs font-medium rounded-full border border-primary/10">
                     当前设备
                   </span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">最后活动时间: 现在</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  ID: {localDevice.peerId.substring(0, 8)}...
+                </p>
               </div>
             </div>
 
@@ -73,7 +138,7 @@ const CurrentDevice: React.FC = () => {
                 className="overflow-hidden"
               >
                 <div className="pt-6 border-t border-border/50 mt-6">
-                  <DeviceSettingsPanel deviceId="current" deviceName="MacBook Pro" />
+                  <DeviceSettingsPanel deviceId="current" deviceName={localDevice.deviceName} />
                 </div>
               </motion.div>
             )}

@@ -29,6 +29,8 @@ pub struct P2PRuntime {
     p2p_sync: Arc<Libp2pSync>,
     /// Local peer ID
     local_peer_id: String,
+    /// Local device name
+    device_name: String,
     /// Discovered peers (thread-safe for queries)
     discovered_peers: Arc<RwLock<HashMap<String, DiscoveredPeer>>>,
     /// Configuration
@@ -92,10 +94,13 @@ impl P2PRuntime {
         // Create PeerStorage
         let peer_storage = Arc::new(PeerStorage::new().expect("Failed to create PeerStorage"));
 
+        // Clone device_name for P2pSync (original will be stored in P2PRuntime)
+        let device_name_for_sync = device_name.clone();
+
         // Create P2pSync
         let p2p_sync = Arc::new(Libp2pSync::new(
             network_cmd_tx.clone(),
-            device_name,
+            device_name_for_sync,
             local_peer_id.clone(),
             peer_storage,
         ));
@@ -125,6 +130,8 @@ impl P2PRuntime {
                         peer_id,
                         request,
                     } => {
+                        let device_name = request.device_name.clone();
+
                         // Send to pairing manager
                         let _ = pairing_cmd_tx_clone
                             .send(PairingCommand::HandleRequest {
@@ -137,7 +144,7 @@ impl P2PRuntime {
                         let event_data = P2PPairingRequestEventData {
                             session_id,
                             peer_id,
-                            device_name: None, // Will be filled by pairing manager
+                            device_name: Some(device_name),
                         };
                         if let Err(e) =
                             app_handle_for_events.emit("p2p-pairing-request", event_data)
@@ -213,6 +220,7 @@ impl P2PRuntime {
             pairing_cmd_tx,
             p2p_sync,
             local_peer_id,
+            device_name,
             discovered_peers,
             config,
             app_handle,
@@ -228,6 +236,11 @@ impl P2PRuntime {
     /// Get the local peer ID
     pub fn local_peer_id(&self) -> &str {
         &self.local_peer_id
+    }
+
+    /// Get the local device name
+    pub fn device_name(&self) -> &str {
+        &self.device_name
     }
 
     /// Get discovered peers

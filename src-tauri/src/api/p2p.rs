@@ -6,8 +6,9 @@ use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::domain::pairing::PairedPeer;
 use crate::infrastructure::p2p::DiscoveredPeer;
-use crate::infrastructure::runtime::{AppRuntimeHandle, P2PCommand};
+use crate::infrastructure::runtime::{AppRuntimeHandle, LocalDeviceInfo, P2PCommand};
 
 /// P2P 设备信息
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -241,4 +242,44 @@ pub async fn accept_p2p_pairing(
 
     rx.await
         .map_err(|e| format!("Failed to receive response: {}", e))?
+}
+
+/// 获取本地设备信息
+#[tauri::command]
+pub async fn get_local_device_info(
+    app_handle: State<'_, AppRuntimeHandle>,
+) -> Result<LocalDeviceInfo, String> {
+    info!("Getting local device info");
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    app_handle
+        .p2p_tx
+        .send(P2PCommand::GetLocalDeviceInfo { respond_to: tx })
+        .await
+        .map_err(|e| format!("Failed to send command: {}", e))?;
+
+    rx.await
+        .map_err(|e| format!("Failed to receive response: {}", e))?
+        .map_err(|e| e.to_string())
+}
+
+/// 获取已配对的设备列表
+#[tauri::command]
+pub async fn get_paired_peers(
+    app_handle: State<'_, AppRuntimeHandle>,
+) -> Result<Vec<PairedPeer>, String> {
+    info!("Getting paired peers");
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    app_handle
+        .p2p_tx
+        .send(P2PCommand::GetPairedPeers { respond_to: tx })
+        .await
+        .map_err(|e| format!("Failed to send command: {}", e))?;
+
+    rx.await
+        .map_err(|e| format!("Failed to receive response: {}", e))?
+        .map_err(|e| e.to_string())
 }

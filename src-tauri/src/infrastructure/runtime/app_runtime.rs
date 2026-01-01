@@ -2,7 +2,7 @@
 //!
 //! Single owner of all core application components.
 use anyhow::Result;
-use log::{error, info};
+use log::info;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::AppHandle;
@@ -235,6 +235,21 @@ impl AppRuntime {
                 let peers = p2p_runtime.discovered_peers().await;
                 let _ = respond_to.send(Ok(peers));
             }
+            P2PCommand::GetLocalDeviceInfo { respond_to } => {
+                use crate::infrastructure::runtime::LocalDeviceInfo;
+                let device_info = LocalDeviceInfo {
+                    peer_id: p2p_runtime.local_peer_id().to_string(),
+                    device_name: p2p_runtime.device_name().to_string(),
+                };
+                let _ = respond_to.send(Ok(device_info));
+            }
+            P2PCommand::GetPairedPeers { respond_to } => {
+                let peers = p2p_runtime
+                    .p2p_sync()
+                    .peer_storage()
+                    .get_all_peers();
+                let _ = respond_to.send(Ok(peers));
+            }
             P2PCommand::InitiatePairing {
                 peer_id,
                 device_name,
@@ -309,8 +324,10 @@ impl AppRuntime {
                 peer_id,
                 respond_to,
             } => {
-                // TODO: Implement unpairing
-                let _ = respond_to.send(Err("Unpair not implemented".to_string()));
+                let result = p2p_runtime
+                    .unpair_peer(&peer_id)
+                    .map_err(|e| e.to_string());
+                let _ = respond_to.send(result);
             }
             P2PCommand::AcceptPairing {
                 session_id,

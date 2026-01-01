@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, oneshot};
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 
 use super::events::NetworkEvent;
-use super::protocol::{PairingChallenge, PairingConfirm, PairingRequest, PairingResponse};
+use super::protocol::{PairingConfirm, PairingRequest, PairingResponse};
 use super::swarm::NetworkCommand;
 
 /// PIN length for pairing verification
@@ -346,16 +346,6 @@ impl PairingManager {
         };
 
         self.sessions.insert(request.session_id.clone(), session);
-
-        // Emit PairingRequestReceived event to frontend - PIN generation is deferred
-        let _ = self
-            .event_tx
-            .send(NetworkEvent::PairingRequestReceived {
-                session_id: request.session_id.clone(),
-                peer_id,
-                request,
-            })
-            .await;
 
         Ok(())
     }

@@ -24,6 +24,34 @@ export interface P2PPeerInfo {
 }
 
 /**
+ * 本地设备信息
+ */
+export interface LocalDeviceInfo {
+  /** Peer ID */
+  peerId: string
+  /** Device name */
+  deviceName: string
+}
+
+/**
+ * 已配对的设备信息
+ */
+export interface PairedPeer {
+  /** Peer ID */
+  peerId: string
+  /** Device name */
+  deviceName: string
+  /** Shared secret (encrypted) */
+  sharedSecret: number[]
+  /** Pairing timestamp (ISO 8601) */
+  pairedAt: string
+  /** Last seen timestamp (ISO 8601) */
+  lastSeen: string | null
+  /** Last known addresses */
+  lastKnownAddresses: string[]
+}
+
+/**
  * P2P 配对请求
  */
 export interface P2PPairingRequest {
@@ -271,5 +299,29 @@ export async function onP2PPairingFailed(
   } catch (error) {
     console.error('Failed to setup P2P pairing failed listener:', error)
     return () => {}
+  }
+}
+
+/**
+ * 获取本地设备信息
+ */
+export async function getLocalDeviceInfo(): Promise<LocalDeviceInfo> {
+  try {
+    return await invoke<LocalDeviceInfo>('get_local_device_info')
+  } catch (error) {
+    console.error('Failed to get local device info:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取已配对的设备列表
+ */
+export async function getPairedPeers(): Promise<PairedPeer[]> {
+  try {
+    return await invoke<PairedPeer[]>('get_paired_peers')
+  } catch (error) {
+    console.error('Failed to get paired peers:', error)
+    throw error
   }
 }

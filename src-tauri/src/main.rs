@@ -228,6 +228,8 @@ fn run_app(user_setting: Setting, device_id: String) {
             api::onboarding::save_device_info,
             api::p2p::get_local_peer_id,
             api::p2p::get_p2p_peers,
+            api::p2p::get_local_device_info,
+            api::p2p::get_paired_peers,
             api::p2p::initiate_p2p_pairing,
             api::p2p::verify_p2p_pairing_pin,
             api::p2p::reject_p2p_pairing,

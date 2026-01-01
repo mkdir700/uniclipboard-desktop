@@ -1,11 +1,13 @@
 import { configureStore } from '@reduxjs/toolkit'
 import clipboardReducer from './slices/clipboardSlice'
+import devicesReducer from './slices/devicesSlice'
 import statsReducer from './slices/statsSlice'
 
 export const store = configureStore({
   reducer: {
     clipboard: clipboardReducer,
     stats: statsReducer,
+    devices: devicesReducer,
   },
 })
 

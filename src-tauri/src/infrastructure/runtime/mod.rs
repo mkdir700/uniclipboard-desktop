@@ -8,5 +8,5 @@ mod handle;
 mod p2p_runtime;
 
 pub use app_runtime::AppRuntime;
-pub use handle::{AppRuntimeHandle, ClipboardCommand, P2PCommand};
+pub use handle::{AppRuntimeHandle, ClipboardCommand, LocalDeviceInfo, P2PCommand};
 pub use p2p_runtime::P2PRuntime;
