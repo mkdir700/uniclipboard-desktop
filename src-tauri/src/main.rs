@@ -138,6 +138,23 @@ fn main() {
 }
 
 // 运行应用程序
+/// Launches the Tauri application configured with the provided UniClipboard instance and user settings.
+///
+/// Configures plugins, creates the main window, registers managed state and IPC handlers, starts the UniClipboard background task, and enters the Tauri event loop.
+///
+/// # Parameters
+///
+/// - `uniclipboard_app`: The shared UniClipboard instance to manage and run in the application's background task.
+/// - `user_setting`: Application settings used to configure window behavior and plugins.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::sync::Arc;
+/// // let uniclipboard = Arc::new(/* UniClipboard instance */);
+/// // let settings = /* Setting instance */;
+/// // run_app(uniclipboard, settings);
+/// ```
 fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
     use std::sync::Mutex;
     use tauri::Builder;
