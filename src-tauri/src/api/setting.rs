@@ -16,7 +16,7 @@ pub struct SettingChangedEventData {
 
 /// 打开设置窗口
 #[tauri::command]
-pub fn open_settings_window(app_handle: AppHandle) -> Result<(), String> {
+pub async fn open_settings_window(app_handle: AppHandle) -> Result<(), String> {
     // 检查设置窗口是否已存在
     if let Some(_settings_window) = app_handle.get_webview_window("settings") {
         // 如果窗口已存在，将其显示并聚焦
@@ -32,13 +32,7 @@ pub fn open_settings_window(app_handle: AppHandle) -> Result<(), String> {
     // 创建新的设置窗口
     use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-    #[cfg(target_os = "macos")]
-    let decorations = false;
-
-    #[cfg(not(target_os = "macos"))]
-    let decorations = false;
-
-    WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app_handle,
         "settings",
         WebviewUrl::App("/settings".into()),
@@ -48,9 +42,32 @@ pub fn open_settings_window(app_handle: AppHandle) -> Result<(), String> {
     .min_inner_size(800.0, 600.0)
     .resizable(true)
     .center()
-    .decorations(decorations)
-    .build()
-    .map_err(|e| format!("Failed to create settings window: {}", e))?;
+    .visible(false); // 初始不可见，等待 WebView 完全初始化
+
+    // 平台特定的窗口装饰配置
+    #[cfg(target_os = "macos")]
+    let builder = builder.decorations(false);
+
+    #[cfg(target_os = "windows")]
+    let builder = builder.decorations(false).shadow(true); // Windows 添加 shadow，与主窗口配置一致
+
+    #[cfg(target_os = "linux")]
+    let builder = builder.decorations(false);
+
+    let window = builder
+        .build()
+        .map_err(|e| format!("Failed to create settings window: {}", e))?;
+
+    // 克隆窗口句柄用于异步任务
+    let window_clone = window.clone();
+
+    // 延迟显示窗口，确保 WebView 完全初始化
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        if let Err(e) = window_clone.show() {
+            log::error!("Failed to show settings window: {:?}", e);
+        }
+    });
 
     Ok(())
 }
