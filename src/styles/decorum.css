@@ -1,0 +1,29 @@
+/**
+ * Decorum Plugin Styles
+ *
+ * 隐藏 decorum 注入的标题栏控件，仅使用其提供的 Windows Snap Layout 功能。
+ * 我们使用自己的自定义 TitleBar 组件来控制窗口。
+ *
+ * 这些样式仅在 Windows 平台上激活。
+ */
+
+/* 隐藏 decorum 注入的所有标题栏按钮 */
+.decorum-tb-btn,
+#decorum-tb-minimize,
+#decorum-tb-maximize,
+#decorum-tb-close {
+  display: none !important;
+}
+
+/* 禁用 decorum 容器的 pointer-events，让点击穿透到我们的按钮 */
+[data-tauri-decorum-tb] {
+  pointer-events: none !important;
+}
+
+/* 确保 decorum 覆盖层的所有子元素也不阻挡点击 */
+[data-tauri-decorum-tb] > * {
+  pointer-events: none !important;
+}
+
+/* 我们的自定义 TitleBar 组件中的按钮需要能够接收点击 */
+/* 通过更高优先级确保点击穿透正常工作 */

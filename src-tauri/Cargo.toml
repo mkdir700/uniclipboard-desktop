@@ -22,6 +22,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }  # Tauri 框架核心库
 tauri-plugin-opener = "2"  # 用于打开文件或URL的Tauri插件
 tauri-plugin-devtools = "2.0.0"  # Tauri开发工具插件
+tauri-plugin-decorum = "1"  # Windows窗口管理插件，提供原生Windows窗口行为
 
 # ===== 序列化/数据处理 =====
 serde = { version = "1", features = ["derive"] }  # 序列化和反序列化框架
