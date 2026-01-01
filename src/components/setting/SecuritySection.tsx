@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { setEncryptionPassword, getEncryptionPassword } from '@/api/security'
 import { Switch, Input } from '@/components/ui'
 import { Card, CardContent } from '@/components/ui/card'
-import { useSetting } from '@/contexts/SettingContext'
+import { useSetting } from '@/hooks/useSetting'
 
 const SecuritySection: React.FC = () => {
   const { t } = useTranslation()

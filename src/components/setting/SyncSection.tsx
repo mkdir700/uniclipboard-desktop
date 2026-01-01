@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSetting } from '../../contexts/SettingContext'
 import {
   Switch,
   Input,
@@ -11,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui'
 import { Card, CardContent } from '@/components/ui/card'
+import { useSetting } from '@/hooks/useSetting'
 
 const SyncSection: React.FC = () => {
   const { t } = useTranslation()

@@ -6,6 +6,7 @@ use crate::domain::transfer_message::ClipboardTransferMessage;
 /// 下载决策器
 ///
 /// 负责决定是否下载远程剪贴板内容
+#[derive(Clone)]
 pub struct DownloadDecisionMaker {
     setting: Setting,
 }

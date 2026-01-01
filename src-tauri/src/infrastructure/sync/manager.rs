@@ -2,13 +2,13 @@ use std::{sync::Arc, time::Duration};
 
 use crate::config::Setting;
 use crate::domain::transfer_message::ClipboardTransferMessage;
-use crate::interface::{RemoteClipboardSync as RemoteClipboardSyncTrait, RemoteSyncManagerTrait};
+use crate::interface::{RemoteClipboardSync, RemoteSyncManagerTrait};
 use anyhow::Result;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 pub struct RemoteSyncManager {
-    sync_handler: Arc<RwLock<Option<Arc<dyn RemoteClipboardSyncTrait>>>>,
+    sync_handler: Arc<RwLock<Option<Arc<dyn RemoteClipboardSync>>>>,
     user_setting: Setting,
 }
 
@@ -31,11 +31,44 @@ impl RemoteSyncManager {
 
 #[async_trait]
 impl RemoteSyncManagerTrait for RemoteSyncManager {
-    async fn set_sync_handler(&self, handler: Arc<dyn RemoteClipboardSyncTrait>) {
+    async fn set_sync_handler(&self, handler: Arc<dyn RemoteClipboardSync>) {
         let mut sync_handler = self.sync_handler.write().await;
         *sync_handler = Some(handler);
     }
 
+    // Delegate other methods to RemoteClipboardSync implementation to avoid duplication or implement them here?
+    // The trait definition requires implementation.
+    async fn push(&self, message: ClipboardTransferMessage) -> Result<()> {
+        RemoteClipboardSync::push(self, message).await
+    }
+
+    async fn pull(&self, timeout: Option<Duration>) -> Result<ClipboardTransferMessage> {
+        RemoteClipboardSync::pull(self, timeout).await
+    }
+
+    async fn sync(&self) -> Result<()> {
+        RemoteClipboardSync::sync(self).await
+    }
+
+    async fn start(&self) -> Result<()> {
+        RemoteClipboardSync::start(self).await
+    }
+
+    async fn stop(&self) -> Result<()> {
+        RemoteClipboardSync::stop(self).await
+    }
+
+    async fn pause(&self) -> Result<()> {
+        RemoteClipboardSync::pause(self).await
+    }
+
+    async fn resume(&self) -> Result<()> {
+        RemoteClipboardSync::resume(self).await
+    }
+}
+
+#[async_trait]
+impl RemoteClipboardSync for RemoteSyncManager {
     async fn push(&self, message: ClipboardTransferMessage) -> Result<()> {
         let sync_handler = self.sync_handler.read().await;
         if let Some(handler) = sync_handler.as_ref() {
@@ -54,7 +87,6 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
         }
     }
 
-    #[allow(dead_code)]
     async fn sync(&self) -> Result<()> {
         let sync_handler = self.sync_handler.read().await;
         if let Some(handler) = sync_handler.as_ref() {
@@ -73,7 +105,6 @@ impl RemoteSyncManagerTrait for RemoteSyncManager {
         }
     }
 
-    #[allow(dead_code)]
     async fn stop(&self) -> Result<()> {
         let sync_handler = self.sync_handler.read().await;
         if let Some(handler) = sync_handler.as_ref() {

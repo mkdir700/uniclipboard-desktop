@@ -179,6 +179,80 @@ All frontend-backend communication through Tauri commands defined in [api/](src-
 
 ## Development Style
 
+### Problem-Solving Philosophy
+
+**CRITICAL**: Don't treat symptoms in isolation. Always step back and analyze problems from a higher-level perspective before implementing fixes.
+
+**Symptoms vs. Root Causes**:
+
+```
+❌ ANTI-PATTERN - Symptom-focused
+"Component renders wrong" → Add useEffect hack → "State desync" → Add more hacks → Spaghetti code
+
+✅ CORRECT - Root cause analysis
+"Component renders wrong" → Trace data flow → Identify architectural gap → Design proper solution → Fix at the right layer
+```
+
+**High-Level Thinking Checklist**:
+
+Before making changes, ask:
+
+1. **Where does this problem originate?**
+   - UI layer issue, or state management problem?
+   - API contract mismatch, or business logic gap?
+   - Infrastructure limitation, or architectural flaw?
+
+2. **What's the systemic fix?**
+   - Can this be solved by improving the abstraction?
+   - Would a design pattern eliminate this class of bugs?
+   - Is there a missing piece in the architecture?
+
+3. **What are the trade-offs?**
+   - Short-term hack vs. long-term maintainability
+   - Local fix vs. systemic improvement
+   - Quick workaround vs. proper solution
+
+**Examples**:
+
+```rust
+// ❌ WRONG - Treating symptoms everywhere
+async fn sync_clipboard() {
+    match send_to_device().await {
+        Err(_) => sleep(Duration::from_secs(1)).await, // Band-aid
+        Ok(_) => {}
+    }
+}
+
+// ✅ CORRECT - Fix the retry logic at the infrastructure layer
+// infrastructure/sync/retry_policy.rs
+pub struct RetryPolicy {
+    max_attempts: u32,
+    backoff_strategy: BackoffStrategy,
+}
+
+async fn sync_clipboard_with_retry(policy: &RetryPolicy) -> Result<()> {
+    policy.execute(|| send_to_device()).await
+}
+```
+
+```tsx
+// ❌ WRONG - Local state patch
+function DeviceList() {
+  const [devices, setDevices] = useState([])
+  useEffect(() => {
+    fetchDevices().then(setDevices)
+    setInterval(() => fetchDevices().then(setDevices), 5000) // Manual polling
+  }, [])
+}
+
+// ✅ CORRECT - Leverage existing state management (Redux RTK Query)
+function DeviceList() {
+  const { data: devices } = useGetDevicesQuery() // Built-in caching, refetch, error handling
+}
+```
+
+**Rationale**: High-level problem-solving prevents technical debt, reduces code complexity, and creates more maintainable solutions. Always identify the root cause and fix it at the appropriate abstraction layer.
+
 ### Rust Error Handling
 
 **CRITICAL**: Never use `unwrap()` or `expect()` in production code. Always handle errors explicitly:
@@ -215,6 +289,135 @@ mod tests {
 ```
 
 **Rationale**: Explicit error handling prevents panics in production, provides better error messages, and makes failure modes visible to callers.
+
+### Avoid Silent Failures in Event-Driven Code
+
+**CRITICAL**: When handling events or commands in async/event-driven systems, never silently ignore errors. Always log errors and emit failure events when appropriate.
+
+**Anti-Pattern**: Silent failures with `if let Ok(...)`:
+
+```rust
+// ❌ WRONG - Silent failure, caller never knows the operation failed
+NetworkCommand::SendPairingRequest { peer_id, message } => {
+    if let Ok(peer) = peer_id.parse::<PeerId>() {
+        self.swarm.send_request(&peer, request);
+        debug!("Sent pairing request to {}", peer_id);
+    }
+    // If parsing fails, execution silently continues - user has no feedback!
+}
+```
+
+**Correct Pattern**: Explicit error handling with logging and event emission:
+
+```rust
+// ✅ CORRECT - Log error and emit event for frontend to handle
+NetworkCommand::SendPairingRequest { peer_id, message } => {
+    match peer_id.parse::<PeerId>() {
+        Ok(peer) => {
+            self.swarm.send_request(&peer, request);
+            debug!("Sent pairing request to {}", peer_id);
+        }
+        Err(e) => {
+            warn!("Invalid peer_id '{}': {}", peer_id, e);
+            let _ = self
+                .event_tx
+                .send(NetworkEvent::Error(format!(
+                    "Failed to send pairing request: invalid peer_id '{}': {}",
+                    peer_id, e
+                )))
+                .await;
+        }
+    }
+}
+```
+
+**Key Rules**:
+
+1. **Use `match` instead of `if let`** - When the `Err` case represents a failure that users should know about
+2. **Always log errors** - Use `warn!()` or `error!()` to ensure failures are visible in logs
+3. **Emit error events** - Send `NetworkEvent::Error` or equivalent so the UI can display user-friendly error messages
+4. **Handle missing resources** - When an expected resource (like a pending channel) is missing, log a warning
+
+**When to use `if let` vs `match`**:
+
+```rust
+// ✅ OK - Using if let when the None/Err case is truly benign
+if let Some(value) = optional_cache.get(&key) {
+    // Use cached value
+}
+
+// ✅ OK - Using if let when fallback behavior is acceptable
+if let Ok(config) = read_config() {
+    apply_config(config);
+} else {
+    use_default_config(); // Explicit fallback
+}
+
+// ❌ WRONG - Using if let when failure should be reported
+if let Ok(peer_id) = str.parse::<PeerId>() {
+    send_request(peer_id);
+}
+// Error is swallowed!
+```
+
+### Tauri State Management
+
+**CRITICAL**: All state accessed via `tauri::State<'_, T>` in commands MUST be registered with `.manage()` before the app starts.
+
+**Common Error**: `state not managed for field 'X' on command 'Y'. You must call .manage() before using this command`
+
+**Root Cause**: When a Tauri command uses `state: tauri::State<'_, MyType>` to access shared state, `MyType` must be registered in the Builder setup using `.manage()`.
+
+**Correct Pattern**:
+
+```rust
+// ❌ WRONG - AppRuntimeHandle created internally, never managed
+// main.rs
+fn run_app(setting: Setting) {
+    Builder::default()
+        .setup(|app| {
+            // AppRuntime creates its own channels internally
+            let runtime = AppRuntime::new(...).await?;
+            // No .manage() call - commands will fail!
+            Ok(())
+        })
+}
+
+// api/clipboard_items.rs
+#[tauri::command]
+pub async fn get_clipboard_items(
+    state: tauri::State<'_, AppRuntimeHandle>, // ERROR: not managed!
+) -> Result<Vec<Item>, String> {
+    // ...
+}
+
+// ✅ CORRECT - Create channels before setup, manage the handle
+// main.rs
+fn run_app(setting: Setting) {
+    // Create channels FIRST
+    let (clipboard_cmd_tx, clipboard_cmd_rx) = mpsc::channel(100);
+    let (p2p_cmd_tx, p2p_cmd_rx) = mpsc::channel(100);
+
+    // Create handle with senders
+    let handle = AppRuntimeHandle::new(clipboard_cmd_tx, p2p_cmd_tx, Arc::new(setting));
+
+    Builder::default()
+        .manage(handle)  // Register BEFORE setup
+        .setup(move |app| {
+            // Pass receivers to runtime
+            AppRuntime::new_with_channels(..., clipboard_cmd_rx, p2p_cmd_rx).await
+        })
+}
+```
+
+**Key Rules**:
+
+1. **Create channels before Builder** - Senders and receivers must be created outside `.setup()`
+2. **Register with .manage()** - Any type accessed via `tauri::State` must be managed
+3. **Clone senders, move receivers** - Senders can be cloned for the handle, receivers move to the runtime
+4. **Use Arc for shared immutable data** - Config and other read-only data should use `Arc<T>`
+
+**Rationale**: Tauri's state system requires explicit registration to ensure thread safety and proper lifetime management. Commands can only access state that was registered before the app started.
 
 ### Frontend Styling (Tailwind CSS)
 

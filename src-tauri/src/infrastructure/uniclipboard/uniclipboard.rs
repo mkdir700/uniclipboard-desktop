@@ -1,71 +1,116 @@
+//! Clipboard Sync Service
+//!
+//! Handles bidirectional clipboard synchronization between local and remote.
+
 use anyhow::Result;
 use log::{error, info};
-use std::env;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::select;
-use tokio::signal::ctrl_c;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::application::clipboard_content_receiver_service::ClipboardContentReceiver;
 use crate::application::download_decision_service::DownloadDecisionMaker;
-use crate::config::get_config_dir;
 use crate::domain::transfer_message::ClipboardTransferMessage;
-use crate::infrastructure::connection::connection_manager::ConnectionManager;
 use crate::infrastructure::event::publish_clipboard_new_content;
 use crate::infrastructure::storage::db::models::clipboard_record::{Filter, OrderBy};
-use crate::infrastructure::storage::db::pool::DB_POOL;
 use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
-use crate::infrastructure::web::WebServer;
 use crate::interface::local_clipboard_trait::LocalClipboardTrait;
-use crate::interface::RemoteSyncManagerTrait;
+use crate::interface::RemoteClipboardSync;
 use crate::message::Payload;
 
-// 本地剪贴板管理器 - 负责监听本地剪贴板变化并推送到远程
-pub struct LocalClipboardManager {
+/// Unified clipboard synchronization service
+///
+/// Manages both directions:
+/// - Local clipboard changes -> Push to remote peers
+/// - Remote messages -> Write to local clipboard
+pub struct ClipboardSyncService {
     device_id: String,
     clipboard: Arc<dyn LocalClipboardTrait>,
-    remote_sync: Arc<dyn RemoteSyncManagerTrait>,
-    is_running: Arc<RwLock<bool>>,
-    is_paused: Arc<RwLock<bool>>,
+    remote_sync: Arc<dyn RemoteClipboardSync>,
+    record_manager: ClipboardRecordManager,
+    file_storage: FileStorageManager,
+    is_running: Arc<AtomicBool>,
+    /// Last payload to prevent duplicate processing (echo cancellation)
     last_payload: Arc<RwLock<Option<Payload>>>,
-    record_manager: Arc<ClipboardRecordManager>,
-    file_storage: Arc<FileStorageManager>,
+    download_decision_maker: DownloadDecisionMaker,
+    content_receiver: ClipboardContentReceiver,
 }
 
-impl LocalClipboardManager {
+impl ClipboardSyncService {
     pub fn new(
-        clipboard: Arc<dyn LocalClipboardTrait>,
-        remote_sync: Arc<dyn RemoteSyncManagerTrait>,
-        record_manager: Arc<ClipboardRecordManager>,
         device_id: String,
-    ) -> Result<Self> {
-        let file_storage = Arc::new(FileStorageManager::new()?);
+        clipboard: Arc<dyn LocalClipboardTrait>,
+        remote_sync: Arc<dyn RemoteClipboardSync>,
+        record_manager: ClipboardRecordManager,
+        file_storage: FileStorageManager,
+    ) -> Self {
+        let content_receiver = ClipboardContentReceiver::new(
+            Arc::new(file_storage.clone()),
+            Arc::new(record_manager.clone()),
+        );
 
-        Ok(Self {
+        Self {
             device_id,
             clipboard,
             remote_sync,
-            is_running: Arc::new(RwLock::new(false)),
-            is_paused: Arc::new(RwLock::new(false)),
-            last_payload: Arc::new(RwLock::new(None)),
             record_manager,
             file_storage,
-        })
-    }
-
-    pub async fn start(&self, clipboard_receiver: mpsc::Receiver<Payload>) -> Result<()> {
-        {
-            let mut is_running = self.is_running.write().await;
-            *is_running = true;
+            is_running: Arc::new(AtomicBool::new(false)),
+            last_payload: Arc::new(RwLock::new(None)),
+            download_decision_maker: DownloadDecisionMaker::new(),
+            content_receiver,
         }
-        let result = self.start_local_to_remote_sync(clipboard_receiver).await;
-        info!("启动本地到远程同步完成");
-        result
     }
 
-    async fn start_local_to_remote_sync(
+    /// Get record manager reference
+    pub fn get_record_manager(&self) -> &ClipboardRecordManager {
+        &self.record_manager
+    }
+
+    /// Get file storage manager reference
+    pub fn get_file_storage_manager(&self) -> &FileStorageManager {
+        &self.file_storage
+    }
+
+    /// Get local clipboard reference
+    pub fn get_local_clipboard(&self) -> Arc<dyn LocalClipboardTrait> {
+        self.clipboard.clone()
+    }
+
+    /// Start clipboard synchronization
+    pub async fn start(&self) -> Result<()> {
+        if self
+            .is_running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            anyhow::bail!("Already running");
+        }
+
+        // Start local clipboard monitoring
+        info!("Starting local clipboard monitoring");
+        let clipboard_receiver = self.clipboard.start_monitoring().await?;
+
+        // Start local-to-remote sync
+        info!("Starting local to remote sync");
+        self.start_outbound_sync(clipboard_receiver).await?;
+
+        // Start remote sync service
+        info!("Starting remote sync service");
+        self.remote_sync.start().await?;
+
+        // Start remote-to-local sync
+        info!("Starting remote to local sync");
+        self.start_inbound_sync().await?;
+
+        info!("ClipboardSyncService started successfully");
+        Ok(())
+    }
+
+    /// Handle local clipboard changes -> push to remote
+    async fn start_outbound_sync(
         &self,
         mut clipboard_receiver: mpsc::Receiver<Payload>,
     ) -> Result<()> {
@@ -75,30 +120,28 @@ impl LocalClipboardManager {
         let last_payload = self.last_payload.clone();
         let record_manager = self.record_manager.clone();
         let file_storage = self.file_storage.clone();
-        info!("Local to remote sync is running");
 
         tokio::spawn(async move {
-            while *is_running.read().await {
+            while is_running.load(Ordering::SeqCst) {
                 if let Some(payload) = clipboard_receiver.recv().await {
-                    info!("Handle new clipboard content: {}", payload);
-                    let last_content = last_payload.read().await;
-                    if let Some(last_payload) = last_content.as_ref() {
-                        if last_payload.is_duplicate(&payload) {
-                            info!(
-                                "Skip push to remote: {}, because it's the same as the last one",
-                                payload
-                            );
-                            continue;
+                    info!("New local clipboard content: {}", payload);
+
+                    // Check for duplicates (echo cancellation)
+                    {
+                        let last = last_payload.read().await;
+                        if let Some(ref last_p) = *last {
+                            if last_p.is_duplicate(&payload) {
+                                info!("Skipping duplicate content");
+                                continue;
+                            }
                         }
                     }
-                    let tmp = last_content.clone();
-                    drop(last_content);
 
-                    {
-                        *last_payload.write().await = Some(payload.clone());
-                    }
+                    // Store as last payload (atomically capture old value and write new value)
+                    let prev_payload =
+                        std::mem::replace(&mut *last_payload.write().await, Some(payload.clone()));
 
-                    // 步骤1: 将 Payload 持久化存储并获取存储路径
+                    // Step 1: Persist to file storage
                     let storage_path = match file_storage.store(&payload).await {
                         Ok(path) => path,
                         Err(e) => {
@@ -107,107 +150,44 @@ impl LocalClipboardManager {
                         }
                     };
 
-                    // 步骤2: 使用 payload + 本地存储路径，构建 metadata
+                    // Step 2: Build metadata and save record
                     let metadata = (&payload, &storage_path).into();
-                    info!("Push to remote: {}", metadata);
                     let result = record_manager
                         .add_or_update_record_with_metadata(&metadata)
                         .await;
 
                     match result {
                         Ok(record_id) => {
-                            // 发布剪贴板新内容事件
+                            info!("Record saved with ID: {}, publishing clipboard-new-content event", record_id);
                             publish_clipboard_new_content(record_id.clone());
-                            // 步骤3: 将 metadata 发送至远程
+                            info!("Event published to event bus");
+
+                            // Step 3: Push to remote
                             let sync_message = ClipboardTransferMessage::from((
                                 metadata,
                                 device_id.clone(),
                                 record_id,
                             ));
+
                             if let Err(e) = remote_sync.push(sync_message).await {
-                                // 恢复到之前的值
-                                *last_payload.write().await = tmp;
-                                // 处理错误，可能需要重试或记录日志
+                                // Restore previous payload on failure
+                                *last_payload.write().await = prev_payload;
                                 error!("Failed to push to remote: {:?}", e);
                             }
                         }
                         Err(e) => {
                             error!("Failed to add record: {:?}", e);
-                            continue;
                         }
                     }
                 }
             }
         });
 
-        // 确保立即返回，不要阻塞
         Ok(())
     }
 
-    pub async fn stop(&self) -> Result<()> {
-        let mut is_running = self.is_running.write().await;
-        *is_running = false;
-        Ok(())
-    }
-
-    pub async fn pause(&self) -> Result<()> {
-        let mut is_paused = self.is_paused.write().await;
-        *is_paused = true;
-        self.clipboard.pause().await;
-        Ok(())
-    }
-
-    pub async fn resume(&self) -> Result<()> {
-        let mut is_paused = self.is_paused.write().await;
-        *is_paused = false;
-        self.clipboard.resume().await;
-        Ok(())
-    }
-}
-
-// 远程剪贴板管理器 - 负责从远程获取内容并写入本地剪贴板
-pub struct RemoteClipboardManager {
-    clipboard: Arc<dyn LocalClipboardTrait>,
-    remote_sync: Arc<dyn RemoteSyncManagerTrait>,
-    record_manager: Arc<ClipboardRecordManager>,
-    is_running: Arc<RwLock<bool>>,
-    is_paused: Arc<RwLock<bool>>,
-    last_payload: Arc<RwLock<Option<Payload>>>,
-    download_decision_maker: Arc<DownloadDecisionMaker>,
-    content_receiver: Arc<ClipboardContentReceiver>,
-}
-
-impl RemoteClipboardManager {
-    pub fn new(
-        clipboard: Arc<dyn LocalClipboardTrait>,
-        remote_sync: Arc<dyn RemoteSyncManagerTrait>,
-        record_manager: Arc<ClipboardRecordManager>,
-        file_storage: Arc<FileStorageManager>,
-    ) -> Self {
-        Self {
-            clipboard,
-            remote_sync,
-            record_manager: record_manager.clone(),
-            is_running: Arc::new(RwLock::new(false)),
-            is_paused: Arc::new(RwLock::new(false)),
-            last_payload: Arc::new(RwLock::new(None)),
-            download_decision_maker: Arc::new(DownloadDecisionMaker::new()),
-            content_receiver: Arc::new(ClipboardContentReceiver::new(file_storage, record_manager)),
-        }
-    }
-
-    pub async fn start(&self) -> Result<()> {
-        {
-            let mut is_running = self.is_running.write().await;
-            *is_running = true;
-        }
-        info!("开始启动远程同步服务");
-        self.remote_sync.start().await?;
-        info!("远程同步服务已启动，开始处理远程到本地同步");
-        self.start_remote_to_local_sync().await
-    }
-
-    async fn start_remote_to_local_sync(&self) -> Result<()> {
+    /// Handle remote messages -> write to local clipboard
+    async fn start_inbound_sync(&self) -> Result<()> {
         let clipboard = self.clipboard.clone();
         let remote_sync = self.remote_sync.clone();
         let is_running = self.is_running.clone();
@@ -217,22 +197,21 @@ impl RemoteClipboardManager {
         let content_receiver = self.content_receiver.clone();
 
         tokio::spawn(async move {
-            while *is_running.read().await {
+            while is_running.load(Ordering::SeqCst) {
                 match remote_sync.pull(Some(Duration::from_secs(10))).await {
                     Ok(message) => {
-                        // 经过下载决策层，决定是否下载
+                        // Check download policy
                         if !download_decision_maker.should_download(&message).await {
-                            info!("内容类型不在下载范围内，跳过: {}", message);
+                            info!("Content type not in download scope, skipping");
                             continue;
                         }
 
-                        // 检查是否超过最大允许大小
                         if download_decision_maker.exceeds_max_size(&message) {
-                            info!("内容超过最大允许大小，跳过: {}", message);
+                            info!("Content exceeds max size, skipping");
                             continue;
                         }
 
-                        // 添加到剪贴板记录
+                        // Save to record
                         if let Err(e) = record_manager
                             .add_record_with_transfer_message(&message)
                             .await
@@ -240,22 +219,23 @@ impl RemoteClipboardManager {
                             error!("Failed to add clipboard record: {:?}", e);
                         }
 
-                        // 接收内容
+                        // Receive and process content
                         match content_receiver.receive(message).await {
                             Ok(payload) => {
-                                info!("Set local clipboard: {}", payload);
-                                let tmp = last_payload.read().await.clone();
-                                {
-                                    *last_payload.write().await = Some(payload.clone());
-                                }
+                                info!("Setting local clipboard: {}", payload);
 
-                                // 设置本地剪贴板
+                                // Atomically capture old value and write new value
+                                let prev_payload = std::mem::replace(
+                                    &mut *last_payload.write().await,
+                                    Some(payload.clone()),
+                                );
+
+                                // Write to local clipboard
                                 if let Err(e) = clipboard.set_clipboard_content(payload).await {
                                     error!("Failed to set clipboard content: {:?}", e);
-                                    // 恢复到之前的值
-                                    *last_payload.write().await = tmp;
+                                    *last_payload.write().await = prev_payload;
                                 } else {
-                                    // 获取最新添加的记录ID，发布剪贴板新内容事件
+                                    // Publish event for latest record
                                     if let Ok(records) = record_manager
                                         .get_records(
                                             Some(OrderBy::UpdatedAtDesc),
@@ -265,8 +245,8 @@ impl RemoteClipboardManager {
                                         )
                                         .await
                                     {
-                                        if let Some(latest_record) = records.first() {
-                                            publish_clipboard_new_content(latest_record.id.clone());
+                                        if let Some(latest) = records.first() {
+                                            publish_clipboard_new_content(latest.id.clone());
                                         }
                                     }
                                 }
@@ -284,215 +264,5 @@ impl RemoteClipboardManager {
         });
 
         Ok(())
-    }
-
-    pub async fn stop(&self) -> Result<()> {
-        let mut is_running = self.is_running.write().await;
-        *is_running = false;
-        Ok(())
-    }
-
-    pub async fn pause(&self) -> Result<()> {
-        let mut is_paused = self.is_paused.write().await;
-        *is_paused = true;
-        Ok(())
-    }
-
-    pub async fn resume(&self) -> Result<()> {
-        let mut is_paused = self.is_paused.write().await;
-        *is_paused = false;
-        Ok(())
-    }
-}
-
-// 主协调器 - 保持对外接口不变
-pub struct UniClipboard {
-    local_manager: Arc<LocalClipboardManager>,
-    remote_manager: Arc<RemoteClipboardManager>,
-    webserver: Arc<WebServer>,
-    connection_manager: Arc<ConnectionManager>,
-    clipboard_receiver: Option<mpsc::Receiver<Payload>>,
-}
-
-impl UniClipboard {
-    pub fn new(
-        device_id: String,
-        webserver: Arc<WebServer>,
-        clipboard: Arc<dyn LocalClipboardTrait>,
-        remote_sync: Arc<dyn RemoteSyncManagerTrait>,
-        connection_manager: Arc<ConnectionManager>,
-        clipboard_record_manager: Arc<ClipboardRecordManager>,
-        file_storage: Arc<FileStorageManager>,
-    ) -> Self {
-        // 创建本地剪贴板管理器
-        let local_manager = Arc::new(
-            LocalClipboardManager::new(
-                clipboard.clone(),
-                remote_sync.clone(),
-                clipboard_record_manager.clone(),
-                device_id.clone(),
-            )
-            .expect("Failed to create LocalClipboardManager"),
-        );
-
-        let remote_manager = Arc::new(RemoteClipboardManager::new(
-            clipboard.clone(),
-            remote_sync.clone(),
-            clipboard_record_manager.clone(),
-            file_storage.clone(),
-        ));
-
-        Self {
-            local_manager,
-            remote_manager,
-            webserver,
-            connection_manager,
-            clipboard_receiver: None,
-        }
-    }
-
-    pub fn get_record_manager(&self) -> Arc<ClipboardRecordManager> {
-        self.local_manager.record_manager.clone()
-    }
-
-    pub fn get_file_storage_manager(&self) -> Arc<FileStorageManager> {
-        self.local_manager.file_storage.clone()
-    }
-
-    pub async fn start(&self) -> Result<()> {
-        // 使用作用域来确保锁被及时释放
-        {
-            let mut is_running = self.local_manager.is_running.write().await;
-            if *is_running {
-                anyhow::bail!("Already running");
-            }
-            *is_running = true;
-        } // 锁在这里被释放
-
-        // 初始化数据库
-        // 如果环境变量中没有设置 DATABASE_URL，则设置默认的配置目录
-        if env::var("DATABASE_URL").is_err() {
-            let config_dir = get_config_dir()?;
-            env::set_var(
-                "DATABASE_URL",
-                config_dir.join("uniclipboard.db").to_str().unwrap(),
-            );
-        }
-        DB_POOL.init()?;
-
-        // 与其他设备建立连接
-        info!("Starting connection manager");
-        self.connection_manager.start().await?;
-
-        // 启动本地剪切板监听
-        info!("Starting local clipboard monitoring");
-        let clipboard_receiver = self.local_manager.clipboard.start_monitoring().await?;
-
-        // 启动本地到远程的同步任务
-        info!("Starting local to remote sync");
-        self.local_manager.start(clipboard_receiver).await?;
-
-        // 启动远程到本地的同步任务
-        info!("Starting remote to local sync");
-        self.remote_manager.start().await?;
-
-        let webserver = self.webserver.clone();
-        // 启动 Web 服务器
-        tokio::spawn(async move {
-            if let Err(e) = webserver.run().await {
-                error!("Web server error: {:?}", e);
-            }
-        });
-
-        info!("UniClipboard 全部启动完成");
-        Ok(())
-    }
-
-    pub async fn stop(&self) -> Result<()> {
-        let mut is_running = self.local_manager.is_running.write().await;
-        if !*is_running {
-            anyhow::bail!("Not running");
-        }
-        *is_running = false;
-
-        // 停止连接管理器
-        self.connection_manager.stop().await;
-
-        // 停止本地剪切板监听
-        self.local_manager.clipboard.stop_monitoring().await?;
-
-        // 停止远程同步
-        self.remote_manager.remote_sync.stop().await?;
-
-        // 停止本地管理器
-        self.local_manager.stop().await?;
-
-        // 停止远程管理器
-        self.remote_manager.stop().await?;
-
-        // 停止 Web 服务器
-        self.webserver.shutdown().await?;
-
-        Ok(())
-    }
-
-    pub async fn pause(&self) -> Result<()> {
-        let mut is_paused = self.local_manager.is_paused.write().await;
-        *is_paused = true;
-
-        // 暂停本地剪切板管理器
-        self.local_manager.pause().await?;
-
-        // 暂停远程剪切板管理器
-        self.remote_manager.pause().await?;
-
-        // 暂停远程同步
-        if let Err(e) = self.remote_manager.remote_sync.pause().await {
-            error!("Failed to pause remote sync: {:?}", e);
-        }
-
-        Ok(())
-    }
-
-    pub async fn resume(&self) -> Result<()> {
-        let mut is_paused = self.local_manager.is_paused.write().await;
-        *is_paused = false;
-
-        // 恢复本地剪切板管理器
-        self.local_manager.resume().await?;
-
-        // 恢复远程剪切板管理器
-        self.remote_manager.resume().await?;
-
-        // 恢复远程同步
-        if let Err(e) = self.remote_manager.remote_sync.resume().await {
-            error!("Failed to resume remote sync: {:?}", e);
-        }
-
-        Ok(())
-    }
-
-    pub async fn wait_for_stop(&self) -> Result<()> {
-        loop {
-            select! {
-                _ = ctrl_c() => {
-                    info!("收到 Ctrl+C，正在停止...");
-                    break;
-                }
-            }
-        }
-
-        // 当收到 Ctrl+C 信号后，停止同步
-        self.stop().await?;
-        info!("剪贴板同步已停止");
-        Ok(())
-    }
-
-    pub fn get_local_clipboard(&self) -> Arc<dyn LocalClipboardTrait> {
-        self.local_manager.clipboard.clone()
-    }
-
-    pub fn get_connection_manager(&self) -> Arc<ConnectionManager> {
-        self.connection_manager.clone()
     }
 }

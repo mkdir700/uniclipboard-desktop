@@ -1,4 +1,4 @@
-use local_ip_address::{local_ip, list_afinet_netifas};
+use local_ip_address::{list_afinet_netifas, local_ip};
 use sha2::{Digest, Sha256};
 
 use crate::domain::network::NetworkInterface;
@@ -42,6 +42,22 @@ pub fn get_local_ip() -> String {
             // 记录错误并返回一个默认值
             eprintln!("获取本地 IP 地址时出错: {}", e);
             "127.0.0.1".to_string()
+        }
+    }
+}
+
+/// 获取首选的本地网络地址用于 P2P 监听
+///
+/// 优先返回非回环的 IPv4 地址，如果不存在则返回 0.0.0.0
+pub fn get_preferred_local_address() -> String {
+    match local_ip() {
+        Ok(ip) => {
+            // local_ip_address 库会自动选择合适的接口
+            ip.to_string()
+        }
+        Err(_) => {
+            log::warn!("Failed to get local IP, falling back to 0.0.0.0");
+            "0.0.0.0".to_string()
         }
     }
 }

@@ -3,14 +3,15 @@ use std::sync::Arc;
 use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
 
-use crate::infrastructure::event::publish_clipboard_new_content;
-use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::application::device_service::get_device_manager;
+use crate::domain::transfer_message::ClipboardTransferMessage;
+use crate::infrastructure::event::publish_clipboard_new_content;
 use crate::message::Payload;
 use anyhow::Result;
 use log::info;
 use reqwest;
 
+#[derive(Clone)]
 pub struct ClipboardContentReceiver {
     file_storage: Arc<FileStorageManager>,
     record_manager: Arc<ClipboardRecordManager>,

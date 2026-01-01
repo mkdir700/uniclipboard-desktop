@@ -1,6 +1,6 @@
+use anyhow::{anyhow, Result};
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use anyhow::{Result, anyhow};
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 

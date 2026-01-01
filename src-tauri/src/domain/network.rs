@@ -123,6 +123,9 @@ mod tests {
         assert_eq!(deserialized.requester_device_id, "123456");
         assert_eq!(deserialized.requester_ip, "192.168.1.100");
         assert_eq!(deserialized.requester_alias, Some("My Device".to_string()));
-        assert_eq!(deserialized.requester_platform, Some("macos aarch64".to_string()));
+        assert_eq!(
+            deserialized.requester_platform,
+            Some("macos aarch64".to_string())
+        );
     }
 }

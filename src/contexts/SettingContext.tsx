@@ -1,98 +1,14 @@
 import { invoke } from '@tauri-apps/api/core'
+import React, { useState, useEffect, ReactNode } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import i18n, { normalizeLanguage, persistLanguage } from '@/i18n'
-
-// 内容类型接口
-interface ContentTypes {
-  text: boolean
-  image: boolean
-  link: boolean
-  file: boolean
-  code_snippet: boolean
-  rich_text: boolean
-}
-
-// 主题模式类型
-export type ThemeMode = 'light' | 'dark' | 'system'
-
-// 通用设置接口
-interface GeneralSetting {
-  auto_start: boolean
-  silent_start: boolean
-  auto_check_update: boolean
-  theme: ThemeMode
-  theme_color: string
-  language: string
-}
-
-// 同步设置接口
-interface SyncSetting {
-  auto_sync: boolean
-  sync_frequency: string
-  content_types: ContentTypes
-  max_file_size: number
-}
-
-// 安全设置接口
-interface SecuritySetting {
-  end_to_end_encryption: boolean
-  password: string
-}
-
-// 网络设置接口
-interface NetworkSetting {
-  sync_method: string
-  cloud_server: string
-  webserver_port: number
-  custom_peer_device: boolean
-  peer_device_addr: string | null
-  peer_device_port: number | null
-}
-
-// 存储设置接口
-interface StorageSetting {
-  auto_clear_history: string
-  history_retention_days: number
-  max_history_items: number
-}
-
-// 关于设置接口
-interface AboutSetting {
-  version: string
-}
-
-// 设置接口
-export interface Setting {
-  general: GeneralSetting
-  sync: SyncSetting
-  security: SecuritySetting
-  network: NetworkSetting
-  storage: StorageSetting
-  about: AboutSetting
-}
+import { SettingContext, type SettingContextType, type Setting } from '@/types/setting'
 
 // 设置变更事件数据接口
 interface SettingChangedEvent {
   settingJson: string
   timestamp: number
 }
-
-// 设置上下文接口
-interface SettingContextType {
-  setting: Setting | null
-  loading: boolean
-  error: string | null
-  updateSetting: (newSetting: Setting) => Promise<void>
-  updateGeneralSetting: (newGeneralSetting: Partial<GeneralSetting>) => Promise<void>
-  updateSyncSetting: (newSyncSetting: Partial<SyncSetting>) => Promise<void>
-  updateSecuritySetting: (newSecuritySetting: Partial<SecuritySetting>) => Promise<void>
-  updateNetworkSetting: (newNetworkSetting: Partial<NetworkSetting>) => Promise<void>
-  updateStorageSetting: (newStorageSetting: Partial<StorageSetting>) => Promise<void>
-}
-
-// 创建设置上下文
-const SettingContext = createContext<SettingContextType | undefined>(undefined)
 
 // 设置提供者属性接口
 interface SettingProviderProps {
@@ -144,7 +60,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 更新通用设置
-  const updateGeneralSetting = async (newGeneralSetting: Partial<GeneralSetting>) => {
+  const updateGeneralSetting = async (newGeneralSetting: Partial<Setting['general']>) => {
     if (!setting) return
     const updatedSetting = {
       ...setting,
@@ -157,7 +73,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 更新同步设置
-  const updateSyncSetting = async (newSyncSetting: Partial<SyncSetting>) => {
+  const updateSyncSetting = async (newSyncSetting: Partial<Setting['sync']>) => {
     if (!setting) return
     const updatedSetting = {
       ...setting,
@@ -170,7 +86,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 更新安全设置
-  const updateSecuritySetting = async (newSecuritySetting: Partial<SecuritySetting>) => {
+  const updateSecuritySetting = async (newSecuritySetting: Partial<Setting['security']>) => {
     if (!setting) return
     const updatedSetting = {
       ...setting,
@@ -183,7 +99,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 更新网络设置
-  const updateNetworkSetting = async (newNetworkSetting: Partial<NetworkSetting>) => {
+  const updateNetworkSetting = async (newNetworkSetting: Partial<Setting['network']>) => {
     if (!setting) return
     const updatedSetting = {
       ...setting,
@@ -196,7 +112,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 更新存储设置
-  const updateStorageSetting = async (newStorageSetting: Partial<StorageSetting>) => {
+  const updateStorageSetting = async (newStorageSetting: Partial<Setting['storage']>) => {
     if (!setting) return
     const updatedSetting = {
       ...setting,
@@ -293,30 +209,19 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
     persistLanguage(next)
   }, [setting?.general?.language])
 
-  return (
-    <SettingContext.Provider
-      value={{
-        setting,
-        loading,
-        error,
-        updateSetting,
-        updateGeneralSetting,
-        updateSyncSetting,
-        updateSecuritySetting,
-        updateNetworkSetting,
-        updateStorageSetting,
-      }}
-    >
-      {children}
-    </SettingContext.Provider>
-  )
+  const value: SettingContextType = {
+    setting,
+    loading,
+    error,
+    updateSetting,
+    updateGeneralSetting,
+    updateSyncSetting,
+    updateSecuritySetting,
+    updateNetworkSetting,
+    updateStorageSetting,
+  }
+
+  return <SettingContext.Provider value={value}>{children}</SettingContext.Provider>
 }
 
-// 使用设置上下文的钩子
-export const useSetting = () => {
-  const context = useContext(SettingContext)
-  if (context === undefined) {
-    throw new Error('useSetting必须在SettingProvider内部使用')
-  }
-  return context
-}
+export { SettingContext }

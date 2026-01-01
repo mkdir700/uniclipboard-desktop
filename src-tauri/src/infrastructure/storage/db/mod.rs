@@ -1,5 +1,5 @@
 pub mod dao;
-pub mod models;
-pub mod schema;
-pub mod pool;
 pub mod migrations;
+pub mod models;
+pub mod pool;
+pub mod schema;

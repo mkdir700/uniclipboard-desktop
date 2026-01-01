@@ -1,10 +1,9 @@
-pub mod storage;
 pub mod clipboard;
-pub mod web;
-pub mod connection;
-pub mod network;
-pub mod security;
-pub mod sync;
 pub mod event;
-pub mod context;
+pub mod network;
+pub mod p2p;
+pub mod runtime;
+pub mod security;
+pub mod storage;
+pub mod sync;
 pub mod uniclipboard;

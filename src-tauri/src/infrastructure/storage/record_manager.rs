@@ -14,7 +14,7 @@ use super::db::models::clipboard_record::{
 };
 use super::db::pool::DB_POOL;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ClipboardStats {
     pub total_items: usize,
     pub total_size: usize,

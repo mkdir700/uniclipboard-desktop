@@ -40,16 +40,21 @@ reqwest_dav = "0.1.13"  # WebDAV客户端
 warp = "0.3.7"  # Web服务器框架
 local-ip-address = "0.6.4"  # 获取本地IP地址
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }  # HTTP客户端，用于内容下载
+# ===== libp2p P2P 网络 =====
+libp2p = { version = "0.56", features = ["tokio", "tcp", "noise", "yamux", "mdns", "gossipsub", "request-response", "identify", "macros"] }  # P2P网络库
+x25519-dalek = { version = "2", features = ["static_secrets", "getrandom"] }  # ECDH密钥交换
 
 # ===== 加密/安全 =====
 sha2 = "0.10.8"  # SHA-2哈希函数
 base64 = "0.22.1"  # Base64编码/解码
 aes-gcm = "0.10.3"  # AES-GCM加密算法
+subtle = "2.5"  # Constant-time comparisons
 twox-hash = "1.6.3"
 
 # ===== 文件/系统操作 =====
 bytes = "1.7.1"  # 字节处理工具
 dirs = "6.0.0"  # 跨平台目录路径
+gethostname = "1.1.0"  # 获取主机名
 
 # ===== 数据库 =====
 diesel = { version = "2.2.0", features = [
