@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { openSettingsWindow } from '@/api/window'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { cn, isMacPlatform } from '@/lib/utils'
 
 const NavButton: React.FC<{
   to: string
@@ -55,6 +55,7 @@ const NavButton: React.FC<{
 const Sidebar: React.FC = () => {
   const { t } = useTranslation()
   const location = useLocation()
+  const isMac = isMacPlatform()
 
   const navItems = [
     { to: '/', icon: Home, label: t('nav.dashboard') },
@@ -72,10 +73,13 @@ const Sidebar: React.FC = () => {
   return (
     <aside
       data-tauri-drag-region
-      className="w-16 h-screen sticky top-0 z-100 flex flex-col items-center pt-10 pb-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl shrink-0"
+      className={cn(
+        'w-16 h-screen sticky top-0 z-100 flex flex-col items-center pb-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl shrink-0',
+        isMac ? 'pt-12' : 'pt-4'
+      )}
     >
       {/* Main Navigation */}
-      <div className="flex flex-col gap-3 w-full items-center pt-2">
+      <div className="flex flex-col gap-3 w-full items-center">
         {navItems.map(item => (
           <NavButton
             key={item.to}
@@ -91,7 +95,7 @@ const Sidebar: React.FC = () => {
       <div data-tauri-drag-region className="flex-1 w-full" />
 
       {/* Bottom Navigation */}
-      <div className="flex flex-col gap-3 w-full items-center pb-2">
+      <div className="flex flex-col gap-3 w-full items-center">
         <NavButton
           to="/settings"
           icon={Settings}
