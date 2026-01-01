@@ -1,9 +1,9 @@
 import { enableModernWindowStyle } from '@cloudworxx/tauri-plugin-mac-rounded-corners'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { Minus, Square, X, ArrowLeft, Search } from 'lucide-react'
+import { Minus, Square, X, Search } from 'lucide-react'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { cn, isMacPlatform, isWindowsPlatform } from '@/lib/utils'
 
@@ -59,15 +59,12 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
   const [isWindows, setIsWindows] = useState(false)
   const [isMac, setIsMac] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
-  const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
 
   const isTauri = useMemo(() => isTauriEnv(), [])
   const windowRef = useMemo(() => (isTauri ? getCurrentWindow() : null), [isTauri])
 
-  // 检测是否在 Settings 页面
-  const isSettingsPage = location.pathname.startsWith('/settings')
   // 检测是否在 Dashboard 页面
   const isDashboardPage = location.pathname === '/'
 
@@ -146,10 +143,6 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
     }
   }
 
-  const handleBack = () => {
-    navigate(-1)
-  }
-
   const [isSearchFocused, setIsSearchFocused] = useState(false)
 
   return (
@@ -173,16 +166,7 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
           )}
           onDoubleClick={isWindows ? handleToggleMaximize : undefined}
         >
-          {isSettingsPage ? (
-            <button
-              onClick={handleBack}
-              data-tauri-drag-region="false"
-              className="flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground active:bg-primary/10 active:text-primary"
-              aria-label={t('nav.back')}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-          ) : isDashboardPage ? (
+          {isDashboardPage ? (
             <div
               className={cn(
                 'relative flex items-center w-64 max-w-xs',
