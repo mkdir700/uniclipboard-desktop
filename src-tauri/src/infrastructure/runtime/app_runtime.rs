@@ -54,9 +54,8 @@ impl AppRuntime {
         let clipboard = Arc::new(LocalClipboard::with_user_setting(user_setting.clone())?);
 
         // 3. Initialize P2P Runtime with AppHandle
-        let p2p_runtime = Arc::new(
-            P2PRuntime::new(device_name.clone(), config.clone(), app_handle).await?,
-        );
+        let p2p_runtime =
+            Arc::new(P2PRuntime::new(device_name.clone(), config.clone(), app_handle).await?);
 
         // Initialize RemoteSyncManager
         let remote_sync_manager =
@@ -312,6 +311,27 @@ impl AppRuntime {
             } => {
                 // TODO: Implement unpairing
                 let _ = respond_to.send(Err("Unpair not implemented".to_string()));
+            }
+            P2PCommand::AcceptPairing {
+                session_id,
+                respond_to,
+            } => {
+                let (tx, rx) = oneshot::channel();
+                let _ = p2p_runtime
+                    .pairing_cmd_tx()
+                    .send(PairingCommand::AcceptPairing {
+                        session_id,
+                        respond_to: tx,
+                    })
+                    .await;
+
+                tokio::spawn(async move {
+                    let result = match rx.await {
+                        Ok(res) => res.map_err(|e| e.to_string()),
+                        Err(_) => Err("Pairing actor dropped response".to_string()),
+                    };
+                    let _ = respond_to.send(result);
+                });
             }
         }
     }

@@ -2,12 +2,12 @@
 //!
 //! 提供基于 libp2p 的设备发现、配对和剪贴板同步功能
 
-use tauri::State;
-use serde::{Deserialize, Serialize};
 use log::{error, info, warn};
+use serde::{Deserialize, Serialize};
+use tauri::State;
 
-use crate::infrastructure::runtime::{AppRuntimeHandle, P2PCommand};
 use crate::infrastructure::p2p::DiscoveredPeer;
+use crate::infrastructure::runtime::{AppRuntimeHandle, P2PCommand};
 
 /// P2P 设备信息
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -57,9 +57,7 @@ pub struct P2PPinVerifyRequest {
 
 /// 获取本地 Peer ID
 #[tauri::command]
-pub async fn get_local_peer_id(
-    app_handle: State<'_, AppRuntimeHandle>,
-) -> Result<String, String> {
+pub async fn get_local_peer_id(app_handle: State<'_, AppRuntimeHandle>) -> Result<String, String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     app_handle
@@ -177,7 +175,10 @@ pub async fn reject_p2p_pairing(
     peer_id: String,
     app_handle: State<'_, AppRuntimeHandle>,
 ) -> Result<(), String> {
-    info!("Rejecting P2P pairing: session={}, peer={}", session_id, peer_id);
+    info!(
+        "Rejecting P2P pairing: session={}, peer={}",
+        session_id, peer_id
+    );
 
     let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -217,5 +218,27 @@ pub async fn unpair_p2p_device(
 
     rx.await
         .map_err(|e| format!("Failed to receive response: {}", e))?
-        .map_err(|e| e.to_string())
+}
+
+/// 接受 P2P 配对请求（接收方）
+#[tauri::command]
+pub async fn accept_p2p_pairing(
+    session_id: String,
+    app_handle: State<'_, AppRuntimeHandle>,
+) -> Result<(), String> {
+    info!("Accepting P2P pairing: session={}", session_id);
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    app_handle
+        .p2p_tx
+        .send(P2PCommand::AcceptPairing {
+            session_id,
+            respond_to: tx,
+        })
+        .await
+        .map_err(|e| format!("Failed to send command: {}", e))?;
+
+    rx.await
+        .map_err(|e| format!("Failed to receive response: {}", e))?
 }

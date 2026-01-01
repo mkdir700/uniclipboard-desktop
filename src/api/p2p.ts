@@ -181,6 +181,20 @@ export async function unpairP2PDevice(peerId: string): Promise<void> {
 }
 
 /**
+ * 接受 P2P 配对请求（接收方）
+ */
+export async function acceptP2PPairing(sessionId: string): Promise<void> {
+  try {
+    await invoke('accept_p2p_pairing', {
+      sessionId,
+    })
+  } catch (error) {
+    console.error('Failed to accept P2P pairing:', error)
+    throw error
+  }
+}
+
+/**
  * 监听 P2P 配对请求事件
  */
 export async function onP2PPairingRequest(

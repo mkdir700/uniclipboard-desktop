@@ -118,7 +118,8 @@ fn run_app(user_setting: Setting, device_id: String) {
 
     // Create AppRuntimeHandle with config
     let config = Arc::new(user_setting.clone());
-    let runtime_handle = AppRuntimeHandle::new(clipboard_cmd_tx.clone(), p2p_cmd_tx.clone(), config);
+    let runtime_handle =
+        AppRuntimeHandle::new(clipboard_cmd_tx.clone(), p2p_cmd_tx.clone(), config);
 
     Builder::default()
         .plugin(logging::get_builder().build())
@@ -231,6 +232,7 @@ fn run_app(user_setting: Setting, device_id: String) {
             api::p2p::verify_p2p_pairing_pin,
             api::p2p::reject_p2p_pairing,
             api::p2p::unpair_p2p_device,
+            api::p2p::accept_p2p_pairing,
             plugins::mac_rounded_corners::enable_rounded_corners,
             plugins::mac_rounded_corners::enable_modern_window_style,
             plugins::mac_rounded_corners::reposition_traffic_lights,

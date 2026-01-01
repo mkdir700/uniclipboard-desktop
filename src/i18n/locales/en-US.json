@@ -299,8 +299,14 @@
     }
   },
   "pairing": {
+    "globalRequest": {
+      "title": "Device Pairing Request",
+      "description": "{{deviceName}} wants to pair with you",
+      "warning": "Make sure you initiated this pairing"
+    },
     "requests": {
       "accept": "Accept",
+      "accepting": "Accepting...",
       "reject": "Reject"
     },
     "steps": {
@@ -334,7 +340,8 @@
       "pinLabel": "Pairing PIN Code",
       "warning": "Please ensure both devices show the same PIN code",
       "notMatch": "Not a Match",
-      "match": "Confirm Match"
+      "match": "Confirm Match",
+      "timeout": "Time remaining: {{time}}"
     },
     "success": {
       "title": "Pairing Successful!"

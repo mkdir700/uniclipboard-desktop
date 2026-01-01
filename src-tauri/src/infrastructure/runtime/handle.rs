@@ -94,6 +94,11 @@ pub enum P2PCommand {
         peer_id: String,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
+    /// Accept pairing request (responder side)
+    AcceptPairing {
+        session_id: String,
+        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
 }
 
 /// Thread-safe handle to the application runtime

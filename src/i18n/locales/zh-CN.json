@@ -299,8 +299,14 @@
     }
   },
   "pairing": {
+    "globalRequest": {
+      "title": "设备配对请求",
+      "description": "{{deviceName}} 请求与您配对",
+      "warning": "请确认这是您发起的配对操作"
+    },
     "requests": {
       "accept": "接受",
+      "accepting": "接受中...",
       "reject": "拒绝"
     },
     "steps": {
@@ -334,7 +340,8 @@
       "pinLabel": "配对 PIN 码",
       "warning": "请确保两台设备显示相同的 PIN 码",
       "notMatch": "不匹配",
-      "match": "确认匹配"
+      "match": "确认匹配",
+      "timeout": "剩余时间：{{time}}"
     },
     "success": {
       "title": "配对成功！"

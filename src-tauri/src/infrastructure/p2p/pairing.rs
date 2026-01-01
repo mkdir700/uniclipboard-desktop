@@ -67,6 +67,11 @@ pub enum PairingCommand {
         peer_id: String,
         respond_to: oneshot::Sender<Result<()>>,
     },
+    /// Accept pairing request (responder side)
+    AcceptPairing {
+        session_id: String,
+        respond_to: oneshot::Sender<Result<()>>,
+    },
 }
 
 /// Active pairing session state
@@ -230,6 +235,13 @@ impl PairingManager {
                 let result = self.reject_pairing(&session_id, peer_id).await;
                 let _ = respond_to.send(result);
             }
+            PairingCommand::AcceptPairing {
+                session_id,
+                respond_to,
+            } => {
+                let result = self.accept_pairing(&session_id).await;
+                let _ = respond_to.send(result);
+            }
         }
         Ok(())
     }
@@ -305,6 +317,7 @@ impl PairingManager {
     }
 
     /// Handle incoming pairing request (responder side)
+    /// Only creates session and notifies frontend - PIN generation is deferred until accept_pairing
     pub async fn handle_pairing_request(
         &mut self,
         peer_id: String,
@@ -332,44 +345,55 @@ impl PairingManager {
             is_initiator: false,
         };
 
-        // Store public key bytes before moving session into map
-        let our_public_key_bytes = session.our_public_key.to_bytes().to_vec();
         self.sessions.insert(request.session_id.clone(), session);
+
+        // Emit PairingRequestReceived event to frontend - PIN generation is deferred
+        let _ = self
+            .event_tx
+            .send(NetworkEvent::PairingRequestReceived {
+                session_id: request.session_id.clone(),
+                peer_id,
+                request,
+            })
+            .await;
+
+        Ok(())
+    }
+
+    /// Accept pairing request (responder side) - generates PIN and sends challenge
+    pub async fn accept_pairing(&mut self, session_id: &str) -> Result<()> {
+        let session = self
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| anyhow!("Session not found"))?;
+
+        if session.is_expired() {
+            return Err(anyhow!("Pairing session expired"));
+        }
+
+        let peer_id = session.peer_id.clone();
+        let peer_device_name = session.device_name.clone();
+        let our_public_key_bytes = session.our_public_key.to_bytes().to_vec();
 
         // Generate PIN for user verification
         let pin = self.generate_pin();
 
-        // Send p2p-pin-ready event to frontend (responder needs to see the PIN too)
+        // Send p2p-pin-ready event to frontend (responder needs to see the PIN)
         let _ = self
             .event_tx
             .send(NetworkEvent::PairingPinReady {
-                session_id: request.session_id.clone(),
+                session_id: session_id.to_string(),
                 pin: pin.clone(),
-                peer_device_name: request.device_name.clone(),
+                peer_device_name: peer_device_name.clone(),
                 peer_public_key: our_public_key_bytes.clone(),
             })
             .await;
 
-        // Send pairing challenge with PIN and our public key
-        let challenge = PairingChallenge {
-            session_id: request.session_id.clone(),
-            pin: pin.clone(),
-            device_name: self.device_name.clone(),
-            public_key: our_public_key_bytes.clone(),
-        };
-
-        let message = super::protocol::ProtocolMessage::Pairing(
-            super::protocol::PairingMessage::Challenge(challenge),
-        );
-
-        let _message_bytes = message
-            .to_bytes()
-            .map_err(|e| anyhow!("Failed to serialize pairing challenge: {}", e))?;
-
+        // Send pairing challenge with PIN and our public key to the initiator
         self.network_command_tx
             .send(NetworkCommand::SendPairingChallenge {
                 peer_id,
-                session_id: request.session_id.clone(),
+                session_id: session_id.to_string(),
                 pin,
                 device_name: self.device_name.clone(),
                 public_key: our_public_key_bytes,
