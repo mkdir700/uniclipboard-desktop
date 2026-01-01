@@ -71,7 +71,8 @@ pub enum NetworkEvent {
     PairingComplete {
         session_id: String,
         peer_id: String,
-        device_name: String,
+        /// Peer device name (the other device's name, not this device's name)
+        peer_device_name: String,
         shared_secret: Vec<u8>,
     },
     PairingFailed {

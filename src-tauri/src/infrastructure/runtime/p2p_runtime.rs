@@ -183,13 +183,13 @@ impl P2PRuntime {
                     NetworkEvent::PairingComplete {
                         session_id,
                         peer_id,
-                        device_name,
+                        peer_device_name,
                         shared_secret,
                     } => {
                         // Save paired peer to PeerStorage
                         let paired_peer = PairedPeer {
                             peer_id: peer_id.clone(),
-                            device_name: device_name.clone(),
+                            device_name: peer_device_name.clone(),
                             shared_secret,
                             paired_at: Utc::now(),
                             last_seen: Some(Utc::now()),
@@ -198,14 +198,14 @@ impl P2PRuntime {
                         if let Err(e) = _p2p_sync_clone.peer_storage().save_peer(paired_peer) {
                             log::error!("Failed to save paired peer {}: {}", peer_id, e);
                         } else {
-                            log::info!("Saved paired peer: {} (device: {})", peer_id, device_name);
+                            log::info!("Saved paired peer: {} (device: {})", peer_id, peer_device_name);
                         }
 
                         // Emit event to frontend
                         let event_data = P2PPairingCompleteEventData {
                             session_id,
                             peer_id,
-                            device_name,
+                            device_name: peer_device_name,
                         };
                         if let Err(e) =
                             app_handle_for_events.emit("p2p-pairing-complete", event_data)

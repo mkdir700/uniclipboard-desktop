@@ -356,21 +356,20 @@ impl NetworkManager {
                                         ProtocolMessage::Pairing(PairingMessage::Confirm(
                                             confirm,
                                         )) => {
-                                            let initiator_device_name = confirm
-                                                .device_name
-                                                .clone()
-                                                .unwrap_or_else(|| "Unknown Device".to_string());
+                                            // Get initiator's device name from the confirm message
+                                            let initiator_device_name = confirm.sender_device_name.clone();
 
                                             if confirm.success {
                                                 if let Some(shared_secret) =
                                                     confirm.shared_secret.clone()
                                                 {
+                                                    // Send ACK with responder's own device name
                                                     let ack = super::protocol::PairingConfirm {
                                                         session_id: confirm.session_id.clone(),
                                                         success: true,
                                                         shared_secret: Some(shared_secret.clone()),
                                                         error: None,
-                                                        device_name: None,
+                                                        sender_device_name: self.device_name.clone(),
                                                     };
                                                     let ack_msg = ProtocolMessage::Pairing(
                                                         PairingMessage::Confirm(ack),
@@ -390,7 +389,7 @@ impl NetworkManager {
                                                         .send(NetworkEvent::PairingComplete {
                                                             session_id: confirm.session_id,
                                                             peer_id: peer.to_string(),
-                                                            device_name: initiator_device_name,
+                                                            peer_device_name: initiator_device_name,
                                                             shared_secret,
                                                         })
                                                         .await;
@@ -401,7 +400,7 @@ impl NetworkManager {
                                                     success: false,
                                                     shared_secret: None,
                                                     error: confirm.error.clone(),
-                                                    device_name: None,
+                                                    sender_device_name: self.device_name.clone(),
                                                 };
                                                 let ack_msg =
                                                     ProtocolMessage::Pairing(PairingMessage::Confirm(ack));
@@ -448,12 +447,15 @@ impl NetworkManager {
                                         PairingMessage::Confirm(confirm) => {
                                             if confirm.success {
                                                 if let Some(secret) = confirm.shared_secret {
+                                                    // Get responder's device name from the ACK
+                                                    let responder_device_name = confirm.sender_device_name.clone();
+
                                                     let _ = self
                                                         .event_tx
                                                         .send(NetworkEvent::PairingComplete {
                                                             session_id: confirm.session_id,
                                                             peer_id: peer.to_string(),
-                                                            device_name: "Unknown".to_string(),
+                                                            peer_device_name: responder_device_name,
                                                             shared_secret: secret,
                                                         })
                                                         .await;

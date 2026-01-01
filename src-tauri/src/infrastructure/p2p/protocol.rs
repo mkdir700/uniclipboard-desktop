@@ -55,7 +55,8 @@ pub struct PairingConfirm {
     pub success: bool,
     pub shared_secret: Option<Vec<u8>>, // Encrypted shared secret
     pub error: Option<String>,
-    pub device_name: Option<String>, // Sender's device name
+    /// Sender's device name (the device sending this confirm message)
+    pub sender_device_name: String,
 }
 
 /// Clipboard content broadcast via GossipSub

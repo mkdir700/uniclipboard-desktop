@@ -78,7 +78,10 @@ pub enum PairingCommand {
 pub struct PairingSession {
     pub session_id: String,
     pub peer_id: String,
-    pub device_name: String,
+    /// Local device name (this device's name)
+    pub local_device_name: String,
+    /// Peer device name (the other device's name)
+    pub peer_device_name: String,
     pub our_public_key: PublicKey,
     pub our_private_key: StaticSecret,
     pub peer_public_key: Option<PublicKey>,
@@ -90,7 +93,8 @@ impl PairingSession {
     pub fn new(
         session_id: String,
         peer_id: String,
-        device_name: String,
+        local_device_name: String,
+        peer_device_name: String,
         is_initiator: bool,
     ) -> Self {
         let our_private_key = StaticSecret::random();
@@ -99,7 +103,8 @@ impl PairingSession {
         Self {
             session_id,
             peer_id,
-            device_name,
+            local_device_name,
+            peer_device_name,
             our_public_key,
             our_private_key,
             peer_public_key: None,
@@ -272,19 +277,15 @@ impl PairingManager {
         device_name: String,
     ) -> Result<String> {
         let session_id = self.generate_session_id();
-        let our_private_key = StaticSecret::random();
-        let our_public_key = PublicKey::from(&our_private_key);
 
-        let session = PairingSession {
-            session_id: session_id.clone(),
-            peer_id: peer_id.clone(),
-            device_name: device_name.clone(),
-            our_public_key,
-            our_private_key,
-            peer_public_key: None,
-            created_at: Utc::now(),
-            is_initiator: true,
-        };
+        // Create session with local device name and "Unknown" for peer (will be updated later)
+        let session = PairingSession::new(
+            session_id.clone(),
+            peer_id.clone(),
+            device_name.clone(),      // local_device_name (this device)
+            "Unknown".to_string(),    // peer_device_name (will be updated in handle_pin_ready)
+            true,                     // is_initiator
+        );
 
         // Store public key bytes before moving session into map
         let public_key_bytes = session.our_public_key.to_bytes().to_vec();
@@ -340,18 +341,20 @@ impl PairingManager {
             .map_err(|e| anyhow!("Invalid public key length: {}", e))?;
         let peer_public = PublicKey::from(peer_public_bytes);
 
-        let session = PairingSession {
-            session_id: request.session_id.clone(),
-            peer_id: peer_id.clone(),
-            device_name: request.device_name.clone(),
-            our_public_key,
-            our_private_key,
-            peer_public_key: Some(peer_public), // Store the key immediately
-            created_at: Utc::now(),
-            is_initiator: false,
-        };
+        // Create session with local device name and peer device name from request
+        let session = PairingSession::new(
+            request.session_id.clone(),
+            peer_id.clone(),
+            self.device_name.clone(),        // local_device_name (responder's device)
+            request.device_name.clone(),     // peer_device_name (initiator's device)
+            false,                           // is_initiator
+        );
 
-        self.sessions.insert(request.session_id.clone(), session);
+        // Store peer public key
+        let mut session_with_key = session;
+        session_with_key.peer_public_key = Some(peer_public);
+
+        self.sessions.insert(request.session_id.clone(), session_with_key);
 
         Ok(())
     }
@@ -429,7 +432,8 @@ impl PairingManager {
         let peer_public = PublicKey::from(peer_public_bytes);
 
         session.peer_public_key = Some(peer_public);
-        session.device_name = peer_device_name;
+        // Update peer device name when we receive the challenge
+        session.peer_device_name = peer_device_name;
 
         Ok(())
     }
@@ -445,8 +449,8 @@ impl PairingManager {
             return Err(anyhow!("Pairing session expired"));
         }
 
-        let device_name = session.device_name.clone();
         let peer_id = session.peer_id.clone();
+        let local_device_name = session.local_device_name.clone();
 
         if !pin_match {
             log::warn!("PIN verification failed for session {}", session_id);
@@ -468,7 +472,7 @@ impl PairingManager {
                 success: true,
                 shared_secret: Some(secret_bytes),
                 error: None,
-                device_name: Some(device_name.clone()),
+                sender_device_name: local_device_name.clone(),
             }
         } else {
             PairingConfirm {
@@ -476,7 +480,7 @@ impl PairingManager {
                 success: false,
                 shared_secret: None,
                 error: Some("PIN verification failed".to_string()),
-                device_name: None,
+                sender_device_name: local_device_name.clone(),
             }
         };
 
@@ -494,7 +498,7 @@ impl PairingManager {
                 session_id: session_id.to_string(),
                 success: confirm.success,
                 shared_secret: confirm.shared_secret,
-                device_name,
+                device_name: local_device_name,
             })
             .await
             .map_err(|e| anyhow!("Failed to send pairing confirm: {}", e))?;
