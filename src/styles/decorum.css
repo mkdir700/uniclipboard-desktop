@@ -1,65 +1,29 @@
 /**
  * Decorum Plugin Styles
  *
- * 这些样式用于 tauri-plugin-decorum 在 Windows 上创建的覆盖标题栏控件。
- * decorum 为 Windows 提供原生的窗口行为（如 Snap Layout），同时保持自定义标题栏设计。
+ * 隐藏 decorum 注入的标题栏控件，仅使用其提供的 Windows Snap Layout 功能。
+ * 我们使用自己的自定义 TitleBar 组件来控制窗口。
  *
- * 这些控件仅在 Windows 平台上激活，不会影响其他平台的显示。
+ * 这些样式仅在 Windows 平台上激活。
  */
 
-/* Decorum 标题栏容器 */
-[data-tauri-decorum-tb] {
-  /* 确保控件与我们的标题栏对齐 */
-  display: flex;
-  align-items: center;
-}
-
-/* Decorum 标题栏按钮通用样式 */
+/* 隐藏 decorum 注入的所有标题栏按钮 */
 .decorum-tb-btn,
 #decorum-tb-minimize,
 #decorum-tb-maximize,
 #decorum-tb-close {
-  /* 使用与 TitleBarButton 相同的颜色标记 */
-  color: hsl(var(--muted-foreground));
-  transition:
-    color 150ms ease,
-    background-color 150ms ease;
+  display: none !important;
 }
 
-/* 悬停状态 */
-.decorum-tb-btn:hover,
-#decorum-tb-minimize:hover,
-#decorum-tb-maximize:hover,
-#decorum-tb-close:hover {
-  color: hsl(var(--foreground));
-  background-color: hsl(var(--muted) / 0.7);
+/* 禁用 decorum 容器的 pointer-events，让点击穿透到我们的按钮 */
+[data-tauri-decorum-tb] {
+  pointer-events: none !important;
 }
 
-/* 激活/点击状态 */
-.decorum-tb-btn:active,
-#decorum-tb-minimize:active,
-#decorum-tb-maximize:active,
-#decorum-tb-close:active {
-  background-color: hsl(var(--primary) / 0.1);
+/* 确保 decorum 覆盖层的所有子元素也不阻挡点击 */
+[data-tauri-decorum-tb] > * {
+  pointer-events: none !important;
 }
 
-/* 关闭按钮特殊样式 - 悬停时显示红色背景 */
-#decorum-tb-close:hover {
-  background-color: hsl(var(--destructive) / 0.9);
-  color: white;
-}
-
-/* 确保 SVG 图标大小与我们的 TitleBarButton 匹配 */
-.decorum-tb-btn svg,
-#decorum-tb-minimize svg,
-#decorum-tb-maximize svg,
-#decorum-tb-close svg {
-  width: 1rem;
-  height: 1rem;
-}
-
-/* 最大化按钮的图标稍小一些，与 TitleBarButton 保持一致 */
-#decorum-tb-maximize svg {
-  width: 0.875rem;
-  height: 0.875rem;
-}
+/* 我们的自定义 TitleBar 组件中的按钮需要能够接收点击 */
+/* 通过更高优先级确保点击穿透正常工作 */
