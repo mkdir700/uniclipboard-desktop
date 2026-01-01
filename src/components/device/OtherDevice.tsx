@@ -2,9 +2,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Smartphone, Monitor, Tablet, Settings, Eye, Trash2, Laptop, RefreshCw } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import DeviceSettingsPanel from './DeviceSettingsPanel'
-import { unpairP2PDevice } from '@/api/p2p'
+import { onP2PPeerConnectionChanged, unpairP2PDevice } from '@/api/p2p'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
-import { fetchPairedDevices, clearPairedDevicesError } from '@/store/slices/devicesSlice'
+import {
+  fetchPairedDevices,
+  clearPairedDevicesError,
+  updatePeerConnectionStatus,
+} from '@/store/slices/devicesSlice'
 
 const OtherDevice: React.FC = () => {
   const [expandedDevices, setExpandedDevices] = useState<Record<string, boolean>>({})
@@ -16,6 +20,28 @@ const OtherDevice: React.FC = () => {
   useEffect(() => {
     // 组件挂载时获取已配对设备
     dispatch(fetchPairedDevices())
+
+    // 监听连接状态变化
+    let unlistenConnection: (() => void) | undefined
+
+    const setupConnectionListener = async () => {
+      unlistenConnection = await onP2PPeerConnectionChanged(event => {
+        // 更新 Redux store 中的连接状态
+        dispatch(
+          updatePeerConnectionStatus({
+            peerId: event.peerId,
+            connected: event.connected,
+          })
+        )
+      })
+    }
+
+    setupConnectionListener()
+
+    return () => {
+      // 清理监听器
+      unlistenConnection?.()
+    }
   }, [dispatch])
 
   const toggleDevice = (id: string) => {
@@ -184,10 +210,22 @@ const OtherDevice: React.FC = () => {
 
                 {/* Actions & Status */}
                 <div className="flex items-center gap-6">
-                  {/* Status Indicator - 显示离线状态（连接状态未实现） */}
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-muted-foreground/10 text-muted-foreground rounded-full border border-border">
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-400"></span>
-                    <span className="text-xs font-medium">离线</span>
+                  {/* Status Indicator - 动态显示在线/离线状态 */}
+                  <div
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${
+                      device.connected
+                        ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
+                        : 'bg-muted-foreground/10 text-muted-foreground border-border'
+                    }`}
+                  >
+                    <span
+                      className={`relative inline-flex rounded-full h-2 w-2 ${
+                        device.connected ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                      }`}
+                    ></span>
+                    <span className="text-xs font-medium">
+                      {device.connected ? '在线' : '离线'}
+                    </span>
                   </div>
 
                   {/* Action Buttons */}

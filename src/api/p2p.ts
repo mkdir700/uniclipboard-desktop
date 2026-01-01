@@ -49,6 +49,8 @@ export interface PairedPeer {
   lastSeen: string | null
   /** Last known addresses */
   lastKnownAddresses: string[]
+  /** Connection status */
+  connected: boolean
 }
 
 /**
@@ -125,6 +127,18 @@ export interface P2PPairingFailedEvent {
   sessionId: string
   /** Error message */
   error: string
+}
+
+/**
+ * P2P 设备连接状态变化事件数据
+ */
+export interface P2PPeerConnectionEvent {
+  /** Peer ID */
+  peerId: string
+  /** Device name (may be null for disconnect) */
+  deviceName?: string | null
+  /** Connection status */
+  connected: boolean
 }
 
 /**
@@ -303,6 +317,26 @@ export async function onP2PPairingFailed(
 }
 
 /**
+ * 监听 P2P 设备连接状态变化事件
+ */
+export async function onP2PPeerConnectionChanged(
+  callback: (event: P2PPeerConnectionEvent) => void
+): Promise<() => void> {
+  try {
+    const unlisten = await listen<P2PPeerConnectionEvent>('p2p-peer-connection-changed', event => {
+      callback(event.payload)
+    })
+
+    return () => {
+      unlisten()
+    }
+  } catch (error) {
+    console.error('Failed to setup P2P peer connection changed listener:', error)
+    return () => {}
+  }
+}
+
+/**
  * 获取本地设备信息
  */
 export async function getLocalDeviceInfo(): Promise<LocalDeviceInfo> {
@@ -322,6 +356,18 @@ export async function getPairedPeers(): Promise<PairedPeer[]> {
     return await invoke<PairedPeer[]>('get_paired_peers')
   } catch (error) {
     console.error('Failed to get paired peers:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取已配对的设备列表（带连接状态）
+ */
+export async function getPairedPeersWithStatus(): Promise<PairedPeer[]> {
+  try {
+    return await invoke<PairedPeer[]>('get_paired_peers_with_status')
+  } catch (error) {
+    console.error('Failed to get paired peers with status:', error)
     throw error
   }
 }

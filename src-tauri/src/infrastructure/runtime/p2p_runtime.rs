@@ -12,11 +12,11 @@ use tokio::sync::{mpsc, RwLock};
 
 use crate::api::event::{
     P2PPairingCompleteEventData, P2PPairingFailedEventData, P2PPairingRequestEventData,
-    P2PPinReadyEventData,
+    P2PPeerConnectionEvent, P2PPinReadyEventData,
 };
 use crate::domain::pairing::PairedPeer;
 use crate::infrastructure::p2p::pairing::{PairingCommand, PairingManager};
-use crate::infrastructure::p2p::{DiscoveredPeer, NetworkCommand};
+use crate::infrastructure::p2p::{ConnectedPeer, DiscoveredPeer, NetworkCommand};
 use crate::infrastructure::storage::peer_storage::PeerStorage;
 use crate::infrastructure::sync::Libp2pSync;
 
@@ -34,6 +34,8 @@ pub struct P2PRuntime {
     device_name: String,
     /// Discovered peers (thread-safe for queries)
     discovered_peers: Arc<RwLock<HashMap<String, DiscoveredPeer>>>,
+    /// Connected peers tracking (peer_id -> ConnectedPeer)
+    connected_peers: Arc<RwLock<HashMap<String, ConnectedPeer>>>,
 }
 
 impl P2PRuntime {
@@ -99,11 +101,13 @@ impl P2PRuntime {
         ));
 
         let discovered_peers = Arc::new(RwLock::new(HashMap::new()));
+        let connected_peers = Arc::new(RwLock::new(HashMap::new()));
 
         // Spawn event monitoring loop
         let pairing_cmd_tx_clone = pairing_cmd_tx.clone();
         let _p2p_sync_clone = p2p_sync.clone();
         let discovered_peers_clone = discovered_peers.clone();
+        let connected_peers_clone = connected_peers.clone();
 
         tokio::spawn(async move {
             use crate::infrastructure::p2p::NetworkEvent;
@@ -238,6 +242,48 @@ impl P2PRuntime {
                             log::warn!("Failed to handle incoming clipboard message: {}", e);
                         }
                     }
+                    NetworkEvent::PeerConnected(connected) => {
+                        // Update connected peers tracking
+                        let mut peers = connected_peers_clone.write().await;
+                        peers.insert(connected.peer_id.clone(), connected.clone());
+                        log::info!(
+                            "Peer connected: {} ({})",
+                            connected.peer_id,
+                            connected.device_name
+                        );
+
+                        // Emit event to frontend
+                        let event_data = P2PPeerConnectionEvent {
+                            peer_id: connected.peer_id.clone(),
+                            device_name: Some(connected.device_name.clone()),
+                            connected: true,
+                        };
+                        if let Err(e) =
+                            app_handle_for_events.emit("p2p-peer-connection-changed", event_data)
+                        {
+                            log::error!("Failed to emit p2p-peer-connection-changed event: {:?}", e);
+                        }
+                    }
+                    NetworkEvent::PeerDisconnected(peer_id) => {
+                        // Get device name from connected peers before removing
+                        let device_name = {
+                            let mut peers = connected_peers_clone.write().await;
+                            peers.remove(&peer_id).map(|p| p.device_name)
+                        };
+                        log::info!("Peer disconnected: {}", peer_id);
+
+                        // Emit event to frontend
+                        let event_data = P2PPeerConnectionEvent {
+                            peer_id: peer_id.clone(),
+                            device_name,
+                            connected: false,
+                        };
+                        if let Err(e) =
+                            app_handle_for_events.emit("p2p-peer-connection-changed", event_data)
+                        {
+                            log::error!("Failed to emit p2p-peer-connection-changed event: {:?}", e);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -250,6 +296,7 @@ impl P2PRuntime {
             local_peer_id,
             device_name,
             discovered_peers,
+            connected_peers,
         })
     }
 
@@ -277,6 +324,16 @@ impl P2PRuntime {
             .values()
             .cloned()
             .collect()
+    }
+
+    /// Get connected peers
+    pub async fn connected_peers(&self) -> HashMap<String, ConnectedPeer> {
+        self.connected_peers.read().await.clone()
+    }
+
+    /// Check if a specific peer is connected
+    pub async fn is_peer_connected(&self, peer_id: &str) -> bool {
+        self.connected_peers.read().await.contains_key(peer_id)
     }
 
     /// Get the P2P command sender

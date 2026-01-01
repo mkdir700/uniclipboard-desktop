@@ -351,6 +351,41 @@ impl AppRuntime {
                     let _ = respond_to.send(result);
                 });
             }
+            P2PCommand::GetPairedPeersWithStatus { respond_to } => {
+                use crate::infrastructure::runtime::PairedPeerWithStatus;
+
+                // Get paired peers from storage
+                let paired_peers = p2p_runtime
+                    .p2p_sync()
+                    .peer_storage()
+                    .get_all_peers()
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to get peers: {}", e);
+                        Vec::new()
+                    });
+
+                // Get currently connected peers
+                let connected_map = p2p_runtime.connected_peers().await;
+
+                // Merge connection status
+                let peers_with_status: Vec<PairedPeerWithStatus> = paired_peers
+                    .into_iter()
+                    .map(|p| {
+                        let connected = connected_map.contains_key(&p.peer_id);
+                        PairedPeerWithStatus {
+                            peer_id: p.peer_id,
+                            device_name: p.device_name,
+                            shared_secret: p.shared_secret,
+                            paired_at: p.paired_at.to_rfc3339(),
+                            last_seen: p.last_seen.map(|dt| dt.to_rfc3339()),
+                            last_known_addresses: p.last_known_addresses,
+                            connected,
+                        }
+                    })
+                    .collect();
+
+                let _ = respond_to.send(Ok(peers_with_status));
+            }
         }
     }
 
