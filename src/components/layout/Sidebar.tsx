@@ -75,7 +75,7 @@ const Sidebar: React.FC = () => {
       data-tauri-drag-region
       className={cn(
         'w-16 h-screen sticky top-0 z-100 flex flex-col items-center pb-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl shrink-0',
-        isMac ? 'pt-12' : 'pt-2'
+        isMac ? 'pt-12' : 'pt-4'
       )}
     >
       {/* Main Navigation */}
