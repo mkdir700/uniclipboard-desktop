@@ -14,6 +14,7 @@ use tokio::sync::{mpsc, oneshot};
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 
 use super::events::NetworkEvent;
+use super::pin_hash;
 use super::protocol::{PairingConfirm, PairingRequest, PairingResponse};
 use super::swarm::NetworkCommand;
 
@@ -86,6 +87,9 @@ pub struct PairingSession {
     pub peer_public_key: Option<PublicKey>,
     pub created_at: chrono::DateTime<Utc>,
     pub is_initiator: bool,
+    /// PIN stored in memory only for hash computation (initiator side)
+    /// This is cleared after verification to minimize exposure
+    pin: Option<String>,
 }
 
 impl PairingSession {
@@ -109,7 +113,23 @@ impl PairingSession {
             peer_public_key: None,
             created_at: Utc::now(),
             is_initiator,
+            pin: None,
         }
+    }
+
+    /// Set the PIN for this session (initiator side only)
+    pub fn set_pin(&mut self, pin: String) {
+        self.pin = Some(pin);
+    }
+
+    /// Get the PIN for this session
+    pub fn get_pin(&self) -> Option<&str> {
+        self.pin.as_deref()
+    }
+
+    /// Clear the PIN from memory after use
+    pub fn clear_pin(&mut self) {
+        self.pin = None;
     }
 
     /// Compute ECDH shared secret
@@ -361,18 +381,24 @@ impl PairingManager {
 
     /// Accept pairing request (responder side) - generates PIN and sends challenge
     pub async fn accept_pairing(&mut self, session_id: &str) -> Result<()> {
-        let session = self
-            .sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow!("Session not found"))?;
+        // Clone needed values before borrowing to avoid borrow conflicts
+        let (peer_id, peer_device_name, our_public_key_bytes, is_expired) = {
+            let session = self
+                .sessions
+                .get_mut(session_id)
+                .ok_or_else(|| anyhow!("Session not found"))?;
 
-        if session.is_expired() {
-            return Err(anyhow!("Pairing session expired"));
-        }
+            if session.is_expired() {
+                return Err(anyhow!("Pairing session expired"));
+            }
 
-        let peer_id = session.peer_id.clone();
-        let peer_device_name = session.peer_device_name.clone();
-        let our_public_key_bytes = session.our_public_key.to_bytes().to_vec();
+            (
+                session.peer_id.clone(),
+                session.peer_device_name.clone(),
+                session.our_public_key.to_bytes().to_vec(),
+                false,
+            )
+        };
 
         // Generate PIN for user verification
         let pin = self.generate_pin();
@@ -382,6 +408,15 @@ impl PairingManager {
             session_id,
             pin
         );
+
+        // Store PIN for later hash verification when initiator responds
+        {
+            let session = self
+                .sessions
+                .get_mut(session_id)
+                .ok_or_else(|| anyhow!("Session not found"))?;
+            session.set_pin(pin.clone());
+        }
 
         // Send p2p-pin-ready event to frontend (responder needs to see the PIN)
         let _ = self
@@ -413,7 +448,7 @@ impl PairingManager {
     pub async fn handle_pin_ready(
         &mut self,
         session_id: &str,
-        _pin: String,
+        pin: String,
         peer_device_name: String,
         peer_public_key: Vec<u8>,
     ) -> Result<()> {
@@ -438,11 +473,14 @@ impl PairingManager {
         session.peer_public_key = Some(peer_public);
         // Update peer device name when we receive the challenge
         session.peer_device_name = peer_device_name;
+        // Store PIN for later hash computation when user confirms
+        session.set_pin(pin);
 
         Ok(())
     }
 
     /// Handle PIN verification result (initiator side)
+    /// Sends PairingResponse with Argon2id-derived PIN hash to responder
     pub async fn verify_pin(&mut self, session_id: &str, pin_match: bool) -> Result<()> {
         let session = self
             .sessions
@@ -454,95 +492,189 @@ impl PairingManager {
         }
 
         let peer_id = session.peer_id.clone();
-        let local_device_name = session.local_device_name.clone();
 
         if !pin_match {
             log::warn!("PIN verification failed for session {}", session_id);
-        } else {
-            log::info!(
-                "PIN verified successfully for session {}, peer: {}",
+            // Send rejection response
+            self.network_command_tx
+                .send(NetworkCommand::SendPairingResponse {
+                    peer_id,
+                    session_id: session_id.to_string(),
+                    pin_hash: Vec::new(), // Empty hash for rejection
+                    accepted: false,
+                })
+                .await
+                .map_err(|e| anyhow!("Failed to send pairing response: {}", e))?;
+
+            self.sessions.remove(session_id);
+            return Ok(());
+        }
+
+        // Get the stored PIN and compute Argon2id hash
+        let pin = session
+            .get_pin()
+            .ok_or_else(|| anyhow!("PIN not found in session"))?;
+
+        log::info!(
+            "Computing Argon2id hash for PIN verification, session: {}, peer: {}",
+            session_id,
+            peer_id
+        );
+
+        let pin_hash = pin_hash::hash_pin(pin)
+            .map_err(|e| anyhow!("Failed to compute PIN hash: {}", e))?;
+
+        // Clear PIN from memory after use
+        session.clear_pin();
+
+        log::info!(
+            "Sending PairingResponse with Argon2id hash for session {}, peer: {}",
+            session_id,
+            peer_id
+        );
+
+        // Send PairingResponse with PIN hash
+        self.network_command_tx
+            .send(NetworkCommand::SendPairingResponse {
+                peer_id,
+                session_id: session_id.to_string(),
+                pin_hash,
+                accepted: true,
+            })
+            .await
+            .map_err(|e| anyhow!("Failed to send pairing response: {}", e))?;
+
+        // Note: We don't remove the session yet; we wait for PairingConfirm from responder
+        Ok(())
+    }
+
+    /// Handle pairing response (responder side)
+    /// Verifies the Argon2id PIN hash and sends PairingConfirm
+    pub async fn handle_pairing_response(
+        &mut self,
+        session_id: &str,
+        response: PairingResponse,
+        _peer_device_name: String,
+    ) -> Result<(bool, Option<Vec<u8>>)> {
+        // Clone needed values before borrowing to avoid borrow conflicts
+        let (peer_id, local_device_name, is_expired, pin) = {
+            let session = self
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Session not found"))?;
+
+            (
+                session.peer_id.clone(),
+                session.local_device_name.clone(),
+                session.is_expired(),
+                session.get_pin().map(|p| p.to_string()),
+            )
+        };
+
+        if is_expired {
+            return Err(anyhow!("Pairing session expired"));
+        }
+
+        if !response.accepted {
+            log::warn!(
+                "Pairing rejected by initiator for session {}, peer: {}",
                 session_id,
                 peer_id
             );
+            self.sessions.remove(session_id);
+
+            // Send rejection confirm
+            let _ = self
+                .network_command_tx
+                .send(NetworkCommand::SendPairingConfirm {
+                    peer_id,
+                    session_id: session_id.to_string(),
+                    success: false,
+                    shared_secret: None,
+                    device_name: local_device_name,
+                })
+                .await;
+
+            return Ok((false, None));
         }
 
-        let confirm = if pin_match {
-            // Compute shared secret
-            let shared_secret = session.compute_shared_secret()?;
-            let secret_bytes = shared_secret.to_bytes().to_vec();
+        // Get the stored PIN for verification
+        let pin = pin.ok_or_else(|| anyhow!("PIN not found in session"))?;
 
-            PairingConfirm {
-                session_id: session_id.to_string(),
-                success: true,
-                shared_secret: Some(secret_bytes),
-                error: None,
-                sender_device_name: local_device_name.clone(),
-            }
-        } else {
-            PairingConfirm {
-                session_id: session_id.to_string(),
-                success: false,
-                shared_secret: None,
-                error: Some("PIN verification failed".to_string()),
-                sender_device_name: local_device_name.clone(),
-            }
-        };
-
-        let message = super::protocol::ProtocolMessage::Pairing(
-            super::protocol::PairingMessage::Confirm(confirm.clone()),
+        log::info!(
+            "Verifying Argon2id PIN hash for session {}, peer: {}",
+            session_id,
+            peer_id
         );
 
-        let _message_bytes = message
-            .to_bytes()
-            .map_err(|e| anyhow!("Failed to serialize pairing confirm: {}", e))?;
+        // Verify the PIN hash using constant-time comparison
+        let verified = pin_hash::verify_pin(&pin, &response.pin_hash)
+            .map_err(|e| anyhow!("Failed to verify PIN hash: {}", e))?;
 
+        if !verified {
+            log::warn!(
+                "PIN hash verification failed for session {}, peer: {}",
+                session_id,
+                peer_id
+            );
+
+            self.sessions.remove(session_id);
+
+            // Send failure confirm
+            let _ = self
+                .network_command_tx
+                .send(NetworkCommand::SendPairingConfirm {
+                    peer_id,
+                    session_id: session_id.to_string(),
+                    success: false,
+                    shared_secret: None,
+                    device_name: local_device_name,
+                })
+                .await;
+
+            return Ok((false, None));
+        }
+
+        log::info!(
+            "PIN hash verified successfully for session {}, peer: {}",
+            session_id,
+            peer_id
+        );
+
+        // Compute shared secret (need to re-borrow session)
+        let shared_secret = {
+            let session = self
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow!("Session not found"))?;
+            session.compute_shared_secret()?
+        };
+        let secret_bytes = shared_secret.to_bytes().to_vec();
+
+        log::info!(
+            "Sending PairingConfirm with success=true for session {}",
+            session_id
+        );
+
+        // Send success confirm
         self.network_command_tx
             .send(NetworkCommand::SendPairingConfirm {
                 peer_id,
                 session_id: session_id.to_string(),
-                success: confirm.success,
-                shared_secret: confirm.shared_secret,
+                success: true,
+                shared_secret: Some(secret_bytes.clone()),
                 device_name: local_device_name,
             })
             .await
             .map_err(|e| anyhow!("Failed to send pairing confirm: {}", e))?;
 
-        if !pin_match {
-            self.sessions.remove(session_id);
-        }
-
-        Ok(())
+        self.sessions.remove(session_id);
+        Ok((true, Some(secret_bytes)))
     }
 
-    /// Handle pairing response (responder side)
-    pub async fn handle_pairing_response(
-        &mut self,
-        session_id: &str,
-        response: PairingResponse,
-        peer_device_name: String,
-    ) -> Result<(bool, Option<Vec<u8>>)> {
-        let session = self
-            .sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow!("Session not found"))?;
-
-        if session.is_expired() {
-            return Err(anyhow!("Pairing session expired"));
-        }
-
-        if !response.accepted {
-            self.sessions.remove(session_id);
-            return Ok((false, None));
-        }
-
-        // Verify PIN hash
-        // TODO: Implement proper PIN hash verification
-        // For now, we trust the client-side verification
-
-        Ok((true, None))
-    }
-
-    /// Handle pairing confirmation (responder side)
+    /// Handle pairing confirmation
+    /// Called by both initiator (receiving confirmation from responder)
+    /// and responder (when pairing is complete)
     pub async fn handle_pairing_confirm(
         &mut self,
         session_id: &str,
@@ -573,16 +705,13 @@ impl PairingManager {
         }
 
         if confirm.success {
-            if confirm.shared_secret.is_some() {
-                // The shared secret is sent by the initiator
-                // For now, we'll derive our own shared secret
-                let shared_secret = session.compute_shared_secret()?;
-                let secret_bytes = shared_secret.to_bytes().to_vec();
+            // Derive our own shared secret (both parties compute the same secret via ECDH)
+            let shared_secret = session.compute_shared_secret()?;
+            let secret_bytes = shared_secret.to_bytes().to_vec();
 
-                self.sessions.remove(session_id);
+            self.sessions.remove(session_id);
 
-                return Ok(Some(secret_bytes));
-            }
+            return Ok(Some(secret_bytes));
         }
 
         self.sessions.remove(session_id);
@@ -643,6 +772,7 @@ mod tests {
             "test-session".to_string(),
             "peer-123".to_string(),
             "Test Device".to_string(),
+            "Peer Device".to_string(),
             true,
         );
         assert!(!session.is_expired());

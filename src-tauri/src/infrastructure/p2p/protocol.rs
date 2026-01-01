@@ -41,9 +41,53 @@ pub struct PairingChallenge {
 }
 
 /// Pairing response from initiator after PIN verification
+///
+/// # Security Requirements for `pin_hash`
+///
+/// The `pin_hash` field MUST contain a properly derived key using a secure
+/// password hashing algorithm, NOT a simple cryptographic hash.
+///
+/// ## Algorithm: Argon2id
+///
+/// Use Argon2id (the hybrid version that provides protection against both
+/// GPU/ASIC and side-channel attacks) with the following RECOMMENDED parameters:
+///
+/// - **Output length**: 32 bytes (256 bits)
+/// - **Salt**: 16 bytes, cryptographically random per PIN
+/// - **Memory cost**: 64 MiB (65536 KiB)
+/// - **Time cost**: 3 iterations
+/// - **Parallelism**: 4 lanes
+///
+/// ## Salt Storage Strategy
+///
+/// The salt MUST be encoded together with the hash to allow verification.
+/// Use the following encoding format:
+///
+/// ```text
+/// {version||salt||hash}
+/// ```
+///
+/// Where:
+/// - `version`: 1 byte (currently 0x01 for Argon2id)
+/// - `salt`: 16 bytes
+/// - `hash`: 32 bytes (Argon2id output)
+///
+/// Total: 49 bytes (1 + 16 + 32)
+///
+/// This allows the verifier to extract the salt and recompute the hash
+/// for verification while supporting future algorithm upgrades via versioning.
+///
+/// ## Example Encoding (pseudocode)
+///
+/// ```rust,ignore
+/// let salt = random_16_bytes();
+/// let hash = argon2id_hash(pin, salt, params);
+/// let encoded = [0x01, salt..., hash...]; // 49 bytes total
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PairingResponse {
     pub session_id: String,
+    /// Argon2id-derived key encoded as {version(1)||salt(16)||hash(32)} = 49 bytes
     pub pin_hash: Vec<u8>,
     pub accepted: bool,
 }

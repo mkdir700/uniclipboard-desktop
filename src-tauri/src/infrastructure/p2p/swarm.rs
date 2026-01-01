@@ -34,6 +34,13 @@ pub enum NetworkCommand {
         device_name: String,
         public_key: Vec<u8>, // Our X25519 public key for ECDH
     },
+    /// Send a pairing response with PIN hash (after initiator verifies PIN)
+    SendPairingResponse {
+        peer_id: String,
+        session_id: String,
+        pin_hash: Vec<u8>, // Argon2id-encoded {version||salt||hash}
+        accepted: bool,
+    },
     /// Reject a pairing request
     RejectPairing {
         peer_id: String,
@@ -666,6 +673,49 @@ impl NetworkManager {
                         .event_tx
                         .send(NetworkEvent::Error(format!(
                             "Failed to send pairing challenge: invalid peer_id '{}': {}",
+                            peer_id, e
+                        )))
+                        .await;
+                }
+            },
+
+            NetworkCommand::SendPairingResponse {
+                peer_id,
+                session_id,
+                pin_hash,
+                accepted,
+            } => match peer_id.parse::<PeerId>() {
+                Ok(peer) => {
+                    if let Some(channel) = self.pending_responses.remove(&peer) {
+                        let response = super::protocol::PairingResponse {
+                            session_id,
+                            pin_hash,
+                            accepted,
+                        };
+                        let protocol_msg =
+                            ProtocolMessage::Pairing(PairingMessage::Response(response));
+                        if let Ok(message) = protocol_msg.to_bytes() {
+                            let resp = ReqPairingResponse { message };
+                            if self
+                                .swarm
+                                .behaviour_mut()
+                                .request_response
+                                .send_response(channel, resp)
+                                .is_ok()
+                            {
+                                debug!("Sent pairing response to {}", peer_id);
+                            }
+                        }
+                    } else {
+                        warn!("No pending response channel for peer {}", peer_id);
+                    }
+                }
+                Err(e) => {
+                    warn!("Invalid peer_id '{}': {}", peer_id, e);
+                    let _ = self
+                        .event_tx
+                        .send(NetworkEvent::Error(format!(
+                            "Failed to send pairing response: invalid peer_id '{}': {}",
                             peer_id, e
                         )))
                         .await;
