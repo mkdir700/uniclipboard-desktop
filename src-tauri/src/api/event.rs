@@ -6,7 +6,6 @@ use crate::infrastructure::event::event_bus::{
     subscribe_clipboard_new_content, subscribe_connection_request, subscribe_connection_response,
     ListenerId,
 };
-use crate::infrastructure::uniclipboard::ClipboardSyncService;
 
 /// 剪贴板新内容事件数据
 #[derive(Clone, Serialize)]
@@ -72,7 +71,6 @@ impl Default for EventListenerState {
 #[tauri::command]
 pub fn listen_clipboard_new_content<R: Runtime>(
     app_handle: AppHandle<R>,
-    _uniclipboard_app: State<'_, Arc<Mutex<Option<Arc<ClipboardSyncService>>>>>,
     event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>,
 ) {
     // 如果已经在监听，则不再重复监听

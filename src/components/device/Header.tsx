@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { Plus } from 'lucide-react'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -13,9 +14,10 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) => {
+  const { t } = useTranslation()
   const tabs: { id: DeviceTab; label: string }[] = [
-    { id: 'requests', label: '配对请求' },
-    { id: 'connected', label: '已连接设备' },
+    { id: 'requests', label: t('devices.tabs.requests') },
+    { id: 'connected', label: t('devices.tabs.connected') },
   ]
 
   return (
@@ -30,7 +32,7 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
         {/* Top Row: Title & Action */}
         <div className="flex items-center justify-between">
           <h1 data-tauri-drag-region className="text-2xl font-bold tracking-tight">
-            设备管理
+            {t('devices.title')}
           </h1>
 
           <Button
@@ -39,7 +41,7 @@ const Header: React.FC<HeaderProps> = ({ addDevice, activeTab, onTabChange }) =>
             className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 rounded-lg px-4 py-2 h-auto text-sm font-medium transition-all duration-300 transform hover:scale-105 active:scale-95"
           >
             <Plus className="h-4 w-4 mr-2" />
-            添加新设备
+            {t('devices.addNew')}
           </Button>
         </div>
 

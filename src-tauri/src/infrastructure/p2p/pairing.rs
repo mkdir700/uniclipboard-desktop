@@ -129,6 +129,8 @@ pub struct PairingManager {
     event_tx: mpsc::Sender<NetworkEvent>,
     /// Channel to receive commands
     command_rx: mpsc::Receiver<PairingCommand>,
+    /// local device name
+    device_name: String,
 }
 
 impl PairingManager {
@@ -136,12 +138,14 @@ impl PairingManager {
         network_command_tx: mpsc::Sender<NetworkCommand>,
         event_tx: mpsc::Sender<NetworkEvent>,
         command_rx: mpsc::Receiver<PairingCommand>,
+        device_name: String,
     ) -> Self {
         Self {
             sessions: HashMap::new(),
             network_command_tx,
             event_tx,
             command_rx,
+            device_name,
         }
     }
 
@@ -339,7 +343,7 @@ impl PairingManager {
         let challenge = PairingChallenge {
             session_id: request.session_id.clone(),
             pin: pin.clone(),
-            device_name: "My Device".to_string(), // TODO: Get from settings
+            device_name: self.device_name.clone(),
             public_key: our_public_key_bytes.clone(),
         };
 
@@ -356,7 +360,7 @@ impl PairingManager {
                 peer_id,
                 session_id: request.session_id.clone(),
                 pin,
-                device_name: "My Device".to_string(),
+                device_name: self.device_name.clone(),
                 public_key: our_public_key_bytes,
             })
             .await
@@ -588,6 +592,6 @@ mod tests {
         let (cmd_tx, _) = mpsc::channel(100);
         let (event_tx, _) = mpsc::channel(100);
         let (_, command_rx) = mpsc::channel(100);
-        PairingManager::new(cmd_tx, event_tx, command_rx)
+        PairingManager::new(cmd_tx, event_tx, command_rx, "Test Device".to_string())
     }
 }

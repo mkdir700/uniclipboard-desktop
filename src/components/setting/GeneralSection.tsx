@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
+  Input,
 } from '@/components/ui'
 import { Card, CardContent } from '@/components/ui/card'
 import { useSetting } from '@/contexts/SettingContext'
@@ -19,6 +20,7 @@ export default function GeneralSection() {
   const [autoStart, setAutoStart] = useState(false)
   const [silentStart, setSilentStart] = useState(false)
   const [language, setLanguage] = useState<SupportedLanguage>(getInitialLanguage())
+  const [deviceName, setDeviceName] = useState('')
   const [isLoading, setIsLoading] = useState(true)
 
   // 初始化时检查自启动状态和设置
@@ -30,10 +32,13 @@ export default function GeneralSection() {
         const enabled = await invoke('is_autostart_enabled')
         setAutoStart(enabled as boolean)
 
-        // 从配置中读取静默启动状态
+        // 从配置中读取设置
         if (setting?.general) {
           setSilentStart(setting.general.silent_start)
           setLanguage((setting.general.language as SupportedLanguage) || getInitialLanguage())
+          if (setting.general.device_name) {
+            setDeviceName(setting.general.device_name)
+          }
         }
       } catch (error) {
         console.error('初始化设置失败:', error)
@@ -88,6 +93,19 @@ export default function GeneralSection() {
     }
   }
 
+  const handleDeviceNameChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newName = e.target.value
+    setDeviceName(newName)
+  }
+
+  const handleDeviceNameBlur = async () => {
+    try {
+      await updateGeneralSetting({ device_name: deviceName })
+    } catch (error) {
+      console.error('更改设备名称失败:', error)
+    }
+  }
+
   return (
     <>
       <Card>
@@ -98,6 +116,26 @@ export default function GeneralSection() {
           <div className="h-px flex-1 bg-border/50"></div>
         </div>
         <CardContent className="pt-0 space-y-4">
+          <div className="flex items-center justify-between py-2">
+            <div className="space-y-0.5 max-w-[60%]">
+              <h4 className="text-sm font-medium">
+                {t('settings.sections.general.deviceName.label')}
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {t('settings.sections.general.deviceName.description')}
+              </p>
+            </div>
+            <div className="w-40">
+              <Input
+                value={deviceName}
+                onChange={handleDeviceNameChange}
+                onBlur={handleDeviceNameBlur}
+                placeholder={t('settings.sections.general.deviceName.placeholder')}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+
           <div className="flex items-center justify-between py-2">
             <div className="space-y-0.5">
               <h4 className="text-sm font-medium">

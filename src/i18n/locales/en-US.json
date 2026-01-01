@@ -23,6 +23,11 @@
       "general": {
         "title": "General",
         "startupTitle": "Startup",
+        "deviceName": {
+          "label": "Device Name",
+          "description": "Used to identify this device on the local network",
+          "placeholder": "Enter device name"
+        },
         "autoStart": {
           "label": "Launch at startup",
           "description": "Start Uniclipboard when the system boots"
@@ -280,5 +285,84 @@
     "cancelLabel": "Cancel",
     "deleteLabel": "Delete",
     "deletingLabel": "Deleting..."
+  },
+  "devices": {
+    "title": "Device Management",
+    "addNew": "Add New Device",
+    "tabs": {
+      "connected": "Connected Devices",
+      "requests": "Pairing Requests"
+    },
+    "sections": {
+      "requests": "Pairing Requests",
+      "noRequests": "No pairing requests"
+    }
+  },
+  "pairing": {
+    "steps": {
+      "discovery": "Discover Devices",
+      "connecting": "Connecting...",
+      "pinVerify": "Security Verification",
+      "success": "Pairing Successful",
+      "failed": "Pairing Failed"
+    },
+    "discovery": {
+      "description": "Please ensure both devices are on the same local network",
+      "searching": "Searching for devices...",
+      "noDevices": "No connectable devices discovered",
+      "reScan": "Rescan",
+      "foundCount": "Found {{count}} devices",
+      "unknownDevice": "Unknown Device",
+      "connect": "Connect"
+    },
+    "connecting": {
+      "title": "Connecting to {{deviceName}}",
+      "pleaseWait": "Please wait..."
+    },
+    "pinVerify": {
+      "description": "Please confirm if the PIN codes on both devices match",
+      "pinLabel": "Pairing PIN Code",
+      "warning": "Please ensure both devices show the same PIN code",
+      "notMatch": "Not a Match",
+      "match": "Confirm Match"
+    },
+    "success": {
+      "title": "Pairing Successful!"
+    },
+    "failed": {
+      "title": "Pairing Failed",
+      "retry": "Retry",
+      "errors": {
+        "loadPeers": "Failed to get device list",
+        "reject": "Connection request rejected",
+        "initiate": "Failed to initiate pairing",
+        "verifyPin": "Failed to verify PIN"
+      }
+    }
+  },
+  "connectionRequest": {
+    "title": "Device Connection Request",
+    "status": {
+      "idle": "Device {{name}} is requesting to connect to this device",
+      "processing": "Processing...",
+      "accepted": "Connection request accepted",
+      "rejected": "Connection request rejected",
+      "error": "Processing failed: {{message}}",
+      "establishing": "Processing connection request...",
+      "connected": "Connection established",
+      "rejectedResult": "Connection rejected"
+    },
+    "info": {
+      "device": "Device {{id}}",
+      "ip": "IP: {{ip}}",
+      "platform": "Platform: {{platform}}"
+    },
+    "timeout": "Automatically reject after {{time}} seconds",
+    "actions": {
+      "reject": "Reject",
+      "accept": "Accept",
+      "close": "Close",
+      "retry": "Retry"
+    }
   }
 }

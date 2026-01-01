@@ -18,8 +18,6 @@ use infrastructure::security::password::PasswordManager;
 use infrastructure::storage::db::pool::DB_POOL;
 use log::error;
 use std::sync::Arc;
-#[cfg(target_os = "macos")]
-use tauri::TitleBarStyle;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 use utils::logging;
 
@@ -27,7 +25,7 @@ fn main() {
     // 注意: 日志系统将在 Builder 插件注册时初始化
 
     // 加载用户设置
-    let user_setting = match Setting::load(None) {
+    let mut user_setting = match Setting::load(None) {
         Ok(config) => config,
         Err(e) => {
             error!("加载配置失败: {}", e);
@@ -36,11 +34,22 @@ fn main() {
             // 尝试保存默认配置
             if let Err(e) = default_config.save(None) {
                 error!("保存默认配置失败: {}", e);
-                // 即使保存失败，我们仍然可以使用默认配置继续运行
             }
             default_config
         }
     };
+
+    // 如果设备名称为空，使用主机名
+    if user_setting.general.device_name.is_empty() {
+        let hostname = hostname::get()
+            .map(|h: std::ffi::OsString| h.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "Unknown Device".to_string());
+        user_setting.general.device_name = hostname;
+        // 保存更新后的配置
+        if let Err(e) = user_setting.save(None) {
+            error!("Fail to save default device name: {}", e);
+        }
+    }
 
     // 确保配置已保存到全局 CONFIG 变量中
     {
@@ -61,13 +70,13 @@ fn main() {
     };
 
     // 注册当前设备
-    let (device_id, device_name) = {
+    let device_id = {
         let manager = get_device_manager();
         match manager.get_current_device() {
             Ok(Some(device)) => {
                 SETTING.write().unwrap().set_device_id(device.id.clone());
                 log::info!("Self device already exists: {}", device.id);
-                (device.id, device.alias)
+                device.id
             }
             Ok(None) => {
                 // TODO: 获取本地IP地址
@@ -82,12 +91,7 @@ fn main() {
                 log::info!("Registered self device with ID: {}", device_id);
                 SETTING.write().unwrap().set_device_id(device_id.clone());
 
-                // Use hostname as default device name when registering
-                let device_name = hostname::get()
-                    .map(|h: std::ffi::OsString| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|_| "Unknown Device".to_string());
-
-                (device_id, Some(device_name))
+                device_id
             }
             Err(e) => {
                 panic!("Failed to get self device: {}", e);
@@ -101,7 +105,7 @@ fn main() {
         match AppRuntime::new(
             user_setting.clone(),
             device_id,
-            device_name.unwrap_or("Unknown Device".to_string()),
+            user_setting.general.device_name.clone(),
         )
         .await
         {

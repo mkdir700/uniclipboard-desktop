@@ -179,6 +179,80 @@ All frontend-backend communication through Tauri commands defined in [api/](src-
 
 ## Development Style
 
+### Problem-Solving Philosophy
+
+**CRITICAL**: Don't treat symptoms in isolation. Always step back and analyze problems from a higher-level perspective before implementing fixes.
+
+**Symptoms vs. Root Causes**:
+
+```
+❌ ANTI-PATTERN - Symptom-focused
+"Component renders wrong" → Add useEffect hack → "State desync" → Add more hacks → Spaghetti code
+
+✅ CORRECT - Root cause analysis
+"Component renders wrong" → Trace data flow → Identify architectural gap → Design proper solution → Fix at the right layer
+```
+
+**High-Level Thinking Checklist**:
+
+Before making changes, ask:
+
+1. **Where does this problem originate?**
+   - UI layer issue, or state management problem?
+   - API contract mismatch, or business logic gap?
+   - Infrastructure limitation, or architectural flaw?
+
+2. **What's the systemic fix?**
+   - Can this be solved by improving the abstraction?
+   - Would a design pattern eliminate this class of bugs?
+   - Is there a missing piece in the architecture?
+
+3. **What are the trade-offs?**
+   - Short-term hack vs. long-term maintainability
+   - Local fix vs. systemic improvement
+   - Quick workaround vs. proper solution
+
+**Examples**:
+
+```rust
+// ❌ WRONG - Treating symptoms everywhere
+async fn sync_clipboard() {
+    match send_to_device().await {
+        Err(_) => sleep(Duration::from_secs(1)).await, // Band-aid
+        Ok(_) => {}
+    }
+}
+
+// ✅ CORRECT - Fix the retry logic at the infrastructure layer
+// infrastructure/sync/retry_policy.rs
+pub struct RetryPolicy {
+    max_attempts: u32,
+    backoff_strategy: BackoffStrategy,
+}
+
+async fn sync_clipboard_with_retry(policy: &RetryPolicy) -> Result<()> {
+    policy.execute(|| send_to_device()).await
+}
+```
+
+```tsx
+// ❌ WRONG - Local state patch
+function DeviceList() {
+  const [devices, setDevices] = useState([])
+  useEffect(() => {
+    fetchDevices().then(setDevices)
+    setInterval(() => fetchDevices().then(setDevices), 5000) // Manual polling
+  }, [])
+}
+
+// ✅ CORRECT - Leverage existing state management (Redux RTK Query)
+function DeviceList() {
+  const { data: devices } = useGetDevicesQuery() // Built-in caching, refetch, error handling
+}
+```
+
+**Rationale**: High-level problem-solving prevents technical debt, reduces code complexity, and creates more maintainable solutions. Always identify the root cause and fix it at the appropriate abstraction layer.
+
 ### Rust Error Handling
 
 **CRITICAL**: Never use `unwrap()` or `expect()` in production code. Always handle errors explicitly:

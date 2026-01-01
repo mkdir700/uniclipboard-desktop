@@ -160,8 +160,9 @@ impl AppRuntime {
 
         // UniClipboard is owned by Self, but Self is consumed. The loop runs in THIS task (main thread blocked or spawned task).
         // clipboard_service.start() spawns tasks but uses internal Arc states.
-        // We need access to ClipboardSyncService for some commands?
-        // ClipboardSyncService only exposes `get_record_manager`.
+
+        // Wrap clipboard_service in Arc to be used by ClipboardService wrapper
+        let clipboard_service_arc = Arc::new(self.clipboard_service);
         // We can keep `clipboard_service` alive in this scope.
 
         info!("AppRuntime started successfully, entering command loop");
@@ -173,11 +174,78 @@ impl AppRuntime {
 
             tokio::select! {
                 Some(cmd) = clipboard_cmd_rx.recv() => {
+                    let service = crate::application::clipboard_service::ClipboardService::new(
+                         // We need Arc<ClipboardSyncService>.
+                         // But self.clipboard_service is ClipboardSyncService (owned).
+                         // We cannot wrap it in Arc here because we are in a loop and it's owned by self, and self is consumed.
+                         // However, we can wrap it in Arc BEFORE the loop.
+                        // See 'Proposed Changes' notes.
+                        // Actually, let's fix the loop structure first.
+                        // I will assume I have 'clipboard_service_arc' available.
+                         clipboard_service_arc.clone()
+                    );
+
                     match cmd {
-                        ClipboardCommand::GetItems { respond_to } => {
-                            let result: anyhow::Result<Vec<crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord>> = self.clipboard_service.get_record_manager().get_records(None, None, None, None).await;
-                            let response = result.map_err(|e: anyhow::Error| e.to_string());
-                            let _ = respond_to.send(response);
+                         ClipboardCommand::GetStats { respond_to } => {
+                            let result = service.get_clipboard_stats().await.map_err(|e| e.to_string());
+                            let _ = respond_to.send(result);
+                        }
+                        ClipboardCommand::GetItems {
+                            order_by,
+                            limit,
+                            offset,
+                            filter,
+                            respond_to,
+                        } => {
+                            let result = service
+                                .get_clipboard_items(order_by, limit, offset, filter)
+                                .await
+                                .map_err(|e| e.to_string());
+                            let _ = respond_to.send(result);
+                        }
+                        ClipboardCommand::GetItem {
+                            id,
+                            full_content,
+                            respond_to,
+                        } => {
+                            let result = service
+                                .get_clipboard_item(&id, full_content)
+                                .await
+                                .map_err(|e| e.to_string());
+                            let _ = respond_to.send(result);
+                        }
+                        ClipboardCommand::DeleteItem { id, respond_to } => {
+                            let result = service
+                                .delete_clipboard_item(&id)
+                                .await
+                                .map_err(|e| e.to_string());
+                            let _ = respond_to.send(result);
+                        }
+                        ClipboardCommand::ClearItems { respond_to } => {
+                            let result = service
+                                .clear_clipboard_items()
+                                .await
+                                .map_err(|e| e.to_string());
+                            let _ = respond_to.send(result);
+                        }
+                        ClipboardCommand::CopyItem { id, respond_to } => {
+                            let result = service
+                                .copy_clipboard_item(&id)
+                                .await
+                                .map_err(|e| e.to_string());
+                            let _ = respond_to.send(result);
+                        }
+                        ClipboardCommand::ToggleFavorite {
+                            id,
+                            is_favorited,
+                            respond_to,
+                        } => {
+                            let result = if is_favorited {
+                                service.favorite_clipboard_item(&id).await
+                            } else {
+                                service.unfavorite_clipboard_item(&id).await
+                            };
+                            let _ = respond_to.send(result.map_err(|e| e.to_string()));
                         }
                     }
                 }

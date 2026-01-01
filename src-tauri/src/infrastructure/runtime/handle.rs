@@ -13,16 +13,49 @@ use crate::config::Setting;
 pub enum ClipboardCommand {
     /// Get clipboard items
     GetItems {
+        order_by: Option<crate::infrastructure::storage::db::models::clipboard_record::OrderBy>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        filter: Option<crate::infrastructure::storage::db::models::clipboard_record::Filter>,
         respond_to: tokio::sync::oneshot::Sender<
-            Result<
-                Vec<
-                    crate::infrastructure::storage::db::models::clipboard_record::DbClipboardRecord,
-                >,
-                String,
-            >,
+            Result<Vec<crate::application::clipboard_service::ClipboardItemResponse>, String>,
         >,
     },
     // More commands as needed...
+    /// Get clipboard stats
+    GetStats {
+        respond_to: tokio::sync::oneshot::Sender<
+            Result<crate::infrastructure::storage::record_manager::ClipboardStats, String>,
+        >,
+    },
+    /// Get single clipboard item
+    GetItem {
+        id: String,
+        full_content: bool,
+        respond_to: tokio::sync::oneshot::Sender<
+            Result<Option<crate::application::clipboard_service::ClipboardItemResponse>, String>,
+        >,
+    },
+    /// Delete clipboard item
+    DeleteItem {
+        id: String,
+        respond_to: tokio::sync::oneshot::Sender<Result<bool, String>>,
+    },
+    /// Clear all clipboard items
+    ClearItems {
+        respond_to: tokio::sync::oneshot::Sender<Result<usize, String>>,
+    },
+    /// Copy clipboard item to system clipboard
+    CopyItem {
+        id: String,
+        respond_to: tokio::sync::oneshot::Sender<Result<bool, String>>,
+    },
+    /// Toggle favorite status
+    ToggleFavorite {
+        id: String,
+        is_favorited: bool,
+        respond_to: tokio::sync::oneshot::Sender<Result<bool, String>>,
+    },
 }
 
 /// Commands that can be sent to the P2P subsystem

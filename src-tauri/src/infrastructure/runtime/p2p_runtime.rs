@@ -64,9 +64,14 @@ impl P2PRuntime {
         // Spawn PairingManager actor
         let pairing_network_cmd_tx = network_cmd_tx.clone();
         let pairing_event_tx = network_event_tx.clone();
+        let pairing_device_name = device_name.clone();
         tokio::spawn(async move {
-            let pairing_manager =
-                PairingManager::new(pairing_network_cmd_tx, pairing_event_tx, pairing_cmd_rx);
+            let pairing_manager = PairingManager::new(
+                pairing_network_cmd_tx,
+                pairing_event_tx,
+                pairing_cmd_rx,
+                pairing_device_name,
+            );
             pairing_manager.run().await;
         });
 

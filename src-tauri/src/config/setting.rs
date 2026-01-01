@@ -40,6 +40,12 @@ pub struct GeneralSetting {
     pub theme_color: String,
     #[serde(default = "default_language")]
     pub language: String,
+    #[serde(default = "default_device_name")]
+    pub device_name: String,
+}
+
+fn default_device_name() -> String {
+    String::new()
 }
 
 fn default_theme_color() -> String {
@@ -149,6 +155,7 @@ impl Setting {
                 theme: ThemeMode::System,
                 theme_color: "inc".to_string(),
                 language: default_language(),
+                device_name: default_device_name(),
             },
             sync: SyncSetting {
                 auto_sync: true,

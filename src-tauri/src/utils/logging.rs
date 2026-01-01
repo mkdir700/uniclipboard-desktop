@@ -14,6 +14,8 @@ pub fn get_builder() -> tauri_plugin_log::Builder {
     let mut builder = tauri_plugin_log::Builder::new()
         .timezone_strategy(TimezoneStrategy::UseLocal)
         .level(default_log_level)
+        // 过滤 libp2p_mdns 模块的 ERROR 日志（代理软件虚拟网络接口导致的无害错误）
+        .level_for("libp2p_mdns", LevelFilter::Warn)
         // 过滤掉 tauri-plugin-log 自己的日志，避免无限循环
         // 因为 Webview 目标会通过 log://log 事件发送日志，而这些事件的日志
         // 会再次触发 log://log 事件，形成死循环
@@ -37,10 +39,10 @@ pub fn get_builder() -> tauri_plugin_log::Builder {
             // 保持现有格式: 时间戳 级别 [文件:行号] [模块] 消息
             let level_color = match record.level() {
                 log::Level::Error => "\x1b[31;1m", // 红色加粗
-                log::Level::Warn => "\x1b[33m",     // 黄色
-                log::Level::Info => "\x1b[32m",     // 绿色
-                log::Level::Debug => "\x1b[34m",    // 蓝色
-                log::Level::Trace => "\x1b[36m",    // 青色
+                log::Level::Warn => "\x1b[33m",    // 黄色
+                log::Level::Info => "\x1b[32m",    // 绿色
+                log::Level::Debug => "\x1b[34m",   // 蓝色
+                log::Level::Trace => "\x1b[36m",   // 青色
             };
             let reset = "\x1b[0m";
 

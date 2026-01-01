@@ -6,6 +6,8 @@
 
 import { Smartphone, Network, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import React, { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import {
   respondToConnectionRequest,
   type ConnectionRequestInfo,
@@ -26,15 +28,15 @@ interface ConnectionRequestModalProps {
   request: ConnectionRequestInfo | null
 }
 
-type RequestStatus = 'idle' | 'processing' | 'accepted' | 'rejected' | 'error'
+type RequestStatus = 'idle' | 'processing' | 'accepted' | 'rejected'
 
 const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
   open,
   onClose,
   request,
 }) => {
+  const { t } = useTranslation()
   const [status, setStatus] = useState<RequestStatus>('idle')
-  const [errorMessage, setErrorMessage] = useState<string>('')
   const [timeLeft, setTimeLeft] = useState<number>(30)
 
   const handleResponse = useCallback(
@@ -59,15 +61,23 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
             onClose()
           }, 1500)
         } else {
-          setStatus('error')
-          setErrorMessage(response.message)
+          setStatus('idle')
+          toast.error(
+            response.message ||
+              t('connectionRequest.status.error', {
+                message: t('connectionRequest.status.processing'),
+              })
+          )
         }
-      } catch {
-        setStatus('error')
-        setErrorMessage('处理失败，请重试')
+      } catch (error) {
+        console.error('Connection request error:', error)
+        setStatus('idle')
+        toast.error(
+          t('connectionRequest.status.error', { message: t('connectionRequest.status.processing') })
+        )
       }
     },
-    [request, onClose]
+    [request, onClose, t]
   )
 
   // 倒计时自动拒绝
@@ -88,13 +98,12 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [open, request])
+  }, [open, request, status, handleResponse])
 
   // 重置状态
   useEffect(() => {
     if (open && request) {
       setStatus('idle')
-      setErrorMessage('')
       setTimeLeft(30)
     }
   }, [open, request])
@@ -105,23 +114,28 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>设备连接请求</DialogTitle>
+          <DialogTitle>{t('connectionRequest.title')}</DialogTitle>
           <DialogDescription asChild>
             <div>
               {status === 'idle' && (
                 <p className="text-muted-foreground">
-                  设备 {request.requester_alias || request.requester_device_id} 请求连接到此设备
+                  {t('connectionRequest.status.idle', {
+                    name: request.requester_alias || request.requester_device_id,
+                  })}
                 </p>
               )}
-              {status === 'processing' && <p className="text-muted-foreground">正在处理...</p>}
+              {status === 'processing' && (
+                <p className="text-muted-foreground">{t('connectionRequest.status.processing')}</p>
+              )}
               {status === 'accepted' && (
-                <p className="text-muted-foreground text-green-600">已接受连接请求</p>
+                <p className="text-muted-foreground text-green-600">
+                  {t('connectionRequest.status.accepted')}
+                </p>
               )}
               {status === 'rejected' && (
-                <p className="text-muted-foreground text-red-600">已拒绝连接请求</p>
-              )}
-              {status === 'error' && (
-                <p className="text-muted-foreground text-red-600">{errorMessage}</p>
+                <p className="text-muted-foreground text-red-600">
+                  {t('connectionRequest.status.rejected')}
+                </p>
               )}
             </div>
           </DialogDescription>
@@ -138,7 +152,8 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
                   </div>
                   <div className="flex-1">
                     <div className="font-semibold text-lg">
-                      {request.requester_alias || `设备 ${request.requester_device_id}`}
+                      {request.requester_alias ||
+                        t('connectionRequest.info.device', { id: request.requester_device_id })}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       ID: {request.requester_device_id}
@@ -149,11 +164,13 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
                 <div className="mt-4 pt-4 border-t border-border/50">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Network className="w-4 h-4" />
-                    <span>IP: {request.requester_ip}</span>
+                    <span>{t('connectionRequest.info.ip', { ip: request.requester_ip })}</span>
                   </div>
                   {request.requester_platform && (
                     <div className="text-xs text-muted-foreground mt-1">
-                      平台: {request.requester_platform}
+                      {t('connectionRequest.info.platform', {
+                        platform: request.requester_platform,
+                      })}
                     </div>
                   )}
                 </div>
@@ -161,8 +178,9 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
 
               {/* 倒计时提示 */}
               <div className="text-center text-sm text-muted-foreground">
-                <span className={timeLeft <= 10 ? 'text-red-500' : ''}>{timeLeft}</span>{' '}
-                秒后自动拒绝
+                <span className={timeLeft <= 10 ? 'text-red-500' : ''}>
+                  {t('connectionRequest.timeout', { time: timeLeft })}
+                </span>
               </div>
 
               {/* 操作按钮 */}
@@ -173,14 +191,14 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
                   className="flex-1"
                   disabled={status !== 'idle'}
                 >
-                  拒绝
+                  {t('connectionRequest.actions.reject')}
                 </Button>
                 <Button
                   onClick={() => handleResponse(true)}
                   className="flex-1"
                   disabled={status !== 'idle'}
                 >
-                  接受
+                  {t('connectionRequest.actions.accept')}
                 </Button>
               </div>
             </div>
@@ -189,38 +207,27 @@ const ConnectionRequestModal: React.FC<ConnectionRequestModalProps> = ({
           {status === 'processing' && (
             <div className="flex flex-col items-center py-6">
               <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
-              <p className="text-sm text-muted-foreground">正在处理连接请求...</p>
+              <p className="text-sm text-muted-foreground">
+                {t('connectionRequest.status.establishing')}
+              </p>
             </div>
           )}
 
           {status === 'accepted' && (
             <div className="flex flex-col items-center py-6">
               <CheckCircle2 className="w-12 h-12 text-green-500 mb-4" />
-              <p className="text-sm font-medium text-green-600">连接已建立</p>
+              <p className="text-sm font-medium text-green-600">
+                {t('connectionRequest.status.connected')}
+              </p>
             </div>
           )}
 
           {status === 'rejected' && (
             <div className="flex flex-col items-center py-6">
               <XCircle className="w-12 h-12 text-red-500 mb-4" />
-              <p className="text-sm font-medium text-red-600">已拒绝连接</p>
-            </div>
-          )}
-
-          {status === 'error' && (
-            <div className="space-y-4">
-              <div className="flex items-start gap-3 p-3 bg-destructive/10 rounded-lg">
-                <XCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-destructive">{errorMessage}</p>
-              </div>
-              <div className="flex gap-3">
-                <Button onClick={onClose} variant="outline" className="flex-1">
-                  关闭
-                </Button>
-                <Button onClick={() => handleResponse(true)} className="flex-1">
-                  重试
-                </Button>
-              </div>
+              <p className="text-sm font-medium text-red-600">
+                {t('connectionRequest.status.rejectedResult')}
+              </p>
             </div>
           )}
         </div>

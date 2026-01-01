@@ -23,6 +23,11 @@
       "general": {
         "title": "通用设置",
         "startupTitle": "启动设置",
+        "deviceName": {
+          "label": "设备名称",
+          "description": "用于在局域网中识别此设备",
+          "placeholder": "输入设备名称"
+        },
         "autoStart": {
           "label": "开机自启动",
           "description": "系统启动时自动启动 Uniclipboard"
@@ -280,5 +285,84 @@
     "cancelLabel": "取消",
     "deleteLabel": "删除",
     "deletingLabel": "删除中..."
+  },
+  "devices": {
+    "title": "设备管理",
+    "addNew": "添加新设备",
+    "tabs": {
+      "connected": "已连接设备",
+      "requests": "配对请求"
+    },
+    "sections": {
+      "requests": "配对请求",
+      "noRequests": "暂无配对请求"
+    }
+  },
+  "pairing": {
+    "steps": {
+      "discovery": "发现设备",
+      "connecting": "正在连接...",
+      "pinVerify": "安全验证",
+      "success": "配对成功",
+      "failed": "配对失败"
+    },
+    "discovery": {
+      "description": "请确保两台设备都在同一局域网下",
+      "searching": "正在搜索设备...",
+      "noDevices": "未发现可连接设备",
+      "reScan": "重新扫描",
+      "foundCount": "发现 {{count}} 个设备",
+      "unknownDevice": "未知设备",
+      "connect": "连接"
+    },
+    "connecting": {
+      "title": "正在连接 {{deviceName}}",
+      "pleaseWait": "请稍候..."
+    },
+    "pinVerify": {
+      "description": "请确认两台设备上的 PIN 码是否一致",
+      "pinLabel": "配对 PIN 码",
+      "warning": "请确保两台设备显示相同的 PIN 码",
+      "notMatch": "不匹配",
+      "match": "确认匹配"
+    },
+    "success": {
+      "title": "配对成功！"
+    },
+    "failed": {
+      "title": "配对失败",
+      "retry": "重试",
+      "errors": {
+        "loadPeers": "无法获取设备列表",
+        "reject": "连接请求被拒绝",
+        "initiate": "发起配对失败",
+        "verifyPin": "验证 PIN 失败"
+      }
+    }
+  },
+  "connectionRequest": {
+    "title": "设备连接请求",
+    "status": {
+      "idle": "设备 {{name}} 请求连接到此设备",
+      "processing": "正在处理...",
+      "accepted": "已接受连接请求",
+      "rejected": "已拒绝连接请求",
+      "error": "处理失败：{{message}}",
+      "establishing": "正在处理连接请求...",
+      "connected": "连接已建立",
+      "rejectedResult": "已拒绝连接"
+    },
+    "info": {
+      "device": "设备 {{id}}",
+      "ip": "IP: {{ip}}",
+      "platform": "平台: {{platform}}"
+    },
+    "timeout": "{{time}} 秒后自动拒绝",
+    "actions": {
+      "reject": "拒绝",
+      "accept": "接受",
+      "close": "关闭",
+      "retry": "重试"
+    }
   }
 }

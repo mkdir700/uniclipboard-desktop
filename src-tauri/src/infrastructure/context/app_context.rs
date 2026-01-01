@@ -87,10 +87,12 @@ impl AppContextBuilder {
         let local_peer_id = libp2p::PeerId::from(local_key.public()).to_string();
 
         // Create pairing manager
+        let pairing_device_name = device_name.clone();
         let pairing_manager = Arc::new(PairingManager::new(
             command_tx.clone(),
             event_tx.clone(),
             pairing_cmd_rx,
+            pairing_device_name,
         ));
 
         // Spawn network manager task
@@ -165,10 +167,15 @@ impl AppContextBuilder {
             Arc::new(FileStorageManager::new().expect("Failed to create FileStorageManager"));
 
         // Get device name for P2P - use system hostname or default
-        let device_name = gethostname::gethostname()
-            .to_str()
-            .unwrap_or("Unknown Device")
-            .to_string();
+        // Get device name for P2P - use settings or system hostname
+        let device_name = if !self.user_setting.general.device_name.is_empty() {
+            self.user_setting.general.device_name.clone()
+        } else {
+            gethostname::gethostname()
+                .to_str()
+                .unwrap_or("Unknown Device")
+                .to_string()
+        };
 
         // Build P2P components
         let (p2p_command_tx, pairing_manager, p2p_sync, local_peer_id) =

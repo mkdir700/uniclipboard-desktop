@@ -16,14 +16,14 @@ use serde::{Deserialize, Serialize};
 /// 文本摘要的最大长度
 const MAX_TEXT_PREVIEW_LENGTH: usize = 1000;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TextItem {
     pub display_text: String,
     pub is_truncated: bool,
     pub size: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ImageItem {
     pub thumbnail: String,
     pub size: usize,
@@ -31,23 +31,23 @@ pub struct ImageItem {
     pub height: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FileItem {
     pub file_names: Vec<String>,
     pub file_sizes: Vec<usize>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LinkItem {
     pub url: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CodeItem {
     pub code: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum ClipboardItem {
     #[serde(rename = "text")]
     Text(TextItem),
@@ -63,7 +63,7 @@ pub enum ClipboardItem {
     Unknown,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ClipboardItemResponse {
     pub id: String,
     pub device_id: String,

@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { onConnectionRequest, type ConnectionRequestInfo } from '@/api/deviceConnection'
 import { DeviceList, DeviceHeader } from '@/components'
-import { PairingModal, ConnectionRequestModal } from '@/components/device'
+import { ConnectionRequestModal } from '@/components/device'
 import { DeviceTab } from '@/components/device/Header'
+import PairingDialog from '@/components/PairingDialog'
 
 const DevicesPage: React.FC = () => {
-  const [showPairingModal, setShowPairingModal] = useState(false)
+  const { t } = useTranslation()
+  const [showPairingDialog, setShowPairingDialog] = useState(false)
   const [activeTab, setActiveTab] = useState<DeviceTab>('connected')
 
   // 连接请求相关状态
@@ -42,14 +45,14 @@ const DevicesPage: React.FC = () => {
   }, [setupConnectionRequestListener])
 
   const handleAddDevice = () => {
-    setShowPairingModal(true)
+    setShowPairingDialog(true)
   }
 
-  const handleClosePairingModal = () => {
-    setShowPairingModal(false)
+  const handleClosePairingDialog = () => {
+    setShowPairingDialog(false)
   }
 
-  const handleConnectSuccess = () => {
+  const handlePairingSuccess = () => {
     // 连接成功后刷新设备列表
     // TODO: 可以添加刷新设备列表的逻辑
   }
@@ -122,12 +125,13 @@ const DevicesPage: React.FC = () => {
           <div id="requests" ref={requestsRef} className="scroll-mt-24 mb-12">
             <div className="flex items-center gap-4 mb-4 mt-8">
               <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-                配对请求
+                {t('devices.sections.requests')}
               </h3>
               <div className="h-px flex-1 bg-border/50"></div>
             </div>
+            {/* TODO: Add pairing request list if we have separate listener for p2p requests */}
             <div className="flex flex-col items-center justify-center p-8 border border-dashed border-border/50 rounded-lg bg-muted/5 text-muted-foreground">
-              <p>暂无配对请求</p>
+              <p>{t('devices.sections.noRequests')}</p>
             </div>
           </div>
 
@@ -138,14 +142,14 @@ const DevicesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 设备配对模态框 */}
-      <PairingModal
-        open={showPairingModal}
-        onClose={handleClosePairingModal}
-        onConnectSuccess={handleConnectSuccess}
+      {/* P2P Pairing Dialog */}
+      <PairingDialog
+        open={showPairingDialog}
+        onClose={handleClosePairingDialog}
+        onPairingSuccess={handlePairingSuccess}
       />
 
-      {/* 连接请求确认模态框 */}
+      {/* Legacy Connection Request Modal (keep for manual requests compatible if needed) */}
       <ConnectionRequestModal
         open={pendingRequest !== null}
         onClose={handleCloseConnectionRequest}
