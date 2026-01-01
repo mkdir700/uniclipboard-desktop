@@ -7,8 +7,6 @@ use log::{error, info};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::select;
-use tokio::signal::ctrl_c;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::application::clipboard_content_receiver_service::ClipboardContentReceiver;
@@ -34,7 +32,6 @@ pub struct ClipboardSyncService {
     record_manager: ClipboardRecordManager,
     file_storage: FileStorageManager,
     is_running: Arc<AtomicBool>,
-    is_paused: Arc<AtomicBool>,
     /// Last payload to prevent duplicate processing (echo cancellation)
     last_payload: Arc<RwLock<Option<Payload>>>,
     download_decision_maker: DownloadDecisionMaker,
@@ -61,7 +58,6 @@ impl ClipboardSyncService {
             record_manager,
             file_storage,
             is_running: Arc::new(AtomicBool::new(false)),
-            is_paused: Arc::new(AtomicBool::new(false)),
             last_payload: Arc::new(RwLock::new(None)),
             download_decision_maker: DownloadDecisionMaker::new(),
             content_receiver,
@@ -85,10 +81,9 @@ impl ClipboardSyncService {
 
     /// Start clipboard synchronization
     pub async fn start(&self) -> Result<()> {
-        if self.is_running.load(Ordering::SeqCst) {
+        if self.is_running.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
             anyhow::bail!("Already running");
         }
-        self.is_running.store(true, Ordering::SeqCst);
 
         // Start local clipboard monitoring
         info!("Starting local clipboard monitoring");
@@ -138,9 +133,9 @@ impl ClipboardSyncService {
                         }
                     }
 
-                    // Store as last payload
-                    let prev_payload = last_payload.read().await.clone();
-                    *last_payload.write().await = Some(payload.clone());
+                    // Store as last payload (atomically capture old value and write new value)
+                    let prev_payload =
+                        std::mem::replace(&mut *last_payload.write().await, Some(payload.clone()));
 
                     // Step 1: Persist to file storage
                     let storage_path = match file_storage.store(&payload).await {
@@ -223,8 +218,11 @@ impl ClipboardSyncService {
                             Ok(payload) => {
                                 info!("Setting local clipboard: {}", payload);
 
-                                let prev_payload = last_payload.read().await.clone();
-                                *last_payload.write().await = Some(payload.clone());
+                                // Atomically capture old value and write new value
+                                let prev_payload = std::mem::replace(
+                                    &mut *last_payload.write().await,
+                                    Some(payload.clone()),
+                                );
 
                                 // Write to local clipboard
                                 if let Err(e) = clipboard.set_clipboard_content(payload).await {
@@ -259,54 +257,6 @@ impl ClipboardSyncService {
             }
         });
 
-        Ok(())
-    }
-
-    /// Stop synchronization
-    pub async fn stop(&self) -> Result<()> {
-        if !self.is_running.load(Ordering::SeqCst) {
-            anyhow::bail!("Not running");
-        }
-        self.is_running.store(false, Ordering::SeqCst);
-
-        self.clipboard.stop_monitoring().await?;
-        self.remote_sync.stop().await?;
-
-        Ok(())
-    }
-
-    /// Pause synchronization
-    pub async fn pause(&self) -> Result<()> {
-        self.is_paused.store(true, Ordering::SeqCst);
-        self.clipboard.pause().await;
-        if let Err(e) = self.remote_sync.pause().await {
-            error!("Failed to pause remote sync: {:?}", e);
-        }
-        Ok(())
-    }
-
-    /// Resume synchronization
-    pub async fn resume(&self) -> Result<()> {
-        self.is_paused.store(false, Ordering::SeqCst);
-        self.clipboard.resume().await;
-        if let Err(e) = self.remote_sync.resume().await {
-            error!("Failed to resume remote sync: {:?}", e);
-        }
-        Ok(())
-    }
-
-    /// Wait for stop signal (Ctrl+C)
-    pub async fn wait_for_stop(&self) -> Result<()> {
-        loop {
-            select! {
-                _ = ctrl_c() => {
-                    info!("Received Ctrl+C, stopping...");
-                    break;
-                }
-            }
-        }
-        self.stop().await?;
-        info!("Clipboard sync stopped");
         Ok(())
     }
 }

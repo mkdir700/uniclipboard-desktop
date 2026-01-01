@@ -5,7 +5,6 @@ use crate::message::Payload;
 use anyhow::anyhow;
 use anyhow::Result;
 use async_trait::async_trait;
-use clipboard_rs::WatcherShutdown;
 use clipboard_rs::{ClipboardWatcher, ClipboardWatcherContext};
 use log::error;
 use log::{debug, info};
@@ -22,7 +21,6 @@ pub struct LocalClipboard {
     paused: Arc<(TokioMutex<bool>, Notify)>,
     stopped: Arc<TokioMutex<bool>>,
     watcher: Arc<Mutex<ClipboardWatcherContext<RsClipboardChangeHandler>>>,
-    watcher_shutdown: Arc<TokioMutex<Option<WatcherShutdown>>>,
     rw_lock: Arc<RwLock<bool>>,
     last_write: Arc<TokioMutex<Instant>>,
     write_cooldown: Duration,
@@ -30,46 +28,19 @@ pub struct LocalClipboard {
 }
 
 impl LocalClipboard {
-    pub fn new() -> Result<Self> {
-        let notify = Arc::new(Notify::new());
-        let rs_clipboard = RsClipboard::new(notify.clone())?;
-        let clipboard_change_handler = RsClipboardChangeHandler::new(notify);
-        let mut watcher: ClipboardWatcherContext<RsClipboardChangeHandler> =
-            ClipboardWatcherContext::new()
-                .map_err(|e| anyhow!("Failed to create clipboard watcher context: {:?}", e))?;
-        let watcher_shutdown = watcher
-            .add_handler(clipboard_change_handler)
-            .get_shutdown_channel();
-        Ok(Self {
-            rs_clipboard: Arc::new(rs_clipboard),
-            paused: Arc::new((TokioMutex::new(false), Notify::new())),
-            stopped: Arc::new(TokioMutex::new(false)),
-            watcher: Arc::new(Mutex::new(watcher)),
-            watcher_shutdown: Arc::new(TokioMutex::new(Some(watcher_shutdown))),
-            rw_lock: Arc::new(RwLock::new(false)),
-            last_write: Arc::new(TokioMutex::new(Instant::now())),
-            write_cooldown: Duration::from_millis(500), // 在 500ms 内，忽略自己写入导致的剪贴板变更事件
-            is_self_write: Arc::new(AtomicBool::new(false)),
-        })
-    }
-
     /// 创建一个新的 LocalClipboard 实例，使用指定的配置
     pub fn with_user_setting(user_setting: Setting) -> Result<Self> {
         let notify = Arc::new(Notify::new());
         let rs_clipboard = RsClipboard::with_user_setting(notify.clone(), user_setting)?;
-        let clipboard_change_handler = RsClipboardChangeHandler::new(notify);
-        let mut watcher: ClipboardWatcherContext<RsClipboardChangeHandler> =
+        let watcher: ClipboardWatcherContext<RsClipboardChangeHandler> =
             ClipboardWatcherContext::new()
                 .map_err(|e| anyhow!("Failed to create clipboard watcher context: {:?}", e))?;
-        let watcher_shutdown = watcher
-            .add_handler(clipboard_change_handler)
-            .get_shutdown_channel();
+
         Ok(Self {
             rs_clipboard: Arc::new(rs_clipboard),
             paused: Arc::new((TokioMutex::new(false), Notify::new())),
             stopped: Arc::new(TokioMutex::new(false)),
             watcher: Arc::new(Mutex::new(watcher)),
-            watcher_shutdown: Arc::new(TokioMutex::new(Some(watcher_shutdown))),
             rw_lock: Arc::new(RwLock::new(false)),
             last_write: Arc::new(TokioMutex::new(Instant::now())),
             write_cooldown: Duration::from_millis(500), // 在 500ms 内，忽略自己写入导致的剪贴板变更事件
@@ -80,17 +51,6 @@ impl LocalClipboard {
 
 #[async_trait]
 impl LocalClipboardTrait for LocalClipboard {
-    async fn pause(&self) {
-        let mut is_paused = self.paused.0.lock().await;
-        *is_paused = true;
-    }
-
-    async fn resume(&self) {
-        let mut is_paused = self.paused.0.lock().await;
-        *is_paused = false;
-        self.paused.1.notify_waiters();
-    }
-
     async fn read(&self) -> Result<Payload> {
         let reading_lock = self.rw_lock.read().await;
         let payload = self.rs_clipboard.read()?;
@@ -167,15 +127,6 @@ impl LocalClipboardTrait for LocalClipboard {
             }
         });
         Ok(rx)
-    }
-
-    async fn stop_monitoring(&self) -> Result<()> {
-        let mut is_stopped = self.stopped.lock().await;
-        *is_stopped = true;
-        if let Some(shutdown) = self.watcher_shutdown.lock().await.take() {
-            shutdown.stop();
-        }
-        Ok(())
     }
 
     /// 写入剪贴板内容，并设置自写标志和更新最后写入时间
