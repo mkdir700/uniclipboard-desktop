@@ -134,9 +134,16 @@ impl NetworkManager {
             error!("Failed to subscribe to clipboard topic: {}", e);
         }
 
-        // Start listening on all interfaces
+        // Get preferred local address for listening
+        // On macOS, binding to 0.0.0.0 can cause mDNS routing issues with multiple interfaces
+        let local_ip = crate::utils::helpers::get_preferred_local_address();
+        info!("P2P NetworkManager binding to {}:31773", local_ip);
+
+        // Start listening on the preferred interface
         // Use a fixed port (31773) so cached addresses remain valid across app restarts.
-        let listen_addr: Multiaddr = "/ip4/0.0.0.0/tcp/31773".parse().unwrap();
+        let listen_addr: Multiaddr = format!("/ip4/{}/tcp/31773", local_ip)
+            .parse()
+            .expect("Invalid listen address");
         if let Err(e) = self.swarm.listen_on(listen_addr) {
             error!("Failed to start listening: {}", e);
             let _ = self

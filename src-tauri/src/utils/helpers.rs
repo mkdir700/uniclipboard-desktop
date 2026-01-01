@@ -46,6 +46,22 @@ pub fn get_local_ip() -> String {
     }
 }
 
+/// 获取首选的本地网络地址用于 P2P 监听
+///
+/// 优先返回非回环的 IPv4 地址，如果不存在则返回 0.0.0.0
+pub fn get_preferred_local_address() -> String {
+    match local_ip() {
+        Ok(ip) => {
+            // local_ip_address 库会自动选择合适的接口
+            ip.to_string()
+        }
+        Err(_) => {
+            log::warn!("Failed to get local IP, falling back to 0.0.0.0");
+            "0.0.0.0".to_string()
+        }
+    }
+}
+
 /// 获取所有网络接口的 IP 地址
 ///
 /// 返回所有非回环的 IPv4 地址，用于显示本机可用的网络接口
