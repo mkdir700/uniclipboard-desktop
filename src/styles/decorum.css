@@ -7,11 +7,16 @@
  * 这些控件仅在 Windows 平台上激活，不会影响其他平台的显示。
  */
 
-/* Decorum 标题栏容器 */
+/* Decorum 标题栏容器 - 定位在标题栏右侧 */
 [data-tauri-decorum-tb] {
-  /* 确保控件与我们的标题栏对齐 */
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
+  pointer-events: auto;
+  z-index: 51;
 }
 
 /* Decorum 标题栏按钮通用样式 */
@@ -19,11 +24,13 @@
 #decorum-tb-minimize,
 #decorum-tb-maximize,
 #decorum-tb-close {
-  /* 使用与 TitleBarButton 相同的颜色标记 */
+  /* 使用与设计系统一致的颜色标记 */
   color: hsl(var(--muted-foreground));
   transition:
     color 150ms ease,
     background-color 150ms ease;
+  /* 确保按钮可点击 */
+  pointer-events: auto;
 }
 
 /* 悬停状态 */
@@ -49,7 +56,7 @@
   color: white;
 }
 
-/* 确保 SVG 图标大小与我们的 TitleBarButton 匹配 */
+/* 确保 SVG 图标大小合适 */
 .decorum-tb-btn svg,
 #decorum-tb-minimize svg,
 #decorum-tb-maximize svg,
@@ -58,7 +65,7 @@
   height: 1rem;
 }
 
-/* 最大化按钮的图标稍小一些，与 TitleBarButton 保持一致 */
+/* 最大化按钮的图标稍小一些 */
 #decorum-tb-maximize svg {
   width: 0.875rem;
   height: 0.875rem;

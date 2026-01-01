@@ -1,7 +1,7 @@
 import { enableModernWindowStyle } from '@cloudworxx/tauri-plugin-mac-rounded-corners'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { Minus, Square, X, ArrowLeft, Search } from 'lucide-react'
-import React, { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, Search } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
@@ -21,39 +21,8 @@ const MAC_WINDOW_STYLE = {
   offsetY: -3,
 } as const
 
-const TitleBarButton = ({
-  onClick,
-  children,
-  className,
-  'aria-label': ariaLabel,
-}: {
-  onClick: () => void
-  children: React.ReactNode
-  className?: string
-  'aria-label': string
-}) => (
-  <button
-    type="button"
-    aria-label={ariaLabel}
-    data-tauri-drag-region="false"
-    onClick={e => {
-      console.log('[TitleBarButton] Button clicked:', ariaLabel)
-      e.stopPropagation()
-      onClick()
-    }}
-    onDoubleClick={event => event.stopPropagation()}
-    className={cn(
-      'h-full w-12 flex items-center justify-center transition-colors duration-150',
-      'text-muted-foreground hover:text-foreground',
-      className
-    )}
-  >
-    {children}
-  </button>
-)
-
 export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleBarProps) => {
-  const [isMaximized, setIsMaximized] = useState(false)
+  const [isMaximized, setIsMaximized] = useState(false) // Used for macOS double-click maximize
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
@@ -94,45 +63,21 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
     }
   }, [isTauri, isMac, windowRef])
 
-  const handleMinimize = async () => {
-    console.log('[TitleBar] Minimize clicked, isTauri:', isTauri)
-    if (!isTauri || !windowRef) return
-    try {
-      console.log('[TitleBar] Calling minimize...')
-      await windowRef.minimize()
-      console.log('[TitleBar] Minimize succeeded')
-    } catch (error) {
-      console.error('[TitleBar] Minimize failed:', error)
-    }
-  }
-
+  // Windows: Double-click to maximize is handled by decorum
+  // macOS: We handle it manually for the drag region
   const handleToggleMaximize = async () => {
-    console.log('[TitleBar] Toggle maximize clicked, isTauri:', isTauri)
+    if (isWindows) return // decorum handles this on Windows
     if (!isTauri || !windowRef) return
     try {
-      const maximized = await windowRef.isMaximized()
-      console.log('[TitleBar] Current maximized state:', maximized)
+      const maximized = isMaximized // Use current state value
       if (maximized) {
         await windowRef.unmaximize()
       } else {
         await windowRef.maximize()
       }
       setIsMaximized(!maximized)
-      console.log('[TitleBar] Toggle maximize succeeded')
     } catch (error) {
       console.error('[TitleBar] Toggle maximize failed:', error)
-    }
-  }
-
-  const handleClose = async () => {
-    console.log('[TitleBar] Close clicked, isTauri:', isTauri)
-    if (!isTauri || !windowRef) return
-    try {
-      console.log('[TitleBar] Calling close...')
-      await windowRef.close()
-      console.log('[TitleBar] Close succeeded')
-    } catch (error) {
-      console.error('[TitleBar] Close failed:', error)
     }
   }
 
@@ -155,13 +100,13 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
           data-tauri-drag-region
           className={cn(
             'flex-1 flex items-center',
-            'pr-4',
+            // On Windows with decorum, reserve space for the injected controls (right side)
             // On macOS, add left padding to avoid traffic lights
             // On other platforms, use default padding
-            isMac ? `pl-16` : 'px-3',
+            isMac ? 'pl-16 pr-4' : isWindows ? 'px-3' : 'px-3 pr-4',
             isDashboardPage ? 'justify-center' : ''
           )}
-          onDoubleClick={isWindows ? handleToggleMaximize : undefined}
+          onDoubleClick={isMac ? handleToggleMaximize : undefined}
         >
           {isSettingsPage ? (
             <button
@@ -206,26 +151,8 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
             </div>
           ) : null}
         </div>
-        {isWindows && (
-          <div className="flex items-center h-full" data-tauri-drag-region="false">
-            <TitleBarButton aria-label="最小化" onClick={handleMinimize}>
-              <Minus className="h-4 w-4" />
-            </TitleBarButton>
-            <TitleBarButton
-              aria-label={isMaximized ? '还原' : '最大化'}
-              onClick={handleToggleMaximize}
-            >
-              <Square className="h-3.5 w-3.5" />
-            </TitleBarButton>
-            <TitleBarButton
-              aria-label="关闭"
-              onClick={handleClose}
-              className="hover:bg-red-500/90 hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </TitleBarButton>
-          </div>
-        )}
+        {/* Windows: Decorum plugin provides native window controls, so we don't render our custom buttons */}
+        {/* The decorum controls are injected into the DOM and styled via decorum.css */}
       </div>
     </div>
   )
