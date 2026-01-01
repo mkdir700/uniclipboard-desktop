@@ -13,12 +13,13 @@ mod utils;
 use application::device_service::get_device_manager;
 use tauri_plugin_decorum::WebviewWindowExt;
 use config::setting::{Setting, SETTING};
-use infrastructure::runtime::AppRuntime;
+use infrastructure::runtime::{AppRuntime, AppRuntimeHandle};
 use infrastructure::security::password::PasswordManager;
 use infrastructure::storage::db::pool::DB_POOL;
 use log::error;
 use std::sync::Arc;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tokio::sync::mpsc;
 use utils::logging;
 
 fn main() {
@@ -99,42 +100,25 @@ fn main() {
         }
     };
 
-    // 创建 AppRuntime
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let app_runtime = runtime.block_on(async {
-        match AppRuntime::new(
-            user_setting.clone(),
-            device_id,
-            user_setting.general.device_name.clone(),
-        )
-        .await
-        {
-            Ok(runtime) => runtime,
-            Err(e) => {
-                error!("Failed to create AppRuntime: {}", e);
-                panic!("Failed to create AppRuntime: {}", e);
-            }
-        }
-    });
-
-    // 获取 runtime handle
-    let app_handle = app_runtime.handle();
-
     // 运行应用
-    run_app(app_runtime, app_handle, user_setting);
+    run_app(user_setting, device_id);
 }
 
 // 运行应用程序
-fn run_app(
-    app_runtime: AppRuntime,
-    app_handle: infrastructure::runtime::AppRuntimeHandle,
-    user_setting: Setting,
-) {
+fn run_app(user_setting: Setting, device_id: String) {
     use tauri::Builder;
     use tauri_plugin_autostart::MacosLauncher;
     use tauri_plugin_single_instance;
     use tauri_plugin_stronghold;
     use tauri_plugin_decorum;
+
+    // Create command channels BEFORE setup
+    let (clipboard_cmd_tx, clipboard_cmd_rx) = mpsc::channel(100);
+    let (p2p_cmd_tx, p2p_cmd_rx) = mpsc::channel(100);
+
+    // Create AppRuntimeHandle with config
+    let config = Arc::new(user_setting.clone());
+    let runtime_handle = AppRuntimeHandle::new(clipboard_cmd_tx.clone(), p2p_cmd_tx.clone(), config);
 
     Builder::default()
         .plugin(logging::get_builder().build())
@@ -148,10 +132,10 @@ fn run_app(
             tauri_plugin_stronghold::Builder::with_argon2(&PasswordManager::get_salt_file_path())
                 .build(),
         )
-        .manage(app_handle)
         .manage(Arc::new(std::sync::Mutex::new(
             api::event::EventListenerState::default(),
         )))
+        .manage(runtime_handle)
         .setup(move |app| {
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("")
@@ -177,9 +161,29 @@ fn run_app(
             // macOS specific window styling will be handled by the rounded corners plugin
             // The plugin will set up rounded corners, traffic lights positioning, and transparency
 
+            // 创建 AppRuntime
+            let app_handle = app.handle().clone();
+            let device_name = user_setting.general.device_name.clone();
+
             // 启动 AppRuntime
             tauri::async_runtime::spawn(async move {
-                // 启动 AppRuntime
+                let app_runtime = match AppRuntime::new_with_channels(
+                    user_setting.clone(),
+                    device_id,
+                    device_name,
+                    app_handle,
+                    clipboard_cmd_rx,
+                    p2p_cmd_rx,
+                )
+                .await
+                {
+                    Ok(runtime) => runtime,
+                    Err(e) => {
+                        error!("Failed to create AppRuntime: {}", e);
+                        return;
+                    }
+                };
+
                 match app_runtime.start().await {
                     Ok(_) => {
                         log::info!("AppRuntime started successfully");
@@ -209,18 +213,18 @@ fn run_app(
             api::clipboard_items::get_clipboard_stats,
             api::event::listen_clipboard_new_content,
             api::event::stop_listen_clipboard_new_content,
-            api::event::listen_connection_request,
-            api::event::stop_listen_connection_request,
-            api::event::listen_connection_response,
-            api::event::stop_listen_connection_response,
+            api::event::listen_p2p_pairing_request,
+            api::event::stop_listen_p2p_pairing_request,
+            api::event::listen_p2p_pin_ready,
+            api::event::stop_listen_p2p_pin_ready,
+            api::event::listen_p2p_pairing_complete,
+            api::event::stop_listen_p2p_pairing_complete,
+            api::event::listen_p2p_pairing_failed,
+            api::event::stop_listen_p2p_pairing_failed,
             api::onboarding::check_onboarding_status,
             api::onboarding::complete_onboarding,
             api::onboarding::get_device_id,
             api::onboarding::save_device_info,
-            api::device_connection::get_local_network_interfaces,
-            api::device_connection::connect_to_device_manual,
-            api::device_connection::respond_to_connection_request,
-            api::device_connection::cancel_connection_request,
             api::p2p::get_local_peer_id,
             api::p2p::get_p2p_peers,
             api::p2p::initiate_p2p_pairing,

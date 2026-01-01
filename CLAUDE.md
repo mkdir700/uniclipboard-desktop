@@ -290,6 +290,65 @@ mod tests {
 
 **Rationale**: Explicit error handling prevents panics in production, provides better error messages, and makes failure modes visible to callers.
 
+### Tauri State Management
+
+**CRITICAL**: All state accessed via `tauri::State<'_, T>` in commands MUST be registered with `.manage()` before the app starts.
+
+**Common Error**: `state not managed for field 'X' on command 'Y'. You must call .manage() before using this command`
+
+**Root Cause**: When a Tauri command uses `state: tauri::State<'_, MyType>` to access shared state, `MyType` must be registered in the Builder setup using `.manage()`.
+
+**Correct Pattern**:
+
+```rust
+// ❌ WRONG - AppRuntimeHandle created internally, never managed
+// main.rs
+fn run_app(setting: Setting) {
+    Builder::default()
+        .setup(|app| {
+            // AppRuntime creates its own channels internally
+            let runtime = AppRuntime::new(...).await?;
+            // No .manage() call - commands will fail!
+            Ok(())
+        })
+}
+
+// api/clipboard_items.rs
+#[tauri::command]
+pub async fn get_clipboard_items(
+    state: tauri::State<'_, AppRuntimeHandle>, // ERROR: not managed!
+) -> Result<Vec<Item>, String> {
+    // ...
+}
+
+// ✅ CORRECT - Create channels before setup, manage the handle
+// main.rs
+fn run_app(setting: Setting) {
+    // Create channels FIRST
+    let (clipboard_cmd_tx, clipboard_cmd_rx) = mpsc::channel(100);
+    let (p2p_cmd_tx, p2p_cmd_rx) = mpsc::channel(100);
+
+    // Create handle with senders
+    let handle = AppRuntimeHandle::new(clipboard_cmd_tx, p2p_cmd_tx, Arc::new(setting));
+
+    Builder::default()
+        .manage(handle)  // Register BEFORE setup
+        .setup(move |app| {
+            // Pass receivers to runtime
+            AppRuntime::new_with_channels(..., clipboard_cmd_rx, p2p_cmd_rx).await
+        })
+}
+```
+
+**Key Rules**:
+
+1. **Create channels before Builder** - Senders and receivers must be created outside `.setup()`
+2. **Register with .manage()** - Any type accessed via `tauri::State` must be managed
+3. **Clone senders, move receivers** - Senders can be cloned for the handle, receivers move to the runtime
+4. **Use Arc for shared immutable data** - Config and other read-only data should use `Arc<T>`
+
+**Rationale**: Tauri's state system requires explicit registration to ensure thread safety and proper lifetime management. Commands can only access state that was registered before the app started.
+
 ### Frontend Styling (Tailwind CSS)
 
 **CRITICAL**: Avoid fixed pixel values (`w-[XXpx]`, `h-[XXpx]`) for cross-platform compatibility. Use Tailwind's built-in utilities or relative units (rem) instead:

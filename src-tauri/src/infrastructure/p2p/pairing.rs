@@ -339,6 +339,17 @@ impl PairingManager {
         // Generate PIN for user verification
         let pin = self.generate_pin();
 
+        // Send p2p-pin-ready event to frontend (responder needs to see the PIN too)
+        let _ = self
+            .event_tx
+            .send(NetworkEvent::PairingPinReady {
+                session_id: request.session_id.clone(),
+                pin: pin.clone(),
+                peer_device_name: request.device_name.clone(),
+                peer_public_key: our_public_key_bytes.clone(),
+            })
+            .await;
+
         // Send pairing challenge with PIN and our public key
         let challenge = PairingChallenge {
             session_id: request.session_id.clone(),

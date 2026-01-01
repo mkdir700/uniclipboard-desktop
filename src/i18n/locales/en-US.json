@@ -299,6 +299,10 @@
     }
   },
   "pairing": {
+    "requests": {
+      "accept": "Accept",
+      "reject": "Reject"
+    },
     "steps": {
       "discovery": "Discover Devices",
       "connecting": "Connecting...",
@@ -321,6 +325,12 @@
     },
     "pinVerify": {
       "description": "Please confirm if the PIN codes on both devices match",
+      "initiatorTitle": "Verify PIN Code",
+      "initiatorDescription": "Check if this PIN matches the one shown on {{deviceName}}",
+      "responderTitle": "Your PIN Code",
+      "responderDescription": "Share this PIN with the user of {{deviceName}}",
+      "verifying": "Verifying...",
+      "pleaseWait": "Please wait...",
       "pinLabel": "Pairing PIN Code",
       "warning": "Please ensure both devices show the same PIN code",
       "notMatch": "Not a Match",

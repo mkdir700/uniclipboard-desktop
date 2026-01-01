@@ -299,6 +299,10 @@
     }
   },
   "pairing": {
+    "requests": {
+      "accept": "接受",
+      "reject": "拒绝"
+    },
     "steps": {
       "discovery": "发现设备",
       "connecting": "正在连接...",
@@ -321,6 +325,12 @@
     },
     "pinVerify": {
       "description": "请确认两台设备上的 PIN 码是否一致",
+      "initiatorTitle": "验证 PIN 码",
+      "initiatorDescription": "检查此 PIN 码是否与 {{deviceName}} 上显示的一致",
+      "responderTitle": "您的 PIN 码",
+      "responderDescription": "将此 PIN 码提供给 {{deviceName}} 的用户",
+      "verifying": "正在验证...",
+      "pleaseWait": "请稍候...",
       "pinLabel": "配对 PIN 码",
       "warning": "请确保两台设备显示相同的 PIN 码",
       "notMatch": "不匹配",

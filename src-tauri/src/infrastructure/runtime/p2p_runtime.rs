@@ -6,8 +6,13 @@ use anyhow::Result;
 use libp2p::identity::Keypair;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, RwLock};
 
+use crate::api::event::{
+    P2PPairingCompleteEventData, P2PPairingFailedEventData, P2PPairingRequestEventData,
+    P2PPinReadyEventData,
+};
 use crate::config::Setting;
 use crate::infrastructure::p2p::pairing::{PairingCommand, PairingManager};
 use crate::infrastructure::p2p::{DiscoveredPeer, NetworkCommand};
@@ -28,11 +33,17 @@ pub struct P2PRuntime {
     discovered_peers: Arc<RwLock<HashMap<String, DiscoveredPeer>>>,
     /// Configuration
     config: Arc<Setting>,
+    /// AppHandle for emitting events to frontend
+    app_handle: AppHandle,
 }
 
 impl P2PRuntime {
     /// Create a new P2P runtime
-    pub async fn new(device_name: String, config: Arc<Setting>) -> Result<Self> {
+    pub async fn new(
+        device_name: String,
+        config: Arc<Setting>,
+        app_handle: AppHandle,
+    ) -> Result<Self> {
         // Create channels for network communication
         let (network_cmd_tx, network_cmd_rx) = mpsc::channel(100);
         let (network_event_tx, mut network_event_rx) = mpsc::channel(100);
@@ -43,6 +54,9 @@ impl P2PRuntime {
 
         // Create channels for pairing manager
         let (pairing_cmd_tx, pairing_cmd_rx) = mpsc::channel(100);
+
+        // Clone app_handle for the event loop
+        let app_handle_for_events = app_handle.clone();
 
         // Spawn NetworkManager task
         let network_event_tx_clone = network_event_tx.clone();
@@ -107,11 +121,29 @@ impl P2PRuntime {
                         peers.remove(&peer_id);
                     }
                     NetworkEvent::PairingRequestReceived {
-                        peer_id, request, ..
+                        session_id,
+                        peer_id,
+                        request,
                     } => {
+                        // Send to pairing manager
                         let _ = pairing_cmd_tx_clone
-                            .send(PairingCommand::HandleRequest { peer_id, request })
+                            .send(PairingCommand::HandleRequest {
+                                peer_id: peer_id.clone(),
+                                request,
+                            })
                             .await;
+
+                        // Emit event to frontend
+                        let event_data = P2PPairingRequestEventData {
+                            session_id,
+                            peer_id,
+                            device_name: None, // Will be filled by pairing manager
+                        };
+                        if let Err(e) =
+                            app_handle_for_events.emit("p2p-pairing-request", event_data)
+                        {
+                            log::error!("Failed to emit p2p-pairing-request event: {:?}", e);
+                        }
                     }
                     NetworkEvent::PairingPinReady {
                         session_id,
@@ -119,14 +151,51 @@ impl P2PRuntime {
                         peer_device_name,
                         peer_public_key,
                     } => {
+                        // Send to pairing manager
                         let _ = pairing_cmd_tx_clone
                             .send(PairingCommand::HandlePinReady {
-                                session_id,
-                                pin,
-                                peer_device_name,
+                                session_id: session_id.clone(),
+                                pin: pin.clone(),
+                                peer_device_name: peer_device_name.clone(),
                                 peer_public_key,
                             })
                             .await;
+
+                        // Emit event to frontend
+                        let event_data = P2PPinReadyEventData {
+                            session_id,
+                            pin,
+                            peer_device_name,
+                        };
+                        if let Err(e) = app_handle_for_events.emit("p2p-pin-ready", event_data) {
+                            log::error!("Failed to emit p2p-pin-ready event: {:?}", e);
+                        }
+                    }
+                    NetworkEvent::PairingComplete {
+                        session_id,
+                        peer_id,
+                        device_name,
+                        shared_secret: _,
+                    } => {
+                        // Emit event to frontend
+                        let event_data = P2PPairingCompleteEventData {
+                            session_id,
+                            peer_id,
+                            device_name,
+                        };
+                        if let Err(e) =
+                            app_handle_for_events.emit("p2p-pairing-complete", event_data)
+                        {
+                            log::error!("Failed to emit p2p-pairing-complete event: {:?}", e);
+                        }
+                    }
+                    NetworkEvent::PairingFailed { session_id, error } => {
+                        // Emit event to frontend
+                        let event_data = P2PPairingFailedEventData { session_id, error };
+                        if let Err(e) = app_handle_for_events.emit("p2p-pairing-failed", event_data)
+                        {
+                            log::error!("Failed to emit p2p-pairing-failed event: {:?}", e);
+                        }
                     }
                     NetworkEvent::ClipboardReceived(msg) => {
                         // Forward to P2pSync
@@ -146,6 +215,7 @@ impl P2PRuntime {
             local_peer_id,
             discovered_peers,
             config,
+            app_handle,
         })
     }
 

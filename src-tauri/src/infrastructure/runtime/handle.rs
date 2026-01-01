@@ -96,27 +96,6 @@ pub enum P2PCommand {
     },
 }
 
-/// Commands that can be sent to the Connection Manager (Legacy/WebSocket)
-#[derive(Debug)]
-pub enum ConnectionCommand {
-    /// Manually connect to a device
-    ManualConnect {
-        ip: String,
-        port: u16,
-        respond_to: tokio::sync::oneshot::Sender<Result<String, String>>,
-    },
-    /// Respond to an incoming connection request
-    RespondConnection {
-        requester_device_id: String,
-        accept: bool,
-        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
-    },
-    /// Cancel all pending connection requests
-    CancelConnectionRequest {
-        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
-    },
-}
-
 /// Thread-safe handle to the application runtime
 ///
 /// This handle satisfies Tauri's requirements for managed state:
@@ -130,8 +109,6 @@ pub struct AppRuntimeHandle {
     pub clipboard_tx: mpsc::Sender<ClipboardCommand>,
     /// Sender for P2P commands
     pub p2p_tx: mpsc::Sender<P2PCommand>,
-    /// Sender for connection commands
-    pub connection_tx: mpsc::Sender<ConnectionCommand>,
     /// Application configuration (immutable, shared via Arc)
     pub config: Arc<Setting>,
 }
@@ -141,13 +118,11 @@ impl AppRuntimeHandle {
     pub fn new(
         clipboard_tx: mpsc::Sender<ClipboardCommand>,
         p2p_tx: mpsc::Sender<P2PCommand>,
-        connection_tx: mpsc::Sender<ConnectionCommand>,
         config: Arc<Setting>,
     ) -> Self {
         Self {
             clipboard_tx,
             p2p_tx,
-            connection_tx,
             config,
         }
     }
