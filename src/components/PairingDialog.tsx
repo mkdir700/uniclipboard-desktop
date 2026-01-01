@@ -158,8 +158,8 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
     }
   }
 
-  const getDeviceIcon = (name: string = '') => {
-    const n = name.toLowerCase()
+  const getDeviceIcon = (name?: string | null) => {
+    const n = (name || '').toLowerCase()
     if (n.includes('phone') || n.includes('iphone') || n.includes('android'))
       return <Smartphone className="w-5 h-5" />
     if (n.includes('mac') || n.includes('book') || n.includes('laptop'))

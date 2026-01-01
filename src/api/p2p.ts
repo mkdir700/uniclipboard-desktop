@@ -13,8 +13,8 @@ import { listen } from '@tauri-apps/api/event'
 export interface P2PPeerInfo {
   /** Peer ID (libp2p identifier) */
   peerId: string
-  /** Device name */
-  deviceName?: string
+  /** Device name (may be null if not yet discovered) */
+  deviceName?: string | null
   /** Addresses */
   addresses: string[]
   /** Whether this peer is paired */
