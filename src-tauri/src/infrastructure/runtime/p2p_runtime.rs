@@ -187,6 +187,31 @@ impl P2PRuntime {
                             })
                             .await;
                     }
+                    NetworkEvent::PairingConfirmReceived {
+                        session_id,
+                        peer_id,
+                        confirm,
+                    } => {
+                        log::info!(
+                            "Received PairingConfirm for session {} from peer {}",
+                            session_id,
+                            peer_id
+                        );
+
+                        // Send to pairing manager for final verification
+                        let (tx, _rx) = tokio::sync::oneshot::channel();
+                        if let Err(e) = pairing_cmd_tx_clone
+                            .send(PairingCommand::HandleConfirm {
+                                session_id: session_id.clone(),
+                                confirm,
+                                peer_id,
+                                respond_to: tx,
+                            })
+                            .await
+                        {
+                            log::error!("Failed to send HandleConfirm command: {}", e);
+                        }
+                    }
                     NetworkEvent::PairingComplete {
                         session_id,
                         peer_id,
