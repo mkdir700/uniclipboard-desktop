@@ -41,7 +41,7 @@ impl Codec for UniClipboardCodec {
         io: &mut T,
     ) -> std::io::Result<Self::Request>
     where
-        T: AsyncRead + Unpin + Send,
+        T: futures::AsyncRead + Unpin + Send,
     {
         let mut buf = Vec::new();
         let mut limited = io.take(1024 * 64); // 64KB limit
@@ -56,7 +56,7 @@ impl Codec for UniClipboardCodec {
         io: &mut T,
     ) -> std::io::Result<Self::Response>
     where
-        T: AsyncRead + Unpin + Send,
+        T: futures::AsyncRead + Unpin + Send,
     {
         let mut buf = Vec::new();
         let mut limited = io.take(1024 * 64); // 64KB limit
@@ -72,7 +72,7 @@ impl Codec for UniClipboardCodec {
         req: Self::Request,
     ) -> std::io::Result<()>
     where
-        T: AsyncWrite + Unpin + Send,
+        T: futures::AsyncWrite + Unpin + Send,
     {
         let bytes = serde_json::to_vec(&req)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -88,7 +88,7 @@ impl Codec for UniClipboardCodec {
         res: Self::Response,
     ) -> std::io::Result<()>
     where
-        T: AsyncWrite + Unpin + Send,
+        T: futures::AsyncWrite + Unpin + Send,
     {
         let bytes = serde_json::to_vec(&res)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;

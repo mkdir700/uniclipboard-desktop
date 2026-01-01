@@ -19,9 +19,18 @@ use super::events::{ConnectedPeer, DiscoveredPeer, NetworkEvent, NetworkStatus};
 use super::protocol::{ClipboardMessage, DeviceAnnounceMessage, PairingMessage, ProtocolMessage};
 
 /// Holds a pending pairing response channel with metadata
+/// This is only available to the receiver of a request-response call
 struct PendingPairingResponse {
     peer_id: PeerId,
     channel: ResponseChannel<ReqPairingResponse>,
+    timestamp: Instant,
+}
+
+/// Tracks pending pairing requests waiting for Challenge response
+/// Used by the initiator when waiting for the responder's Challenge
+struct PendingChallengeRequest {
+    peer_id: PeerId,
+    session_id: String,
     timestamp: Instant,
 }
 
@@ -93,9 +102,13 @@ pub struct NetworkManager {
     event_tx: mpsc::Sender<NetworkEvent>,
     discovered_peers: HashMap<PeerId, DiscoveredPeer>,
     connected_peers: HashMap<PeerId, ConnectedPeer>,
-    /// Maps session_id -> (peer_id, channel, timestamp)
+    /// Maps session_id -> response channel
+    /// Only populated for the receiver of a request-response call
     /// Using session_id as key provides stability across network reconnects
     pending_responses: HashMap<String, PendingPairingResponse>,
+    /// Maps session_id -> pending challenge request info
+    /// Used by the initiator to track outgoing PairingRequest that expects Challenge response
+    pending_challenges: HashMap<String, PendingChallengeRequest>,
     /// Peers confirmed ready for broadcast (subscribed to clipboard topic).
     ready_peers: HashMap<PeerId, Instant>,
     /// Current device name (updated when settings change)
@@ -134,6 +147,7 @@ impl NetworkManager {
             discovered_peers: HashMap::new(),
             connected_peers: HashMap::new(),
             pending_responses: HashMap::new(),
+            pending_challenges: HashMap::new(),
             ready_peers: HashMap::new(),
             device_name,
         })
@@ -153,6 +167,18 @@ impl NetworkManager {
             if now.duration_since(pending.timestamp) > timeout {
                 debug!(
                     "Removing expired pending response for session {} (peer: {})",
+                    session_id, pending.peer_id
+                );
+                false
+            } else {
+                true
+            }
+        });
+
+        self.pending_challenges.retain(|session_id, pending| {
+            if now.duration_since(pending.timestamp) > timeout {
+                debug!(
+                    "Removing expired pending challenge for session {} (peer: {})",
                     session_id, pending.peer_id
                 );
                 false
@@ -405,6 +431,51 @@ impl NetworkManager {
                                                 })
                                                 .await;
                                         }
+                                        // Handle Challenge message sent as a NEW request (not response)
+                                        // This allows the responder to send Challenge to the initiator
+                                        ProtocolMessage::Pairing(PairingMessage::Challenge(challenge)) => {
+                                            // Store the channel for responding with ChallengeResponse
+                                            self.pending_responses.insert(
+                                                challenge.session_id.clone(),
+                                                PendingPairingResponse {
+                                                    peer_id: peer,
+                                                    channel,
+                                                    timestamp: Instant::now(),
+                                                },
+                                            );
+
+                                            let _ = self
+                                                .event_tx
+                                                .send(NetworkEvent::PairingPinReady {
+                                                    session_id: challenge.session_id,
+                                                    pin: challenge.pin,
+                                                    peer_device_name: challenge.device_name,
+                                                    peer_public_key: challenge.public_key,
+                                                })
+                                                .await;
+                                        }
+                                        // Handle Response message sent as a NEW request
+                                        // This allows the initiator to send Response (PIN hash) to the responder
+                                        ProtocolMessage::Pairing(PairingMessage::Response(response)) => {
+                                            // Store the channel for responding with Confirm
+                                            self.pending_responses.insert(
+                                                response.session_id.clone(),
+                                                PendingPairingResponse {
+                                                    peer_id: peer,
+                                                    channel,
+                                                    timestamp: Instant::now(),
+                                                },
+                                            );
+
+                                            let _ = self
+                                                .event_tx
+                                                .send(NetworkEvent::PairingResponseReceived {
+                                                    session_id: response.session_id.clone(),
+                                                    peer_id: peer.to_string(),
+                                                    response,
+                                                })
+                                                .await;
+                                        }
                                         ProtocolMessage::Pairing(PairingMessage::Confirm(
                                             confirm,
                                         )) => {
@@ -485,21 +556,12 @@ impl NetworkManager {
                                 }
                             }
                             request_response::Message::Response { response, .. } => {
+                                // Note: Challenge and Response are now sent as requests, not responses
+                                // This branch handles the Confirm ACK (response to Confirm request)
                                 if let Ok(ProtocolMessage::Pairing(pairing_msg)) =
                                     ProtocolMessage::from_bytes(&response.message)
                                 {
                                     match pairing_msg {
-                                        PairingMessage::Challenge(challenge) => {
-                                            let _ = self
-                                                .event_tx
-                                                .send(NetworkEvent::PairingPinReady {
-                                                    session_id: challenge.session_id,
-                                                    pin: challenge.pin,
-                                                    peer_device_name: challenge.device_name,
-                                                    peer_public_key: challenge.public_key,
-                                                })
-                                                .await;
-                                        }
                                         PairingMessage::Confirm(confirm) => {
                                             if confirm.success {
                                                 if let Some(secret) = confirm.shared_secret {
@@ -687,72 +749,41 @@ impl NetworkManager {
                 device_name,
                 public_key,
             } => {
-                // Use session_id to lookup the pending response
-                if let Some(pending) = self.pending_responses.remove(&session_id) {
-                    // Optional: Verify peer_id matches
-                    if pending.peer_id.to_string() != peer_id {
-                        warn!(
-                            "Peer ID mismatch for session {}: expected {}, got {}",
-                            session_id, pending.peer_id, peer_id
-                        );
-                    }
-
-                    let challenge = super::protocol::PairingChallenge {
-                        session_id: session_id.clone(),
-                        pin,
-                        device_name,
-                        public_key,
-                    };
-                    let protocol_msg =
-                        ProtocolMessage::Pairing(PairingMessage::Challenge(challenge));
-                    if let Ok(message) = protocol_msg.to_bytes() {
-                        let response = ReqPairingResponse { message };
-                        match self
-                            .swarm
-                            .behaviour_mut()
-                            .request_response
-                            .send_response(pending.channel, response)
-                        {
-                            Ok(_) => {
-                                debug!(
-                                    "Sent pairing challenge to {} for session {}",
-                                    peer_id, session_id
-                                );
-                            }
-                            Err(e) => {
-                                // Channel send failed - connection likely lost
-                                warn!(
-                                    "Failed to send pairing challenge for session {}: channel error: {:?}",
-                                    session_id, e
-                                );
-
-                                // Notify frontend that pairing failed
-                                let _ = self
-                                    .event_tx
-                                    .send(NetworkEvent::PairingFailed {
-                                        session_id,
-                                        error: "Network connection lost during pairing".to_string(),
-                                    })
-                                    .await;
-                            }
+                // CRITICAL FIX: Send Challenge as a NEW request, not as a response
+                // This works because the initiator (A) doesn't have a response channel
+                // The responder (B) initiates a new request to send the Challenge to A
+                match peer_id.parse::<PeerId>() {
+                    Ok(peer) => {
+                        let challenge = super::protocol::PairingChallenge {
+                            session_id: session_id.clone(),
+                            pin,
+                            device_name,
+                            public_key,
+                        };
+                        let protocol_msg =
+                            ProtocolMessage::Pairing(PairingMessage::Challenge(challenge));
+                        if let Ok(message) = protocol_msg.to_bytes() {
+                            let request = ReqPairingRequest { message };
+                            self.swarm
+                                .behaviour_mut()
+                                .request_response
+                                .send_request(&peer, request);
+                            debug!(
+                                "Sent pairing challenge to {} for session {}",
+                                peer_id, session_id
+                            );
                         }
                     }
-                } else {
-                    // Channel lost - connection may have been reconnected
-                    warn!(
-                        "No pending response channel for session {} (peer: {})",
-                        session_id, peer_id
-                    );
-
-                    // Notify frontend that pairing failed
-                    let _ = self
-                        .event_tx
-                        .send(NetworkEvent::PairingFailed {
-                            session_id,
-                            error: "Network connection interrupted. Please try pairing again."
-                                .to_string(),
-                        })
-                        .await;
+                    Err(e) => {
+                        warn!("Invalid peer_id '{}': {}", peer_id, e);
+                        let _ = self
+                            .event_tx
+                            .send(NetworkEvent::Error(format!(
+                                "Failed to send pairing challenge: invalid peer_id '{}': {}",
+                                peer_id, e
+                            )))
+                            .await;
+                    }
                 }
             }
 
@@ -762,70 +793,38 @@ impl NetworkManager {
                 pin_hash,
                 accepted,
             } => {
-                // Use session_id to lookup the pending response
-                if let Some(pending) = self.pending_responses.remove(&session_id) {
-                    // Optional: Verify peer_id matches
-                    if pending.peer_id.to_string() != peer_id {
-                        warn!(
-                            "Peer ID mismatch for session {}: expected {}, got {}",
-                            session_id, pending.peer_id, peer_id
-                        );
-                    }
-
-                    let response = super::protocol::PairingResponse {
-                        session_id: session_id.clone(),
-                        pin_hash,
-                        accepted,
-                    };
-                    let protocol_msg = ProtocolMessage::Pairing(PairingMessage::Response(response));
-                    if let Ok(message) = protocol_msg.to_bytes() {
-                        let resp = ReqPairingResponse { message };
-                        match self
-                            .swarm
-                            .behaviour_mut()
-                            .request_response
-                            .send_response(pending.channel, resp)
-                        {
-                            Ok(_) => {
-                                debug!(
-                                    "Sent pairing response to {} for session {}",
-                                    peer_id, session_id
-                                );
-                            }
-                            Err(e) => {
-                                // Channel send failed - connection likely lost
-                                warn!(
-                                    "Failed to send pairing response for session {}: channel error: {:?}",
-                                    session_id, e
-                                );
-
-                                // Notify frontend that pairing failed
-                                let _ = self
-                                    .event_tx
-                                    .send(NetworkEvent::PairingFailed {
-                                        session_id,
-                                        error: "Network connection lost during pairing".to_string(),
-                                    })
-                                    .await;
-                            }
+                // CRITICAL FIX: Send Response as a NEW request
+                // Since Challenge is now sent as a request, Response must also be a request
+                match peer_id.parse::<PeerId>() {
+                    Ok(peer) => {
+                        let response = super::protocol::PairingResponse {
+                            session_id: session_id.clone(),
+                            pin_hash,
+                            accepted,
+                        };
+                        let protocol_msg = ProtocolMessage::Pairing(PairingMessage::Response(response));
+                        if let Ok(message) = protocol_msg.to_bytes() {
+                            let request = ReqPairingRequest { message };
+                            self.swarm
+                                .behaviour_mut()
+                                .request_response
+                                .send_request(&peer, request);
+                            debug!(
+                                "Sent pairing response to {} for session {}",
+                                peer_id, session_id
+                            );
                         }
                     }
-                } else {
-                    // Channel lost - connection may have been reconnected
-                    warn!(
-                        "No pending response channel for session {} (peer: {})",
-                        session_id, peer_id
-                    );
-
-                    // Notify frontend that pairing failed
-                    let _ = self
-                        .event_tx
-                        .send(NetworkEvent::PairingFailed {
-                            session_id,
-                            error: "Network connection interrupted. Please try pairing again."
-                                .to_string(),
-                        })
-                        .await;
+                    Err(e) => {
+                        warn!("Invalid peer_id '{}': {}", peer_id, e);
+                        let _ = self
+                            .event_tx
+                            .send(NetworkEvent::Error(format!(
+                                "Failed to send pairing response: invalid peer_id '{}': {}",
+                                peer_id, e
+                            )))
+                            .await;
+                    }
                 }
             }
 
@@ -833,72 +832,40 @@ impl NetworkManager {
                 peer_id,
                 session_id,
             } => {
-                // Use session_id to lookup the pending response
-                if let Some(pending) = self.pending_responses.remove(&session_id) {
-                    // Optional: Verify peer_id matches
-                    if pending.peer_id.to_string() != peer_id {
-                        warn!(
-                            "Peer ID mismatch for session {}: expected {}, got {}",
-                            session_id, pending.peer_id, peer_id
-                        );
-                    }
-
-                    let confirm = super::protocol::PairingConfirm {
-                        session_id: session_id.clone(),
-                        success: false,
-                        shared_secret: None,
-                        error: Some("Pairing rejected by user".to_string()),
-                        sender_device_name: "Unknown".to_string(),
-                    };
-                    let protocol_msg = ProtocolMessage::Pairing(PairingMessage::Confirm(confirm));
-                    if let Ok(message) = protocol_msg.to_bytes() {
-                        let response = ReqPairingResponse { message };
-                        match self
-                            .swarm
-                            .behaviour_mut()
-                            .request_response
-                            .send_response(pending.channel, response)
-                        {
-                            Ok(_) => {
-                                debug!(
-                                    "Sent pairing rejection to {} for session {}",
-                                    peer_id, session_id
-                                );
-                            }
-                            Err(e) => {
-                                // Channel send failed - connection likely lost
-                                warn!(
-                                    "Failed to send pairing rejection for session {}: channel error: {:?}",
-                                    session_id, e
-                                );
-
-                                // Notify frontend that pairing failed
-                                let _ = self
-                                    .event_tx
-                                    .send(NetworkEvent::PairingFailed {
-                                        session_id,
-                                        error: "Network connection lost during pairing".to_string(),
-                                    })
-                                    .await;
-                            }
+                // CRITICAL FIX: Send rejection as a NEW request
+                // The responder sends a rejection confirm to the initiator
+                match peer_id.parse::<PeerId>() {
+                    Ok(peer) => {
+                        let confirm = super::protocol::PairingConfirm {
+                            session_id: session_id.clone(),
+                            success: false,
+                            shared_secret: None,
+                            error: Some("Pairing rejected by user".to_string()),
+                            sender_device_name: self.device_name.clone(),
+                        };
+                        let protocol_msg = ProtocolMessage::Pairing(PairingMessage::Confirm(confirm));
+                        if let Ok(message) = protocol_msg.to_bytes() {
+                            let request = ReqPairingRequest { message };
+                            self.swarm
+                                .behaviour_mut()
+                                .request_response
+                                .send_request(&peer, request);
+                            debug!(
+                                "Sent pairing rejection to {} for session {}",
+                                peer_id, session_id
+                            );
                         }
                     }
-                } else {
-                    // Channel lost - connection may have been reconnected
-                    warn!(
-                        "No pending response channel for session {} (peer: {})",
-                        session_id, peer_id
-                    );
-
-                    // Notify frontend that pairing failed
-                    let _ = self
-                        .event_tx
-                        .send(NetworkEvent::PairingFailed {
-                            session_id,
-                            error: "Network connection interrupted. Please try pairing again."
-                                .to_string(),
-                        })
-                        .await;
+                    Err(e) => {
+                        warn!("Invalid peer_id '{}': {}", peer_id, e);
+                        let _ = self
+                            .event_tx
+                            .send(NetworkEvent::Error(format!(
+                                "Failed to send pairing rejection: invalid peer_id '{}': {}",
+                                peer_id, e
+                            )))
+                            .await;
+                    }
                 }
             }
 

@@ -17,7 +17,8 @@ use crate::api::event::{
 use crate::config::Setting;
 use crate::domain::pairing::PairedPeer;
 use crate::infrastructure::p2p::pairing::{PairingCommand, PairingManager};
-use crate::infrastructure::p2p::{DiscoveredPeer, NetworkCommand};
+use crate::infrastructure::p2p::{DiscoveredPeer, NetworkCommand, NetworkEvent};
+use crate::infrastructure::p2p::protocol::PairingResponse;
 use crate::infrastructure::storage::peer_storage::PeerStorage;
 use crate::infrastructure::sync::Libp2pSync;
 
@@ -179,6 +180,22 @@ impl P2PRuntime {
                         if let Err(e) = app_handle_for_events.emit("p2p-pin-ready", event_data) {
                             log::error!("Failed to emit p2p-pin-ready event: {:?}", e);
                         }
+                    }
+                    NetworkEvent::PairingResponseReceived {
+                        session_id,
+                        peer_id,
+                        response,
+                    } => {
+                        // Send to pairing manager for verification
+                        let (tx, _rx) = tokio::sync::oneshot::channel();
+                        let _ = pairing_cmd_tx_clone
+                            .send(PairingCommand::HandleResponse {
+                                session_id: session_id.clone(),
+                                response,
+                                peer_device_name: peer_id.clone(), // We'll use peer_id as device name placeholder
+                                respond_to: tx,
+                            })
+                            .await;
                     }
                     NetworkEvent::PairingComplete {
                         session_id,

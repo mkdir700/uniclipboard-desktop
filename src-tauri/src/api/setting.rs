@@ -36,7 +36,7 @@ pub async fn open_settings_window(app_handle: AppHandle) -> Result<(), String> {
     // 创建新的设置窗口
     use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-    let mut builder = WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         &app_handle,
         "settings",
         WebviewUrl::App("/settings".into()),

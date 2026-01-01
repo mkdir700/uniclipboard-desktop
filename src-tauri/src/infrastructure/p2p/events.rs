@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::protocol::{ClipboardMessage, PairingRequest};
+use super::protocol::{ClipboardMessage, PairingRequest, PairingResponse};
 
 /// Network status for P2P connection
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -67,6 +67,11 @@ pub enum NetworkEvent {
         pin: String,
         peer_device_name: String, // Responder's device name (for initiator to display)
         peer_public_key: Vec<u8>, // Responder's X25519 public key for ECDH
+    },
+    PairingResponseReceived {
+        session_id: String,
+        peer_id: String,
+        response: PairingResponse,
     },
     PairingComplete {
         session_id: String,
