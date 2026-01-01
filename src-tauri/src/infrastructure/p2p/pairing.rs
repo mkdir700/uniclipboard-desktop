@@ -21,7 +21,6 @@ use super::swarm::NetworkCommand;
 const PIN_LENGTH: usize = 6;
 
 /// Commands for the pairing actor
-#[derive(Debug)]
 pub enum PairingCommand {
     /// Initiate pairing with a peer
     Initiate {
@@ -662,5 +661,44 @@ mod tests {
         let (event_tx, _) = mpsc::channel(100);
         let (_, command_rx) = mpsc::channel(100);
         PairingManager::new(cmd_tx, event_tx, command_rx, "Test Device".to_string())
+    }
+}
+
+impl std::fmt::Debug for PairingCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::HandlePinReady { session_id, peer_device_name, .. } => {
+                f.debug_struct("HandlePinReady")
+                    .field("session_id", session_id)
+                    .field("peer_device_name", peer_device_name)
+                    .field("pin", &"[REDACTED]")
+                    .field("peer_public_key", &"[REDACTED]")
+                    .finish()
+            }
+            Self::HandleResponse { session_id, peer_device_name, .. } => {
+                f.debug_struct("HandleResponse")
+                    .field("session_id", session_id)
+                    .field("peer_device_name", peer_device_name)
+                    .field("response", &"[REDACTED]")
+                    .finish()
+            }
+            Self::HandleConfirm { session_id, peer_id, .. } => {
+                f.debug_struct("HandleConfirm")
+                    .field("session_id", session_id)
+                    .field("peer_id", peer_id)
+                    .field("confirm", &"[REDACTED]")
+                    .finish()
+            }
+            Self::HandleRequest { peer_id, .. } => {
+                f.debug_struct("HandleRequest")
+                    .field("peer_id", peer_id)
+                    .field("request", &"[REDACTED]")
+                    .finish()
+            }
+            _ => {
+                // For non-sensitive variants, use discriminant
+                write!(f, "{:?}", std::mem::discriminant(self))
+            }
+        }
     }
 }

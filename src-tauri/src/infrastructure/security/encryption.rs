@@ -3,6 +3,46 @@ use aes_gcm::{
     Aes256Gcm, Key, Nonce,
 };
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+
+/// Wrapper for sensitive byte arrays that redacts in Debug output
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SecretBytes(Vec<u8>);
+
+impl SecretBytes {
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for SecretBytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("SecretBytes")
+            .field(&format!("[{} bytes]", self.0.len()))
+            .finish()
+    }
+}
+
+impl From<Vec<u8>> for SecretBytes {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl AsRef<[u8]> for SecretBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 pub struct Encryptor {
     cipher: Aes256Gcm,
 }

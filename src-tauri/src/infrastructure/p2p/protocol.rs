@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// P2P protocol messages for UniClipboard
 /// Based on decentpaste protocol with UniClipboard-specific adaptations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum ProtocolMessage {
     Pairing(PairingMessage),
     Clipboard(ClipboardMessage),
@@ -14,7 +14,7 @@ pub enum ProtocolMessage {
 }
 
 /// Pairing protocol messages for secure device pairing with PIN verification
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum PairingMessage {
     Request(PairingRequest),
     Challenge(PairingChallenge),
@@ -23,7 +23,7 @@ pub enum PairingMessage {
 }
 
 /// Initial pairing request sent by initiator
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PairingRequest {
     pub session_id: String,
     pub device_name: String,
@@ -32,7 +32,7 @@ pub struct PairingRequest {
 }
 
 /// Pairing challenge sent by responder with PIN
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PairingChallenge {
     pub session_id: String,
     pub pin: String,
@@ -41,7 +41,7 @@ pub struct PairingChallenge {
 }
 
 /// Pairing response from initiator after PIN verification
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PairingResponse {
     pub session_id: String,
     pub pin_hash: Vec<u8>,
@@ -49,7 +49,7 @@ pub struct PairingResponse {
 }
 
 /// Final pairing confirmation message
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PairingConfirm {
     pub session_id: String,
     pub success: bool,
@@ -92,5 +92,73 @@ impl ProtocolMessage {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, serde_json::Error> {
         serde_json::from_slice(bytes)
+    }
+}
+
+// Custom Debug implementations to redact sensitive fields
+
+impl std::fmt::Debug for ProtocolMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pairing(msg) => f.debug_tuple("Pairing").field(msg).finish(),
+            Self::Clipboard(msg) => f.debug_tuple("Clipboard").field(msg).finish(),
+            Self::Heartbeat(msg) => f.debug_tuple("Heartbeat").field(msg).finish(),
+            Self::DeviceAnnounce(msg) => f.debug_tuple("DeviceAnnounce").field(msg).finish(),
+        }
+    }
+}
+
+impl std::fmt::Debug for PairingMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Request(msg) => f.debug_tuple("Request").field(msg).finish(),
+            Self::Challenge(msg) => f.debug_tuple("Challenge").field(msg).finish(),
+            Self::Response(msg) => f.debug_tuple("Response").field(msg).finish(),
+            Self::Confirm(msg) => f.debug_tuple("Confirm").field(msg).finish(),
+        }
+    }
+}
+
+impl std::fmt::Debug for PairingRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingRequest")
+            .field("session_id", &self.session_id)
+            .field("device_name", &self.device_name)
+            .field("device_id", &self.device_id)
+            .field("public_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for PairingChallenge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingChallenge")
+            .field("session_id", &self.session_id)
+            .field("pin", &"[REDACTED]")
+            .field("device_name", &self.device_name)
+            .field("public_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for PairingResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingResponse")
+            .field("session_id", &self.session_id)
+            .field("pin_hash", &"[REDACTED]")
+            .field("accepted", &self.accepted)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for PairingConfirm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingConfirm")
+            .field("session_id", &self.session_id)
+            .field("success", &self.success)
+            .field("shared_secret", &"[REDACTED]")
+            .field("error", &self.error)
+            .field("sender_device_name", &self.sender_device_name)
+            .finish()
     }
 }

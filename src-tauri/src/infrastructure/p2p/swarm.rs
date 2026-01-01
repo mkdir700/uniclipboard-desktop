@@ -798,3 +798,36 @@ impl NetworkManager {
         }
     }
 }
+
+impl std::fmt::Debug for NetworkCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SendPairingChallenge { peer_id, session_id, .. } => {
+                f.debug_struct("SendPairingChallenge")
+                    .field("peer_id", peer_id)
+                    .field("session_id", session_id)
+                    .field("pin", &"[REDACTED]")
+                    .field("public_key", &"[REDACTED]")
+                    .finish()
+            }
+            Self::SendPairingConfirm { peer_id, session_id, success, .. } => {
+                f.debug_struct("SendPairingConfirm")
+                    .field("peer_id", peer_id)
+                    .field("session_id", session_id)
+                    .field("success", success)
+                    .field("shared_secret", &"[REDACTED]")
+                    .finish()
+            }
+            Self::SendPairingRequest { peer_id, .. } => {
+                f.debug_struct("SendPairingRequest")
+                    .field("peer_id", peer_id)
+                    .field("message", &"[REDACTED]")
+                    .finish()
+            }
+            _ => {
+                // For non-sensitive variants, use discriminant
+                write!(f, "{:?}", std::mem::discriminant(self))
+            }
+        }
+    }
+}

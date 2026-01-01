@@ -10,7 +10,7 @@ use crate::config::get_config_dir;
 use crate::domain::pairing::PairedPeer;
 
 /// Legacy PairedPeer format for migration (snake_case)
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 struct PairedPeerLegacy {
     pub peer_id: String,
     pub device_name: String,
@@ -18,6 +18,19 @@ struct PairedPeerLegacy {
     pub paired_at: String,
     pub last_seen: Option<String>,
     pub last_known_addresses: Vec<String>,
+}
+
+impl std::fmt::Debug for PairedPeerLegacy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairedPeerLegacy")
+            .field("peer_id", &self.peer_id)
+            .field("device_name", &self.device_name)
+            .field("shared_secret", &"[REDACTED]")
+            .field("paired_at", &self.paired_at)
+            .field("last_seen", &self.last_seen)
+            .field("last_known_addresses", &self.last_known_addresses)
+            .finish()
+    }
 }
 
 impl From<PairedPeerLegacy> for PairedPeer {
