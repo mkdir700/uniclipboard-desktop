@@ -9059,6 +9059,7 @@ dependencies = [
  "futures",
  "futures-util",
  "gethostname",
+ "hex",
  "image",
  "iota_stronghold",
  "lazy_static",

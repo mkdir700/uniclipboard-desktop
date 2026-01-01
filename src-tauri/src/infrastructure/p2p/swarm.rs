@@ -67,7 +67,8 @@ pub enum NetworkCommand {
         peer_id: String,
         session_id: String,
         success: bool,
-        shared_secret: Option<Vec<u8>>,
+        /// Key verification hash (not the actual secret)
+        key_verify_hash: Option<Vec<u8>>,
         device_name: String,
     },
     BroadcastClipboard {
@@ -488,47 +489,40 @@ impl NetworkManager {
                                                 confirm.sender_device_name.clone();
 
                                             if confirm.success {
-                                                if let Some(shared_secret) =
-                                                    confirm.shared_secret.clone()
-                                                {
-                                                    // Send ACK with responder's own device name
-                                                    let ack = super::protocol::PairingConfirm {
-                                                        session_id: confirm.session_id.clone(),
-                                                        success: true,
-                                                        shared_secret: Some(shared_secret.clone()),
-                                                        error: None,
-                                                        sender_device_name: self
-                                                            .device_name
-                                                            .clone(),
-                                                    };
-                                                    let ack_msg = ProtocolMessage::Pairing(
-                                                        PairingMessage::Confirm(ack),
-                                                    );
-                                                    if let Ok(message) = ack_msg.to_bytes() {
-                                                        let response =
-                                                            ReqPairingResponse { message };
-                                                        let _ = self
-                                                            .swarm
-                                                            .behaviour_mut()
-                                                            .request_response
-                                                            .send_response(channel, response);
-                                                    }
-
+                                                // Send ACK with responder's own device name and key_verify_hash
+                                                let ack = super::protocol::PairingConfirm {
+                                                    session_id: confirm.session_id.clone(),
+                                                    success: true,
+                                                    key_verify_hash: confirm.key_verify_hash.clone(),
+                                                    error: None,
+                                                    sender_device_name: self.device_name.clone(),
+                                                };
+                                                let ack_msg = ProtocolMessage::Pairing(
+                                                    PairingMessage::Confirm(ack),
+                                                );
+                                                if let Ok(message) = ack_msg.to_bytes() {
+                                                    let response =
+                                                        ReqPairingResponse { message };
                                                     let _ = self
-                                                        .event_tx
-                                                        .send(NetworkEvent::PairingComplete {
-                                                            session_id: confirm.session_id,
-                                                            peer_id: peer.to_string(),
-                                                            peer_device_name: initiator_device_name,
-                                                            shared_secret,
-                                                        })
-                                                        .await;
+                                                        .swarm
+                                                        .behaviour_mut()
+                                                        .request_response
+                                                        .send_response(channel, response);
                                                 }
+
+                                                let _ = self
+                                                    .event_tx
+                                                    .send(NetworkEvent::PairingConfirmReceived {
+                                                        session_id: confirm.session_id.clone(),
+                                                        peer_id: peer.to_string(),
+                                                        confirm,
+                                                    })
+                                                    .await;
                                             } else {
                                                 let ack = super::protocol::PairingConfirm {
                                                     session_id: confirm.session_id.clone(),
                                                     success: false,
-                                                    shared_secret: None,
+                                                    key_verify_hash: None,
                                                     error: confirm.error.clone(),
                                                     sender_device_name: self.device_name.clone(),
                                                 };
@@ -567,33 +561,15 @@ impl NetworkManager {
                                 {
                                     match pairing_msg {
                                         PairingMessage::Confirm(confirm) => {
-                                            if confirm.success {
-                                                if let Some(secret) = confirm.shared_secret {
-                                                    // Get responder's device name from the ACK
-                                                    let responder_device_name =
-                                                        confirm.sender_device_name.clone();
-
-                                                    let _ = self
-                                                        .event_tx
-                                                        .send(NetworkEvent::PairingComplete {
-                                                            session_id: confirm.session_id,
-                                                            peer_id: peer.to_string(),
-                                                            peer_device_name: responder_device_name,
-                                                            shared_secret: secret,
-                                                        })
-                                                        .await;
-                                                }
-                                            } else {
-                                                let _ = self
-                                                    .event_tx
-                                                    .send(NetworkEvent::PairingFailed {
-                                                        session_id: confirm.session_id,
-                                                        error: confirm.error.unwrap_or_else(|| {
-                                                            "Unknown error".to_string()
-                                                        }),
-                                                    })
-                                                    .await;
-                                            }
+                                            // Forward the confirm message to PairingManager
+                                            let _ = self
+                                                .event_tx
+                                                .send(NetworkEvent::PairingConfirmReceived {
+                                                    session_id: confirm.session_id.clone(),
+                                                    peer_id: peer.to_string(),
+                                                    confirm,
+                                                })
+                                                .await;
                                         }
                                         _ => {}
                                     }
@@ -844,7 +820,7 @@ impl NetworkManager {
                         let confirm = super::protocol::PairingConfirm {
                             session_id: session_id.clone(),
                             success: false,
-                            shared_secret: None,
+                            key_verify_hash: None,
                             error: Some("Pairing rejected by user".to_string()),
                             sender_device_name: self.device_name.clone(),
                         };
@@ -879,14 +855,14 @@ impl NetworkManager {
                 peer_id,
                 session_id,
                 success,
-                shared_secret,
+                key_verify_hash,
                 device_name,
             } => match peer_id.parse::<PeerId>() {
                 Ok(peer) => {
                     let confirm = super::protocol::PairingConfirm {
                         session_id,
                         success,
-                        shared_secret,
+                        key_verify_hash,
                         error: None,
                         sender_device_name: device_name,
                     };
@@ -1050,7 +1026,7 @@ impl std::fmt::Debug for NetworkCommand {
                 .field("peer_id", peer_id)
                 .field("session_id", session_id)
                 .field("success", success)
-                .field("shared_secret", &"[REDACTED]")
+                .field("key_verify_hash", &"[REDACTED]")
                 .finish(),
             Self::SendPairingRequest { peer_id, .. } => f
                 .debug_struct("SendPairingRequest")

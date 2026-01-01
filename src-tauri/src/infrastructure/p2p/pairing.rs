@@ -141,6 +141,37 @@ impl PairingSession {
         Ok(self.our_private_key.diffie_hellman(&peer_public))
     }
 
+    /// Compute key verification hash
+    /// Format: SHA256(session_id + shared_secret[0..16]), taking first 16 bytes
+    pub fn compute_key_verify_hash(&self) -> Result<Vec<u8>> {
+        use sha2::{Digest, Sha256};
+
+        let shared_secret = self.compute_shared_secret()?;
+        let secret_bytes = shared_secret.to_bytes();
+
+        let mut hasher = Sha256::new();
+        hasher.update(self.session_id.as_bytes());
+        hasher.update(&secret_bytes[..16]);
+
+        Ok(hasher.finalize().to_vec()[..16].to_vec())
+    }
+
+    /// Verify key hash from peer
+    pub fn verify_key_hash(&self, peer_hash: &[u8]) -> Result<bool> {
+        let our_hash = self.compute_key_verify_hash()?;
+
+        if our_hash.len() != peer_hash.len() {
+            return Ok(false);
+        }
+
+        let mut result = 0u8;
+        for (a, b) in our_hash.iter().zip(peer_hash.iter()) {
+            result |= a ^ b;
+        }
+
+        Ok(result == 0)
+    }
+
     /// Check if session is expired (5 minutes)
     pub fn is_expired(&self) -> bool {
         let elapsed = Utc::now() - self.created_at;
@@ -590,7 +621,7 @@ impl PairingManager {
                     peer_id,
                     session_id: session_id.to_string(),
                     success: false,
-                    shared_secret: None,
+                    key_verify_hash: None,
                     device_name: local_device_name,
                 })
                 .await;
@@ -627,7 +658,7 @@ impl PairingManager {
                     peer_id,
                     session_id: session_id.to_string(),
                     success: false,
-                    shared_secret: None,
+                    key_verify_hash: None,
                     device_name: local_device_name,
                 })
                 .await;
@@ -641,35 +672,37 @@ impl PairingManager {
             peer_id
         );
 
-        // Compute shared secret (need to re-borrow session)
-        let shared_secret = {
+        // Compute shared secret and verification hash (need to re-borrow session)
+        let (shared_secret, key_verify_hash) = {
             let session = self
                 .sessions
                 .get(session_id)
                 .ok_or_else(|| anyhow!("Session not found"))?;
-            session.compute_shared_secret()?
+            let shared_secret = session.compute_shared_secret()?;
+            let secret_bytes = shared_secret.to_bytes().to_vec();
+            let key_verify_hash = session.compute_key_verify_hash()?;
+            (secret_bytes, key_verify_hash)
         };
-        let secret_bytes = shared_secret.to_bytes().to_vec();
 
         log::info!(
-            "Sending PairingConfirm with success=true for session {}",
-            session_id
+            "Sending PairingConfirm with key_hash: {}",
+            hex::encode(&key_verify_hash)
         );
 
-        // Send success confirm
+        // Send success confirm with key verification hash
         self.network_command_tx
             .send(NetworkCommand::SendPairingConfirm {
                 peer_id,
                 session_id: session_id.to_string(),
                 success: true,
-                shared_secret: Some(secret_bytes.clone()),
+                key_verify_hash: Some(key_verify_hash),
                 device_name: local_device_name,
             })
             .await
             .map_err(|e| anyhow!("Failed to send pairing confirm: {}", e))?;
 
         self.sessions.remove(session_id);
-        Ok((true, Some(secret_bytes)))
+        Ok((true, Some(shared_secret)))
     }
 
     /// Handle pairing confirmation
@@ -705,12 +738,44 @@ impl PairingManager {
         }
 
         if confirm.success {
-            // Derive our own shared secret (both parties compute the same secret via ECDH)
+            // Compute our shared secret
             let shared_secret = session.compute_shared_secret()?;
             let secret_bytes = shared_secret.to_bytes().to_vec();
 
-            self.sessions.remove(session_id);
+            // Verify key hash if provided
+            if let Some(peer_key_hash) = &confirm.key_verify_hash {
+                let our_key_hash = session.compute_key_verify_hash()?;
 
+                log::info!(
+                    "Key verification - Our hash: {}, Peer hash: {}",
+                    hex::encode(&our_key_hash),
+                    hex::encode(peer_key_hash)
+                );
+
+                if !session.verify_key_hash(peer_key_hash)? {
+                    log::error!(
+                        "Key hash mismatch for session {} with peer {}!",
+                        session_id, peer_id
+                    );
+
+                    let _ = self
+                        .event_tx
+                        .send(NetworkEvent::PairingFailed {
+                            session_id: session_id.to_string(),
+                            error: "Key verification failed".to_string(),
+                        })
+                        .await;
+
+                    self.sessions.remove(session_id);
+                    return Err(anyhow!(
+                        "Key verification failed: shared secrets do not match"
+                    ));
+                }
+
+                log::info!("Key hash verified successfully");
+            }
+
+            self.sessions.remove(session_id);
             return Ok(Some(secret_bytes));
         }
 
@@ -793,6 +858,45 @@ mod tests {
         let bob_shared = bob_private.diffie_hellman(&alice_public);
 
         assert_eq!(alice_shared.as_bytes(), bob_shared.as_bytes());
+    }
+
+    #[test]
+    fn test_key_verify_hash_consistency() {
+        let alice_private = StaticSecret::random();
+        let alice_public = PublicKey::from(&alice_private);
+
+        let bob_private = StaticSecret::random();
+        let bob_public = PublicKey::from(&bob_private);
+
+        let mut alice_session = PairingSession::new(
+            "test-session".to_string(),
+            "bob-peer-id".to_string(),
+            "Alice".to_string(),
+            "Bob".to_string(),
+            true,
+        );
+        // Override Alice's keys with the test keys
+        alice_session.our_private_key = alice_private;
+        alice_session.our_public_key = alice_public;
+        alice_session.peer_public_key = Some(bob_public);
+
+        let mut bob_session = PairingSession::new(
+            "test-session".to_string(),
+            "alice-peer-id".to_string(),
+            "Bob".to_string(),
+            "Alice".to_string(),
+            false,
+        );
+        // Override Bob's keys with the test keys
+        bob_session.our_private_key = bob_private;
+        bob_session.our_public_key = bob_public;
+        bob_session.peer_public_key = Some(alice_public);
+
+        let alice_hash = alice_session.compute_key_verify_hash().unwrap();
+        let bob_hash = bob_session.compute_key_verify_hash().unwrap();
+
+        assert_eq!(alice_hash, bob_hash);
+        assert!(alice_session.verify_key_hash(&bob_hash).unwrap());
     }
 
     fn create_test_manager() -> PairingManager {

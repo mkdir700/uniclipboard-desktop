@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::protocol::{ClipboardMessage, PairingRequest, PairingResponse};
+use super::protocol::{ClipboardMessage, PairingConfirm, PairingRequest, PairingResponse};
 
 /// Network status for P2P connection
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -72,6 +72,11 @@ pub enum NetworkEvent {
         session_id: String,
         peer_id: String,
         response: PairingResponse,
+    },
+    PairingConfirmReceived {
+        session_id: String,
+        peer_id: String,
+        confirm: PairingConfirm,
     },
     PairingComplete {
         session_id: String,

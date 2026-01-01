@@ -85,29 +85,68 @@ impl Libp2pSync {
         encryptor.encrypt(content)
     }
 
-    /// Attempt to decrypt content using any known peer key
-    /// This is inefficient but necessary if we don't know who sent it or which key was used
-    /// Ideally, the message should contain a KeyID or we try the sender's key.
+    /// Attempt to decrypt content using the sender's shared secret
     fn decrypt_content(&self, content: &[u8], origin_peer_id: &str) -> Result<Vec<u8>> {
-        // Try to get the sender's shared secret
-        if let Ok(Some(peer)) = self.peer_storage.get_peer(origin_peer_id) {
-            let secret_bytes: [u8; 32] = peer
-                .shared_secret
-                .as_slice()
-                .try_into()
-                .map_err(|_| anyhow!("Invalid shared secret length"))?;
-            let encryptor = Encryptor::from_key(&secret_bytes);
+        debug!(
+            "Attempting to decrypt message from peer {}, content length: {}",
+            origin_peer_id,
+            content.len()
+        );
 
-            match encryptor.decrypt(content) {
-                Ok(data) => return Ok(data),
-                Err(e) => {
-                    debug!("Failed to decrypt with sender's key: {}", e);
-                    // Fallback to trying all keys? Unlikely to work if sender didn't use our shared key.
-                }
-            }
+        let peer = self.peer_storage.get_peer(origin_peer_id)?;
+
+        if peer.is_none() {
+            warn!("Peer {} not found in storage", origin_peer_id);
+            return Err(anyhow!(
+                "Could not decrypt content from {}: peer not found",
+                origin_peer_id
+            ));
         }
 
-        Err(anyhow!("Could not decrypt content from {}", origin_peer_id))
+        let peer = peer.unwrap();
+
+        if peer.shared_secret.len() != 32 {
+            error!(
+                "Invalid shared secret length for peer {}: expected 32, got {}",
+                origin_peer_id,
+                peer.shared_secret.len()
+            );
+            return Err(anyhow!(
+                "Could not decrypt content from {}: invalid secret length",
+                origin_peer_id
+            ));
+        }
+
+        let secret_bytes: [u8; 32] = peer
+            .shared_secret
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow!("Invalid shared secret format"))?;
+
+        debug!(
+            "Using shared secret for peer {} (first 4 bytes: {})",
+            origin_peer_id,
+            hex::encode(&secret_bytes[..4])
+        );
+
+        let encryptor = Encryptor::from_key(&secret_bytes);
+
+        match encryptor.decrypt(content) {
+            Ok(data) => {
+                debug!("Successfully decrypted {} bytes", data.len());
+                Ok(data)
+            }
+            Err(e) => {
+                error!(
+                    "Failed to decrypt message from peer {}: {} (content_len: {}, secret_hash: {})",
+                    origin_peer_id,
+                    e,
+                    content.len(),
+                    hex::encode(&Sha256::digest(&secret_bytes)[..8])
+                );
+                Err(anyhow!("Could not decrypt content from {}: {}", origin_peer_id, e))
+            }
+        }
     }
 
     /// Handle an incoming encrypted clipboard message from the network

@@ -97,7 +97,9 @@ pub struct PairingResponse {
 pub struct PairingConfirm {
     pub session_id: String,
     pub success: bool,
-    pub shared_secret: Option<Vec<u8>>, // Encrypted shared secret
+    /// Key verification hash - used to verify both parties computed the same key
+    /// Format: SHA256(session_id + shared_secret[0..16]), taking first 16 bytes
+    pub key_verify_hash: Option<Vec<u8>>,
     pub error: Option<String>,
     /// Sender's device name (the device sending this confirm message)
     pub sender_device_name: String,
@@ -200,7 +202,7 @@ impl std::fmt::Debug for PairingConfirm {
         f.debug_struct("PairingConfirm")
             .field("session_id", &self.session_id)
             .field("success", &self.success)
-            .field("shared_secret", &"[REDACTED]")
+            .field("key_verify_hash", &"[REDACTED]")
             .field("error", &self.error)
             .field("sender_device_name", &self.sender_device_name)
             .finish()
