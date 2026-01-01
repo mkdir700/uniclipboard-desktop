@@ -323,6 +323,12 @@ impl PairingManager {
         peer_id: String,
         request: PairingRequest,
     ) -> Result<()> {
+        log::info!(
+            "Received pairing request from peer {} (device: {})",
+            peer_id,
+            request.device_name
+        );
+
         let our_private_key = StaticSecret::random();
         let our_public_key = PublicKey::from(&our_private_key);
 
@@ -368,6 +374,8 @@ impl PairingManager {
         // Generate PIN for user verification
         let pin = self.generate_pin();
 
+        log::info!("Accepted pairing request {}, generated PIN: {}", session_id, pin);
+
         // Send p2p-pin-ready event to frontend (responder needs to see the PIN)
         let _ = self
             .event_tx
@@ -402,6 +410,12 @@ impl PairingManager {
         peer_device_name: String,
         peer_public_key: Vec<u8>,
     ) -> Result<()> {
+        log::info!(
+            "Received PIN challenge for session {}, peer device: {}",
+            session_id,
+            peer_device_name
+        );
+
         let session = self
             .sessions
             .get_mut(session_id)
@@ -433,6 +447,16 @@ impl PairingManager {
 
         let device_name = session.device_name.clone();
         let peer_id = session.peer_id.clone();
+
+        if !pin_match {
+            log::warn!("PIN verification failed for session {}", session_id);
+        } else {
+            log::info!(
+                "PIN verified successfully for session {}, peer: {}",
+                session_id,
+                peer_id
+            );
+        }
 
         let confirm = if pin_match {
             // Compute shared secret
@@ -527,6 +551,20 @@ impl PairingManager {
         }
 
         if confirm.success {
+            log::info!(
+                "Pairing completed successfully for session {}, peer: {}",
+                session_id,
+                peer_id
+            );
+        } else {
+            log::warn!(
+                "Pairing failed for session {}: {}",
+                session_id,
+                confirm.error.as_deref().unwrap_or("unknown error")
+            );
+        }
+
+        if confirm.success {
             if confirm.shared_secret.is_some() {
                 // The shared secret is sent by the initiator
                 // For now, we'll derive our own shared secret
@@ -545,6 +583,8 @@ impl PairingManager {
 
     /// Reject an incoming pairing request
     pub async fn reject_pairing(&mut self, session_id: &str, peer_id: String) -> Result<()> {
+        log::info!("Rejected pairing request {} from peer {}", session_id, peer_id);
+
         self.network_command_tx
             .send(NetworkCommand::RejectPairing {
                 peer_id,

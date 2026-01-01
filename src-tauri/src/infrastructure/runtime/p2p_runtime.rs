@@ -3,6 +3,7 @@
 //! Manages all P2P-related components including NetworkManager, PairingManager, and P2pSync.
 
 use anyhow::Result;
+use chrono::Utc;
 use libp2p::identity::Keypair;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,6 +15,7 @@ use crate::api::event::{
     P2PPinReadyEventData,
 };
 use crate::config::Setting;
+use crate::domain::pairing::PairedPeer;
 use crate::infrastructure::p2p::pairing::{PairingCommand, PairingManager};
 use crate::infrastructure::p2p::{DiscoveredPeer, NetworkCommand};
 use crate::infrastructure::storage::peer_storage::PeerStorage;
@@ -182,8 +184,23 @@ impl P2PRuntime {
                         session_id,
                         peer_id,
                         device_name,
-                        shared_secret: _,
+                        shared_secret,
                     } => {
+                        // Save paired peer to PeerStorage
+                        let paired_peer = PairedPeer {
+                            peer_id: peer_id.clone(),
+                            device_name: device_name.clone(),
+                            shared_secret,
+                            paired_at: Utc::now(),
+                            last_seen: Some(Utc::now()),
+                            last_known_addresses: vec![],
+                        };
+                        if let Err(e) = _p2p_sync_clone.peer_storage().save_peer(paired_peer) {
+                            log::error!("Failed to save paired peer {}: {}", peer_id, e);
+                        } else {
+                            log::info!("Saved paired peer: {} (device: {})", peer_id, device_name);
+                        }
+
                         // Emit event to frontend
                         let event_data = P2PPairingCompleteEventData {
                             session_id,
