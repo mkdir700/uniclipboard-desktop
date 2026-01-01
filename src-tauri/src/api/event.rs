@@ -60,6 +60,22 @@ pub struct P2PPairingFailedEventData {
     pub error: String,
 }
 
+/// Onboarding 密码设置成功事件数据
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingPasswordSetEvent {
+    /// 事件时间戳（毫秒）
+    pub timestamp: u64,
+}
+
+/// Onboarding 流程完成事件数据
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingCompletedEvent {
+    /// 事件时间戳（毫秒）
+    pub timestamp: u64,
+}
+
 /// 事件监听器状态
 pub struct EventListenerState {
     /// 剪贴板新内容事件监听器ID

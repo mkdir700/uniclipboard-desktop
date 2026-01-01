@@ -3,6 +3,7 @@ import { TitleBar } from '@/components'
 import GlobalPairingRequestDialog from '@/components/GlobalPairingRequestDialog'
 import PairingPinDialog from '@/components/PairingPinDialog'
 import { Toaster } from '@/components/ui/sonner'
+import { OnboardingProvider, useOnboarding } from '@/contexts/OnboardingContext'
 import { P2PProvider } from '@/contexts/P2PContext'
 import { SearchProvider, useSearch } from '@/contexts/SearchContext'
 import { SettingProvider } from '@/contexts/SettingContext'
@@ -11,6 +12,7 @@ import { useP2P } from '@/hooks/useP2P'
 import { MainLayout, SettingsWindowLayout } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
 import DevicesPage from '@/pages/DevicesPage'
+import OnboardingPage from '@/pages/OnboardingPage'
 import SettingsPage from '@/pages/SettingsPage'
 import './App.css'
 
@@ -54,6 +56,16 @@ const AuthenticatedLayout = () => {
 
 // 主应用程序内容
 const AppContent = () => {
+  const { status, loading } = useOnboarding()
+
+  if (loading || status === null) {
+    return null // Loading
+  }
+
+  if (!status.has_completed) {
+    return <OnboardingPage />
+  }
+
   return (
     <ShortcutProvider>
       <P2PProvider>
@@ -86,8 +98,10 @@ export default function App() {
   return (
     <Router>
       <SearchProvider>
-        <TitleBarWithSearch />
-        <AppContent />
+        <OnboardingProvider>
+          <TitleBarWithSearch />
+          <AppContent />
+        </OnboardingProvider>
       </SearchProvider>
     </Router>
   )

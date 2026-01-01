@@ -4,3 +4,4 @@ pub mod event;
 pub mod onboarding;
 pub mod p2p;
 pub mod setting;
+pub mod vault;

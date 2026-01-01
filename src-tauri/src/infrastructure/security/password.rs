@@ -87,8 +87,20 @@ impl PasswordManager {
 
     // 内部构造函数，只在初始化单例时使用
     fn new_internal() -> Self {
-        let valut_password = "A1B2C3D4E5F60718A1B2C3D4E5F60718";
-        let stronghold = Stronghold::new(Self::get_snapshot_path(), valut_password.into()).unwrap();
+        let vault_password = Self::init_vault_password()
+            .unwrap_or_else(|e| {
+                log::error!("Failed to initialize vault password: {}", e);
+                // 降级：生成临时密码（避免应用崩溃）
+                Self::generate_vault_password()
+            });
+
+        let stronghold = Stronghold::new(
+            Self::get_snapshot_path(),
+            vault_password.into()
+        ).unwrap_or_else(|e| {
+            panic!("Failed to initialize Stronghold: {}", e);
+        });
+
         // 如果加载失败，捕获错误并创建 client
         let client = stronghold
             .load_client("uniclipboard")
@@ -126,8 +138,8 @@ impl PasswordManager {
     pub fn init_salt_file_if_not_exists() -> Result<()> {
         let salt_file_path = Self::get_salt_file_path();
         if !salt_file_path.exists() {
-            Self::generate_salt();
-            std::fs::write(salt_file_path, Self::generate_salt())?;
+            let salt = Self::generate_salt();
+            std::fs::write(salt_file_path, salt)?;
         }
         Ok(())
     }
@@ -138,6 +150,90 @@ impl PasswordManager {
     /// * `String` - 生成的盐值字符串表示
     pub fn generate_salt() -> String {
         SaltString::generate(&mut OsRng).to_string()
+    }
+
+    /// 获取 vault 密钥文件路径
+    pub fn get_vault_key_path() -> PathBuf {
+        get_config_dir()
+            .expect("Could not find config directory")
+            .join(".vault_key")
+    }
+
+    /// 检查加密密码是否存在（不触发单例初始化）
+    ///
+    /// 此方法仅检查文件系统状态，不会访问 INSTANCE 单例
+    /// 用于 onboarding 流程中的轻量级状态检查
+    pub fn has_encryption_password() -> bool {
+        let snapshot_path = Self::get_snapshot_path();
+        let vault_key_path = Self::get_vault_key_path();
+
+        // 两个文件都必须存在才表示 vault 已正确初始化
+        snapshot_path.exists() && vault_key_path.exists()
+    }
+
+    /// 生成随机 vault 密码
+    fn generate_vault_password() -> String {
+        use rand::Rng;
+        const VAULT_PASSWORD_LENGTH: usize = 32;
+        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                                abcdefghijklmnopqrstuvwxyz\
+                                0123456789";
+        let mut rng = rand::rng();
+        (0..VAULT_PASSWORD_LENGTH)
+            .map(|_| {
+                let idx = rng.random_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect()
+    }
+
+    /// 初始化或加载 vault 密码
+    fn init_vault_password() -> Result<String> {
+        let vault_key_path = Self::get_vault_key_path();
+        let snapshot_path = Self::get_snapshot_path();
+
+        // 检查状态一致性
+        let vault_exists = vault_key_path.exists();
+        let snapshot_exists = snapshot_path.exists();
+
+        if vault_exists && snapshot_exists {
+            // 两个文件都存在 - 读取已存在的 vault 密码
+            return std::fs::read_to_string(&vault_key_path)
+                .map_err(|e| anyhow!("Failed to read vault key: {}", e));
+        }
+
+        if !vault_exists && !snapshot_exists {
+            // 两个文件都不存在 - 生成新的 vault 密码
+            let vault_password = Self::generate_vault_password();
+            std::fs::write(&vault_key_path, &vault_password)
+                .map_err(|e| anyhow!("Failed to write vault key: {}", e))?;
+
+            // 设置文件权限（Unix: 仅用户可读写）
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = std::fs::metadata(&vault_key_path)?.permissions();
+                perms.set_mode(0o600);
+                std::fs::set_permissions(&vault_key_path, perms)?;
+            }
+
+            return Ok(vault_password);
+        }
+
+        // 状态不一致 - 一个存在另一个不存在
+        Err(anyhow!(
+            "Vault state inconsistent: vault_key={}, snapshot={}. \
+             Please delete both files to reset: {:?} and {:?}",
+            vault_exists,
+            snapshot_exists,
+            vault_key_path,
+            snapshot_path
+        ))
+    }
+
+    /// 检查 vault 密钥是否已存在
+    pub fn vault_key_exists() -> bool {
+        Self::get_vault_key_path().exists()
     }
 
     /// 获取Stronghold数据文件路径

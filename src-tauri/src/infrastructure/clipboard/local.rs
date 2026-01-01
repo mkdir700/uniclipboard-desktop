@@ -75,7 +75,13 @@ impl LocalClipboardTrait for LocalClipboard {
 
         // 在后台线程中启动剪贴板监听
         thread::spawn(move || {
-            let mut watcher = watcher.lock().expect("Failed to lock watcher");
+            let mut watcher = match watcher.lock() {
+                Ok(w) => w,
+                Err(e) => {
+                    error!("Failed to lock clipboard watcher: {}", e);
+                    return;
+                }
+            };
             debug!("Start watching clipboard");
             watcher.start_watch();
         });

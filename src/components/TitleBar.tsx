@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
+import { useOnboarding } from '@/contexts/OnboardingContext'
 import { usePlatform } from '@/hooks/usePlatform'
 import { cn } from '@/lib/utils'
 
@@ -56,6 +57,7 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
   const [isMaximized, setIsMaximized] = useState(false)
   const location = useLocation()
   const { t } = useTranslation()
+  const { status } = useOnboarding()
 
   // 使用 usePlatform hook 获取平台信息
   const { isWindows, isMac, isTauri } = usePlatform()
@@ -63,6 +65,8 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
 
   // 检测是否在 Dashboard 页面
   const isDashboardPage = location.pathname === '/'
+  // 检测是否在 Onboarding 页面（通过 onboarding 状态判断，未完成时隐藏 TitleBar）
+  const isOnboardingPage = status !== null && !status.has_completed
 
   useEffect(() => {
     if (!isTauri || !windowRef) return
@@ -134,6 +138,11 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
   }
 
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+
+  // Onboarding 页面隐藏 TitleBar 保持沉浸感
+  if (isOnboardingPage) {
+    return null
+  }
 
   return (
     <div

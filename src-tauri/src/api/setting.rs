@@ -149,7 +149,8 @@ pub async fn get_encryption_password() -> Result<String, String> {
 
     // 处理结果
     match result {
-        Ok(password) => Ok(password.unwrap_or_default()),
+        Ok(Some(password)) => Ok(password),
+        Ok(None) => Err("加密密码未设置".to_string()),
         Err(e) => Err(format!("获取加密口令失败: {}", e)),
     }
 }

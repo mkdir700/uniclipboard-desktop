@@ -62,6 +62,26 @@ fn main() {
     // 初始化密码管理器
     PasswordManager::init_salt_file_if_not_exists().unwrap();
 
+    // 检查 vault 状态一致性（在单例初始化之前）
+    // 如果状态不一致，提供恢复提示
+    let vault_key_path = PasswordManager::get_vault_key_path();
+    let snapshot_path = PasswordManager::get_snapshot_path();
+    let vault_exists = vault_key_path.exists();
+    let snapshot_exists = snapshot_path.exists();
+
+    if vault_exists != snapshot_exists {
+        // 状态不一致 - 一个文件存在另一个不存在
+        error!(
+            "Vault state inconsistent: vault_key={}, snapshot={}. \
+             Please delete both files to reset: {:?} and {:?}",
+            vault_exists, snapshot_exists, vault_key_path, snapshot_path
+        );
+        panic!(
+            "Vault state inconsistent. Please delete both files to reset:\n  {:?}\n  {:?}",
+            vault_key_path, snapshot_path
+        );
+    }
+
     // 初始化数据库
     match DB_POOL.init() {
         Ok(_) => log::info!("Database initialized successfully"),
@@ -225,8 +245,11 @@ fn run_app(user_setting: Setting, device_id: String) {
             api::event::stop_listen_p2p_pairing_failed,
             api::onboarding::check_onboarding_status,
             api::onboarding::complete_onboarding,
+            api::onboarding::setup_encryption_password,
             api::onboarding::get_device_id,
             api::onboarding::save_device_info,
+            api::vault::check_vault_status,
+            api::vault::reset_vault,
             api::p2p::get_local_peer_id,
             api::p2p::get_p2p_peers,
             api::p2p::get_local_device_info,
