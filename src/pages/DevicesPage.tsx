@@ -104,7 +104,7 @@ const DevicesPage: React.FC = () => {
   }, [])
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full relative pt-10">
       {/* 顶部标题栏 */}
       <DeviceHeader
         addDevice={handleAddDevice}
