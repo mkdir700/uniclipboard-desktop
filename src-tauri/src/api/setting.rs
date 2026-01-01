@@ -65,10 +65,15 @@ pub fn save_setting(app_handle: AppHandle, setting_json: &str) -> Result<(), Str
             }
 
             // 广播设置变更事件到所有窗口
-            let timestamp = std::time::SystemTime::now()
+            let timestamp = match std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
+            {
+                Ok(dur) => dur.as_millis() as u64,
+                Err(e) => {
+                    log::error!("Failed to get system time: {:?}", e);
+                    return Err(format!("Failed to get timestamp: {}", e));
+                }
+            };
 
             let event_data = SettingChangedEventData {
                 setting_json: setting_json.to_string(),
