@@ -48,6 +48,7 @@ x25519-dalek = { version = "2", features = ["static_secrets", "getrandom"] }  # 
 sha2 = "0.10.8"  # SHA-2哈希函数
 base64 = "0.22.1"  # Base64编码/解码
 aes-gcm = "0.10.3"  # AES-GCM加密算法
+subtle = "2.5"  # Constant-time comparisons
 twox-hash = "1.6.3"
 
 # ===== 文件/系统操作 =====

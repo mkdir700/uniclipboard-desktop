@@ -16,6 +16,7 @@ use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
     Argon2, Algorithm, Params, Version,
 };
+use subtle::ConstantTimeEq;
 
 /// Current version of the PIN hash encoding format
 pub const HASH_VERSION: u8 = 0x01;
@@ -143,10 +144,7 @@ pub fn verify_pin(pin: &str, encoded_hash: &[u8]) -> Result<bool> {
     let computed = argon2id_hash(pin, &decoded.salt)?;
 
     // Constant-time comparison to prevent timing attacks
-    let matches = computed
-        .iter()
-        .zip(decoded.hash.iter())
-        .all(|(a, b)| a == b);
+    let matches = computed.ct_eq(&decoded.hash).into();
 
     Ok(matches)
 }
