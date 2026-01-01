@@ -1,4 +1,4 @@
-use local_ip_address::{local_ip, list_afinet_netifas};
+use local_ip_address::{list_afinet_netifas, local_ip};
 use sha2::{Digest, Sha256};
 
 use crate::domain::network::NetworkInterface;

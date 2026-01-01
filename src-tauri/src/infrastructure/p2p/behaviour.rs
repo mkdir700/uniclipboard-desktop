@@ -155,9 +155,8 @@ impl UniClipboardBehaviour {
         // Format: "uniclipboard/<version>/<device_name>"
         // The device name is included so other peers can display a human-readable name
         let identify = identify::Behaviour::new(
-            identify::Config::new(PROTOCOL_NAME.to_string(), keypair.public()).with_agent_version(
-                format!("uniclipboard/1.0.0/{}", device_name),
-            ),
+            identify::Config::new(PROTOCOL_NAME.to_string(), keypair.public())
+                .with_agent_version(format!("uniclipboard/1.0.0/{}", device_name)),
         );
 
         Ok(Self {

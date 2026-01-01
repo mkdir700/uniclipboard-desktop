@@ -244,10 +244,7 @@ impl AppRuntime {
                 let _ = respond_to.send(Ok(device_info));
             }
             P2PCommand::GetPairedPeers { respond_to } => {
-                let peers = p2p_runtime
-                    .p2p_sync()
-                    .peer_storage()
-                    .get_all_peers();
+                let peers = p2p_runtime.p2p_sync().peer_storage().get_all_peers();
                 let _ = respond_to.send(Ok(peers));
             }
             P2PCommand::InitiatePairing {
@@ -324,9 +321,7 @@ impl AppRuntime {
                 peer_id,
                 respond_to,
             } => {
-                let result = p2p_runtime
-                    .unpair_peer(&peer_id)
-                    .map_err(|e| e.to_string());
+                let result = p2p_runtime.unpair_peer(&peer_id).map_err(|e| e.to_string());
                 let _ = respond_to.send(result);
             }
             P2PCommand::AcceptPairing {

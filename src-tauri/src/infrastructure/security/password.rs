@@ -3,9 +3,12 @@ use anyhow::{anyhow, Result};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use iota_stronghold::types::Client;
 use once_cell::sync::Lazy;
-use std::{path::PathBuf, sync::{Arc, Mutex}};
-use tokio::sync::mpsc;
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use tauri_plugin_stronghold::stronghold::Stronghold;
+use tokio::sync::mpsc;
 
 /// 密码管理器，用于处理密码的哈希和验证
 pub struct PasswordManager {
@@ -14,9 +17,8 @@ pub struct PasswordManager {
 }
 
 // 全局单例实例
-static INSTANCE: Lazy<Mutex<PasswordManager>> = Lazy::new(|| {
-    Mutex::new(PasswordManager::new_internal())
-});
+static INSTANCE: Lazy<Mutex<PasswordManager>> =
+    Lazy::new(|| Mutex::new(PasswordManager::new_internal()));
 
 // 异步操作请求类型
 pub enum PasswordRequest {
@@ -32,7 +34,7 @@ pub enum PasswordRequest {
 pub static PASSWORD_SENDER: Lazy<Mutex<Option<mpsc::Sender<PasswordRequest>>>> = Lazy::new(|| {
     // 创建通道
     let (tx, mut rx) = mpsc::channel::<PasswordRequest>(100);
-    
+
     // 启动后台工作线程
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -40,30 +42,30 @@ pub static PASSWORD_SENDER: Lazy<Mutex<Option<mpsc::Sender<PasswordRequest>>>> =
             while let Some(request) = rx.recv().await {
                 // 获取密码管理器实例
                 let pm = PasswordManager::get_instance().lock().unwrap();
-                
+
                 match request {
                     PasswordRequest::GetRecord(key, responder) => {
                         let result = pm.get_record_internal(key);
                         let _ = responder.send(result).await;
-                    },
+                    }
                     PasswordRequest::InsertRecord(key, value, responder) => {
                         let result = pm.insert_record_internal(key, value);
                         let _ = responder.send(result).await;
-                    },
+                    }
                     PasswordRequest::DeleteRecord(key, responder) => {
                         let result = pm.delete_record_internal(key);
                         let _ = responder.send(result).await;
-                    },
+                    }
                     PasswordRequest::GetEncryptionPassword(responder) => {
                         let key = "encryption_password".to_string();
                         let result = pm.get_record_internal(key);
                         let _ = responder.send(result).await;
-                    },
+                    }
                     PasswordRequest::SetEncryptionPassword(password, responder) => {
                         let key = "encryption_password".to_string();
                         let result = pm.insert_record_internal(key, password);
                         let _ = responder.send(result).await;
-                    },
+                    }
                     PasswordRequest::DeleteEncryptionPassword(responder) => {
                         let key = "encryption_password".to_string();
                         let result = pm.delete_record_internal(key);
@@ -73,7 +75,7 @@ pub static PASSWORD_SENDER: Lazy<Mutex<Option<mpsc::Sender<PasswordRequest>>>> =
             }
         });
     });
-    
+
     Mutex::new(Some(tx))
 });
 
@@ -166,7 +168,7 @@ impl PasswordManager {
             None => Ok(None),
         }
     }
-    
+
     // 内部同步方法，只在后台线程中使用
     fn delete_record_internal(&self, key: String) -> Result<()> {
         self.client.store().delete(key.as_bytes())?;
@@ -177,15 +179,16 @@ impl PasswordManager {
     /// 插入记录（异步版本）
     pub async fn insert_record(&self, key: String, value: String) -> Result<()> {
         let (tx, mut rx) = mpsc::channel(1);
-        
+
         // 发送请求到工作线程
         if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender.send(PasswordRequest::InsertRecord(key, value, tx)).await
+            sender
+                .send(PasswordRequest::InsertRecord(key, value, tx))
+                .await
                 .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-            
+
             // 等待结果
-            rx.recv().await
-                .ok_or_else(|| anyhow!("工作线程已关闭"))?
+            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
         } else {
             Err(anyhow!("密码通道未初始化"))
         }
@@ -194,32 +197,34 @@ impl PasswordManager {
     /// 获取记录（异步版本）
     pub async fn get_record(&self, key: String) -> Result<Option<String>> {
         let (tx, mut rx) = mpsc::channel(1);
-        
+
         // 发送请求到工作线程
         if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender.send(PasswordRequest::GetRecord(key, tx)).await
+            sender
+                .send(PasswordRequest::GetRecord(key, tx))
+                .await
                 .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-            
+
             // 等待结果
-            rx.recv().await
-                .ok_or_else(|| anyhow!("工作线程已关闭"))?
+            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
         } else {
             Err(anyhow!("密码通道未初始化"))
         }
     }
-    
+
     /// 删除记录（异步版本）
     pub async fn delete_record(&self, key: String) -> Result<()> {
         let (tx, mut rx) = mpsc::channel(1);
-        
+
         // 发送请求到工作线程
         if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender.send(PasswordRequest::DeleteRecord(key, tx)).await
+            sender
+                .send(PasswordRequest::DeleteRecord(key, tx))
+                .await
                 .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-            
+
             // 等待结果
-            rx.recv().await
-                .ok_or_else(|| anyhow!("工作线程已关闭"))?
+            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
         } else {
             Err(anyhow!("密码通道未初始化"))
         }
@@ -228,15 +233,16 @@ impl PasswordManager {
     /// 获取加密口令（异步版本）
     pub async fn get_encryption_password(&self) -> Result<Option<String>> {
         let (tx, mut rx) = mpsc::channel(1);
-        
+
         // 发送请求到工作线程
         if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender.send(PasswordRequest::GetEncryptionPassword(tx)).await
+            sender
+                .send(PasswordRequest::GetEncryptionPassword(tx))
+                .await
                 .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-            
+
             // 等待结果
-            rx.recv().await
-                .ok_or_else(|| anyhow!("工作线程已关闭"))?
+            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
         } else {
             Err(anyhow!("密码通道未初始化"))
         }
@@ -245,15 +251,16 @@ impl PasswordManager {
     /// 设置加密口令（异步版本）
     pub async fn set_encryption_password(&self, password: String) -> Result<()> {
         let (tx, mut rx) = mpsc::channel(1);
-        
+
         // 发送请求到工作线程
         if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender.send(PasswordRequest::SetEncryptionPassword(password, tx)).await
+            sender
+                .send(PasswordRequest::SetEncryptionPassword(password, tx))
+                .await
                 .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-            
+
             // 等待结果
-            rx.recv().await
-                .ok_or_else(|| anyhow!("工作线程已关闭"))?
+            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
         } else {
             Err(anyhow!("密码通道未初始化"))
         }
@@ -262,15 +269,16 @@ impl PasswordManager {
     /// 清除加密口令（异步版本）
     pub async fn delete_encryption_password(&self) -> Result<()> {
         let (tx, mut rx) = mpsc::channel(1);
-        
+
         // 发送请求到工作线程
         if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender.send(PasswordRequest::DeleteEncryptionPassword(tx)).await
+            sender
+                .send(PasswordRequest::DeleteEncryptionPassword(tx))
+                .await
                 .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-            
+
             // 等待结果
-            rx.recv().await
-                .ok_or_else(|| anyhow!("工作线程已关闭"))?
+            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
         } else {
             Err(anyhow!("密码通道未初始化"))
         }

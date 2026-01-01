@@ -281,9 +281,9 @@ impl PairingManager {
         let session = PairingSession::new(
             session_id.clone(),
             peer_id.clone(),
-            device_name.clone(),      // local_device_name (this device)
-            "Unknown".to_string(),    // peer_device_name (will be updated in handle_pin_ready)
-            true,                     // is_initiator
+            device_name.clone(),   // local_device_name (this device)
+            "Unknown".to_string(), // peer_device_name (will be updated in handle_pin_ready)
+            true,                  // is_initiator
         );
 
         // Store public key bytes before moving session into map
@@ -344,16 +344,17 @@ impl PairingManager {
         let session = PairingSession::new(
             request.session_id.clone(),
             peer_id.clone(),
-            self.device_name.clone(),        // local_device_name (responder's device)
-            request.device_name.clone(),     // peer_device_name (initiator's device)
-            false,                           // is_initiator
+            self.device_name.clone(), // local_device_name (responder's device)
+            request.device_name.clone(), // peer_device_name (initiator's device)
+            false,                    // is_initiator
         );
 
         // Store peer public key
         let mut session_with_key = session;
         session_with_key.peer_public_key = Some(peer_public);
 
-        self.sessions.insert(request.session_id.clone(), session_with_key);
+        self.sessions
+            .insert(request.session_id.clone(), session_with_key);
 
         Ok(())
     }
@@ -376,7 +377,11 @@ impl PairingManager {
         // Generate PIN for user verification
         let pin = self.generate_pin();
 
-        log::info!("Accepted pairing request {}, generated PIN: {}", session_id, pin);
+        log::info!(
+            "Accepted pairing request {}, generated PIN: {}",
+            session_id,
+            pin
+        );
 
         // Send p2p-pin-ready event to frontend (responder needs to see the PIN)
         let _ = self
@@ -586,7 +591,11 @@ impl PairingManager {
 
     /// Reject an incoming pairing request
     pub async fn reject_pairing(&mut self, session_id: &str, peer_id: String) -> Result<()> {
-        log::info!("Rejected pairing request {} from peer {}", session_id, peer_id);
+        log::info!(
+            "Rejected pairing request {} from peer {}",
+            session_id,
+            peer_id
+        );
 
         self.network_command_tx
             .send(NetworkCommand::RejectPairing {
@@ -667,34 +676,42 @@ mod tests {
 impl std::fmt::Debug for PairingCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::HandlePinReady { session_id, peer_device_name, .. } => {
-                f.debug_struct("HandlePinReady")
-                    .field("session_id", session_id)
-                    .field("peer_device_name", peer_device_name)
-                    .field("pin", &"[REDACTED]")
-                    .field("peer_public_key", &"[REDACTED]")
-                    .finish()
-            }
-            Self::HandleResponse { session_id, peer_device_name, .. } => {
-                f.debug_struct("HandleResponse")
-                    .field("session_id", session_id)
-                    .field("peer_device_name", peer_device_name)
-                    .field("response", &"[REDACTED]")
-                    .finish()
-            }
-            Self::HandleConfirm { session_id, peer_id, .. } => {
-                f.debug_struct("HandleConfirm")
-                    .field("session_id", session_id)
-                    .field("peer_id", peer_id)
-                    .field("confirm", &"[REDACTED]")
-                    .finish()
-            }
-            Self::HandleRequest { peer_id, .. } => {
-                f.debug_struct("HandleRequest")
-                    .field("peer_id", peer_id)
-                    .field("request", &"[REDACTED]")
-                    .finish()
-            }
+            Self::HandlePinReady {
+                session_id,
+                peer_device_name,
+                ..
+            } => f
+                .debug_struct("HandlePinReady")
+                .field("session_id", session_id)
+                .field("peer_device_name", peer_device_name)
+                .field("pin", &"[REDACTED]")
+                .field("peer_public_key", &"[REDACTED]")
+                .finish(),
+            Self::HandleResponse {
+                session_id,
+                peer_device_name,
+                ..
+            } => f
+                .debug_struct("HandleResponse")
+                .field("session_id", session_id)
+                .field("peer_device_name", peer_device_name)
+                .field("response", &"[REDACTED]")
+                .finish(),
+            Self::HandleConfirm {
+                session_id,
+                peer_id,
+                ..
+            } => f
+                .debug_struct("HandleConfirm")
+                .field("session_id", session_id)
+                .field("peer_id", peer_id)
+                .field("confirm", &"[REDACTED]")
+                .finish(),
+            Self::HandleRequest { peer_id, .. } => f
+                .debug_struct("HandleRequest")
+                .field("peer_id", peer_id)
+                .field("request", &"[REDACTED]")
+                .finish(),
             _ => {
                 // For non-sensitive variants, use discriminant
                 write!(f, "{:?}", std::mem::discriminant(self))

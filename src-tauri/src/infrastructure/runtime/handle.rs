@@ -78,7 +78,8 @@ pub enum P2PCommand {
     },
     /// Get paired peers from storage
     GetPairedPeers {
-        respond_to: tokio::sync::oneshot::Sender<Result<Vec<crate::domain::pairing::PairedPeer>, String>>,
+        respond_to:
+            tokio::sync::oneshot::Sender<Result<Vec<crate::domain::pairing::PairedPeer>, String>>,
     },
     /// Initiate pairing with a peer
     InitiatePairing {

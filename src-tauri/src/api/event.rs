@@ -181,9 +181,7 @@ pub fn listen_p2p_pin_ready<R: Runtime>(
 
 /// 停止监听 P2P PIN 就绪事件
 #[tauri::command]
-pub fn stop_listen_p2p_pin_ready(
-    event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>,
-) {
+pub fn stop_listen_p2p_pin_ready(event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>) {
     let mut state = event_listener_state.lock().unwrap();
     state.p2p_pin_ready_listener_id = None;
 }

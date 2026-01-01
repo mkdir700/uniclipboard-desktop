@@ -236,9 +236,7 @@ impl From<DbDevice> for Device {
         device.status = DeviceStatus::try_from(db_device.status).unwrap_or(DeviceStatus::Unknown);
         device.updated_at = Some(db_device.updated_at);
         device.alias = db_device.alias;
-        device.platform = db_device
-            .platform
-            .map(|p| Platform::from_str(&p).unwrap());
+        device.platform = db_device.platform.map(|p| Platform::from_str(&p).unwrap());
         device.peer_id = db_device.peer_id;
         device.device_name = db_device.device_name;
         device.is_paired = db_device.is_paired;

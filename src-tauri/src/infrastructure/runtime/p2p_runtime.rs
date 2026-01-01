@@ -198,7 +198,11 @@ impl P2PRuntime {
                         if let Err(e) = _p2p_sync_clone.peer_storage().save_peer(paired_peer) {
                             log::error!("Failed to save paired peer {}: {}", peer_id, e);
                         } else {
-                            log::info!("Saved paired peer: {} (device: {})", peer_id, peer_device_name);
+                            log::info!(
+                                "Saved paired peer: {} (device: {})",
+                                peer_id,
+                                peer_device_name
+                            );
                         }
 
                         // Emit event to frontend

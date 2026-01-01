@@ -1,6 +1,5 @@
 use tauri_plugin_autostart::ManagerExt as _;
 
-
 // 启用开机自启动
 #[tauri::command]
 pub async fn enable_autostart(app_handle: tauri::AppHandle) -> Result<(), String> {

@@ -6,10 +6,10 @@ use libp2p::{
     swarm::SwarmEvent,
     tcp, yamux, Multiaddr, PeerId, Swarm,
 };
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use log::{debug, error, info, warn};
 
 use super::behaviour::{
     PairingRequest as ReqPairingRequest, PairingResponse as ReqPairingResponse,
@@ -19,7 +19,6 @@ use super::events::{ConnectedPeer, DiscoveredPeer, NetworkEvent, NetworkStatus};
 use super::protocol::{ClipboardMessage, DeviceAnnounceMessage, PairingMessage, ProtocolMessage};
 
 /// Commands sent to NetworkManager
-#[derive(Debug)]
 pub enum NetworkCommand {
     StartListening,
     StopListening,
@@ -357,7 +356,8 @@ impl NetworkManager {
                                             confirm,
                                         )) => {
                                             // Get initiator's device name from the confirm message
-                                            let initiator_device_name = confirm.sender_device_name.clone();
+                                            let initiator_device_name =
+                                                confirm.sender_device_name.clone();
 
                                             if confirm.success {
                                                 if let Some(shared_secret) =
@@ -369,7 +369,9 @@ impl NetworkManager {
                                                         success: true,
                                                         shared_secret: Some(shared_secret.clone()),
                                                         error: None,
-                                                        sender_device_name: self.device_name.clone(),
+                                                        sender_device_name: self
+                                                            .device_name
+                                                            .clone(),
                                                     };
                                                     let ack_msg = ProtocolMessage::Pairing(
                                                         PairingMessage::Confirm(ack),
@@ -402,8 +404,9 @@ impl NetworkManager {
                                                     error: confirm.error.clone(),
                                                     sender_device_name: self.device_name.clone(),
                                                 };
-                                                let ack_msg =
-                                                    ProtocolMessage::Pairing(PairingMessage::Confirm(ack));
+                                                let ack_msg = ProtocolMessage::Pairing(
+                                                    PairingMessage::Confirm(ack),
+                                                );
                                                 if let Ok(message) = ack_msg.to_bytes() {
                                                     let response = ReqPairingResponse { message };
                                                     let _ = self
@@ -448,7 +451,8 @@ impl NetworkManager {
                                             if confirm.success {
                                                 if let Some(secret) = confirm.shared_secret {
                                                     // Get responder's device name from the ACK
-                                                    let responder_device_name = confirm.sender_device_name.clone();
+                                                    let responder_device_name =
+                                                        confirm.sender_device_name.clone();
 
                                                     let _ = self
                                                         .event_tx
@@ -601,13 +605,25 @@ impl NetworkManager {
             }
 
             NetworkCommand::SendPairingRequest { peer_id, message } => {
-                if let Ok(peer) = peer_id.parse::<PeerId>() {
-                    let request = ReqPairingRequest { message };
-                    self.swarm
-                        .behaviour_mut()
-                        .request_response
-                        .send_request(&peer, request);
-                    debug!("Sent pairing request to {}", peer_id);
+                match peer_id.parse::<PeerId>() {
+                    Ok(peer) => {
+                        let request = ReqPairingRequest { message };
+                        self.swarm
+                            .behaviour_mut()
+                            .request_response
+                            .send_request(&peer, request);
+                        debug!("Sent pairing request to {}", peer_id);
+                    }
+                    Err(e) => {
+                        warn!("Invalid peer_id '{}': {}", peer_id, e);
+                        let _ = self
+                            .event_tx
+                            .send(NetworkEvent::Error(format!(
+                                "Failed to send pairing request: invalid peer_id '{}': {}",
+                                peer_id, e
+                            )))
+                            .await;
+                    }
                 }
             }
 
@@ -617,8 +633,8 @@ impl NetworkManager {
                 pin,
                 device_name,
                 public_key,
-            } => {
-                if let Ok(peer) = peer_id.parse::<PeerId>() {
+            } => match peer_id.parse::<PeerId>() {
+                Ok(peer) => {
                     if let Some(channel) = self.pending_responses.remove(&peer) {
                         let challenge = super::protocol::PairingChallenge {
                             session_id: session_id.clone(),
@@ -640,15 +656,27 @@ impl NetworkManager {
                                 debug!("Sent pairing challenge to {}", peer_id);
                             }
                         }
+                    } else {
+                        warn!("No pending response channel for peer {}", peer_id);
                     }
                 }
-            }
+                Err(e) => {
+                    warn!("Invalid peer_id '{}': {}", peer_id, e);
+                    let _ = self
+                        .event_tx
+                        .send(NetworkEvent::Error(format!(
+                            "Failed to send pairing challenge: invalid peer_id '{}': {}",
+                            peer_id, e
+                        )))
+                        .await;
+                }
+            },
 
             NetworkCommand::RejectPairing {
                 peer_id,
                 session_id,
-            } => {
-                if let Ok(peer) = peer_id.parse::<PeerId>() {
+            } => match peer_id.parse::<PeerId>() {
+                Ok(peer) => {
                     if let Some(channel) = self.pending_responses.remove(&peer) {
                         let confirm = super::protocol::PairingConfirm {
                             session_id,
@@ -667,9 +695,21 @@ impl NetworkManager {
                                 .request_response
                                 .send_response(channel, response);
                         }
+                    } else {
+                        warn!("No pending response channel for peer {}", peer_id);
                     }
                 }
-            }
+                Err(e) => {
+                    warn!("Invalid peer_id '{}': {}", peer_id, e);
+                    let _ = self
+                        .event_tx
+                        .send(NetworkEvent::Error(format!(
+                            "Failed to reject pairing: invalid peer_id '{}': {}",
+                            peer_id, e
+                        )))
+                        .await;
+                }
+            },
 
             NetworkCommand::SendPairingConfirm {
                 peer_id,
@@ -677,8 +717,8 @@ impl NetworkManager {
                 success,
                 shared_secret,
                 device_name,
-            } => {
-                if let Ok(peer) = peer_id.parse::<PeerId>() {
+            } => match peer_id.parse::<PeerId>() {
+                Ok(peer) => {
                     let confirm = super::protocol::PairingConfirm {
                         session_id,
                         success,
@@ -695,7 +735,17 @@ impl NetworkManager {
                             .send_request(&peer, request);
                     }
                 }
-            }
+                Err(e) => {
+                    warn!("Invalid peer_id '{}': {}", peer_id, e);
+                    let _ = self
+                        .event_tx
+                        .send(NetworkEvent::Error(format!(
+                            "Failed to send pairing confirm: invalid peer_id '{}': {}",
+                            peer_id, e
+                        )))
+                        .await;
+                }
+            },
 
             NetworkCommand::ReconnectPeers {
                 paired_peer_addresses,
@@ -750,7 +800,10 @@ impl NetworkManager {
                         for addr_str in addresses {
                             if let Ok(addr) = addr_str.parse::<Multiaddr>() {
                                 if let Err(e) = self.swarm.dial(addr.clone()) {
-                                    warn!("Failed to dial paired peer {} at {}: {}", peer_id, addr, e);
+                                    warn!(
+                                        "Failed to dial paired peer {} at {}: {}",
+                                        peer_id, addr, e
+                                    );
                                 } else {
                                     dialed_peers.insert(peer_id);
                                     break;
@@ -761,8 +814,8 @@ impl NetworkManager {
                 }
             }
 
-            NetworkCommand::RefreshPeer { peer_id } => {
-                if let Ok(pid) = peer_id.parse::<PeerId>() {
+            NetworkCommand::RefreshPeer { peer_id } => match peer_id.parse::<PeerId>() {
+                Ok(pid) => {
                     if let Some(peer) = self.discovered_peers.get(&pid) {
                         let _ = self
                             .event_tx
@@ -770,7 +823,17 @@ impl NetworkManager {
                             .await;
                     }
                 }
-            }
+                Err(e) => {
+                    warn!("Invalid peer_id '{}': {}", peer_id, e);
+                    let _ = self
+                        .event_tx
+                        .send(NetworkEvent::Error(format!(
+                            "Failed to refresh peer: invalid peer_id '{}': {}",
+                            peer_id, e
+                        )))
+                        .await;
+                }
+            },
 
             NetworkCommand::AnnounceDeviceName { device_name } => {
                 self.device_name = device_name.clone();
@@ -802,28 +865,34 @@ impl NetworkManager {
 impl std::fmt::Debug for NetworkCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SendPairingChallenge { peer_id, session_id, .. } => {
-                f.debug_struct("SendPairingChallenge")
-                    .field("peer_id", peer_id)
-                    .field("session_id", session_id)
-                    .field("pin", &"[REDACTED]")
-                    .field("public_key", &"[REDACTED]")
-                    .finish()
-            }
-            Self::SendPairingConfirm { peer_id, session_id, success, .. } => {
-                f.debug_struct("SendPairingConfirm")
-                    .field("peer_id", peer_id)
-                    .field("session_id", session_id)
-                    .field("success", success)
-                    .field("shared_secret", &"[REDACTED]")
-                    .finish()
-            }
-            Self::SendPairingRequest { peer_id, .. } => {
-                f.debug_struct("SendPairingRequest")
-                    .field("peer_id", peer_id)
-                    .field("message", &"[REDACTED]")
-                    .finish()
-            }
+            Self::SendPairingChallenge {
+                peer_id,
+                session_id,
+                ..
+            } => f
+                .debug_struct("SendPairingChallenge")
+                .field("peer_id", peer_id)
+                .field("session_id", session_id)
+                .field("pin", &"[REDACTED]")
+                .field("public_key", &"[REDACTED]")
+                .finish(),
+            Self::SendPairingConfirm {
+                peer_id,
+                session_id,
+                success,
+                ..
+            } => f
+                .debug_struct("SendPairingConfirm")
+                .field("peer_id", peer_id)
+                .field("session_id", session_id)
+                .field("success", success)
+                .field("shared_secret", &"[REDACTED]")
+                .finish(),
+            Self::SendPairingRequest { peer_id, .. } => f
+                .debug_struct("SendPairingRequest")
+                .field("peer_id", peer_id)
+                .field("message", &"[REDACTED]")
+                .finish(),
             _ => {
                 // For non-sensitive variants, use discriminant
                 write!(f, "{:?}", std::mem::discriminant(self))
