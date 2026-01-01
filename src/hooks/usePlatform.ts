@@ -3,9 +3,7 @@ import { useMemo } from 'react'
 /**
  * 检查是否在 Tauri 环境中运行
  */
-const isTauriEnv = () =>
-  typeof window !== 'undefined' &&
-  Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+const isTauriEnv = () => typeof window !== 'undefined' && '__TAURI__' in window
 
 /**
  * 平台检测结果接口

@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './decorum.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -174,7 +175,6 @@
 @import './themes/catppuccin.css';
 @import './themes/t3chat.css';
 @import './themes/claude.css';
-@import './decorum.css';
 
 /* 玻璃态效果 */
 @layer utilities {

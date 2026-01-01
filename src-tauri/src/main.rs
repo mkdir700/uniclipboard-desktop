@@ -163,7 +163,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
         .manage(Arc::new(Mutex::new(
             api::event::EventListenerState::default(),
         )))
-        .setup(move |app| {
+        .setup(move |app| -> Result<(), Box<dyn std::error::Error>> {
             // 获取应用句柄并克隆以便在异步任务中使用
             let app_handle = app.handle().clone();
 
@@ -186,7 +186,10 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
                 win_builder
             };
 
-            let window = win_builder.build().unwrap();
+            let window = win_builder.build().map_err(|e| {
+                log::error!("Failed to create main window: {}", e);
+                e
+            })?;
 
             // Windows: Create overlay titlebar for native window behaviors
             // This enables Windows Snap Layout and proper window chrome while maintaining our custom titlebar design
