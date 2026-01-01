@@ -1,5 +1,6 @@
 use anyhow::Result;
 use log::{info, warn};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -7,6 +8,36 @@ use std::sync::{Arc, RwLock};
 
 use crate::config::get_config_dir;
 use crate::domain::pairing::PairedPeer;
+
+/// Legacy PairedPeer format for migration (snake_case)
+#[derive(Debug, Clone, Deserialize)]
+struct PairedPeerLegacy {
+    pub peer_id: String,
+    pub device_name: String,
+    pub shared_secret: Vec<u8>,
+    pub paired_at: String,
+    pub last_seen: Option<String>,
+    pub last_known_addresses: Vec<String>,
+}
+
+impl From<PairedPeerLegacy> for PairedPeer {
+    fn from(legacy: PairedPeerLegacy) -> Self {
+        Self {
+            peer_id: legacy.peer_id,
+            device_name: legacy.device_name,
+            shared_secret: legacy.shared_secret,
+            paired_at: chrono::DateTime::parse_from_rfc3339(&legacy.paired_at)
+                .unwrap_or_else(|_| chrono::Utc::now())
+                .with_timezone(&chrono::Utc),
+            last_seen: legacy.last_seen.and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+            }),
+            last_known_addresses: legacy.last_known_addresses,
+        }
+    }
+}
 
 /// Storage for paired peers
 ///
@@ -46,15 +77,51 @@ impl PeerStorage {
     /// Load peers from disk
     fn load(&self) -> Result<()> {
         let file = File::open(&self.file_path)?;
-        let peers: Vec<PairedPeer> = serde_json::from_reader(file)?;
+
+        // Try loading as new format (camelCase) first
+        let peers: Result<Vec<PairedPeer>, _> = serde_json::from_reader(&file);
 
         let mut cache = self.cache.write().unwrap();
         cache.clear();
-        for peer in peers {
-            cache.insert(peer.peer_id.clone(), peer);
+
+        match peers {
+            Ok(peers) => {
+                for peer in peers {
+                    cache.insert(peer.peer_id.clone(), peer);
+                }
+                info!("Loaded {} paired peers from storage", cache.len());
+            }
+            Err(_) => {
+                // Fallback: try loading as legacy format (snake_case)
+                warn!("Failed to load peers in new format, trying legacy format");
+                let legacy_file = File::open(&self.file_path)?;
+                let legacy_peers: Result<Vec<PairedPeerLegacy>, _> =
+                    serde_json::from_reader(legacy_file);
+
+                match legacy_peers {
+                    Ok(peers) => {
+                        for peer in peers {
+                            let modern: PairedPeer = peer.into();
+                            cache.insert(modern.peer_id.clone(), modern);
+                        }
+                        // Resave in new format
+                        drop(cache);
+                        self.save()?;
+                        info!(
+                            "Migrated {} paired peers from legacy format",
+                            self.cache.read().unwrap().len()
+                        );
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to load peers in both new and legacy formats: {}",
+                            e
+                        ));
+                    }
+                }
+            }
         }
 
-        info!("Loaded {} paired peers from storage", cache.len());
         Ok(())
     }
 
