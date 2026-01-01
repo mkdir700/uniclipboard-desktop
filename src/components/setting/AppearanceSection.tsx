@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from '@/constants/theme'
-import { useSetting, ThemeMode } from '@/contexts/SettingContext'
+import { useSetting, type ThemeMode } from '@/hooks/useSetting'
 import { cn } from '@/lib/utils'
 
 interface ThemeOptionProps {

@@ -11,7 +11,7 @@ import {
   Input,
 } from '@/components/ui'
 import { Card, CardContent } from '@/components/ui/card'
-import { useSetting } from '@/contexts/SettingContext'
+import { useSetting } from '@/hooks/useSetting'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage, getInitialLanguage } from '@/i18n'
 
 export default function GeneralSection() {

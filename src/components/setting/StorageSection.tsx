@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui'
 import { Card, CardContent } from '@/components/ui/card'
-import { useSetting } from '@/contexts/SettingContext'
+import { useSetting } from '@/hooks/useSetting'
 
 const StorageSection: React.FC = () => {
   const { setting, error, updateStorageSetting } = useSetting()

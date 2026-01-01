@@ -1,6 +1,6 @@
 import { toast, Toaster as SonnerToaster } from 'sonner'
 import type { ToasterProps } from 'sonner'
-import { useSetting } from '@/contexts/SettingContext'
+import { useSetting } from '@/hooks/useSetting'
 
 function Toaster({ ...props }: ToasterProps) {
   const { setting } = useSetting()

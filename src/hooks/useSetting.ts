@@ -1,6 +1,6 @@
 import { useContext } from 'react'
 import { SettingContext } from '@/contexts/SettingContext'
-export type { SettingContextType } from '@/types/setting'
+export type { SettingContextType, ThemeMode } from '@/types/setting'
 
 /**
  * 使用设置上下文的钩子
