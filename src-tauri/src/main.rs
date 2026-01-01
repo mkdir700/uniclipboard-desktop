@@ -11,6 +11,7 @@ mod plugins;
 mod utils;
 
 use application::device_service::get_device_manager;
+use tauri_plugin_decorum::WebviewWindowExt;
 use config::setting::{Setting, SETTING};
 use infrastructure::context::AppContextBuilder;
 use infrastructure::security::password::PasswordManager;
@@ -143,6 +144,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
     use tauri_plugin_autostart::MacosLauncher;
     use tauri_plugin_single_instance;
     use tauri_plugin_stronghold;
+    use tauri_plugin_decorum;
 
     Builder::default()
         .plugin(logging::get_builder().build())
@@ -156,6 +158,7 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
             tauri_plugin_stronghold::Builder::with_argon2(&PasswordManager::get_salt_file_path())
                 .build(),
         )
+        .plugin(tauri_plugin_decorum::init())
         .manage(Arc::new(Mutex::new(Some(uniclipboard_app.clone()))))
         .manage(Arc::new(Mutex::new(
             api::event::EventListenerState::default(),
@@ -184,6 +187,17 @@ fn run_app(uniclipboard_app: Arc<UniClipboard>, user_setting: Setting) {
             };
 
             let window = win_builder.build().unwrap();
+
+            // Windows: Create overlay titlebar for native window behaviors
+            // This enables Windows Snap Layout and proper window chrome while maintaining our custom titlebar design
+            #[cfg(target_os = "windows")]
+            {
+                if let Err(e) = window.create_overlay_titlebar() {
+                    log::error!("Failed to create overlay titlebar: {}", e);
+                } else {
+                    log::info!("Windows overlay titlebar created successfully");
+                }
+            }
 
             // macOS specific window styling will be handled by the rounded corners plugin
             // The plugin will set up rounded corners, traffic lights positioning, and transparency

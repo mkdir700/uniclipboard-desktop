@@ -5,7 +5,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
-import { cn, isMacPlatform, isWindowsPlatform } from '@/lib/utils'
+import { usePlatform } from '@/hooks/usePlatform'
+import { cn } from '@/lib/utils'
 
 interface TitleBarProps {
   className?: string
@@ -19,10 +20,6 @@ const MAC_WINDOW_STYLE = {
   offsetX: -15,
   offsetY: -3,
 } as const
-
-const isTauriEnv = () =>
-  typeof window !== 'undefined' &&
-  Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
 
 const TitleBarButton = ({
   onClick,
@@ -56,14 +53,13 @@ const TitleBarButton = ({
 )
 
 export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleBarProps) => {
-  const [isWindows, setIsWindows] = useState(false)
-  const [isMac, setIsMac] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
 
-  const isTauri = useMemo(() => isTauriEnv(), [])
+  // 使用 usePlatform hook 获取平台信息
+  const { isWindows, isMac, isTauri } = usePlatform()
   const windowRef = useMemo(() => (isTauri ? getCurrentWindow() : null), [isTauri])
 
   // 检测是否在 Settings 页面
@@ -75,12 +71,6 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
     if (!isTauri || !windowRef) return
 
     let mounted = true
-
-    const isWindows = isWindowsPlatform()
-    const isMac = isMacPlatform()
-
-    setIsWindows(isWindows)
-    setIsMac(isMac)
 
     // Enable macOS rounded corners
     if (isMac) {
@@ -102,7 +92,7 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
       mounted = false
       unlistenPromise.then(unlisten => unlisten())
     }
-  }, [isTauri, windowRef])
+  }, [isTauri, isMac, windowRef])
 
   const handleMinimize = async () => {
     console.log('[TitleBar] Minimize clicked, isTauri:', isTauri)
