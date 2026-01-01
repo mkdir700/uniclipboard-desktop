@@ -53,7 +53,7 @@ twox-hash = "1.6.3"
 # ===== 文件/系统操作 =====
 bytes = "1.7.1"  # 字节处理工具
 dirs = "6.0.0"  # 跨平台目录路径
-gethostname = "0.5"  # 获取主机名
+gethostname = "1.1.0"  # 获取主机名
 
 # ===== 数据库 =====
 diesel = { version = "2.2.0", features = [
@@ -89,7 +89,6 @@ dotenvy = "0.15"  # 环境变量管理
 tauri-plugin-stronghold = "2"
 argon2 = "0.5.3"
 iota_stronghold = "2.1.0"
-hostname = "0.4.2"
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic

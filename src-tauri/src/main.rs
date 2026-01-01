@@ -42,9 +42,10 @@ fn main() {
 
     // 如果设备名称为空，使用主机名
     if user_setting.general.device_name.is_empty() {
-        let hostname = hostname::get()
-            .map(|h: std::ffi::OsString| h.to_string_lossy().to_string())
-            .unwrap_or_else(|_| "Unknown Device".to_string());
+        let hostname = gethostname::gethostname()
+            .to_str()
+            .unwrap_or("Unknown Device")
+            .to_string();
         user_setting.general.device_name = hostname;
         // 保存更新后的配置
         if let Err(e) = user_setting.save(None) {
