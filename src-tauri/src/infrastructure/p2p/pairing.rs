@@ -742,19 +742,11 @@ impl PairingManager {
             let shared_secret = session.compute_shared_secret()?;
             let secret_bytes = shared_secret.to_bytes().to_vec();
 
-            // Verify key hash if provided
-            if let Some(peer_key_hash) = &confirm.key_verify_hash {
-                let our_key_hash = session.compute_key_verify_hash()?;
-
-                log::info!(
-                    "Key verification - Our hash: {}, Peer hash: {}",
-                    hex::encode(&our_key_hash),
-                    hex::encode(peer_key_hash)
-                );
-
-                if !session.verify_key_hash(peer_key_hash)? {
+            // Verify key hash - must be provided
+            match &confirm.key_verify_hash {
+                None => {
                     log::error!(
-                        "Key hash mismatch for session {} with peer {}!",
+                        "Key verification failed for session {} with peer {}: no key verify hash provided",
                         session_id, peer_id
                     );
 
@@ -762,17 +754,47 @@ impl PairingManager {
                         .event_tx
                         .send(NetworkEvent::PairingFailed {
                             session_id: session_id.to_string(),
-                            error: "Key verification failed".to_string(),
+                            error: "Key verification failed: no verification hash provided"
+                                .to_string(),
                         })
                         .await;
 
                     self.sessions.remove(session_id);
                     return Err(anyhow!(
-                        "Key verification failed: shared secrets do not match"
+                        "Key verification failed: peer did not provide key verification hash"
                     ));
                 }
+                Some(peer_key_hash) => {
+                    let our_key_hash = session.compute_key_verify_hash()?;
 
-                log::info!("Key hash verified successfully");
+                    log::info!(
+                        "Key verification - Our hash: {}, Peer hash: {}",
+                        hex::encode(&our_key_hash),
+                        hex::encode(peer_key_hash)
+                    );
+
+                    if !session.verify_key_hash(peer_key_hash)? {
+                        log::error!(
+                            "Key hash mismatch for session {} with peer {}!",
+                            session_id, peer_id
+                        );
+
+                        let _ = self
+                            .event_tx
+                            .send(NetworkEvent::PairingFailed {
+                                session_id: session_id.to_string(),
+                                error: "Key verification failed".to_string(),
+                            })
+                            .await;
+
+                        self.sessions.remove(session_id);
+                        return Err(anyhow!(
+                            "Key verification failed: shared secrets do not match"
+                        ));
+                    }
+
+                    log::info!("Key hash verified successfully");
+                }
             }
 
             self.sessions.remove(session_id);
