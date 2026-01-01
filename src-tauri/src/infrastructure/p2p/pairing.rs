@@ -380,9 +380,6 @@ impl PairingManager {
             request.device_name
         );
 
-        let our_private_key = StaticSecret::random();
-        let our_public_key = PublicKey::from(&our_private_key);
-
         // Parse peer's public key
         let peer_public_bytes: [u8; 32] = request
             .public_key
@@ -392,6 +389,7 @@ impl PairingManager {
         let peer_public = PublicKey::from(peer_public_bytes);
 
         // Create session with local device name and peer device name from request
+        // Note: PairingSession::new() generates our key pair internally
         let session = PairingSession::new(
             request.session_id.clone(),
             peer_id.clone(),
