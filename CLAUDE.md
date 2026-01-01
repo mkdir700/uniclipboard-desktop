@@ -290,6 +290,76 @@ mod tests {
 
 **Rationale**: Explicit error handling prevents panics in production, provides better error messages, and makes failure modes visible to callers.
 
+### Avoid Silent Failures in Event-Driven Code
+
+**CRITICAL**: When handling events or commands in async/event-driven systems, never silently ignore errors. Always log errors and emit failure events when appropriate.
+
+**Anti-Pattern**: Silent failures with `if let Ok(...)`:
+
+```rust
+// ❌ WRONG - Silent failure, caller never knows the operation failed
+NetworkCommand::SendPairingRequest { peer_id, message } => {
+    if let Ok(peer) = peer_id.parse::<PeerId>() {
+        self.swarm.send_request(&peer, request);
+        debug!("Sent pairing request to {}", peer_id);
+    }
+    // If parsing fails, execution silently continues - user has no feedback!
+}
+```
+
+**Correct Pattern**: Explicit error handling with logging and event emission:
+
+```rust
+// ✅ CORRECT - Log error and emit event for frontend to handle
+NetworkCommand::SendPairingRequest { peer_id, message } => {
+    match peer_id.parse::<PeerId>() {
+        Ok(peer) => {
+            self.swarm.send_request(&peer, request);
+            debug!("Sent pairing request to {}", peer_id);
+        }
+        Err(e) => {
+            warn!("Invalid peer_id '{}': {}", peer_id, e);
+            let _ = self
+                .event_tx
+                .send(NetworkEvent::Error(format!(
+                    "Failed to send pairing request: invalid peer_id '{}': {}",
+                    peer_id, e
+                )))
+                .await;
+        }
+    }
+}
+```
+
+**Key Rules**:
+
+1. **Use `match` instead of `if let`** - When the `Err` case represents a failure that users should know about
+2. **Always log errors** - Use `warn!()` or `error!()` to ensure failures are visible in logs
+3. **Emit error events** - Send `NetworkEvent::Error` or equivalent so the UI can display user-friendly error messages
+4. **Handle missing resources** - When an expected resource (like a pending channel) is missing, log a warning
+
+**When to use `if let` vs `match`**:
+
+```rust
+// ✅ OK - Using if let when the None/Err case is truly benign
+if let Some(value) = optional_cache.get(&key) {
+    // Use cached value
+}
+
+// ✅ OK - Using if let when fallback behavior is acceptable
+if let Ok(config) = read_config() {
+    apply_config(config);
+} else {
+    use_default_config(); // Explicit fallback
+}
+
+// ❌ WRONG - Using if let when failure should be reported
+if let Ok(peer_id) = str.parse::<PeerId>() {
+    send_request(peer_id);
+}
+// Error is swallowed!
+```
+
 ### Tauri State Management
 
 **CRITICAL**: All state accessed via `tauri::State<'_, T>` in commands MUST be registered with `.manage()` before the app starts.
