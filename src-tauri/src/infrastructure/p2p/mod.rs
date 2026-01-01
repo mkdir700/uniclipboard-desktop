@@ -11,6 +11,6 @@ pub mod swarm;
 
 pub use events::{ConnectedPeer, DiscoveredPeer, NetworkEvent, NetworkStatus};
 pub use pairing::{PairingManager, PairingSession};
-pub use pin_hash::{hash_pin, verify_pin, EncodedPinHash, ENCODED_SIZE};
+pub use pin_hash::{hash_pin, verify_pin};
 pub use protocol::{ClipboardMessage, PairingRequest, ProtocolMessage};
 pub use swarm::{NetworkCommand, NetworkManager};

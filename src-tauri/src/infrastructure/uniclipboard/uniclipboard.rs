@@ -81,7 +81,11 @@ impl ClipboardSyncService {
 
     /// Start clipboard synchronization
     pub async fn start(&self) -> Result<()> {
-        if self.is_running.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        if self
+            .is_running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
             anyhow::bail!("Already running");
         }
 

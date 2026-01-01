@@ -11,7 +11,6 @@ mod plugins;
 mod utils;
 
 use application::device_service::get_device_manager;
-use tauri_plugin_decorum::WebviewWindowExt;
 use config::setting::{Setting, SETTING};
 use infrastructure::runtime::{AppRuntime, AppRuntimeHandle};
 use infrastructure::security::password::PasswordManager;
@@ -19,6 +18,7 @@ use infrastructure::storage::db::pool::DB_POOL;
 use log::error;
 use std::sync::Arc;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_decorum::WebviewWindowExt;
 use tokio::sync::mpsc;
 use utils::logging;
 
@@ -55,12 +55,15 @@ fn main() {
 
     // 确保配置已保存到全局 CONFIG 变量中
     {
-        let mut global_setting = SETTING.write().unwrap();
+        let mut global_setting = SETTING
+            .write()
+            .expect("Failed to acquire write lock on SETTING");
         *global_setting = user_setting.clone();
     }
 
     // 初始化密码管理器
-    PasswordManager::init_salt_file_if_not_exists().unwrap();
+    PasswordManager::init_salt_file_if_not_exists()
+        .expect("Failed to initialize password manager salt file");
 
     // 检查 vault 状态一致性（在单例初始化之前）
     // 如果状态不一致，提供恢复提示
@@ -96,7 +99,12 @@ fn main() {
         let manager = get_device_manager();
         match manager.get_current_device() {
             Ok(Some(device)) => {
-                SETTING.write().unwrap().set_device_id(device.id.clone());
+                {
+                    let mut setting = SETTING
+                        .write()
+                        .expect("Failed to acquire write lock on SETTING");
+                    setting.set_device_id(device.id.clone());
+                }
                 log::info!("Self device already exists: {}", device.id);
                 device.id
             }
@@ -106,12 +114,20 @@ fn main() {
                 let local_ip = utils::helpers::get_local_ip();
                 let result =
                     manager.register_self_device(local_ip, user_setting.network.webserver_port);
-                if let Err(e) = result {
-                    panic!("Failed to register self device: {}", e);
-                }
-                let device_id = result.unwrap();
+                let device_id = match result {
+                    Ok(id) => id,
+                    Err(e) => {
+                        error!("Failed to register self device: {}", e);
+                        panic!("Failed to register self device: {}", e);
+                    }
+                };
                 log::info!("Registered self device with ID: {}", device_id);
-                SETTING.write().unwrap().set_device_id(device_id.clone());
+                {
+                    let mut setting = SETTING
+                        .write()
+                        .expect("Failed to acquire write lock on SETTING");
+                    setting.set_device_id(device_id.clone());
+                }
 
                 device_id
             }
@@ -129,9 +145,9 @@ fn main() {
 fn run_app(user_setting: Setting, device_id: String) {
     use tauri::Builder;
     use tauri_plugin_autostart::MacosLauncher;
+    use tauri_plugin_decorum;
     use tauri_plugin_single_instance;
     use tauri_plugin_stronghold;
-    use tauri_plugin_decorum;
 
     // Create command channels BEFORE setup
     let (clipboard_cmd_tx, clipboard_cmd_rx) = mpsc::channel(100);
@@ -178,7 +194,7 @@ fn run_app(user_setting: Setting, device_id: String) {
                 win_builder
             };
 
-            let _window = win_builder.build().unwrap();
+            let _window = win_builder.build().expect("Failed to build main window");
 
             // macOS specific window styling will be handled by the rounded corners plugin
             // The plugin will set up rounded corners, traffic lights positioning, and transparency

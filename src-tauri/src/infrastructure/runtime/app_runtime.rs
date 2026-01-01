@@ -15,7 +15,7 @@ use crate::infrastructure::runtime::p2p_runtime::P2PRuntime;
 use crate::infrastructure::runtime::{AppRuntimeHandle, ClipboardCommand, P2PCommand};
 use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
-use crate::infrastructure::sync::RemoteSyncManager;
+use crate::infrastructure::sync::manager::RemoteSyncManager;
 use crate::infrastructure::uniclipboard::ClipboardSyncService;
 use crate::interface::{RemoteClipboardSync, RemoteSyncManagerTrait};
 
@@ -54,8 +54,7 @@ impl AppRuntime {
         let clipboard = Arc::new(LocalClipboard::with_user_setting(user_setting.clone())?);
 
         // 3. Initialize P2P Runtime with AppHandle
-        let p2p_runtime =
-            Arc::new(P2PRuntime::new(device_name.clone(), config.clone(), app_handle).await?);
+        let p2p_runtime = Arc::new(P2PRuntime::new(device_name.clone(), app_handle).await?);
 
         // Initialize RemoteSyncManager
         let remote_sync_manager =
@@ -244,7 +243,14 @@ impl AppRuntime {
                 let _ = respond_to.send(Ok(device_info));
             }
             P2PCommand::GetPairedPeers { respond_to } => {
-                let peers = p2p_runtime.p2p_sync().peer_storage().get_all_peers();
+                let peers = p2p_runtime
+                    .p2p_sync()
+                    .peer_storage()
+                    .get_all_peers()
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to get peers: {}", e);
+                        Vec::new()
+                    });
                 let _ = respond_to.send(Ok(peers));
             }
             P2PCommand::InitiatePairing {

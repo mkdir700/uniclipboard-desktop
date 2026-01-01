@@ -7,18 +7,16 @@ use chrono::Utc;
 use libp2p::identity::Keypair;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, RwLock};
 
 use crate::api::event::{
     P2PPairingCompleteEventData, P2PPairingFailedEventData, P2PPairingRequestEventData,
     P2PPinReadyEventData,
 };
-use crate::config::Setting;
 use crate::domain::pairing::PairedPeer;
 use crate::infrastructure::p2p::pairing::{PairingCommand, PairingManager};
-use crate::infrastructure::p2p::{DiscoveredPeer, NetworkCommand, NetworkEvent};
-use crate::infrastructure::p2p::protocol::PairingResponse;
+use crate::infrastructure::p2p::{DiscoveredPeer, NetworkCommand};
 use crate::infrastructure::storage::peer_storage::PeerStorage;
 use crate::infrastructure::sync::Libp2pSync;
 
@@ -36,19 +34,11 @@ pub struct P2PRuntime {
     device_name: String,
     /// Discovered peers (thread-safe for queries)
     discovered_peers: Arc<RwLock<HashMap<String, DiscoveredPeer>>>,
-    /// Configuration
-    config: Arc<Setting>,
-    /// AppHandle for emitting events to frontend
-    app_handle: AppHandle,
 }
 
 impl P2PRuntime {
     /// Create a new P2P runtime
-    pub async fn new(
-        device_name: String,
-        config: Arc<Setting>,
-        app_handle: AppHandle,
-    ) -> Result<Self> {
+    pub async fn new(device_name: String, app_handle: AppHandle) -> Result<Self> {
         // Create channels for network communication
         let (network_cmd_tx, network_cmd_rx) = mpsc::channel(100);
         let (network_event_tx, mut network_event_rx) = mpsc::channel(100);
@@ -260,8 +250,6 @@ impl P2PRuntime {
             local_peer_id,
             device_name,
             discovered_peers,
-            config,
-            app_handle,
         })
     }
 

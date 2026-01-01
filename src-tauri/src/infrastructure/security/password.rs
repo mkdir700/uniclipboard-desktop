@@ -3,10 +3,7 @@ use anyhow::{anyhow, Result};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use iota_stronghold::types::Client;
 use once_cell::sync::Lazy;
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{path::PathBuf, sync::Mutex};
 use tauri_plugin_stronghold::stronghold::Stronghold;
 use tokio::sync::mpsc;
 
@@ -37,11 +34,14 @@ pub static PASSWORD_SENDER: Lazy<Mutex<Option<mpsc::Sender<PasswordRequest>>>> =
 
     // 启动后台工作线程
     std::thread::spawn(move || {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new()
+            .expect("Failed to create Tokio runtime for password manager background thread");
         runtime.block_on(async {
             while let Some(request) = rx.recv().await {
                 // 获取密码管理器实例
-                let pm = PasswordManager::get_instance().lock().unwrap();
+                let pm = PasswordManager::get_instance()
+                    .lock()
+                    .expect("PasswordManager lock poisoned");
 
                 match request {
                     PasswordRequest::GetRecord(key, responder) => {
@@ -87,24 +87,24 @@ impl PasswordManager {
 
     // 内部构造函数，只在初始化单例时使用
     fn new_internal() -> Self {
-        let vault_password = Self::init_vault_password()
-            .unwrap_or_else(|e| {
-                log::error!("Failed to initialize vault password: {}", e);
-                // 降级：生成临时密码（避免应用崩溃）
-                Self::generate_vault_password()
-            });
-
-        let stronghold = Stronghold::new(
-            Self::get_snapshot_path(),
-            vault_password.into()
-        ).unwrap_or_else(|e| {
-            panic!("Failed to initialize Stronghold: {}", e);
+        let vault_password = Self::init_vault_password().unwrap_or_else(|e| {
+            log::error!("Failed to initialize vault password: {}", e);
+            // 降级：生成临时密码（避免应用崩溃）
+            Self::generate_vault_password()
         });
 
+        let stronghold = Stronghold::new(Self::get_snapshot_path(), vault_password.into())
+            .unwrap_or_else(|e| {
+                panic!("Failed to initialize Stronghold: {}", e);
+            });
+
         // 如果加载失败，捕获错误并创建 client
-        let client = stronghold
-            .load_client("uniclipboard")
-            .unwrap_or_else(|_| stronghold.create_client("uniclipboard").unwrap());
+        let client = match stronghold.load_client("uniclipboard") {
+            Ok(client) => client,
+            Err(_) => stronghold
+                .create_client("uniclipboard")
+                .expect("Failed to create Stronghold client"),
+        };
         Self { stronghold, client }
     }
 
@@ -236,13 +236,6 @@ impl PasswordManager {
         Self::get_vault_key_path().exists()
     }
 
-    /// 获取Stronghold数据文件路径
-    pub fn get_stronghold_path() -> PathBuf {
-        get_config_dir()
-            .expect("Could not find config directory")
-            .join("uniclipboard.stronghold")
-    }
-
     // 内部同步方法，只在后台线程中使用
     fn insert_record_internal(&self, key: String, value: String) -> Result<()> {
         self.client.store().insert(key.into(), value.into(), None)?;
@@ -270,114 +263,6 @@ impl PasswordManager {
         self.client.store().delete(key.as_bytes())?;
         self.stronghold.save()?;
         Ok(())
-    }
-
-    /// 插入记录（异步版本）
-    pub async fn insert_record(&self, key: String, value: String) -> Result<()> {
-        let (tx, mut rx) = mpsc::channel(1);
-
-        // 发送请求到工作线程
-        if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender
-                .send(PasswordRequest::InsertRecord(key, value, tx))
-                .await
-                .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-
-            // 等待结果
-            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
-        } else {
-            Err(anyhow!("密码通道未初始化"))
-        }
-    }
-
-    /// 获取记录（异步版本）
-    pub async fn get_record(&self, key: String) -> Result<Option<String>> {
-        let (tx, mut rx) = mpsc::channel(1);
-
-        // 发送请求到工作线程
-        if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender
-                .send(PasswordRequest::GetRecord(key, tx))
-                .await
-                .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-
-            // 等待结果
-            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
-        } else {
-            Err(anyhow!("密码通道未初始化"))
-        }
-    }
-
-    /// 删除记录（异步版本）
-    pub async fn delete_record(&self, key: String) -> Result<()> {
-        let (tx, mut rx) = mpsc::channel(1);
-
-        // 发送请求到工作线程
-        if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender
-                .send(PasswordRequest::DeleteRecord(key, tx))
-                .await
-                .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-
-            // 等待结果
-            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
-        } else {
-            Err(anyhow!("密码通道未初始化"))
-        }
-    }
-
-    /// 获取加密口令（异步版本）
-    pub async fn get_encryption_password(&self) -> Result<Option<String>> {
-        let (tx, mut rx) = mpsc::channel(1);
-
-        // 发送请求到工作线程
-        if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender
-                .send(PasswordRequest::GetEncryptionPassword(tx))
-                .await
-                .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-
-            // 等待结果
-            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
-        } else {
-            Err(anyhow!("密码通道未初始化"))
-        }
-    }
-
-    /// 设置加密口令（异步版本）
-    pub async fn set_encryption_password(&self, password: String) -> Result<()> {
-        let (tx, mut rx) = mpsc::channel(1);
-
-        // 发送请求到工作线程
-        if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender
-                .send(PasswordRequest::SetEncryptionPassword(password, tx))
-                .await
-                .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-
-            // 等待结果
-            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
-        } else {
-            Err(anyhow!("密码通道未初始化"))
-        }
-    }
-
-    /// 清除加密口令（异步版本）
-    pub async fn delete_encryption_password(&self) -> Result<()> {
-        let (tx, mut rx) = mpsc::channel(1);
-
-        // 发送请求到工作线程
-        if let Some(sender) = PASSWORD_SENDER.lock().unwrap().as_ref() {
-            sender
-                .send(PasswordRequest::DeleteEncryptionPassword(tx))
-                .await
-                .map_err(|_| anyhow!("无法发送密码操作请求"))?;
-
-            // 等待结果
-            rx.recv().await.ok_or_else(|| anyhow!("工作线程已关闭"))?
-        } else {
-            Err(anyhow!("密码通道未初始化"))
-        }
     }
 }
 

@@ -275,7 +275,7 @@ impl PairingManager {
         use std::time::{SystemTime, UNIX_EPOCH};
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("System time is before UNIX_EPOCH")
             .as_millis();
         let mut rng = rand::rng();
         format!("{}-{}", timestamp, rng.random::<u32>())
@@ -521,8 +521,8 @@ impl PairingManager {
             peer_id
         );
 
-        let pin_hash = pin_hash::hash_pin(pin)
-            .map_err(|e| anyhow!("Failed to compute PIN hash: {}", e))?;
+        let pin_hash =
+            pin_hash::hash_pin(pin).map_err(|e| anyhow!("Failed to compute PIN hash: {}", e))?;
 
         // Clear PIN from memory after use
         session.clear_pin();

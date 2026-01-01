@@ -90,7 +90,7 @@ impl Libp2pSync {
     /// Ideally, the message should contain a KeyID or we try the sender's key.
     fn decrypt_content(&self, content: &[u8], origin_peer_id: &str) -> Result<Vec<u8>> {
         // Try to get the sender's shared secret
-        if let Some(peer) = self.peer_storage.get_peer(origin_peer_id) {
+        if let Ok(Some(peer)) = self.peer_storage.get_peer(origin_peer_id) {
             let secret_bytes: [u8; 32] = peer
                 .shared_secret
                 .as_slice()
@@ -134,7 +134,10 @@ impl RemoteClipboardSync for Libp2pSync {
         let content_bytes = serde_json::to_vec(&message)
             .map_err(|e| anyhow!("Failed to serialize clipboard message: {}", e))?;
 
-        let peers = self.peer_storage.get_all_peers();
+        let peers = self.peer_storage.get_all_peers().unwrap_or_else(|e| {
+            log::error!("Failed to get peers: {}", e);
+            Vec::new()
+        });
 
         if peers.is_empty() {
             debug!("No paired peers to sync with");

@@ -433,7 +433,9 @@ impl NetworkManager {
                                         }
                                         // Handle Challenge message sent as a NEW request (not response)
                                         // This allows the responder to send Challenge to the initiator
-                                        ProtocolMessage::Pairing(PairingMessage::Challenge(challenge)) => {
+                                        ProtocolMessage::Pairing(PairingMessage::Challenge(
+                                            challenge,
+                                        )) => {
                                             // Store the channel for responding with ChallengeResponse
                                             self.pending_responses.insert(
                                                 challenge.session_id.clone(),
@@ -456,7 +458,9 @@ impl NetworkManager {
                                         }
                                         // Handle Response message sent as a NEW request
                                         // This allows the initiator to send Response (PIN hash) to the responder
-                                        ProtocolMessage::Pairing(PairingMessage::Response(response)) => {
+                                        ProtocolMessage::Pairing(PairingMessage::Response(
+                                            response,
+                                        )) => {
                                             // Store the channel for responding with Confirm
                                             self.pending_responses.insert(
                                                 response.session_id.clone(),
@@ -802,7 +806,8 @@ impl NetworkManager {
                             pin_hash,
                             accepted,
                         };
-                        let protocol_msg = ProtocolMessage::Pairing(PairingMessage::Response(response));
+                        let protocol_msg =
+                            ProtocolMessage::Pairing(PairingMessage::Response(response));
                         if let Ok(message) = protocol_msg.to_bytes() {
                             let request = ReqPairingRequest { message };
                             self.swarm
@@ -843,7 +848,8 @@ impl NetworkManager {
                             error: Some("Pairing rejected by user".to_string()),
                             sender_device_name: self.device_name.clone(),
                         };
-                        let protocol_msg = ProtocolMessage::Pairing(PairingMessage::Confirm(confirm));
+                        let protocol_msg =
+                            ProtocolMessage::Pairing(PairingMessage::Confirm(confirm));
                         if let Ok(message) = protocol_msg.to_bytes() {
                             let request = ReqPairingRequest { message };
                             self.swarm

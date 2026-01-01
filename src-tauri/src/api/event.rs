@@ -151,10 +151,7 @@ pub fn stop_listen_clipboard_new_content(
 ///
 /// 当收到其他设备的P2P配对请求时，会向前端发送 "p2p-pairing-request" 事件
 #[tauri::command]
-pub fn listen_p2p_pairing_request<R: Runtime>(
-    app_handle: AppHandle<R>,
-    event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>,
-) {
+pub fn listen_p2p_pairing_request(event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>) {
     // 如果已经在监听，则不再重复监听
     let mut state = event_listener_state.lock().unwrap();
     if state.p2p_pairing_request_listener_id.is_some() {
@@ -181,10 +178,7 @@ pub fn stop_listen_p2p_pairing_request(
 ///
 /// 当PIN准备好时，会向前端发送 "p2p-pin-ready" 事件
 #[tauri::command]
-pub fn listen_p2p_pin_ready<R: Runtime>(
-    app_handle: AppHandle<R>,
-    event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>,
-) {
+pub fn listen_p2p_pin_ready(event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>) {
     // 如果已经在监听，则不再重复监听
     let mut state = event_listener_state.lock().unwrap();
     if state.p2p_pin_ready_listener_id.is_some() {
@@ -206,8 +200,7 @@ pub fn stop_listen_p2p_pin_ready(event_listener_state: State<'_, Arc<Mutex<Event
 ///
 /// 当配对完成时，会向前端发送 "p2p-pairing-complete" 事件
 #[tauri::command]
-pub fn listen_p2p_pairing_complete<R: Runtime>(
-    app_handle: AppHandle<R>,
+pub fn listen_p2p_pairing_complete(
     event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>,
 ) {
     // 如果已经在监听，则不再重复监听
@@ -233,10 +226,7 @@ pub fn stop_listen_p2p_pairing_complete(
 ///
 /// 当配对失败时，会向前端发送 "p2p-pairing-failed" 事件
 #[tauri::command]
-pub fn listen_p2p_pairing_failed<R: Runtime>(
-    app_handle: AppHandle<R>,
-    event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>,
-) {
+pub fn listen_p2p_pairing_failed(event_listener_state: State<'_, Arc<Mutex<EventListenerState>>>) {
     // 如果已经在监听，则不再重复监听
     let mut state = event_listener_state.lock().unwrap();
     if state.p2p_pairing_failed_listener_id.is_some() {

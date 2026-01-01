@@ -94,7 +94,10 @@ impl PeerStorage {
         // Try loading as new format (camelCase) first
         let peers: Result<Vec<PairedPeer>, _> = serde_json::from_reader(&file);
 
-        let mut cache = self.cache.write().unwrap();
+        let mut cache = self
+            .cache
+            .write()
+            .expect("Failed to acquire write lock on peer cache");
         cache.clear();
 
         match peers {
@@ -122,7 +125,10 @@ impl PeerStorage {
                         self.save()?;
                         info!(
                             "Migrated {} paired peers from legacy format",
-                            self.cache.read().unwrap().len()
+                            self.cache
+                                .read()
+                                .expect("Failed to acquire read lock on peer cache")
+                                .len()
                         );
                     }
                     Err(e) => {
@@ -140,7 +146,10 @@ impl PeerStorage {
 
     /// Save peers to disk
     fn save(&self) -> Result<()> {
-        let cache = self.cache.read().unwrap();
+        let cache = self
+            .cache
+            .read()
+            .expect("Failed to acquire read lock on peer cache");
         let peers: Vec<&PairedPeer> = cache.values().collect();
 
         let file = File::create(&self.file_path)?;
@@ -152,7 +161,10 @@ impl PeerStorage {
     /// Add or update a paired peer
     pub fn save_peer(&self, peer: PairedPeer) -> Result<()> {
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self
+                .cache
+                .write()
+                .expect("Failed to acquire write lock on peer cache");
             cache.insert(peer.peer_id.clone(), peer);
         }
         self.save()?;
@@ -160,15 +172,21 @@ impl PeerStorage {
     }
 
     /// Get a paired peer by ID
-    pub fn get_peer(&self, peer_id: &str) -> Option<PairedPeer> {
-        let cache = self.cache.read().unwrap();
-        cache.get(peer_id).cloned()
+    pub fn get_peer(&self, peer_id: &str) -> Result<Option<PairedPeer>> {
+        let cache = self
+            .cache
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?;
+        Ok(cache.get(peer_id).cloned())
     }
 
     /// Remove a paired peer
     pub fn remove_peer(&self, peer_id: &str) -> Result<()> {
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self
+                .cache
+                .write()
+                .expect("Failed to acquire write lock on peer cache");
             cache.remove(peer_id);
         }
         self.save()?;
@@ -176,8 +194,11 @@ impl PeerStorage {
     }
 
     /// Get all paired peers
-    pub fn get_all_peers(&self) -> Vec<PairedPeer> {
-        let cache = self.cache.read().unwrap();
-        cache.values().cloned().collect()
+    pub fn get_all_peers(&self) -> Result<Vec<PairedPeer>> {
+        let cache = self
+            .cache
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?;
+        Ok(cache.values().cloned().collect())
     }
 }

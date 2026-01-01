@@ -36,17 +36,14 @@ pub async fn open_settings_window(app_handle: AppHandle) -> Result<(), String> {
     // 创建新的设置窗口
     use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-    let builder = WebviewWindowBuilder::new(
-        &app_handle,
-        "settings",
-        WebviewUrl::App("/settings".into()),
-    )
-    .title("Settings")
-    .inner_size(900.0, 700.0)
-    .min_inner_size(800.0, 600.0)
-    .resizable(true)
-    .center()
-    .visible(false); // 初始不可见，等待 WebView 完全初始化
+    let builder =
+        WebviewWindowBuilder::new(&app_handle, "settings", WebviewUrl::App("/settings".into()))
+            .title("Settings")
+            .inner_size(900.0, 700.0)
+            .min_inner_size(800.0, 600.0)
+            .resizable(true)
+            .center()
+            .visible(false); // 初始不可见，等待 WebView 完全初始化
 
     // 平台特定的窗口装饰配置
     #[cfg(target_os = "macos")]
@@ -86,8 +83,7 @@ pub fn save_setting(app_handle: AppHandle, setting_json: &str) -> Result<(), Str
             }
 
             // 广播设置变更事件到所有窗口
-            let timestamp = match std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            let timestamp = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
             {
                 Ok(dur) => dur.as_millis() as u64,
                 Err(e) => {

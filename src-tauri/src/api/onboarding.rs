@@ -33,8 +33,7 @@ pub struct OnboardingStatus {
 /// 4. 检查加密密码是否已设置
 #[tauri::command]
 pub async fn check_onboarding_status() -> Result<OnboardingStatus, String> {
-    let config_dir = get_config_dir()
-        .map_err(|e| format!("获取配置目录失败: {}", e))?;
+    let config_dir = get_config_dir().map_err(|e| format!("获取配置目录失败: {}", e))?;
 
     let onboarding_file = config_dir.join(ONBOARDING_FILE);
     let has_completed = onboarding_file.exists();
@@ -85,12 +84,10 @@ pub async fn check_onboarding_status() -> Result<OnboardingStatus, String> {
 /// 注意：调用此命令前，用户必须已经设置了加密密码
 #[tauri::command]
 pub async fn complete_onboarding(app_handle: AppHandle) -> Result<(), String> {
-    let config_dir = get_config_dir()
-        .map_err(|e| format!("获取配置目录失败: {}", e))?;
+    let config_dir = get_config_dir().map_err(|e| format!("获取配置目录失败: {}", e))?;
 
     // 确保配置目录存在
-    std::fs::create_dir_all(&config_dir)
-        .map_err(|e| format!("创建配置目录失败: {}", e))?;
+    std::fs::create_dir_all(&config_dir).map_err(|e| format!("创建配置目录失败: {}", e))?;
 
     // 验证 vault 密钥是否已初始化
     // PasswordManager 单例在首次访问时会自动初始化 vault 密码
@@ -132,8 +129,14 @@ pub async fn complete_onboarding(app_handle: AppHandle) -> Result<(), String> {
 
     // 使用原子写入避免文件损坏
     let temp_file = onboarding_file.with_extension("tmp");
-    fs::write(&temp_file, format!("onboarding completed\n{}", chrono::Local::now().to_rfc3339()))
-        .map_err(|e| format!("写入临时 onboarding 文件失败: {}", e))?;
+    fs::write(
+        &temp_file,
+        format!(
+            "onboarding completed\n{}",
+            chrono::Local::now().to_rfc3339()
+        ),
+    )
+    .map_err(|e| format!("写入临时 onboarding 文件失败: {}", e))?;
 
     // 原子性重命名
     fs::rename(&temp_file, &onboarding_file)

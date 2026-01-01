@@ -14,7 +14,7 @@
 use anyhow::{anyhow, ensure, Result};
 use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
-    Argon2, Algorithm, Params, Version,
+    Algorithm, Argon2, Params, Version,
 };
 use subtle::ConstantTimeEq;
 
@@ -85,7 +85,11 @@ impl EncodedPinHash {
         let mut hash = [0u8; HASH_SIZE];
         hash.copy_from_slice(&encoded[1 + SALT_SIZE..]);
 
-        Ok(Self { version, salt, hash })
+        Ok(Self {
+            version,
+            salt,
+            hash,
+        })
     }
 }
 
@@ -171,7 +175,8 @@ fn argon2id_hash(pin: &str, salt: &[u8; SALT_SIZE]) -> Result<[u8; HASH_SIZE]> {
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, get_argon_params());
 
     // hash_password_into expects salt as &[u8]
-    argon.hash_password_into(pin.as_bytes(), salt, &mut output)
+    argon
+        .hash_password_into(pin.as_bytes(), salt, &mut output)
         .map_err(|e| anyhow!("Argon2id hashing failed: {}", e))?;
 
     Ok(output)
@@ -254,8 +259,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         // All salts should be unique (with extremely high probability)
-        let unique_salts: std::collections::HashSet<_> =
-            salts.iter().collect();
+        let unique_salts: std::collections::HashSet<_> = salts.iter().collect();
         assert_eq!(unique_salts.len(), 100);
     }
 
