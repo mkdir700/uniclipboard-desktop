@@ -113,8 +113,11 @@ pub fn listen_clipboard_new_content<R: Runtime>(
     // 如果已经在监听，则不再重复监听
     let mut state = event_listener_state.lock().unwrap();
     if state.clipboard_new_content_listener_id.is_some() {
+        log::info!("Clipboard-new-content listener already registered, skipping");
         return;
     }
+
+    log::info!("Registering clipboard-new-content event listener");
 
     // 订阅剪贴板新内容事件
     let app_handle_clone = app_handle.clone();
@@ -124,16 +127,23 @@ pub fn listen_clipboard_new_content<R: Runtime>(
             timestamp: event.timestamp,
         };
 
-        log::info!("Received clipboard-new-content event");
+        log::info!(
+            "Received clipboard-new-content event from event bus, record_id: {}, timestamp: {}",
+            event.record_id,
+            event.timestamp
+        );
 
         // 向前端发送事件
         if let Err(e) = app_handle_clone.emit("clipboard-new-content", event_data) {
-            log::error!("Failed to emit clipboard-new-content event: {:?}", e);
+            log::error!("Failed to emit clipboard-new-content event to frontend: {:?}", e);
+        } else {
+            log::info!("Successfully sent clipboard-new-content event to frontend");
         }
     });
 
     // 保存监听器ID，以便后续可以取消监听
     state.clipboard_new_content_listener_id = Some(listener_id);
+    log::info!("Clipboard-new-content listener registered with ID: {:?}", listener_id);
 }
 
 /// 停止监听剪贴板新内容事件
