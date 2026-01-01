@@ -17,7 +17,7 @@ interface TitleBarProps {
 const MAC_WINDOW_STYLE = {
   cornerRadius: 12,
   offsetX: -15,
-  offsetY: 0,
+  offsetY: -3,
 } as const
 
 const isTauriEnv = () =>
