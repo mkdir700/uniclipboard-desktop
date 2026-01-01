@@ -149,11 +149,25 @@ impl PairingSession {
         let shared_secret = self.compute_shared_secret()?;
         let secret_bytes = shared_secret.to_bytes();
 
+        log::debug!(
+            "Computing key verify hash - session_id: {}, our_public: {}, peer_public: {}",
+            self.session_id,
+            hex::encode(self.our_public_key.as_bytes()),
+            self.peer_public_key.as_ref().map(|k| hex::encode(k.as_bytes())).unwrap_or("None".to_string())
+        );
+        log::debug!(
+            "Shared secret (first 16 bytes): {}",
+            hex::encode(&secret_bytes[..16])
+        );
+
         let mut hasher = Sha256::new();
         hasher.update(self.session_id.as_bytes());
         hasher.update(&secret_bytes[..16]);
 
-        Ok(hasher.finalize().to_vec()[..16].to_vec())
+        let result = hasher.finalize().to_vec()[..16].to_vec();
+        log::debug!("Computed key verify hash: {}", hex::encode(&result));
+
+        Ok(result)
     }
 
     /// Verify key hash from peer
