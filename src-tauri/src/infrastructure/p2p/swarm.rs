@@ -655,7 +655,7 @@ impl NetworkManager {
                             success: false,
                             shared_secret: None,
                             error: Some("Pairing rejected by user".to_string()),
-                            device_name: None,
+                            sender_device_name: "Unknown".to_string(),
                         };
                         let protocol_msg =
                             ProtocolMessage::Pairing(PairingMessage::Confirm(confirm));
@@ -684,7 +684,7 @@ impl NetworkManager {
                         success,
                         shared_secret,
                         error: None,
-                        device_name: Some(device_name),
+                        sender_device_name: device_name,
                     };
                     let protocol_msg = ProtocolMessage::Pairing(PairingMessage::Confirm(confirm));
                     if let Ok(message) = protocol_msg.to_bytes() {

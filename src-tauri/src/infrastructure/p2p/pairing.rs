@@ -371,7 +371,7 @@ impl PairingManager {
         }
 
         let peer_id = session.peer_id.clone();
-        let peer_device_name = session.device_name.clone();
+        let peer_device_name = session.peer_device_name.clone();
         let our_public_key_bytes = session.our_public_key.to_bytes().to_vec();
 
         // Generate PIN for user verification
