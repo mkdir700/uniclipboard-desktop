@@ -1,7 +1,18 @@
 use crate::config::Setting;
 use crate::infrastructure::security::password::{PASSWORD_SENDER, PasswordRequest};
-use tauri::{AppHandle, Manager};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
+
+/// 设置变更事件数据
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingChangedEventData {
+    /// 完整的设置对象 (JSON 字符串)
+    pub setting_json: String,
+    /// 事件时间戳
+    pub timestamp: u64,
+}
 
 /// 打开设置窗口
 #[tauri::command]
@@ -46,12 +57,28 @@ pub fn open_settings_window(app_handle: AppHandle) -> Result<(), String> {
 
 /// 保存设置的Tauri命令
 #[tauri::command]
-pub fn save_setting(setting_json: &str) -> Result<(), String> {
+pub fn save_setting(app_handle: AppHandle, setting_json: &str) -> Result<(), String> {
     match serde_json::from_str::<Setting>(setting_json) {
         Ok(setting) => {
             if let Err(e) = setting.save(None) {
                 return Err(format!("保存设置失败: {}", e));
             }
+
+            // 广播设置变更事件到所有窗口
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
+
+            let event_data = SettingChangedEventData {
+                setting_json: setting_json.to_string(),
+                timestamp,
+            };
+
+            if let Err(e) = app_handle.emit("setting-changed", event_data) {
+                log::error!("Failed to emit setting-changed event: {:?}", e);
+            }
+
             Ok(())
         }
         Err(e) => Err(format!("解析TOML设置失败: {}", e)),

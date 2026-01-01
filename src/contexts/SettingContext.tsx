@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import i18n, { normalizeLanguage, persistLanguage } from '@/i18n'
 
@@ -69,6 +70,12 @@ export interface Setting {
   network: NetworkSetting
   storage: StorageSetting
   about: AboutSetting
+}
+
+// 设置变更事件数据接口
+interface SettingChangedEvent {
+  settingJson: string
+  timestamp: number
 }
 
 // 设置上下文接口
@@ -204,6 +211,39 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   // 初始加载设置
   useEffect(() => {
     loadSetting()
+  }, [])
+
+  // 监听来自其他窗口的设置变更事件
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+
+    const setupSettingChangeListener = async () => {
+      try {
+        unlisten = await listen<SettingChangedEvent>('setting-changed', event => {
+          console.log('收到设置变更事件:', event.payload)
+
+          // 解析新的设置
+          try {
+            const newSetting = JSON.parse(event.payload.settingJson) as Setting
+
+            // 更新本地状态 (不触发再次保存)
+            setSetting(newSetting)
+          } catch (err) {
+            console.error('解析设置变更事件失败:', err)
+          }
+        })
+      } catch (err) {
+        console.error('设置设置变更监听器失败:', err)
+      }
+    }
+
+    setupSettingChangeListener()
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
   }, [])
 
   // 监听主题变化并应用
