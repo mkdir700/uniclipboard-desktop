@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
-import { cn } from '@/lib/utils'
+import { cn, isMacPlatform, isWindowsPlatform } from '@/lib/utils'
 
 interface TitleBarProps {
   className?: string
@@ -23,24 +23,6 @@ const MAC_WINDOW_STYLE = {
 const isTauriEnv = () =>
   typeof window !== 'undefined' &&
   Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
-
-const isWindowsPlatform = () => {
-  if (typeof navigator === 'undefined') return false
-  const userAgent = navigator.userAgent.toLowerCase()
-  const platform = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData
-    ?.platform
-
-  return userAgent.includes('windows') || platform?.toLowerCase() === 'windows'
-}
-
-const isMacPlatform = () => {
-  if (typeof navigator === 'undefined') return false
-  const userAgent = navigator.userAgent.toLowerCase()
-  const platform = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData
-    ?.platform
-
-  return userAgent.includes('mac') || platform?.toLowerCase() === 'mac'
-}
 
 const TitleBarButton = ({
   onClick,
