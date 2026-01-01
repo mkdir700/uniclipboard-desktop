@@ -109,6 +109,11 @@ pub enum P2PCommand {
         session_id: String,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
+    /// Get paired peers with connection status
+    GetPairedPeersWithStatus {
+        respond_to:
+            tokio::sync::oneshot::Sender<Result<Vec<PairedPeerWithStatus>, String>>,
+    },
 }
 
 /// Local device info
@@ -117,6 +122,19 @@ pub enum P2PCommand {
 pub struct LocalDeviceInfo {
     pub peer_id: String,
     pub device_name: String,
+}
+
+/// Paired peer with connection status
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairedPeerWithStatus {
+    pub peer_id: String,
+    pub device_name: String,
+    pub shared_secret: Vec<u8>,
+    pub paired_at: String,
+    pub last_seen: Option<String>,
+    pub last_known_addresses: Vec<String>,
+    pub connected: bool,
 }
 
 /// Thread-safe handle to the application runtime

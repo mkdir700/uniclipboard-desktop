@@ -1,7 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import {
   getLocalDeviceInfo,
-  getPairedPeers,
+  getPairedPeersWithStatus,
   type LocalDeviceInfo,
   type PairedPeer,
 } from '@/api/p2p'
@@ -43,7 +43,7 @@ export const fetchPairedDevices = createAsyncThunk(
   'devices/fetchPaired',
   async (_, { rejectWithValue }) => {
     try {
-      return await getPairedPeers()
+      return await getPairedPeersWithStatus()
     } catch {
       return rejectWithValue('获取已配对设备失败')
     }
@@ -59,6 +59,15 @@ const devicesSlice = createSlice({
     },
     clearPairedDevicesError: state => {
       state.pairedDevicesError = null
+    },
+    updatePeerConnectionStatus: (
+      state,
+      action: { payload: { peerId: string; connected: boolean } }
+    ) => {
+      const peer = state.pairedDevices.find(d => d.peerId === action.payload.peerId)
+      if (peer) {
+        peer.connected = action.payload.connected
+      }
     },
   },
   extraReducers: builder => {
@@ -94,5 +103,6 @@ const devicesSlice = createSlice({
   },
 })
 
-export const { clearLocalDeviceError, clearPairedDevicesError } = devicesSlice.actions
+export const { clearLocalDeviceError, clearPairedDevicesError, updatePeerConnectionStatus } =
+  devicesSlice.actions
 export default devicesSlice.reducer

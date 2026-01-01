@@ -60,6 +60,18 @@ pub struct P2PPairingFailedEventData {
     pub error: String,
 }
 
+/// P2P 设备连接状态变化事件数据
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct P2PPeerConnectionEvent {
+    /// Peer ID
+    pub peer_id: String,
+    /// Device name (可选，断开连接时可能为空)
+    pub device_name: Option<String>,
+    /// Connection status
+    pub connected: bool,
+}
+
 /// Onboarding 密码设置成功事件数据
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,6 +100,8 @@ pub struct EventListenerState {
     p2p_pairing_complete_listener_id: Option<ListenerId>,
     /// P2P 配对失败事件监听器ID
     p2p_pairing_failed_listener_id: Option<ListenerId>,
+    /// P2P 设备连接状态变化事件监听器ID
+    p2p_peer_connection_changed_listener_id: Option<ListenerId>,
 }
 
 impl Default for EventListenerState {
@@ -98,6 +112,7 @@ impl Default for EventListenerState {
             p2p_pin_ready_listener_id: None,
             p2p_pairing_complete_listener_id: None,
             p2p_pairing_failed_listener_id: None,
+            p2p_peer_connection_changed_listener_id: None,
         }
     }
 }
