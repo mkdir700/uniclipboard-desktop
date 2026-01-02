@@ -308,9 +308,11 @@ impl NetworkManager {
                 gossipsub::Event::Message { message, .. } => {
                     match ProtocolMessage::from_bytes(&message.data) {
                         Ok(ProtocolMessage::Clipboard(clipboard_msg)) => {
-                            debug!(
-                                "Received clipboard message from {}",
-                                clipboard_msg.origin_device_id
+                            info!(
+                                "Received P2P clipboard message from device '{}' (device-id: {}, timestamp: {})",
+                                clipboard_msg.origin_device_name,
+                                clipboard_msg.origin_device_id,
+                                clipboard_msg.timestamp
                             );
                             let _ = self
                                 .event_tx

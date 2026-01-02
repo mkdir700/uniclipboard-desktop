@@ -104,6 +104,11 @@ impl Libp2pSync {
     /// Handle an incoming encrypted clipboard message from the network
     /// This is called when NetworkManager receives a message
     pub async fn handle_incoming_message(&self, msg: ClipboardMessage) -> Result<()> {
+        info!(
+            "Decrypting clipboard message from '{}' (encrypted size: {} bytes)",
+            msg.origin_device_name,
+            msg.encrypted_content.len()
+        );
         // Decrypt using unified encryptor (no longer need origin_device_id)
         let decrypted = self
             .decrypt_content(&msg.encrypted_content)
@@ -116,14 +121,22 @@ impl Libp2pSync {
                 )
             })?;
 
+        info!("Clipboard message decrypted successfully");
         let transfer_msg: ClipboardTransferMessage = serde_json::from_slice(&decrypted)
             .map_err(|e| anyhow!("Failed to deserialize clipboard message: {}", e))?;
+
+        info!(
+            "Deserialized clipboard transfer message: type={:?}, size={} bytes",
+            transfer_msg.metadata.get_content_type(),
+            transfer_msg.metadata.get_size()
+        );
 
         self.clipboard_tx
             .send(transfer_msg)
             .await
             .map_err(|e| anyhow!("Failed to send to clipboard channel: {}", e))?;
 
+        info!("Sent clipboard message to internal channel");
         Ok(())
     }
 }
@@ -170,11 +183,17 @@ impl RemoteClipboardSync for Libp2pSync {
 
     /// Pull clipboard content from P2P network
     async fn pull(&self, _timeout: Option<Duration>) -> Result<ClipboardTransferMessage> {
+        info!("Pulling clipboard message from P2P internal channel");
         // We just wait for messages on the channel
         let mut rx = self.clipboard_rx.lock().await;
-        rx.recv()
+        let msg = rx.recv()
             .await
-            .ok_or_else(|| anyhow!("Clipboard channel closed"))
+            .ok_or_else(|| anyhow!("Clipboard channel closed"))?;
+        info!("Received clipboard message from internal channel: type={:?}, size={} bytes",
+            msg.metadata.get_content_type(),
+            msg.metadata.get_size()
+        );
+        Ok(msg)
     }
 
     /// Sync is a no-op for P2P (continuous sync via gossipsub)

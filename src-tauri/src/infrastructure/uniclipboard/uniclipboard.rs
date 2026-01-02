@@ -203,16 +203,19 @@ impl ClipboardSyncService {
             while is_running.load(Ordering::SeqCst) {
                 match remote_sync.pull(Some(Duration::from_secs(10))).await {
                     Ok(message) => {
+                        info!("Pulled clipboard message from remote sync (message-id: {})", message.message_id);
                         // Check download policy
                         if !download_decision_maker.should_download(&message).await {
-                            info!("Content type not in download scope, skipping");
+                            info!("Content type {:?} not in download scope, skipping", message.metadata.get_content_type());
                             continue;
                         }
 
                         if download_decision_maker.exceeds_max_size(&message) {
-                            info!("Content exceeds max size, skipping");
+                            info!("Content size {} bytes exceeds max size, skipping", message.metadata.get_size());
                             continue;
                         }
+
+                        info!("Content type {:?} accepted by download policy", message.metadata.get_content_type());
 
                         // Save to record
                         if let Err(e) = record_manager
@@ -220,6 +223,8 @@ impl ClipboardSyncService {
                             .await
                         {
                             error!("Failed to add clipboard record: {:?}", e);
+                        } else {
+                            info!("Saved clipboard record to database (message-id: {})", message.message_id);
                         }
 
                         // Receive and process content
@@ -238,6 +243,7 @@ impl ClipboardSyncService {
                                     error!("Failed to set clipboard content: {:?}", e);
                                     *last_payload.write().await = prev_payload;
                                 } else {
+                                    info!("Successfully wrote clipboard content to local clipboard");
                                     // Publish event for latest record
                                     if let Ok(records) = record_manager
                                         .get_records(

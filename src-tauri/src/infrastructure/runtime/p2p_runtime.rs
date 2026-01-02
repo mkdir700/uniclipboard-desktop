@@ -323,6 +323,11 @@ impl P2PRuntime {
                         }
                     }
                     NetworkEvent::ClipboardReceived(msg) => {
+                        log::info!(
+                            "Handling incoming clipboard message from device '{}' (device-id: {})",
+                            msg.origin_device_name,
+                            msg.origin_device_id
+                        );
                         // Forward to P2pSync if initialized
                         if let Some(p2p_sync) = &p2p_sync_for_events {
                             if let Err(e) = p2p_sync.handle_incoming_message(msg).await {

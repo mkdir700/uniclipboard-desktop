@@ -151,11 +151,18 @@ impl LocalClipboardTrait for LocalClipboard {
 
     /// 写入剪贴板内容，并设置自写标志和更新最后写入时间
     async fn set_clipboard_content(&self, content: Payload) -> Result<()> {
+        info!(
+            "Received clipboard write request: type={}, payload={}",
+            content.get_content_type(),
+            content
+        );
         let result = self.write(content).await;
         // 设置自写标志和更新最后写入时间
         self.is_self_write.store(true, Ordering::SeqCst);
+        info!("Set self-write flag to prevent echo");
         let mut last_write = self.last_write.lock().await;
         *last_write = Instant::now();
+        info!("Updated last write timestamp");
         result
     }
 }
