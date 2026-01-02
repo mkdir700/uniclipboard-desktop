@@ -1,6 +1,5 @@
 pub mod clipboard;
 pub mod event;
-pub mod network;
 pub mod p2p;
 pub mod runtime;
 pub mod security;

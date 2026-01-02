@@ -5,21 +5,16 @@
 
 use crate::api::setting::get_encryption_password;
 use crate::api::setting::set_encryption_password;
-use crate::infrastructure::security::unified_encryptor::UnifiedEncryptor;
-use crate::infrastructure::security::unified_key_manager::UnifiedKeyManager;
+use crate::infrastructure::security::unified_encryption::UnifiedEncryption;
 use log::{info, warn};
 use std::sync::Arc;
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
-/// Global unified encryptor instance
+/// Global unified encryption instance
 ///
-/// This is shared across the application for both P2P and WebDAV encryption.
-static UNIFIED_ENCRYPTOR: LazyLock<Mutex<Option<Arc<UnifiedEncryptor>>>> =
-    LazyLock::new(|| Mutex::new(None));
-
-/// Global unified key manager instance
-static UNIFIED_KEY_MANAGER: LazyLock<Mutex<Option<Arc<UnifiedKeyManager>>>> =
+/// This is shared across the application for P2P encryption.
+static UNIFIED_ENCRYPTION: LazyLock<Mutex<Option<Arc<UnifiedEncryption>>>> =
     LazyLock::new(|| Mutex::new(None));
 
 /// Initialize the unified encryption system with the given password
@@ -37,32 +32,14 @@ static UNIFIED_KEY_MANAGER: LazyLock<Mutex<Option<Arc<UnifiedKeyManager>>>> =
 pub async fn initialize_unified_encryption(password: String) -> Result<(), String> {
     info!("Initializing unified encryption system");
 
-    // Create or get the key manager
-    let key_manager = {
-        let mut guard = UNIFIED_KEY_MANAGER.lock().await;
-        if let Some(manager) = &*guard {
-            manager.clone()
-        } else {
-            let manager = Arc::new(UnifiedKeyManager::new());
-            *guard = Some(manager.clone());
-            manager
-        }
-    };
-
-    // Initialize the key manager with the password
-    key_manager
+    let encryption = Arc::new(UnifiedEncryption::new());
+    encryption
         .initialize_from_password(&password)
         .await
-        .map_err(|e| format!("Failed to initialize key manager: {}", e))?;
+        .map_err(|e| format!("Failed to initialize encryption: {}", e))?;
 
-    // Create the unified encryptor
-    let encryptor = Arc::new(UnifiedEncryptor::new(key_manager.clone()));
-
-    // Store the encryptor globally
-    {
-        let mut guard = UNIFIED_ENCRYPTOR.lock().await;
-        *guard = Some(encryptor);
-    }
+    let mut guard = UNIFIED_ENCRYPTION.lock().await;
+    *guard = Some(encryption);
 
     info!("Unified encryption system initialized successfully");
     Ok(())
@@ -99,7 +76,7 @@ pub async fn verify_encryption_password(password: String) -> Result<bool, String
 /// This operation:
 /// 1. Verifies the old password
 /// 2. Sets the new password in storage
-/// 3. Re-initializes the unified key manager with the new password
+/// 3. Re-initializes the unified encryption with the new password
 ///
 /// **WARNING**: After changing the password, all existing encrypted data
 /// will become undecryptable. A migration process should be run to re-encrypt
@@ -134,56 +111,43 @@ pub async fn change_encryption_password(
     // Set new password
     set_encryption_password(new_password.clone()).await?;
 
-    // Re-initialize the key manager with the new password
-    let key_manager = {
-        let mut guard = UNIFIED_KEY_MANAGER.lock().await;
-        if let Some(manager) = &*guard {
+    // Re-initialize the encryption with the new password
+    {
+        let mut guard = UNIFIED_ENCRYPTION.lock().await;
+        if let Some(enc) = &*guard {
             // Clear the old key
-            manager.clear_key().await;
-            manager.clone()
-        } else {
-            return Err("Key manager not initialized".to_string());
+            enc.clear().await;
         }
-    };
 
-    key_manager
-        .initialize_from_password(&new_password)
-        .await
-        .map_err(|e| format!("Failed to reinitialize key manager: {}", e))?;
+        let new_enc = Arc::new(UnifiedEncryption::new());
+        new_enc
+            .initialize_from_password(&new_password)
+            .await
+            .map_err(|e| format!("Failed to reinitialize encryption: {}", e))?;
+        *guard = Some(new_enc);
+    }
 
     info!("Encryption password changed successfully");
     Ok(())
 }
 
-/// Get the global unified encryptor instance
+/// Get the global unified encryption instance
 ///
-/// This is used internally by other modules (P2P, WebDAV) to access
+/// This is used internally by other modules (P2P) to access
 /// the unified encryption system.
 ///
 /// # Returns
-/// * `Some(Arc<UnifiedEncryptor>)` if the encryptor is initialized
-/// * `None` if the encryptor is not initialized
-pub async fn get_unified_encryptor() -> Option<Arc<UnifiedEncryptor>> {
-    let guard = UNIFIED_ENCRYPTOR.lock().await;
-    guard.clone()
-}
-
-/// Get the global unified key manager instance
-///
-/// This is used internally to access the key manager.
-///
-/// # Returns
-/// * `Some(Arc<UnifiedKeyManager>)` if the key manager is initialized
-/// * `None` if the key manager is not initialized
-pub async fn get_unified_key_manager() -> Option<Arc<UnifiedKeyManager>> {
-    let guard = UNIFIED_KEY_MANAGER.lock().await;
+/// * `Some(Arc<UnifiedEncryption>)` if the encryption is initialized
+/// * `None` if the encryption is not initialized
+pub async fn get_unified_encryption() -> Option<Arc<UnifiedEncryption>> {
+    let guard = UNIFIED_ENCRYPTION.lock().await;
     guard.clone()
 }
 
 /// Check if the unified encryption system is initialized
 #[tauri::command]
 pub async fn is_unified_encryption_initialized() -> bool {
-    let guard = UNIFIED_ENCRYPTOR.lock().await;
+    let guard = UNIFIED_ENCRYPTION.lock().await;
     guard.is_some()
 }
 
