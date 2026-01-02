@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 
 use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::p2p::{ClipboardMessage, NetworkCommand};
-use crate::infrastructure::security::unified_encryptor::UnifiedEncryptor;
+use crate::infrastructure::security::unified_encryption::UnifiedEncryption;
 use crate::interface::RemoteClipboardSync;
 
 /// P2P-based clipboard synchronization
@@ -26,8 +26,8 @@ pub struct Libp2pSync {
     device_name: String,
     /// Device ID (PeerId)
     device_id: String,
-    /// Unified encryptor for encrypting/decrypting clipboard content
-    encryptor: Arc<UnifiedEncryptor>,
+    /// Unified encryption for encrypting/decrypting clipboard content
+    encryptor: Arc<UnifiedEncryption>,
     /// Sender for clipboard pull requests (to application)
     clipboard_tx: tokio::sync::mpsc::Sender<ClipboardTransferMessage>,
     /// Receiver for clipboard pull (used internally)
@@ -41,7 +41,7 @@ impl Libp2pSync {
         network_command_tx: tokio::sync::mpsc::Sender<NetworkCommand>,
         device_name: String,
         device_id: String,
-        encryptor: Arc<UnifiedEncryptor>,
+        encryptor: Arc<UnifiedEncryption>,
     ) -> Self {
         let (clipboard_tx, clipboard_rx) = tokio::sync::mpsc::channel(100);
 

@@ -16,9 +16,8 @@ use crate::infrastructure::runtime::p2p_runtime::P2PRuntime;
 use crate::infrastructure::runtime::{AppRuntimeHandle, ClipboardCommand, P2PCommand};
 use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
-use crate::infrastructure::sync::manager::RemoteSyncManager;
 use crate::infrastructure::uniclipboard::ClipboardSyncService;
-use crate::interface::{RemoteClipboardSync, RemoteSyncManagerTrait};
+use crate::interface::RemoteClipboardSync;
 
 /// Application runtime - single owner of all core components
 pub struct AppRuntime {
@@ -57,23 +56,17 @@ impl AppRuntime {
         // 3. Initialize P2P Runtime with AppHandle
         let p2p_runtime = Arc::new(P2PRuntime::new(device_name.clone(), app_handle).await?);
 
-        // Initialize RemoteSyncManager
-        let remote_sync_manager =
-            Arc::new(RemoteSyncManager::with_user_setting(user_setting.clone()));
+        // 4. Initialize ClipboardSyncService
+        // Use P2P sync directly if available
+        let remote_sync: Option<Arc<dyn RemoteClipboardSync>> =
+            p2p_runtime.p2p_sync().map(|s| s as Arc<dyn RemoteClipboardSync>);
 
-        // Set P2P Sync as default handler (if encryption is initialized)
-        if let Some(p2p_sync) = p2p_runtime.p2p_sync() {
-            remote_sync_manager
-                .set_sync_handler(p2p_sync)
-                .await;
-            log::info!("P2P sync handler registered");
+        if remote_sync.is_some() {
+            log::info!("P2P sync handler configured");
         } else {
-            log::info!("P2P sync handler not registered (encryption not set up)");
+            log::info!("P2P sync handler not configured (encryption not set up)");
         }
 
-        // 4. Initialize ClipboardSyncService
-        // Use RemoteSyncManager as the sync interface
-        let remote_sync = remote_sync_manager.clone() as Arc<dyn RemoteClipboardSync>;
         let clipboard_service = ClipboardSyncService::new(
             device_id,
             clipboard,

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, RwLock};
 
-use crate::api::encryption::get_unified_encryptor;
+use crate::api::encryption::get_unified_encryption;
 use crate::api::event::{
     P2PPairingCompleteEventData, P2PPairingFailedEventData, P2PPairingRequestEventData,
     P2PPeerConnectionEvent, P2PPinReadyEventData,
@@ -128,8 +128,8 @@ impl P2PRuntime {
         // Create PeerStorage (kept separate for pairing management)
         let peer_storage = Arc::new(PeerStorage::new().expect("Failed to create PeerStorage"));
 
-        // Try to get the unified encryptor (optional for first-time users)
-        let p2p_sync = match get_unified_encryptor().await {
+        // Try to get the unified encryption (optional for first-time users)
+        let p2p_sync = match get_unified_encryption().await {
             Some(encryptor) => {
                 log::info!("Unified encryptor initialized, P2P sync enabled");
                 let device_name_for_sync = device_name.clone();

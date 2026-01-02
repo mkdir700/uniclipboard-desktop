@@ -80,10 +80,8 @@ pub struct SecuritySetting {
 // 网络设置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkSetting {
-    // 同步方式: "lan_first", "cloud_only", "lan_only"
+    // 同步方式: "lan_only", "p2p_only"
     pub sync_method: String,
-    // 云服务器配置
-    pub cloud_server: String,
     // Web服务器端口
     pub webserver_port: u16,
     // 是否手动填写对等设备地址
@@ -174,8 +172,7 @@ impl Setting {
                 end_to_end_encryption: true,
             },
             network: NetworkSetting {
-                sync_method: "lan_first".to_string(),
-                cloud_server: "api.clipsync.com".to_string(),
+                sync_method: "p2p_only".to_string(),
                 webserver_port: 29217,
                 custom_peer_device: false,
                 peer_device_addr: None,
@@ -292,8 +289,8 @@ mod tests {
             setting.sync.sync_frequency
         );
         assert_eq!(
-            loaded_setting.network.cloud_server,
-            setting.network.cloud_server
+            loaded_setting.network.sync_method,
+            setting.network.sync_method
         );
 
         Ok(())
