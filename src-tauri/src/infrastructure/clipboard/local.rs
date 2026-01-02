@@ -130,7 +130,10 @@ impl LocalClipboardTrait for LocalClipboard {
 
                 match self_clone.read().await {
                     Ok(payload) => {
-                        info!("Clipboard content read successfully: {}, sending to sync service", payload);
+                        info!(
+                            "Clipboard content read successfully: {}, sending to sync service",
+                            payload
+                        );
                         if let Err(e) = tx.send(payload).await {
                             error!("Send payload failed: {:?}", e);
                         } else {

@@ -158,7 +158,10 @@ impl ClipboardSyncService {
 
                     match result {
                         Ok(record_id) => {
-                            info!("Record saved with ID: {}, publishing clipboard-new-content event", record_id);
+                            info!(
+                                "Record saved with ID: {}, publishing clipboard-new-content event",
+                                record_id
+                            );
                             publish_clipboard_new_content(record_id.clone());
                             info!("Event published to event bus");
 

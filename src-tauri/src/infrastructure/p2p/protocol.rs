@@ -23,21 +23,24 @@ pub enum PairingMessage {
 }
 
 /// Initial pairing request sent by initiator
+///
+/// Note: This no longer includes public_key as we've removed ECDH key exchange.
+/// All devices now use the same master key derived from the user's encryption password.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PairingRequest {
     pub session_id: String,
     pub device_name: String,
     pub device_id: String,
-    pub public_key: Vec<u8>, // X25519 public key for ECDH
 }
 
 /// Pairing challenge sent by responder with PIN
+///
+/// Note: This no longer includes public_key as we've removed ECDH key exchange.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PairingChallenge {
     pub session_id: String,
     pub pin: String,
     pub device_name: String, // Responder's device name
-    pub public_key: Vec<u8>, // Responder's X25519 public key for ECDH
 }
 
 /// Pairing response from initiator after PIN verification
@@ -93,11 +96,13 @@ pub struct PairingResponse {
 }
 
 /// Final pairing confirmation message
+///
+/// Note: This no longer includes shared_secret as we've removed ECDH key exchange.
+/// All devices now use the same master key derived from the user's encryption password.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PairingConfirm {
     pub session_id: String,
     pub success: bool,
-    pub shared_secret: Option<Vec<u8>>, // Encrypted shared secret
     pub error: Option<String>,
     /// Sender's device name (the device sending this confirm message)
     pub sender_device_name: String,
@@ -200,7 +205,6 @@ impl std::fmt::Debug for PairingConfirm {
         f.debug_struct("PairingConfirm")
             .field("session_id", &self.session_id)
             .field("success", &self.success)
-            .field("shared_secret", &"[REDACTED]")
             .field("error", &self.error)
             .field("sender_device_name", &self.sender_device_name)
             .finish()

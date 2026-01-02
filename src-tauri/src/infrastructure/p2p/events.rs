@@ -66,7 +66,6 @@ pub enum NetworkEvent {
         session_id: String,
         pin: String,
         peer_device_name: String, // Responder's device name (for initiator to display)
-        peer_public_key: Vec<u8>, // Responder's X25519 public key for ECDH
     },
     PairingResponseReceived {
         session_id: String,
@@ -78,7 +77,6 @@ pub enum NetworkEvent {
         peer_id: String,
         /// Peer device name (the other device's name, not this device's name)
         peer_device_name: String,
-        shared_secret: Vec<u8>,
     },
     PairingFailed {
         session_id: String,

@@ -2,6 +2,7 @@
 //!
 //! Single owner of all core application components.
 use anyhow::Result;
+use chrono::Utc;
 use log::info;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -243,14 +244,10 @@ impl AppRuntime {
                 let _ = respond_to.send(Ok(device_info));
             }
             P2PCommand::GetPairedPeers { respond_to } => {
-                let peers = p2p_runtime
-                    .p2p_sync()
-                    .peer_storage()
-                    .get_all_peers()
-                    .unwrap_or_else(|e| {
-                        log::error!("Failed to get peers: {}", e);
-                        Vec::new()
-                    });
+                let peers = p2p_runtime.get_paired_peers().unwrap_or_else(|e| {
+                    log::error!("Failed to get peers: {}", e);
+                    Vec::new()
+                });
                 let _ = respond_to.send(Ok(peers));
             }
             P2PCommand::InitiatePairing {
@@ -355,14 +352,10 @@ impl AppRuntime {
                 use crate::infrastructure::runtime::PairedPeerWithStatus;
 
                 // Get paired peers from storage
-                let paired_peers = p2p_runtime
-                    .p2p_sync()
-                    .peer_storage()
-                    .get_all_peers()
-                    .unwrap_or_else(|e| {
-                        log::error!("Failed to get peers: {}", e);
-                        Vec::new()
-                    });
+                let paired_peers = p2p_runtime.get_paired_peers().unwrap_or_else(|e| {
+                    log::error!("Failed to get peers: {}", e);
+                    Vec::new()
+                });
 
                 // Get currently connected peers
                 let connected_map = p2p_runtime.connected_peers().await;
@@ -375,9 +368,8 @@ impl AppRuntime {
                         PairedPeerWithStatus {
                             peer_id: p.peer_id,
                             device_name: p.device_name,
-                            shared_secret: p.shared_secret,
                             paired_at: p.paired_at.to_rfc3339(),
-                            last_seen: p.last_seen.map(|dt| dt.to_rfc3339()),
+                            last_seen: p.last_seen.map(|dt: chrono::DateTime<Utc>| dt.to_rfc3339()),
                             last_known_addresses: p.last_known_addresses,
                             connected,
                         }

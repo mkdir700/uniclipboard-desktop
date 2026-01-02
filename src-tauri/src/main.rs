@@ -158,6 +158,9 @@ fn run_app(user_setting: Setting, device_id: String) {
     let runtime_handle =
         AppRuntimeHandle::new(clipboard_cmd_tx.clone(), p2p_cmd_tx.clone(), config);
 
+    // Create a channel to synchronize encryption initialization
+    let (encryption_init_tx, encryption_init_rx) = std::sync::mpsc::channel::<bool>();
+
     Builder::default()
         .plugin(logging::get_builder().build())
         .plugin(tauri_plugin_opener::init())
@@ -175,6 +178,40 @@ fn run_app(user_setting: Setting, device_id: String) {
         )))
         .manage(runtime_handle)
         .setup(move |app| {
+            // Initialize unified encryption BEFORE AppRuntime creation
+            // Use a blocking channel to ensure encryption is ready first
+            let init_tx = encryption_init_tx.clone();
+            tauri::async_runtime::spawn(async move {
+                let result = match api::setting::get_encryption_password().await {
+                    Ok(password) => {
+                        log::info!("Encryption password found, initializing unified encryption");
+                        match api::encryption::initialize_unified_encryption(password).await {
+                            Ok(_) => {
+                                log::info!("Unified encryption initialized successfully");
+                                true
+                            }
+                            Err(e) => {
+                                log::error!("Failed to initialize unified encryption: {}", e);
+                                false
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // Password not set is OK for first-time users
+                        if e.contains("未设置") || e.contains("not set") {
+                            log::info!(
+                                "No encryption password set, will prompt user during onboarding"
+                            );
+                        } else {
+                            log::error!("Failed to check encryption password: {}", e);
+                        }
+                        false
+                    }
+                };
+                // Signal that encryption initialization is complete
+                let _ = init_tx.send(result);
+            });
+
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("")
                 .inner_size(800.0, 600.0)
@@ -205,6 +242,15 @@ fn run_app(user_setting: Setting, device_id: String) {
 
             // 启动 AppRuntime
             tauri::async_runtime::spawn(async move {
+                // Wait for encryption initialization to complete
+                let encryption_init_result = match encryption_init_rx.recv() {
+                    Ok(result) => result,
+                    Err(_) => {
+                        error!("Failed to receive encryption initialization signal");
+                        false
+                    }
+                };
+
                 let app_runtime = match AppRuntime::new_with_channels(
                     user_setting.clone(),
                     device_id,
@@ -218,6 +264,13 @@ fn run_app(user_setting: Setting, device_id: String) {
                     Ok(runtime) => runtime,
                     Err(e) => {
                         error!("Failed to create AppRuntime: {}", e);
+                        // If encryption was not initialized, provide a helpful error
+                        if !encryption_init_result {
+                            error!(
+                                "AppRuntime creation failed - encryption was not initialized. \
+                                 Please set an encryption password first."
+                            );
+                        }
                         return;
                     }
                 };
@@ -276,6 +329,10 @@ fn run_app(user_setting: Setting, device_id: String) {
             api::p2p::reject_p2p_pairing,
             api::p2p::unpair_p2p_device,
             api::p2p::accept_p2p_pairing,
+            api::encryption::initialize_unified_encryption,
+            api::encryption::verify_encryption_password,
+            api::encryption::change_encryption_password,
+            api::encryption::is_unified_encryption_initialized,
             plugins::mac_rounded_corners::enable_rounded_corners,
             plugins::mac_rounded_corners::enable_modern_window_style,
             plugins::mac_rounded_corners::reposition_traffic_lights,

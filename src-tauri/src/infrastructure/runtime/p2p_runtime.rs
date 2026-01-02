@@ -5,11 +5,13 @@
 use anyhow::Result;
 use chrono::Utc;
 use libp2p::identity::Keypair;
+use log::error;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, RwLock};
 
+use crate::api::encryption::get_unified_encryptor;
 use crate::api::event::{
     P2PPairingCompleteEventData, P2PPairingFailedEventData, P2PPairingRequestEventData,
     P2PPeerConnectionEvent, P2PPinReadyEventData,
@@ -28,6 +30,8 @@ pub struct P2PRuntime {
     pairing_cmd_tx: mpsc::Sender<PairingCommand>,
     /// P2P sync instance
     p2p_sync: Arc<Libp2pSync>,
+    /// Peer storage for managing paired devices
+    peer_storage: Arc<PeerStorage>,
     /// Local peer ID
     local_peer_id: String,
     /// Local device name
@@ -86,18 +90,32 @@ impl P2PRuntime {
             pairing_manager.run().await;
         });
 
-        // Create PeerStorage
+        // Create PeerStorage (kept separate for pairing management)
         let peer_storage = Arc::new(PeerStorage::new().expect("Failed to create PeerStorage"));
+
+        // Get the unified encryptor (must be initialized before this point)
+        let encryptor = match get_unified_encryptor().await {
+            Some(encryptor) => {
+                log::info!("Unified encryptor initialized successfully");
+                encryptor
+            }
+            None => {
+                let err_msg =
+                    "Unified encryptor not initialized. Please set encryption password first.";
+                log::error!("{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        };
 
         // Clone device_name for P2pSync (original will be stored in P2PRuntime)
         let device_name_for_sync = device_name.clone();
 
-        // Create P2pSync
+        // Create P2pSync with unified encryptor
         let p2p_sync = Arc::new(Libp2pSync::new(
             network_cmd_tx.clone(),
             device_name_for_sync,
             local_peer_id.clone(),
-            peer_storage,
+            encryptor,
         ));
 
         let discovered_peers = Arc::new(RwLock::new(HashMap::new()));
@@ -105,6 +123,7 @@ impl P2PRuntime {
 
         // Spawn event monitoring loop
         let pairing_cmd_tx_clone = pairing_cmd_tx.clone();
+        let peer_storage_clone = peer_storage.clone();
         let _p2p_sync_clone = p2p_sync.clone();
         let discovered_peers_clone = discovered_peers.clone();
         let connected_peers_clone = connected_peers.clone();
@@ -153,7 +172,6 @@ impl P2PRuntime {
                         session_id,
                         pin,
                         peer_device_name,
-                        peer_public_key,
                     } => {
                         // Send to pairing manager
                         let _ = pairing_cmd_tx_clone
@@ -161,7 +179,6 @@ impl P2PRuntime {
                                 session_id: session_id.clone(),
                                 pin: pin.clone(),
                                 peer_device_name: peer_device_name.clone(),
-                                peer_public_key,
                             })
                             .await;
 
@@ -195,18 +212,17 @@ impl P2PRuntime {
                         session_id,
                         peer_id,
                         peer_device_name,
-                        shared_secret,
                     } => {
-                        // Save paired peer to PeerStorage
+                        // Save paired peer to independent PeerStorage
                         let paired_peer = PairedPeer {
                             peer_id: peer_id.clone(),
                             device_name: peer_device_name.clone(),
-                            shared_secret,
+                            shared_secret: vec![], // Empty - no longer using ECDH shared secret
                             paired_at: Utc::now(),
                             last_seen: Some(Utc::now()),
                             last_known_addresses: vec![],
                         };
-                        if let Err(e) = _p2p_sync_clone.peer_storage().save_peer(paired_peer) {
+                        if let Err(e) = peer_storage_clone.save_peer(paired_peer) {
                             log::error!("Failed to save paired peer {}: {}", peer_id, e);
                         } else {
                             log::info!(
@@ -261,7 +277,10 @@ impl P2PRuntime {
                         if let Err(e) =
                             app_handle_for_events.emit("p2p-peer-connection-changed", event_data)
                         {
-                            log::error!("Failed to emit p2p-peer-connection-changed event: {:?}", e);
+                            log::error!(
+                                "Failed to emit p2p-peer-connection-changed event: {:?}",
+                                e
+                            );
                         }
                     }
                     NetworkEvent::PeerDisconnected(peer_id) => {
@@ -281,7 +300,10 @@ impl P2PRuntime {
                         if let Err(e) =
                             app_handle_for_events.emit("p2p-peer-connection-changed", event_data)
                         {
-                            log::error!("Failed to emit p2p-peer-connection-changed event: {:?}", e);
+                            log::error!(
+                                "Failed to emit p2p-peer-connection-changed event: {:?}",
+                                e
+                            );
                         }
                     }
                     _ => {}
@@ -293,6 +315,7 @@ impl P2PRuntime {
             network_cmd_tx,
             pairing_cmd_tx,
             p2p_sync,
+            peer_storage,
             local_peer_id,
             device_name,
             discovered_peers,
@@ -302,8 +325,14 @@ impl P2PRuntime {
 
     /// Unpair a device
     pub fn unpair_peer(&self, peer_id: &str) -> Result<()> {
-        self.p2p_sync.peer_storage().remove_peer(peer_id)?;
+        // Use the independent peer_storage instead of p2p_sync.peer_storage()
+        self.peer_storage.remove_peer(peer_id)?;
         Ok(())
+    }
+
+    /// Get all paired peers
+    pub fn get_paired_peers(&self) -> Result<Vec<PairedPeer>> {
+        self.peer_storage.get_all_peers()
     }
 
     /// Get the local peer ID
