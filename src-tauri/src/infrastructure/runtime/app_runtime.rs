@@ -61,10 +61,15 @@ impl AppRuntime {
         let remote_sync_manager =
             Arc::new(RemoteSyncManager::with_user_setting(user_setting.clone()));
 
-        // Set P2P Sync as default handler
-        remote_sync_manager
-            .set_sync_handler(p2p_runtime.p2p_sync())
-            .await;
+        // Set P2P Sync as default handler (if encryption is initialized)
+        if let Some(p2p_sync) = p2p_runtime.p2p_sync() {
+            remote_sync_manager
+                .set_sync_handler(p2p_sync)
+                .await;
+            log::info!("P2P sync handler registered");
+        } else {
+            log::info!("P2P sync handler not registered (encryption not set up)");
+        }
 
         // 4. Initialize ClipboardSyncService
         // Use RemoteSyncManager as the sync interface

@@ -28,8 +28,8 @@ pub struct P2PRuntime {
     network_cmd_tx: mpsc::Sender<NetworkCommand>,
     /// Sender for pairing commands
     pairing_cmd_tx: mpsc::Sender<PairingCommand>,
-    /// P2P sync instance
-    p2p_sync: Arc<Libp2pSync>,
+    /// P2P sync instance (None if encryption not initialized)
+    p2p_sync: Option<Arc<Libp2pSync>>,
     /// Peer storage for managing paired devices
     peer_storage: Arc<PeerStorage>,
     /// Local peer ID
@@ -93,30 +93,26 @@ impl P2PRuntime {
         // Create PeerStorage (kept separate for pairing management)
         let peer_storage = Arc::new(PeerStorage::new().expect("Failed to create PeerStorage"));
 
-        // Get the unified encryptor (must be initialized before this point)
-        let encryptor = match get_unified_encryptor().await {
+        // Try to get the unified encryptor (optional for first-time users)
+        let p2p_sync = match get_unified_encryptor().await {
             Some(encryptor) => {
-                log::info!("Unified encryptor initialized successfully");
-                encryptor
+                log::info!("Unified encryptor initialized, P2P sync enabled");
+                let device_name_for_sync = device_name.clone();
+                Some(Arc::new(Libp2pSync::new(
+                    network_cmd_tx.clone(),
+                    device_name_for_sync,
+                    local_peer_id.clone(),
+                    encryptor,
+                )))
             }
             None => {
-                let err_msg =
-                    "Unified encryptor not initialized. Please set encryption password first.";
-                log::error!("{}", err_msg);
-                return Err(anyhow::anyhow!(err_msg));
+                log::info!(
+                    "Unified encryptor not initialized, P2P sync disabled. \
+                     Please set encryption password to enable P2P features."
+                );
+                None
             }
         };
-
-        // Clone device_name for P2pSync (original will be stored in P2PRuntime)
-        let device_name_for_sync = device_name.clone();
-
-        // Create P2pSync with unified encryptor
-        let p2p_sync = Arc::new(Libp2pSync::new(
-            network_cmd_tx.clone(),
-            device_name_for_sync,
-            local_peer_id.clone(),
-            encryptor,
-        ));
 
         let discovered_peers = Arc::new(RwLock::new(HashMap::new()));
         let connected_peers = Arc::new(RwLock::new(HashMap::new()));
@@ -124,7 +120,7 @@ impl P2PRuntime {
         // Spawn event monitoring loop
         let pairing_cmd_tx_clone = pairing_cmd_tx.clone();
         let peer_storage_clone = peer_storage.clone();
-        let _p2p_sync_clone = p2p_sync.clone();
+        let p2p_sync_for_events = p2p_sync.clone();
         let discovered_peers_clone = discovered_peers.clone();
         let connected_peers_clone = connected_peers.clone();
 
@@ -253,9 +249,13 @@ impl P2PRuntime {
                         }
                     }
                     NetworkEvent::ClipboardReceived(msg) => {
-                        // Forward to P2pSync
-                        if let Err(e) = _p2p_sync_clone.handle_incoming_message(msg).await {
-                            log::warn!("Failed to handle incoming clipboard message: {}", e);
+                        // Forward to P2pSync if initialized
+                        if let Some(p2p_sync) = &p2p_sync_for_events {
+                            if let Err(e) = p2p_sync.handle_incoming_message(msg).await {
+                                log::warn!("Failed to handle incoming clipboard message: {}", e);
+                            }
+                        } else {
+                            log::debug!("Received clipboard message but P2P sync is not enabled (encryption not set up)");
                         }
                     }
                     NetworkEvent::PeerConnected(connected) => {
@@ -376,7 +376,9 @@ impl P2PRuntime {
     }
 
     /// Get the P2pSync instance
-    pub fn p2p_sync(&self) -> Arc<Libp2pSync> {
+    ///
+    /// Returns None if encryption is not initialized (first-time users)
+    pub fn p2p_sync(&self) -> Option<Arc<Libp2pSync>> {
         self.p2p_sync.clone()
     }
 }
