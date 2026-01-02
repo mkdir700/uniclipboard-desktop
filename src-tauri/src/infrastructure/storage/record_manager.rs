@@ -93,35 +93,6 @@ impl ClipboardRecordManager {
         }
     }
 
-    pub async fn add_record_with_transfer_message(
-        &self,
-        message: &ClipboardTransferMessage,
-    ) -> Result<String> {
-        let content_type = message.metadata.get_content_type().to_string();
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now().timestamp() as i32;
-
-        let record = DbClipboardRecord::new(
-            id.clone(),
-            message.sender_id.clone(),
-            None,
-            Some(message.record_id.clone()),
-            content_type,
-            Some(message.metadata.get_content_hash().to_string()),
-            Some(message.metadata.get_size() as i32),
-            false,
-            now,
-            now,
-            now,
-            (&message.metadata).try_into()?,
-        )?;
-
-        let mut conn = DB_POOL.get_connection()?;
-        clipboard_record::insert_clipboard_record(&mut conn, &record)?;
-
-        Ok(id)
-    }
-
     /// 获取剪贴板统计信息
     pub async fn get_stats(&self) -> Result<ClipboardStats> {
         let mut conn = DB_POOL.get_connection()?;
