@@ -261,11 +261,13 @@ impl AppRuntime {
                 respond_to,
             } => {
                 let (tx, rx) = oneshot::channel();
+                let local_peer_id = p2p_runtime.local_peer_id().to_string();
                 let _ = p2p_runtime
                     .pairing_cmd_tx()
                     .send(PairingCommand::Initiate {
                         peer_id,
                         device_name,
+                        local_peer_id,
                         respond_to: tx,
                     })
                     .await;

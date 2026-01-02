@@ -17,6 +17,8 @@ pub enum NetworkStatus {
 pub struct DiscoveredPeer {
     pub peer_id: String,
     pub device_name: Option<String>,
+    /// 6-digit device ID (from Identify agent_version)
+    pub device_id: Option<String>,
     pub addresses: Vec<String>,
     pub discovered_at: DateTime<Utc>,
     pub is_paired: bool,
@@ -66,6 +68,7 @@ pub enum NetworkEvent {
         session_id: String,
         pin: String,
         peer_device_name: String, // Responder's device name (for initiator to display)
+        peer_device_id: String,   // Responder's 6-digit device ID
     },
     PairingResponseReceived {
         session_id: String,
@@ -75,6 +78,8 @@ pub enum NetworkEvent {
     PairingComplete {
         session_id: String,
         peer_id: String,
+        /// Peer's 6-digit device ID (stable identifier from database)
+        peer_device_id: String,
         /// Peer device name (the other device's name, not this device's name)
         peer_device_name: String,
     },

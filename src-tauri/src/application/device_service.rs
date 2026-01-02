@@ -213,4 +213,29 @@ impl DeviceManager {
         dao::device::update_device_platform(&mut conn, device_id, &platform.to_string())?;
         Ok(())
     }
+
+    /// 通过 libp2p PeerId 更新设备信息
+    /// 当从 Identify 事件获取到设备的 6 位 ID 时，更新其 PeerId 和 last_seen
+    pub fn update_by_peer_id(&self, peer_id: &str, device_id: &str, device_name: Option<String>) -> Result<()> {
+        let mut conn = DB_POOL.get_connection()?;
+        // Check if device exists
+        if dao::device::is_exist(&mut conn, device_id)? {
+            // Update existing device's peer_id and last_seen
+            dao::device::update_device_peer_id(&mut conn, device_id, peer_id)?;
+            // Update last_seen timestamp
+            dao::device::update_device_last_seen(&mut conn, device_id, Utc::now().timestamp() as i32)?;
+            // Update device_name if provided
+            if let Some(name) = device_name {
+                // Only update if device_name is different or empty
+                let existing_device = dao::device::get_device(&mut conn, device_id)?;
+                if existing_device.is_none() || existing_device.and_then(|d| d.device_name).is_none() {
+                    dao::device::update_device_name(&mut conn, device_id, &name)?;
+                }
+            }
+            log::info!("Updated device {} with peer_id {}", device_id, peer_id);
+        } else {
+            log::warn!("Device {} not found, cannot update peer_id", device_id);
+        }
+        Ok(())
+    }
 }

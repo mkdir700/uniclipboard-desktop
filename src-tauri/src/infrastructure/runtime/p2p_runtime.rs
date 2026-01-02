@@ -53,6 +53,21 @@ impl P2PRuntime {
         let local_key = Keypair::generate_ed25519();
         let local_peer_id = libp2p::PeerId::from(local_key.public()).to_string();
 
+        // Get our 6-digit device ID from database
+        let device_manager = crate::application::device_service::get_device_manager();
+        let our_device_id = match device_manager.get_current_device() {
+            Ok(Some(device)) => device.id,
+            Ok(None) => {
+                log::warn!("No current device found in database, using fallback ID");
+                // Fallback: generate a temporary ID (this shouldn't happen in normal operation)
+                "000000".to_string()
+            }
+            Err(e) => {
+                log::error!("Failed to get current device: {}", e);
+                "000000".to_string()
+            }
+        };
+
         // Create channels for pairing manager
         let (pairing_cmd_tx, pairing_cmd_rx) = mpsc::channel(100);
 
@@ -62,12 +77,14 @@ impl P2PRuntime {
         // Spawn NetworkManager task
         let network_event_tx_clone = network_event_tx.clone();
         let device_name_for_network = device_name.clone();
+        let our_device_id_for_network = our_device_id.clone();
         tokio::spawn(async move {
             let mut network_manager = crate::infrastructure::p2p::NetworkManager::new(
                 network_cmd_rx,
                 network_event_tx_clone,
                 local_key,
                 device_name_for_network,
+                our_device_id_for_network,
             )
             .await
             .expect("Failed to create NetworkManager");
@@ -80,12 +97,30 @@ impl P2PRuntime {
         let pairing_network_cmd_tx = network_cmd_tx.clone();
         let pairing_event_tx = network_event_tx.clone();
         let pairing_device_name = device_name.clone();
+        let pairing_local_peer_id = local_peer_id.clone();
         tokio::spawn(async move {
+            // Get our 6-digit device ID from database
+            let device_manager = crate::application::device_service::get_device_manager();
+            let our_device_id = match device_manager.get_current_device() {
+                Ok(Some(device)) => device.id,
+                Ok(None) => {
+                    log::warn!("No current device found in database, using fallback ID");
+                    // Fallback: generate a temporary ID (this shouldn't happen in normal operation)
+                    "000000".to_string()
+                }
+                Err(e) => {
+                    log::error!("Failed to get current device: {}", e);
+                    "000000".to_string()
+                }
+            };
+
             let pairing_manager = PairingManager::new(
                 pairing_network_cmd_tx,
                 pairing_event_tx,
                 pairing_cmd_rx,
                 pairing_device_name,
+                our_device_id,
+                pairing_local_peer_id,
             );
             pairing_manager.run().await;
         });
@@ -101,7 +136,7 @@ impl P2PRuntime {
                 Some(Arc::new(Libp2pSync::new(
                     network_cmd_tx.clone(),
                     device_name_for_sync,
-                    local_peer_id.clone(),
+                    our_device_id.clone(), // Use 6-digit device ID instead of PeerId
                     encryptor,
                 )))
             }
@@ -168,6 +203,7 @@ impl P2PRuntime {
                         session_id,
                         pin,
                         peer_device_name,
+                        peer_device_id,
                     } => {
                         // Send to pairing manager
                         let _ = pairing_cmd_tx_clone
@@ -175,6 +211,7 @@ impl P2PRuntime {
                                 session_id: session_id.clone(),
                                 pin: pin.clone(),
                                 peer_device_name: peer_device_name.clone(),
+                                peer_device_id: peer_device_id.clone(),
                             })
                             .await;
 
@@ -207,6 +244,7 @@ impl P2PRuntime {
                     NetworkEvent::PairingComplete {
                         session_id,
                         peer_id,
+                        peer_device_id,
                         peer_device_name,
                     } => {
                         // Save paired peer to independent PeerStorage
@@ -222,10 +260,46 @@ impl P2PRuntime {
                             log::error!("Failed to save paired peer {}: {}", peer_id, e);
                         } else {
                             log::info!(
-                                "Saved paired peer: {} (device: {})",
+                                "Saved paired peer: {} (device_id: {}, device: {})",
                                 peer_id,
+                                peer_device_id,
                                 peer_device_name
                             );
+                        }
+
+                        // Also save to DeviceManager (database) for clipboard sync
+                        let device_manager = crate::application::device_service::get_device_manager();
+                        match device_manager.get(&peer_device_id) {
+                            Ok(Some(mut existing_device)) => {
+                                // Update existing device with new peer_id and info
+                                existing_device.peer_id = Some(peer_id.clone());
+                                existing_device.device_name = Some(peer_device_name.clone());
+                                existing_device.is_paired = true;
+                                existing_device.last_seen = Some(Utc::now().timestamp() as i32);
+                                if let Err(e) = device_manager.add(existing_device) {
+                                    log::error!("Failed to update paired device {}: {}", peer_device_id, e);
+                                }
+                            }
+                            Ok(None) => {
+                                // Create new device entry
+                                use crate::domain::device::Device;
+                                let mut new_device = Device::new(
+                                    peer_device_id.clone(),
+                                    None, // IP unknown
+                                    None,
+                                    None,
+                                );
+                                new_device.peer_id = Some(peer_id.clone());
+                                new_device.device_name = Some(peer_device_name.clone());
+                                new_device.is_paired = true;
+                                new_device.last_seen = Some(Utc::now().timestamp() as i32);
+                                if let Err(e) = device_manager.add(new_device) {
+                                    log::error!("Failed to add paired device {}: {}", peer_device_id, e);
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Failed to check device existence: {}", e);
+                            }
                         }
 
                         // Emit event to frontend

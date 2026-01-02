@@ -142,3 +142,27 @@ pub fn update_device_platform(conn: &mut SqliteConnection, id: &str, platform: &
         .context("Failed to update device platform")?;
     Ok(())
 }
+
+pub fn update_device_peer_id(conn: &mut SqliteConnection, id: &str, peer_id: &str) -> Result<()> {
+    diesel::update(devices::table.find(id))
+        .set(devices::peer_id.eq(peer_id))
+        .execute(conn)
+        .context("Failed to update device peer_id")?;
+    Ok(())
+}
+
+pub fn update_device_last_seen(conn: &mut SqliteConnection, id: &str, last_seen: i32) -> Result<()> {
+    diesel::update(devices::table.find(id))
+        .set(devices::last_seen.eq(last_seen))
+        .execute(conn)
+        .context("Failed to update device last_seen")?;
+    Ok(())
+}
+
+pub fn update_device_name(conn: &mut SqliteConnection, id: &str, device_name: &str) -> Result<()> {
+    diesel::update(devices::table.find(id))
+        .set(devices::device_name.eq(device_name))
+        .execute(conn)
+        .context("Failed to update device name")?;
+    Ok(())
+}

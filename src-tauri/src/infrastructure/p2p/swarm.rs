@@ -48,6 +48,8 @@ pub enum NetworkCommand {
         session_id: String,
         pin: String,
         device_name: String,
+        device_id: String,
+        local_peer_id: String,
     },
     /// Send a pairing response with PIN hash (after initiator verifies PIN)
     SendPairingResponse {
@@ -67,6 +69,7 @@ pub enum NetworkCommand {
         session_id: String,
         success: bool,
         device_name: String,
+        device_id: String,
     },
     BroadcastClipboard {
         message: ClipboardMessage,
@@ -111,6 +114,8 @@ pub struct NetworkManager {
     ready_peers: HashMap<PeerId, Instant>,
     /// Current device name (updated when settings change)
     device_name: String,
+    /// Our 6-digit device ID (from database)
+    our_device_id: String,
 }
 
 impl NetworkManager {
@@ -119,6 +124,7 @@ impl NetworkManager {
         event_tx: mpsc::Sender<NetworkEvent>,
         local_key: libp2p::identity::Keypair,
         device_name: String,
+        our_device_id: String,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let local_peer_id = PeerId::from(local_key.public());
         info!("Local peer ID: {}", local_peer_id);
@@ -132,7 +138,7 @@ impl NetworkManager {
                 yamux::Config::default,
             )?
             .with_behaviour(|_key| {
-                UniClipboardBehaviour::new(local_peer_id, &local_key, &device_name)
+                UniClipboardBehaviour::new(local_peer_id, &local_key, &device_name, &our_device_id)
                     .expect("Failed to create behaviour")
             })?
             .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60)))
@@ -148,6 +154,7 @@ impl NetworkManager {
             pending_challenges: HashMap::new(),
             ready_peers: HashMap::new(),
             device_name,
+            our_device_id,
         })
     }
 
@@ -269,6 +276,7 @@ impl NetworkManager {
                             let discovered = DiscoveredPeer {
                                 peer_id: peer_id.to_string(),
                                 device_name: None,
+                                device_id: None, // Will be filled in by Identify event
                                 addresses: vec![addr.to_string()],
                                 discovered_at: Utc::now(),
                                 is_paired: false,
@@ -450,6 +458,7 @@ impl NetworkManager {
                                                     session_id: challenge.session_id,
                                                     pin: challenge.pin,
                                                     peer_device_name: challenge.device_name,
+                                                    peer_device_id: challenge.device_id,
                                                 })
                                                 .await;
                                         }
@@ -485,12 +494,13 @@ impl NetworkManager {
                                                 confirm.sender_device_name.clone();
 
                                             if confirm.success {
-                                                // Send ACK with responder's own device name
+                                                // Send ACK with responder's own device name and device ID
                                                 let ack = super::protocol::PairingConfirm {
                                                     session_id: confirm.session_id.clone(),
                                                     success: true,
                                                     error: None,
                                                     sender_device_name: self.device_name.clone(),
+                                                    device_id: self.our_device_id.clone(),
                                                 };
                                                 let ack_msg = ProtocolMessage::Pairing(
                                                     PairingMessage::Confirm(ack),
@@ -509,6 +519,7 @@ impl NetworkManager {
                                                     .send(NetworkEvent::PairingComplete {
                                                         session_id: confirm.session_id,
                                                         peer_id: peer.to_string(),
+                                                        peer_device_id: confirm.device_id,
                                                         peer_device_name: initiator_device_name,
                                                     })
                                                     .await;
@@ -518,6 +529,7 @@ impl NetworkManager {
                                                     success: false,
                                                     error: confirm.error.clone(),
                                                     sender_device_name: self.device_name.clone(),
+                                                    device_id: String::new(), // Empty for failure case
                                                 };
                                                 let ack_msg = ProtocolMessage::Pairing(
                                                     PairingMessage::Confirm(ack),
@@ -555,15 +567,17 @@ impl NetworkManager {
                                     match pairing_msg {
                                         PairingMessage::Confirm(confirm) => {
                                             if confirm.success {
-                                                // Get responder's device name from the ACK
+                                                // Get responder's device info from the ACK
                                                 let responder_device_name =
                                                     confirm.sender_device_name.clone();
+                                                let responder_device_id = confirm.device_id.clone();
 
                                                 let _ = self
                                                     .event_tx
                                                     .send(NetworkEvent::PairingComplete {
                                                         session_id: confirm.session_id,
                                                         peer_id: peer.to_string(),
+                                                        peer_device_id: responder_device_id,
                                                         peer_device_name: responder_device_name,
                                                     })
                                                     .await;
@@ -594,28 +608,46 @@ impl NetworkManager {
             )) => {
                 debug!("Identified peer {}: {}", peer_id, info.agent_version);
 
-                // Parse device name from agent_version
-                // Format: "uniclipboard/<version>/<device_name>"
-                let device_name = if info.agent_version.starts_with("uniclipboard/") {
-                    let parts: Vec<&str> = info.agent_version.splitn(3, '/').collect();
-                    if parts.len() >= 3 {
-                        Some(parts[2].to_string())
+                // Parse device_id and device_name from agent_version
+                // New format: "uniclipboard/<version>/<device_id>/<device_name>"
+                // Old format: "uniclipboard/<version>/<device_name>" (for backward compatibility)
+                let (device_id, device_name) = if info.agent_version.starts_with("uniclipboard/") {
+                    let parts: Vec<&str> = info.agent_version.splitn(4, '/').collect();
+                    if parts.len() >= 4 {
+                        // New format with device_id
+                        (Some(parts[2].to_string()), Some(parts[3].to_string()))
+                    } else if parts.len() >= 3 {
+                        // Old format without device_id - treat parts[2] as device_name
+                        (None, Some(parts[2].to_string()))
                     } else {
-                        Some(info.agent_version.clone())
+                        (None, Some(info.agent_version.clone()))
                     }
                 } else {
-                    Some(info.agent_version.clone())
+                    (None, Some(info.agent_version.clone()))
                 };
 
                 if let Some(discovered) = self.discovered_peers.get_mut(&peer_id) {
                     let old_name = discovered.device_name.clone();
-                    discovered.device_name = device_name;
+                    discovered.device_name = device_name.clone();
+                    discovered.device_id = device_id.clone(); // Store the 6-digit device ID
 
                     if old_name != discovered.device_name {
                         let _ = self
                             .event_tx
                             .send(NetworkEvent::PeerDiscovered(discovered.clone()))
                             .await;
+                    }
+                }
+
+                // Update device in database when we get both device_id and peer_id
+                if let (Some(device_id), Some(device_name)) = (device_id, device_name) {
+                    let device_manager = crate::application::device_service::get_device_manager();
+                    if let Err(e) = device_manager.update_by_peer_id(
+                        &peer_id.to_string(),
+                        &device_id,
+                        Some(device_name),
+                    ) {
+                        warn!("Failed to update device {} with peer_id {}: {}", device_id, peer_id, e);
                     }
                 }
             }
@@ -735,6 +767,8 @@ impl NetworkManager {
                 session_id,
                 pin,
                 device_name,
+                device_id,
+                local_peer_id,
             } => {
                 // CRITICAL FIX: Send Challenge as a NEW request, not as a response
                 // This works because the initiator (A) doesn't have a response channel
@@ -745,6 +779,7 @@ impl NetworkManager {
                             session_id: session_id.clone(),
                             pin,
                             device_name,
+                            device_id: device_id.clone(),
                         };
                         let protocol_msg =
                             ProtocolMessage::Pairing(PairingMessage::Challenge(challenge));
@@ -755,8 +790,8 @@ impl NetworkManager {
                                 .request_response
                                 .send_request(&peer, request);
                             debug!(
-                                "Sent pairing challenge to {} for session {}",
-                                peer_id, session_id
+                                "Sent pairing challenge to {} for session {} (device_id: {}, peer_id: {})",
+                                peer_id, session_id, device_id, local_peer_id
                             );
                         }
                     }
@@ -828,6 +863,7 @@ impl NetworkManager {
                             success: false,
                             error: Some("Pairing rejected by user".to_string()),
                             sender_device_name: self.device_name.clone(),
+                            device_id: String::new(), // Empty for rejection
                         };
                         let protocol_msg =
                             ProtocolMessage::Pairing(PairingMessage::Confirm(confirm));
@@ -861,6 +897,7 @@ impl NetworkManager {
                 session_id,
                 success,
                 device_name,
+                device_id,
             } => match peer_id.parse::<PeerId>() {
                 Ok(peer) => {
                     let confirm = super::protocol::PairingConfirm {
@@ -868,6 +905,7 @@ impl NetworkManager {
                         success,
                         error: None,
                         sender_device_name: device_name,
+                        device_id,
                     };
                     let protocol_msg = ProtocolMessage::Pairing(PairingMessage::Confirm(confirm));
                     if let Ok(message) = protocol_msg.to_bytes() {

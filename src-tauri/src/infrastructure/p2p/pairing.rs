@@ -28,6 +28,7 @@ pub enum PairingCommand {
     Initiate {
         peer_id: String,
         device_name: String,
+        local_peer_id: String,
         respond_to: oneshot::Sender<Result<String>>,
     },
     /// Handle incoming pairing request
@@ -40,6 +41,7 @@ pub enum PairingCommand {
         session_id: String,
         pin: String,
         peer_device_name: String,
+        peer_device_id: String,
     },
     /// Verify PIN
     VerifyPin {
@@ -84,6 +86,8 @@ pub struct PairingSession {
     pub peer_device_name: String,
     pub created_at: chrono::DateTime<Utc>,
     pub is_initiator: bool,
+    /// Peer's 6-digit device ID (from PairingRequest or PairingChallenge)
+    pub peer_device_id: Option<String>,
     /// PIN stored in memory only for hash computation (initiator side)
     /// This is cleared after verification to minimize exposure
     pin: Option<String>,
@@ -104,6 +108,7 @@ impl PairingSession {
             peer_device_name,
             created_at: Utc::now(),
             is_initiator,
+            peer_device_id: None,
             pin: None,
         }
     }
@@ -142,6 +147,10 @@ pub struct PairingManager {
     command_rx: mpsc::Receiver<PairingCommand>,
     /// local device name
     device_name: String,
+    /// Local device's 6-digit ID (from database)
+    our_device_id: String,
+    /// Local libp2p PeerId (network layer, changes each restart)
+    local_peer_id: String,
 }
 
 impl PairingManager {
@@ -150,6 +159,8 @@ impl PairingManager {
         event_tx: mpsc::Sender<NetworkEvent>,
         command_rx: mpsc::Receiver<PairingCommand>,
         device_name: String,
+        our_device_id: String,
+        local_peer_id: String,
     ) -> Self {
         Self {
             sessions: HashMap::new(),
@@ -157,6 +168,8 @@ impl PairingManager {
             event_tx,
             command_rx,
             device_name,
+            our_device_id,
+            local_peer_id,
         }
     }
 
@@ -184,9 +197,12 @@ impl PairingManager {
             PairingCommand::Initiate {
                 peer_id,
                 device_name,
+                local_peer_id,
                 respond_to,
             } => {
-                let result = self.initiate_pairing(peer_id, device_name).await;
+                let result = self
+                    .initiate_pairing(peer_id, device_name, local_peer_id)
+                    .await;
                 let _ = respond_to.send(result);
             }
             PairingCommand::VerifyPin {
@@ -206,8 +222,9 @@ impl PairingManager {
                 session_id,
                 pin,
                 peer_device_name,
+                peer_device_id,
             } => {
-                self.handle_pin_ready(&session_id, pin, peer_device_name)
+                self.handle_pin_ready(&session_id, pin, peer_device_name, peer_device_id)
                     .await?;
             }
             PairingCommand::HandleResponse {
@@ -275,6 +292,7 @@ impl PairingManager {
         &mut self,
         peer_id: String,
         device_name: String,
+        local_peer_id: String,
     ) -> Result<String> {
         let session_id = self.generate_session_id();
 
@@ -292,7 +310,8 @@ impl PairingManager {
         let request = PairingRequest {
             session_id: session_id.clone(),
             device_name,
-            device_id: peer_id.clone(),
+            device_id: self.our_device_id.clone(), // Our 6-digit stable ID
+            peer_id: local_peer_id,               // Our current libp2p PeerId
         };
 
         let message = super::protocol::ProtocolMessage::Pairing(
@@ -322,19 +341,23 @@ impl PairingManager {
         request: PairingRequest,
     ) -> Result<()> {
         log::info!(
-            "Received pairing request from peer {} (device: {})",
+            "Received pairing request from peer {} (device: {}, device_id: {})",
             peer_id,
-            request.device_name
+            request.device_name,
+            request.device_id
         );
 
         // Create session with local device name and peer device name from request
-        let session = PairingSession::new(
+        let mut session = PairingSession::new(
             request.session_id.clone(),
             peer_id.clone(),
             self.device_name.clone(), // local_device_name (responder's device)
             request.device_name.clone(), // peer_device_name (initiator's device)
             false,                    // is_initiator
         );
+
+        // Store the peer's 6-digit device ID from the request
+        session.peer_device_id = Some(request.device_id.clone());
 
         self.sessions.insert(request.session_id.clone(), session);
 
@@ -344,7 +367,7 @@ impl PairingManager {
     /// Accept pairing request (responder side) - generates PIN and sends challenge
     pub async fn accept_pairing(&mut self, session_id: &str) -> Result<()> {
         // Clone needed values before borrowing to avoid borrow conflicts
-        let (peer_id, peer_device_name) = {
+        let (peer_id, peer_device_name, peer_device_id) = {
             let session = self
                 .sessions
                 .get_mut(session_id)
@@ -354,7 +377,11 @@ impl PairingManager {
                 return Err(anyhow!("Pairing session expired"));
             }
 
-            (session.peer_id.clone(), session.peer_device_name.clone())
+            (
+                session.peer_id.clone(),
+                session.peer_device_name.clone(),
+                session.peer_device_id.clone().ok_or_else(|| anyhow!("Peer device ID not found in session"))?,
+            )
         };
 
         // Generate PIN for user verification
@@ -382,6 +409,7 @@ impl PairingManager {
                 session_id: session_id.to_string(),
                 pin: pin.clone(),
                 peer_device_name: peer_device_name.clone(),
+                peer_device_id: peer_device_id.clone(),
             })
             .await;
 
@@ -392,6 +420,8 @@ impl PairingManager {
                 session_id: session_id.to_string(),
                 pin,
                 device_name: self.device_name.clone(),
+                device_id: self.our_device_id.clone(),
+                local_peer_id: self.local_peer_id.clone(),
             })
             .await
             .map_err(|e| anyhow!("Failed to send pairing challenge: {}", e))?;
@@ -405,11 +435,13 @@ impl PairingManager {
         session_id: &str,
         pin: String,
         peer_device_name: String,
+        peer_device_id: String,
     ) -> Result<()> {
         log::info!(
-            "Received PIN challenge for session {}, peer device: {}",
+            "Received PIN challenge for session {}, peer device: {}, peer_device_id: {}",
             session_id,
-            peer_device_name
+            peer_device_name,
+            peer_device_id
         );
 
         let session = self
@@ -419,6 +451,8 @@ impl PairingManager {
 
         // Update peer device name when we receive the challenge
         session.peer_device_name = peer_device_name;
+        // Store peer's 6-digit device ID
+        session.peer_device_id = Some(peer_device_id);
         // Store PIN for later hash computation when user confirms
         session.set_pin(pin);
 
@@ -537,6 +571,7 @@ impl PairingManager {
                     session_id: session_id.to_string(),
                     success: false,
                     device_name: local_device_name,
+                    device_id: String::new(), // Empty for rejection
                 })
                 .await;
 
@@ -573,6 +608,7 @@ impl PairingManager {
                     session_id: session_id.to_string(),
                     success: false,
                     device_name: local_device_name,
+                    device_id: String::new(), // Empty for failure
                 })
                 .await;
 
@@ -597,6 +633,7 @@ impl PairingManager {
                 session_id: session_id.to_string(),
                 success: true,
                 device_name: local_device_name,
+                device_id: self.our_device_id.clone(), // Our 6-digit device ID
             })
             .await
             .map_err(|e| anyhow!("Failed to send pairing confirm: {}", e))?;
