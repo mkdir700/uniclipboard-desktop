@@ -34,7 +34,38 @@ pub struct AppRuntime {
 }
 
 impl AppRuntime {
-    /// Create a new application runtime
+    /// Constructs a new AppRuntime with the given command receivers and initializes core services.
+    ///
+    /// Initializes file storage, clipboard record manager, the platform clipboard, the P2P runtime,
+    /// and the ClipboardSyncService (using P2P-based remote sync when available). The returned
+    /// AppRuntime has shared configuration and runtime handles wrapped in `Arc`, `is_running` set
+    /// to `false`, the provided command receivers stored, and placeholder senders (to be replaced).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::sync::Arc;
+    /// # use tauri::AppHandle;
+    /// # use tokio::sync::mpsc;
+    /// # // assume `Setting`, `ClipboardCommand`, `P2PCommand` and `new_with_channels` are in scope
+    /// # let setting: Setting = Default::default();
+    /// # let device_id = "dev".to_string();
+    /// # let device_name = "device".to_string();
+    /// # let app_handle: AppHandle = unsafe { std::mem::zeroed() }; // placeholder for example
+    /// let (clipboard_tx, clipboard_rx) = mpsc::channel(16);
+    /// let (p2p_tx, p2p_rx) = mpsc::channel(16);
+    /// let runtime = tokio::runtime::Runtime::new().unwrap();
+    /// let app_runtime = runtime.block_on(async {
+    ///     new_with_channels(
+    ///         setting,
+    ///         device_id,
+    ///         device_name,
+    ///         app_handle,
+    ///         clipboard_rx,
+    ///         p2p_rx,
+    ///     ).await.unwrap()
+    /// });
+    /// ```
     pub async fn new_with_channels(
         user_setting: Setting,
         device_id: String,
