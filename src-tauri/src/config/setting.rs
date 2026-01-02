@@ -142,7 +142,20 @@ impl Setting {
         SETTING.read().unwrap().clone()
     }
 
-    /// 创建默认设置
+    /// Creates a Setting populated with the application's default configuration.
+    ///
+    /// The returned Setting represents the initial configuration used when no user settings
+    /// file exists (e.g., empty device_id, system theme, realtime sync enabled, end-to-end
+    /// encryption enabled, p2p-only networking, 30-day history retention, version "2.4.1").
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let s = Setting::default();
+    /// assert!(s.sync.auto_sync);
+    /// assert_eq!(s.network.sync_method, "p2p_only");
+    /// assert_eq!(s.storage.history_retention_days, 30);
+    /// ```
     pub fn default() -> Self {
         Self {
             device_id: String::new(),

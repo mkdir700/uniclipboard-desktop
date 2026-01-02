@@ -43,7 +43,24 @@ pub struct P2PRuntime {
 }
 
 impl P2PRuntime {
-    /// Create a new P2P runtime
+    /// Creates and starts a new P2P runtime that manages network and pairing components, discovered and connected peer tracking, and optional encrypted P2P sync.
+    ///
+    /// The runtime spawns background tasks for the NetworkManager and PairingManager, initializes peer storage, and begins processing network events that update internal state and emit frontend events. Encryption-based sync (Libp2pSync) is enabled only if unified encryption is available.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Self)` with the initialized P2PRuntime on success, or an error if initialization fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tauri::AppHandle;
+    /// # async fn example(app_handle: AppHandle) -> anyhow::Result<()> {
+    /// let runtime = crate::infrastructure::p2p::P2PRuntime::new("My Device".to_string(), app_handle).await?;
+    /// // runtime is now running with background tasks handling network and pairing events
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn new(device_name: String, app_handle: AppHandle) -> Result<Self> {
         // Create channels for network communication
         let (network_cmd_tx, network_cmd_rx) = mpsc::channel(100);

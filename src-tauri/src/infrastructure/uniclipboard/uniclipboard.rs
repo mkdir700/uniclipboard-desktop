@@ -35,6 +35,23 @@ pub struct ClipboardSyncService {
 }
 
 impl ClipboardSyncService {
+    /// Constructs a new ClipboardSyncService with the given device identifier and dependencies.
+    ///
+    /// The returned service is initially not running and has no last payload recorded. If `remote_sync`
+    /// is `None`, remote synchronization is disabled and inbound/outbound remote operations will be skipped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `device_id`, `clipboard`, `record_manager`, and `file_storage` are assumed to be created earlier.
+    /// let service = ClipboardSyncService::new(
+    ///     "my-device".to_string(),
+    ///     clipboard,
+    ///     None, // no remote sync configured
+    ///     record_manager,
+    ///     file_storage,
+    /// );
+    /// ```
     pub fn new(
         device_id: String,
         clipboard: Arc<dyn LocalClipboardTrait>,
@@ -53,7 +70,22 @@ impl ClipboardSyncService {
         }
     }
 
-    /// Check if content type should be downloaded based on user settings
+    /// Determines whether payloads of the given content type should be downloaded according to user sync settings.
+    ///
+    /// This consults the global settings instance and returns the configured flag for the provided `ContentType`.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the user has enabled downloading for `content_type`, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Run the async method to get the decision.
+    /// // `svc` is an instance of `ClipboardSyncService`.
+    /// let allowed = futures::executor::block_on(svc.should_download_content(&ContentType::Image));
+    /// println!("Download image content allowed: {}", allowed);
+    /// ```
     async fn should_download_content(&self, content_type: &ContentType) -> bool {
         let setting = crate::config::Setting::get_instance();
         match content_type {
@@ -81,7 +113,24 @@ impl ClipboardSyncService {
         self.clipboard.clone()
     }
 
-    /// Start clipboard synchronization
+    /// Starts the clipboard synchronization service, initializing local monitoring, outbound and inbound synchronization, and the optional remote sync service.
+    ///
+    /// On success, background tasks for processing outbound (local-to-remote) and inbound (remote-to-local) clipboard flows are started and the service transitions to a running state.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the service started successfully; `Err` if the service was already running or if any required subsystem failed to start.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assuming `svc` is an initialized `ClipboardSyncService` instance.
+    /// // This example demonstrates the typical call site; adapt test runtime as needed.
+    /// # async fn run_example(svc: &ClipboardSyncService) -> anyhow::Result<()> {
+    /// svc.start().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn start(&self) -> Result<()> {
         if self
             .is_running
@@ -115,7 +164,29 @@ impl ClipboardSyncService {
         Ok(())
     }
 
-    /// Handle local clipboard changes -> push to remote
+    /// Spawn a background task that processes local clipboard payloads: persist content to file storage, create/update a record, publish a local event, and optionally push the content to the configured remote sync service.
+    ///
+    /// The task performs echo-cancellation against the service's internal `last_payload`, stores payload content to `file_storage`, saves metadata via `record_manager`, publishes a clipboard-new-content event on success, and — if a remote sync is configured — serializes the payload and pushes a `ClipboardTransferMessage`. If pushing to the remote fails, the previous `last_payload` is restored to avoid losing synchronization state.
+    ///
+    /// Arguments:
+    /// - `clipboard_receiver`: a receiver that yields local `Payload` instances to be processed.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the background task was spawned successfully.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio::sync::mpsc;
+    ///
+    /// // Assume `service` is an initialized ClipboardSyncService and `Payload` is available.
+    /// let (tx, rx) = mpsc::channel(16);
+    /// // Spawn the outbound sync task that will consume from `rx`.
+    /// service.start_outbound_sync(rx).await.unwrap();
+    /// // Send a payload from elsewhere:
+    /// // tx.send(payload).await.unwrap();
+    /// ```
     async fn start_outbound_sync(
         &self,
         mut clipboard_receiver: mpsc::Receiver<Payload>,
@@ -208,7 +279,26 @@ impl ClipboardSyncService {
         Ok(())
     }
 
-    /// Handle remote messages -> write to local clipboard
+    /// Start the inbound synchronization loop that pulls remote clipboard messages and writes accepted content to the local clipboard.
+    ///
+    /// Runs a background task that continuously:
+    /// - pulls messages from the configured remote sync (if any),
+    /// - applies content-type download policy,
+    /// - materializes message content into a Payload and stores it to local file storage,
+    /// - persists a clipboard record, and
+    /// - writes the payload to the local clipboard while maintaining echo-cancellation state.
+    ///
+    /// The task stops when the service's running flag is cleared. If no remote sync is configured the task sleeps and retries periodically.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use std::sync::Arc;
+    /// # use tokio;
+    /// # async fn example(svc: Arc<crate::clipboard::ClipboardSyncService>) {
+    /// svc.start_inbound_sync().await.unwrap();
+    /// # }
+    /// ```
     async fn start_inbound_sync(&self) -> Result<()> {
         let clipboard = self.clipboard.clone();
         let remote_sync = self.remote_sync.clone();

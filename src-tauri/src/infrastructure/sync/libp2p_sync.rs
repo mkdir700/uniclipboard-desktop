@@ -37,6 +37,28 @@ pub struct Libp2pSync {
 }
 
 impl Libp2pSync {
+    /// Creates a new Libp2pSync instance wired to the provided network sender and encryption provider.
+    ///
+    /// The returned instance is initialized with an internal clipboard channel (capacity 100)
+    /// and a stopped (`running = false`) state.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use tokio::sync::mpsc;
+    ///
+    /// // Placeholder types; replace with real implementations from the crate.
+    /// // let network_command_tx: mpsc::Sender<NetworkCommand> = ...;
+    /// // let encryptor: Arc<UnifiedEncryption> = Arc::new(...);
+    ///
+    /// let (network_command_tx, _rx) = mpsc::channel::<NetworkCommand>(8);
+    /// let device_name = "my-device".to_string();
+    /// let device_id = "peer-id-123".to_string();
+    /// let encryptor = Arc::new(unimplemented!()); // replace with `UnifiedEncryption` instance
+    ///
+    /// let sync = Libp2pSync::new(network_command_tx, device_name, device_id, encryptor);
+    /// ```
     pub fn new(
         network_command_tx: tokio::sync::mpsc::Sender<NetworkCommand>,
         device_name: String,

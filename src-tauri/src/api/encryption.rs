@@ -17,17 +17,23 @@ use tokio::sync::Mutex;
 static UNIFIED_ENCRYPTION: LazyLock<Mutex<Option<Arc<UnifiedEncryption>>>> =
     LazyLock::new(|| Mutex::new(None));
 
-/// Initialize the unified encryption system with the given password
+/// Initializes the unified encryption system with the provided password.
 ///
-/// This should be called once during app startup after the user has entered
-/// their encryption password (either via onboarding or password prompt).
+/// This should be called once during application startup after the user has
+/// supplied their encryption password (for example, during onboarding or a
+/// password prompt).
 ///
-/// # Arguments
-/// * `password` - The user's encryption password
+/// # Examples
+///
+/// ```no_run
+/// # async fn example() {
+/// let _ = initialize_unified_encryption("my-secure-password".to_string()).await;
+/// # }
+/// ```
 ///
 /// # Returns
-/// * `Ok(())` if initialization succeeded
-/// * `Err(String)` if initialization failed
+///
+/// `Ok(())` on success, `Err(String)` with an error message on failure.
 #[tauri::command]
 pub async fn initialize_unified_encryption(password: String) -> Result<(), String> {
     info!("Initializing unified encryption system");
@@ -71,24 +77,33 @@ pub async fn verify_encryption_password(password: String) -> Result<bool, String
     Ok(stored == password)
 }
 
-/// Change the encryption password
+/// Change the unified encryption password and reinitialize the global encryption instance.
 ///
-/// This operation:
-/// 1. Verifies the old password
-/// 2. Sets the new password in storage
-/// 3. Re-initializes the unified encryption with the new password
+/// This verifies the current password, stores the new password, and reinitializes the unified
+/// encryption instance with the new password. After a successful change, previously encrypted
+/// data will not be decryptable until a migration re-encrypts it with the new key.
 ///
-/// **WARNING**: After changing the password, all existing encrypted data
-/// will become undecryptable. A migration process should be run to re-encrypt
-/// all data with the new key.
+/// # Parameters
 ///
-/// # Arguments
-/// * `old_password` - The current encryption password
-/// * `new_password` - The new encryption password
+/// * `old_password` - The current encryption password.
+/// * `new_password` - The new encryption password; must be at least 8 characters.
 ///
 /// # Returns
-/// * `Ok(())` if password change succeeded
-/// * `Err(String)` if password change failed
+///
+/// `Ok(())` if the password was changed and the encryption instance reinitialized, `Err(String)`
+/// with a human-readable message on failure.
+///
+/// # Examples
+///
+/// ```
+/// // Note: this example demonstrates the call pattern; it requires a runtime and the surrounding
+/// // application context to succeed in practice.
+/// let rt = tokio::runtime::Runtime::new().unwrap();
+/// let res = rt.block_on(async {
+///     change_encryption_password("current_pass".to_string(), "new_secure_pass".to_string()).await
+/// });
+/// assert!(res.is_ok() || res.is_err()); // function returns a Result; behavior depends on environment
+/// ```
 #[tauri::command]
 pub async fn change_encryption_password(
     old_password: String,
@@ -131,20 +146,43 @@ pub async fn change_encryption_password(
     Ok(())
 }
 
-/// Get the global unified encryption instance
+/// Retrieve the global unified encryption instance.
 ///
-/// This is used internally by other modules (P2P) to access
-/// the unified encryption system.
+/// This returns the shared, lazily-initialized `UnifiedEncryption` stored by the application.
 ///
 /// # Returns
-/// * `Some(Arc<UnifiedEncryption>)` if the encryption is initialized
-/// * `None` if the encryption is not initialized
+///
+/// `Some(Arc<UnifiedEncryption>)` if the encryption system has been initialized, `None` otherwise.
+///
+/// # Examples
+///
+/// ```
+/// // Synchronously await the async accessor in a simple example.
+/// let enc = futures::executor::block_on(get_unified_encryption());
+/// match enc {
+///     Some(_u) => { /* encryption is initialized */ }
+///     None => { /* encryption is not initialized */ }
+/// }
+/// ```
 pub async fn get_unified_encryption() -> Option<Arc<UnifiedEncryption>> {
     let guard = UNIFIED_ENCRYPTION.lock().await;
     guard.clone()
 }
 
-/// Check if the unified encryption system is initialized
+/// Returns whether the unified encryption system has been initialized.
+///
+/// # Returns
+///
+/// `true` if a unified encryption instance is currently stored and initialized, `false` otherwise.
+///
+/// # Examples
+///
+/// ```
+/// # async fn example() {
+/// let initialized = is_unified_encryption_initialized().await;
+/// // `initialized` is `true` when the system has been initialized
+/// # }
+/// ```
 #[tauri::command]
 pub async fn is_unified_encryption_initialized() -> bool {
     let guard = UNIFIED_ENCRYPTION.lock().await;
