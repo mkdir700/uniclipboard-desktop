@@ -7,7 +7,7 @@ use chrono::Utc;
 use clipboard_rs::common::RustImage;
 use clipboard_rs::{Clipboard, ClipboardContext};
 use clipboard_rs::{ClipboardHandler, RustImageData};
-use log::debug;
+use log::{debug, info};
 use std::fs;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
@@ -131,15 +131,29 @@ impl RsClipboard {
     pub fn write(&self, payload: Payload) -> Result<()> {
         match payload {
             Payload::Image(image) => {
+                info!(
+                    "Writing image to platform clipboard: size={} bytes",
+                    image.get_content().len()
+                );
                 let image_data = RustImageData::from_bytes(&image.get_content().to_vec())
                     .map_err(|e| anyhow::anyhow!("Failed to convert image: {}", e))?;
                 self.write_image(image_data)
             }
             Payload::Text(text) => {
+                info!(
+                    "Writing text to platform clipboard: size={} bytes",
+                    text.get_content().len()
+                );
                 let text = String::from_utf8(text.get_content().to_vec())?;
                 self.write_text(&text)
             }
-            Payload::File(file) => self.write_files(file.get_file_paths()),
+            Payload::File(file) => {
+                info!(
+                    "Writing files to platform clipboard: count={}",
+                    file.get_file_paths().len()
+                );
+                self.write_files(file.get_file_paths())
+            }
         }
     }
 

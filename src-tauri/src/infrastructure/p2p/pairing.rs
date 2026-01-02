@@ -1,17 +1,18 @@
 //! Device pairing module for UniClipboard P2P
 //!
 //! Handles secure device pairing using:
-//! - X25519 ECDH for key exchange
 //! - PIN-based verification to prevent MITM attacks
-//! - Shared secret derivation for encrypted clipboard sync
+//! - Unified encryption (all devices use the same master key)
 //! - Actor pattern for thread safety
+//!
+//! Note: ECDH key exchange has been removed. All devices now use the same
+//! master key derived from the user's encryption password.
 
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 use rand::Rng;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
-use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 
 use super::events::NetworkEvent;
 use super::pin_hash;
@@ -27,6 +28,7 @@ pub enum PairingCommand {
     Initiate {
         peer_id: String,
         device_name: String,
+        local_peer_id: String,
         respond_to: oneshot::Sender<Result<String>>,
     },
     /// Handle incoming pairing request
@@ -39,7 +41,7 @@ pub enum PairingCommand {
         session_id: String,
         pin: String,
         peer_device_name: String,
-        peer_public_key: Vec<u8>,
+        peer_device_id: String,
     },
     /// Verify PIN
     VerifyPin {
@@ -52,14 +54,14 @@ pub enum PairingCommand {
         session_id: String,
         response: PairingResponse,
         peer_device_name: String,
-        respond_to: oneshot::Sender<Result<(bool, Option<Vec<u8>>)>>,
+        respond_to: oneshot::Sender<Result<bool>>,
     },
     /// Handle pairing confirm
     HandleConfirm {
         session_id: String,
         confirm: PairingConfirm,
         peer_id: String,
-        respond_to: oneshot::Sender<Result<Option<Vec<u8>>>>,
+        respond_to: oneshot::Sender<Result<()>>,
     },
     /// Reject pairing
     Reject {
@@ -82,11 +84,10 @@ pub struct PairingSession {
     pub local_device_name: String,
     /// Peer device name (the other device's name)
     pub peer_device_name: String,
-    pub our_public_key: PublicKey,
-    pub our_private_key: StaticSecret,
-    pub peer_public_key: Option<PublicKey>,
     pub created_at: chrono::DateTime<Utc>,
     pub is_initiator: bool,
+    /// Peer's 6-digit device ID (from PairingRequest or PairingChallenge)
+    pub peer_device_id: Option<String>,
     /// PIN stored in memory only for hash computation (initiator side)
     /// This is cleared after verification to minimize exposure
     pin: Option<String>,
@@ -100,19 +101,14 @@ impl PairingSession {
         peer_device_name: String,
         is_initiator: bool,
     ) -> Self {
-        let our_private_key = StaticSecret::random();
-        let our_public_key = PublicKey::from(&our_private_key);
-
         Self {
             session_id,
             peer_id,
             local_device_name,
             peer_device_name,
-            our_public_key,
-            our_private_key,
-            peer_public_key: None,
             created_at: Utc::now(),
             is_initiator,
+            peer_device_id: None,
             pin: None,
         }
     }
@@ -130,15 +126,6 @@ impl PairingSession {
     /// Clear the PIN from memory after use
     pub fn clear_pin(&mut self) {
         self.pin = None;
-    }
-
-    /// Compute ECDH shared secret
-    pub fn compute_shared_secret(&self) -> Result<SharedSecret> {
-        let peer_public = self
-            .peer_public_key
-            .ok_or_else(|| anyhow!("Peer public key not set"))?;
-
-        Ok(self.our_private_key.diffie_hellman(&peer_public))
     }
 
     /// Check if session is expired (5 minutes)
@@ -160,6 +147,10 @@ pub struct PairingManager {
     command_rx: mpsc::Receiver<PairingCommand>,
     /// local device name
     device_name: String,
+    /// Local device's 6-digit ID (from database)
+    our_device_id: String,
+    /// Local libp2p PeerId (network layer, changes each restart)
+    local_peer_id: String,
 }
 
 impl PairingManager {
@@ -168,6 +159,8 @@ impl PairingManager {
         event_tx: mpsc::Sender<NetworkEvent>,
         command_rx: mpsc::Receiver<PairingCommand>,
         device_name: String,
+        our_device_id: String,
+        local_peer_id: String,
     ) -> Self {
         Self {
             sessions: HashMap::new(),
@@ -175,6 +168,8 @@ impl PairingManager {
             event_tx,
             command_rx,
             device_name,
+            our_device_id,
+            local_peer_id,
         }
     }
 
@@ -202,9 +197,12 @@ impl PairingManager {
             PairingCommand::Initiate {
                 peer_id,
                 device_name,
+                local_peer_id,
                 respond_to,
             } => {
-                let result = self.initiate_pairing(peer_id, device_name).await;
+                let result = self
+                    .initiate_pairing(peer_id, device_name, local_peer_id)
+                    .await;
                 let _ = respond_to.send(result);
             }
             PairingCommand::VerifyPin {
@@ -224,9 +222,9 @@ impl PairingManager {
                 session_id,
                 pin,
                 peer_device_name,
-                peer_public_key,
+                peer_device_id,
             } => {
-                self.handle_pin_ready(&session_id, pin, peer_device_name, peer_public_key)
+                self.handle_pin_ready(&session_id, pin, peer_device_name, peer_device_id)
                     .await?;
             }
             PairingCommand::HandleResponse {
@@ -294,6 +292,7 @@ impl PairingManager {
         &mut self,
         peer_id: String,
         device_name: String,
+        local_peer_id: String,
     ) -> Result<String> {
         let session_id = self.generate_session_id();
 
@@ -306,15 +305,13 @@ impl PairingManager {
             true,                  // is_initiator
         );
 
-        // Store public key bytes before moving session into map
-        let public_key_bytes = session.our_public_key.to_bytes().to_vec();
         self.sessions.insert(session_id.clone(), session);
 
         let request = PairingRequest {
             session_id: session_id.clone(),
             device_name,
-            device_id: peer_id.clone(),
-            public_key: public_key_bytes,
+            device_id: self.our_device_id.clone(), // Our 6-digit stable ID
+            peer_id: local_peer_id,               // Our current libp2p PeerId
         };
 
         let message = super::protocol::ProtocolMessage::Pairing(
@@ -344,24 +341,14 @@ impl PairingManager {
         request: PairingRequest,
     ) -> Result<()> {
         log::info!(
-            "Received pairing request from peer {} (device: {})",
+            "Received pairing request from peer {} (device: {}, device_id: {})",
             peer_id,
-            request.device_name
+            request.device_name,
+            request.device_id
         );
 
-        let our_private_key = StaticSecret::random();
-        let our_public_key = PublicKey::from(&our_private_key);
-
-        // Parse peer's public key
-        let peer_public_bytes: [u8; 32] = request
-            .public_key
-            .as_slice()
-            .try_into()
-            .map_err(|e| anyhow!("Invalid public key length: {}", e))?;
-        let peer_public = PublicKey::from(peer_public_bytes);
-
         // Create session with local device name and peer device name from request
-        let session = PairingSession::new(
+        let mut session = PairingSession::new(
             request.session_id.clone(),
             peer_id.clone(),
             self.device_name.clone(), // local_device_name (responder's device)
@@ -369,12 +356,10 @@ impl PairingManager {
             false,                    // is_initiator
         );
 
-        // Store peer public key
-        let mut session_with_key = session;
-        session_with_key.peer_public_key = Some(peer_public);
+        // Store the peer's 6-digit device ID from the request
+        session.peer_device_id = Some(request.device_id.clone());
 
-        self.sessions
-            .insert(request.session_id.clone(), session_with_key);
+        self.sessions.insert(request.session_id.clone(), session);
 
         Ok(())
     }
@@ -382,7 +367,7 @@ impl PairingManager {
     /// Accept pairing request (responder side) - generates PIN and sends challenge
     pub async fn accept_pairing(&mut self, session_id: &str) -> Result<()> {
         // Clone needed values before borrowing to avoid borrow conflicts
-        let (peer_id, peer_device_name, our_public_key_bytes, is_expired) = {
+        let (peer_id, peer_device_name, peer_device_id) = {
             let session = self
                 .sessions
                 .get_mut(session_id)
@@ -395,8 +380,7 @@ impl PairingManager {
             (
                 session.peer_id.clone(),
                 session.peer_device_name.clone(),
-                session.our_public_key.to_bytes().to_vec(),
-                false,
+                session.peer_device_id.clone().ok_or_else(|| anyhow!("Peer device ID not found in session"))?,
             )
         };
 
@@ -425,18 +409,19 @@ impl PairingManager {
                 session_id: session_id.to_string(),
                 pin: pin.clone(),
                 peer_device_name: peer_device_name.clone(),
-                peer_public_key: our_public_key_bytes.clone(),
+                peer_device_id: peer_device_id.clone(),
             })
             .await;
 
-        // Send pairing challenge with PIN and our public key to the initiator
+        // Send pairing challenge with PIN to the initiator
         self.network_command_tx
             .send(NetworkCommand::SendPairingChallenge {
                 peer_id,
                 session_id: session_id.to_string(),
                 pin,
                 device_name: self.device_name.clone(),
-                public_key: our_public_key_bytes,
+                device_id: self.our_device_id.clone(),
+                local_peer_id: self.local_peer_id.clone(),
             })
             .await
             .map_err(|e| anyhow!("Failed to send pairing challenge: {}", e))?;
@@ -450,12 +435,13 @@ impl PairingManager {
         session_id: &str,
         pin: String,
         peer_device_name: String,
-        peer_public_key: Vec<u8>,
+        peer_device_id: String,
     ) -> Result<()> {
         log::info!(
-            "Received PIN challenge for session {}, peer device: {}",
+            "Received PIN challenge for session {}, peer device: {}, peer_device_id: {}",
             session_id,
-            peer_device_name
+            peer_device_name,
+            peer_device_id
         );
 
         let session = self
@@ -463,16 +449,10 @@ impl PairingManager {
             .get_mut(session_id)
             .ok_or_else(|| anyhow!("Session not found"))?;
 
-        // Parse peer's public key
-        let peer_public_bytes: [u8; 32] = peer_public_key
-            .as_slice()
-            .try_into()
-            .map_err(|e| anyhow!("Invalid public key length: {}", e))?;
-        let peer_public = PublicKey::from(peer_public_bytes);
-
-        session.peer_public_key = Some(peer_public);
         // Update peer device name when we receive the challenge
         session.peer_device_name = peer_device_name;
+        // Store peer's 6-digit device ID
+        session.peer_device_id = Some(peer_device_id);
         // Store PIN for later hash computation when user confirms
         session.set_pin(pin);
 
@@ -555,7 +535,7 @@ impl PairingManager {
         session_id: &str,
         response: PairingResponse,
         _peer_device_name: String,
-    ) -> Result<(bool, Option<Vec<u8>>)> {
+    ) -> Result<bool> {
         // Clone needed values before borrowing to avoid borrow conflicts
         let (peer_id, local_device_name, is_expired, pin) = {
             let session = self
@@ -590,12 +570,12 @@ impl PairingManager {
                     peer_id,
                     session_id: session_id.to_string(),
                     success: false,
-                    shared_secret: None,
                     device_name: local_device_name,
+                    device_id: String::new(), // Empty for rejection
                 })
                 .await;
 
-            return Ok((false, None));
+            return Ok(false);
         }
 
         // Get the stored PIN for verification
@@ -627,12 +607,12 @@ impl PairingManager {
                     peer_id,
                     session_id: session_id.to_string(),
                     success: false,
-                    shared_secret: None,
                     device_name: local_device_name,
+                    device_id: String::new(), // Empty for failure
                 })
                 .await;
 
-            return Ok((false, None));
+            return Ok(false);
         }
 
         log::info!(
@@ -641,35 +621,25 @@ impl PairingManager {
             peer_id
         );
 
-        // Compute shared secret (need to re-borrow session)
-        let shared_secret = {
-            let session = self
-                .sessions
-                .get(session_id)
-                .ok_or_else(|| anyhow!("Session not found"))?;
-            session.compute_shared_secret()?
-        };
-        let secret_bytes = shared_secret.to_bytes().to_vec();
-
         log::info!(
             "Sending PairingConfirm with success=true for session {}",
             session_id
         );
 
-        // Send success confirm
+        // Send success confirm (no shared_secret needed anymore)
         self.network_command_tx
             .send(NetworkCommand::SendPairingConfirm {
                 peer_id,
                 session_id: session_id.to_string(),
                 success: true,
-                shared_secret: Some(secret_bytes.clone()),
                 device_name: local_device_name,
+                device_id: self.our_device_id.clone(), // Our 6-digit device ID
             })
             .await
             .map_err(|e| anyhow!("Failed to send pairing confirm: {}", e))?;
 
         self.sessions.remove(session_id);
-        Ok((true, Some(secret_bytes)))
+        Ok(true)
     }
 
     /// Handle pairing confirmation
@@ -680,7 +650,7 @@ impl PairingManager {
         session_id: &str,
         confirm: PairingConfirm,
         peer_id: String,
-    ) -> Result<Option<Vec<u8>>> {
+    ) -> Result<()> {
         let session = self
             .sessions
             .get(session_id)
@@ -704,18 +674,8 @@ impl PairingManager {
             );
         }
 
-        if confirm.success {
-            // Derive our own shared secret (both parties compute the same secret via ECDH)
-            let shared_secret = session.compute_shared_secret()?;
-            let secret_bytes = shared_secret.to_bytes().to_vec();
-
-            self.sessions.remove(session_id);
-
-            return Ok(Some(secret_bytes));
-        }
-
         self.sessions.remove(session_id);
-        Ok(None)
+        Ok(())
     }
 
     /// Reject an incoming pairing request
@@ -778,23 +738,6 @@ mod tests {
         assert!(!session.is_expired());
     }
 
-    #[test]
-    fn test_ecdh_key_exchange() {
-        // Alice's keys
-        let alice_private = StaticSecret::random();
-        let alice_public = PublicKey::from(&alice_private);
-
-        // Bob's keys
-        let bob_private = StaticSecret::random();
-        let bob_public = PublicKey::from(&bob_private);
-
-        // Both should compute the same shared secret
-        let alice_shared = alice_private.diffie_hellman(&bob_public);
-        let bob_shared = bob_private.diffie_hellman(&alice_public);
-
-        assert_eq!(alice_shared.as_bytes(), bob_shared.as_bytes());
-    }
-
     fn create_test_manager() -> PairingManager {
         let (cmd_tx, _) = mpsc::channel(100);
         let (event_tx, _) = mpsc::channel(100);
@@ -815,7 +758,6 @@ impl std::fmt::Debug for PairingCommand {
                 .field("session_id", session_id)
                 .field("peer_device_name", peer_device_name)
                 .field("pin", &"[REDACTED]")
-                .field("peer_public_key", &"[REDACTED]")
                 .finish(),
             Self::HandleResponse {
                 session_id,

@@ -112,6 +112,7 @@ impl UniClipboardBehaviour {
         local_peer_id: libp2p::PeerId,
         keypair: &libp2p::identity::Keypair,
         device_name: &str,
+        device_id: &str, // 6-digit device ID from database
     ) -> Result<Self, Box<dyn std::error::Error>> {
         // mDNS for local device discovery
         let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)?;
@@ -152,11 +153,11 @@ impl UniClipboardBehaviour {
         );
 
         // Identify for peer identification
-        // Format: "uniclipboard/<version>/<device_name>"
-        // The device name is included so other peers can display a human-readable name
+        // Format: "uniclipboard/<version>/<device_id>/<device_name>"
+        // The device_id is the 6-digit stable ID, device_name is human-readable
         let identify = identify::Behaviour::new(
             identify::Config::new(PROTOCOL_NAME.to_string(), keypair.public())
-                .with_agent_version(format!("uniclipboard/1.0.0/{}", device_name)),
+                .with_agent_version(format!("uniclipboard/1.0.0/{}/{}", device_id, device_name)),
         );
 
         Ok(Self {

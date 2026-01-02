@@ -61,10 +61,6 @@ fn main() {
         *global_setting = user_setting.clone();
     }
 
-    // 初始化密码管理器
-    PasswordManager::init_salt_file_if_not_exists()
-        .expect("Failed to initialize password manager salt file");
-
     // 检查 vault 状态一致性（在单例初始化之前）
     // 如果状态不一致，提供恢复提示
     let vault_key_path = PasswordManager::get_vault_key_path();
@@ -204,7 +200,38 @@ fn run_app(user_setting: Setting, device_id: String) {
             let device_name = user_setting.general.device_name.clone();
 
             // 启动 AppRuntime
+            // Note: Encryption initialization happens first in the same task,
+            // ensuring it completes before AppRuntime is created
             tauri::async_runtime::spawn(async move {
+                // Step 1: Initialize unified encryption
+                let encryption_init_result = match api::setting::get_encryption_password().await {
+                    Ok(password) => {
+                        log::info!("Encryption password found, initializing unified encryption");
+                        match api::encryption::initialize_unified_encryption(password).await {
+                            Ok(_) => {
+                                log::info!("Unified encryption initialized successfully");
+                                true
+                            }
+                            Err(e) => {
+                                log::error!("Failed to initialize unified encryption: {}", e);
+                                false
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // Password not set is OK for first-time users
+                        if e.contains("未设置") || e.contains("not set") {
+                            log::info!(
+                                "No encryption password set, will prompt user during onboarding"
+                            );
+                        } else {
+                            log::error!("Failed to check encryption password: {}", e);
+                        }
+                        false
+                    }
+                };
+
+                // Step 2: Create AppRuntime (encryption is now ready)
                 let app_runtime = match AppRuntime::new_with_channels(
                     user_setting.clone(),
                     device_id,
@@ -218,10 +245,18 @@ fn run_app(user_setting: Setting, device_id: String) {
                     Ok(runtime) => runtime,
                     Err(e) => {
                         error!("Failed to create AppRuntime: {}", e);
+                        // If encryption was not initialized, provide a helpful error
+                        if !encryption_init_result {
+                            error!(
+                                "AppRuntime creation failed - encryption was not initialized. \
+                                 Please set an encryption password first."
+                            );
+                        }
                         return;
                     }
                 };
 
+                // Step 3: Start the runtime
                 match app_runtime.start().await {
                     Ok(_) => {
                         log::info!("AppRuntime started successfully");
@@ -276,6 +311,10 @@ fn run_app(user_setting: Setting, device_id: String) {
             api::p2p::reject_p2p_pairing,
             api::p2p::unpair_p2p_device,
             api::p2p::accept_p2p_pairing,
+            api::encryption::initialize_unified_encryption,
+            api::encryption::verify_encryption_password,
+            api::encryption::change_encryption_password,
+            api::encryption::is_unified_encryption_initialized,
             plugins::mac_rounded_corners::enable_rounded_corners,
             plugins::mac_rounded_corners::enable_modern_window_style,
             plugins::mac_rounded_corners::reposition_traffic_lights,

@@ -150,7 +150,10 @@ pub fn listen_clipboard_new_content<R: Runtime>(
 
         // 向前端发送事件
         if let Err(e) = app_handle_clone.emit("clipboard-new-content", event_data) {
-            log::error!("Failed to emit clipboard-new-content event to frontend: {:?}", e);
+            log::error!(
+                "Failed to emit clipboard-new-content event to frontend: {:?}",
+                e
+            );
         } else {
             log::info!("Successfully sent clipboard-new-content event to frontend");
         }
@@ -158,7 +161,10 @@ pub fn listen_clipboard_new_content<R: Runtime>(
 
     // 保存监听器ID，以便后续可以取消监听
     state.clipboard_new_content_listener_id = Some(listener_id);
-    log::info!("Clipboard-new-content listener registered with ID: {:?}", listener_id);
+    log::info!(
+        "Clipboard-new-content listener registered with ID: {:?}",
+        listener_id
+    );
 }
 
 /// 停止监听剪贴板新内容事件

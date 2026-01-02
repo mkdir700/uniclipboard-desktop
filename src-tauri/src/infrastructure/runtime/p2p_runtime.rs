@@ -5,11 +5,13 @@
 use anyhow::Result;
 use chrono::Utc;
 use libp2p::identity::Keypair;
+use log::error;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, RwLock};
 
+use crate::api::encryption::get_unified_encryptor;
 use crate::api::event::{
     P2PPairingCompleteEventData, P2PPairingFailedEventData, P2PPairingRequestEventData,
     P2PPeerConnectionEvent, P2PPinReadyEventData,
@@ -26,8 +28,10 @@ pub struct P2PRuntime {
     network_cmd_tx: mpsc::Sender<NetworkCommand>,
     /// Sender for pairing commands
     pairing_cmd_tx: mpsc::Sender<PairingCommand>,
-    /// P2P sync instance
-    p2p_sync: Arc<Libp2pSync>,
+    /// P2P sync instance (None if encryption not initialized)
+    p2p_sync: Option<Arc<Libp2pSync>>,
+    /// Peer storage for managing paired devices
+    peer_storage: Arc<PeerStorage>,
     /// Local peer ID
     local_peer_id: String,
     /// Local device name
@@ -49,6 +53,21 @@ impl P2PRuntime {
         let local_key = Keypair::generate_ed25519();
         let local_peer_id = libp2p::PeerId::from(local_key.public()).to_string();
 
+        // Get our 6-digit device ID from database
+        let device_manager = crate::application::device_service::get_device_manager();
+        let our_device_id = match device_manager.get_current_device() {
+            Ok(Some(device)) => device.id,
+            Ok(None) => {
+                log::warn!("No current device found in database, using fallback ID");
+                // Fallback: generate a temporary ID (this shouldn't happen in normal operation)
+                "000000".to_string()
+            }
+            Err(e) => {
+                log::error!("Failed to get current device: {}", e);
+                "000000".to_string()
+            }
+        };
+
         // Create channels for pairing manager
         let (pairing_cmd_tx, pairing_cmd_rx) = mpsc::channel(100);
 
@@ -58,12 +77,14 @@ impl P2PRuntime {
         // Spawn NetworkManager task
         let network_event_tx_clone = network_event_tx.clone();
         let device_name_for_network = device_name.clone();
+        let our_device_id_for_network = our_device_id.clone();
         tokio::spawn(async move {
             let mut network_manager = crate::infrastructure::p2p::NetworkManager::new(
                 network_cmd_rx,
                 network_event_tx_clone,
                 local_key,
                 device_name_for_network,
+                our_device_id_for_network,
             )
             .await
             .expect("Failed to create NetworkManager");
@@ -76,36 +97,65 @@ impl P2PRuntime {
         let pairing_network_cmd_tx = network_cmd_tx.clone();
         let pairing_event_tx = network_event_tx.clone();
         let pairing_device_name = device_name.clone();
+        let pairing_local_peer_id = local_peer_id.clone();
         tokio::spawn(async move {
+            // Get our 6-digit device ID from database
+            let device_manager = crate::application::device_service::get_device_manager();
+            let our_device_id = match device_manager.get_current_device() {
+                Ok(Some(device)) => device.id,
+                Ok(None) => {
+                    log::warn!("No current device found in database, using fallback ID");
+                    // Fallback: generate a temporary ID (this shouldn't happen in normal operation)
+                    "000000".to_string()
+                }
+                Err(e) => {
+                    log::error!("Failed to get current device: {}", e);
+                    "000000".to_string()
+                }
+            };
+
             let pairing_manager = PairingManager::new(
                 pairing_network_cmd_tx,
                 pairing_event_tx,
                 pairing_cmd_rx,
                 pairing_device_name,
+                our_device_id,
+                pairing_local_peer_id,
             );
             pairing_manager.run().await;
         });
 
-        // Create PeerStorage
+        // Create PeerStorage (kept separate for pairing management)
         let peer_storage = Arc::new(PeerStorage::new().expect("Failed to create PeerStorage"));
 
-        // Clone device_name for P2pSync (original will be stored in P2PRuntime)
-        let device_name_for_sync = device_name.clone();
-
-        // Create P2pSync
-        let p2p_sync = Arc::new(Libp2pSync::new(
-            network_cmd_tx.clone(),
-            device_name_for_sync,
-            local_peer_id.clone(),
-            peer_storage,
-        ));
+        // Try to get the unified encryptor (optional for first-time users)
+        let p2p_sync = match get_unified_encryptor().await {
+            Some(encryptor) => {
+                log::info!("Unified encryptor initialized, P2P sync enabled");
+                let device_name_for_sync = device_name.clone();
+                Some(Arc::new(Libp2pSync::new(
+                    network_cmd_tx.clone(),
+                    device_name_for_sync,
+                    our_device_id.clone(), // Use 6-digit device ID instead of PeerId
+                    encryptor,
+                )))
+            }
+            None => {
+                log::info!(
+                    "Unified encryptor not initialized, P2P sync disabled. \
+                     Please set encryption password to enable P2P features."
+                );
+                None
+            }
+        };
 
         let discovered_peers = Arc::new(RwLock::new(HashMap::new()));
         let connected_peers = Arc::new(RwLock::new(HashMap::new()));
 
         // Spawn event monitoring loop
         let pairing_cmd_tx_clone = pairing_cmd_tx.clone();
-        let _p2p_sync_clone = p2p_sync.clone();
+        let peer_storage_clone = peer_storage.clone();
+        let p2p_sync_for_events = p2p_sync.clone();
         let discovered_peers_clone = discovered_peers.clone();
         let connected_peers_clone = connected_peers.clone();
 
@@ -153,7 +203,7 @@ impl P2PRuntime {
                         session_id,
                         pin,
                         peer_device_name,
-                        peer_public_key,
+                        peer_device_id,
                     } => {
                         // Send to pairing manager
                         let _ = pairing_cmd_tx_clone
@@ -161,7 +211,7 @@ impl P2PRuntime {
                                 session_id: session_id.clone(),
                                 pin: pin.clone(),
                                 peer_device_name: peer_device_name.clone(),
-                                peer_public_key,
+                                peer_device_id: peer_device_id.clone(),
                             })
                             .await;
 
@@ -194,26 +244,62 @@ impl P2PRuntime {
                     NetworkEvent::PairingComplete {
                         session_id,
                         peer_id,
+                        peer_device_id,
                         peer_device_name,
-                        shared_secret,
                     } => {
-                        // Save paired peer to PeerStorage
+                        // Save paired peer to independent PeerStorage
                         let paired_peer = PairedPeer {
                             peer_id: peer_id.clone(),
                             device_name: peer_device_name.clone(),
-                            shared_secret,
+                            shared_secret: vec![], // Empty - no longer using ECDH shared secret
                             paired_at: Utc::now(),
                             last_seen: Some(Utc::now()),
                             last_known_addresses: vec![],
                         };
-                        if let Err(e) = _p2p_sync_clone.peer_storage().save_peer(paired_peer) {
+                        if let Err(e) = peer_storage_clone.save_peer(paired_peer) {
                             log::error!("Failed to save paired peer {}: {}", peer_id, e);
                         } else {
                             log::info!(
-                                "Saved paired peer: {} (device: {})",
+                                "Saved paired peer: {} (device_id: {}, device: {})",
                                 peer_id,
+                                peer_device_id,
                                 peer_device_name
                             );
+                        }
+
+                        // Also save to DeviceManager (database) for clipboard sync
+                        let device_manager = crate::application::device_service::get_device_manager();
+                        match device_manager.get(&peer_device_id) {
+                            Ok(Some(mut existing_device)) => {
+                                // Update existing device with new peer_id and info
+                                existing_device.peer_id = Some(peer_id.clone());
+                                existing_device.device_name = Some(peer_device_name.clone());
+                                existing_device.is_paired = true;
+                                existing_device.last_seen = Some(Utc::now().timestamp() as i32);
+                                if let Err(e) = device_manager.add(existing_device) {
+                                    log::error!("Failed to update paired device {}: {}", peer_device_id, e);
+                                }
+                            }
+                            Ok(None) => {
+                                // Create new device entry
+                                use crate::domain::device::Device;
+                                let mut new_device = Device::new(
+                                    peer_device_id.clone(),
+                                    None, // IP unknown
+                                    None,
+                                    None,
+                                );
+                                new_device.peer_id = Some(peer_id.clone());
+                                new_device.device_name = Some(peer_device_name.clone());
+                                new_device.is_paired = true;
+                                new_device.last_seen = Some(Utc::now().timestamp() as i32);
+                                if let Err(e) = device_manager.add(new_device) {
+                                    log::error!("Failed to add paired device {}: {}", peer_device_id, e);
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Failed to check device existence: {}", e);
+                            }
                         }
 
                         // Emit event to frontend
@@ -237,9 +323,18 @@ impl P2PRuntime {
                         }
                     }
                     NetworkEvent::ClipboardReceived(msg) => {
-                        // Forward to P2pSync
-                        if let Err(e) = _p2p_sync_clone.handle_incoming_message(msg).await {
-                            log::warn!("Failed to handle incoming clipboard message: {}", e);
+                        log::info!(
+                            "Handling incoming clipboard message from device '{}' (device-id: {})",
+                            msg.origin_device_name,
+                            msg.origin_device_id
+                        );
+                        // Forward to P2pSync if initialized
+                        if let Some(p2p_sync) = &p2p_sync_for_events {
+                            if let Err(e) = p2p_sync.handle_incoming_message(msg).await {
+                                log::warn!("Failed to handle incoming clipboard message: {}", e);
+                            }
+                        } else {
+                            log::debug!("Received clipboard message but P2P sync is not enabled (encryption not set up)");
                         }
                     }
                     NetworkEvent::PeerConnected(connected) => {
@@ -261,7 +356,10 @@ impl P2PRuntime {
                         if let Err(e) =
                             app_handle_for_events.emit("p2p-peer-connection-changed", event_data)
                         {
-                            log::error!("Failed to emit p2p-peer-connection-changed event: {:?}", e);
+                            log::error!(
+                                "Failed to emit p2p-peer-connection-changed event: {:?}",
+                                e
+                            );
                         }
                     }
                     NetworkEvent::PeerDisconnected(peer_id) => {
@@ -281,7 +379,10 @@ impl P2PRuntime {
                         if let Err(e) =
                             app_handle_for_events.emit("p2p-peer-connection-changed", event_data)
                         {
-                            log::error!("Failed to emit p2p-peer-connection-changed event: {:?}", e);
+                            log::error!(
+                                "Failed to emit p2p-peer-connection-changed event: {:?}",
+                                e
+                            );
                         }
                     }
                     _ => {}
@@ -293,6 +394,7 @@ impl P2PRuntime {
             network_cmd_tx,
             pairing_cmd_tx,
             p2p_sync,
+            peer_storage,
             local_peer_id,
             device_name,
             discovered_peers,
@@ -302,8 +404,14 @@ impl P2PRuntime {
 
     /// Unpair a device
     pub fn unpair_peer(&self, peer_id: &str) -> Result<()> {
-        self.p2p_sync.peer_storage().remove_peer(peer_id)?;
+        // Use the independent peer_storage instead of p2p_sync.peer_storage()
+        self.peer_storage.remove_peer(peer_id)?;
         Ok(())
+    }
+
+    /// Get all paired peers
+    pub fn get_paired_peers(&self) -> Result<Vec<PairedPeer>> {
+        self.peer_storage.get_all_peers()
     }
 
     /// Get the local peer ID
@@ -347,7 +455,9 @@ impl P2PRuntime {
     }
 
     /// Get the P2pSync instance
-    pub fn p2p_sync(&self) -> Arc<Libp2pSync> {
+    ///
+    /// Returns None if encryption is not initialized (first-time users)
+    pub fn p2p_sync(&self) -> Option<Arc<Libp2pSync>> {
         self.p2p_sync.clone()
     }
 }

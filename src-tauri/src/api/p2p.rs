@@ -8,7 +8,9 @@ use tauri::State;
 
 use crate::domain::pairing::PairedPeer;
 use crate::infrastructure::p2p::DiscoveredPeer;
-use crate::infrastructure::runtime::{AppRuntimeHandle, LocalDeviceInfo, PairedPeerWithStatus, P2PCommand};
+use crate::infrastructure::runtime::{
+    AppRuntimeHandle, LocalDeviceInfo, P2PCommand, PairedPeerWithStatus,
+};
 
 /// P2P 设备信息
 #[derive(Clone, Debug, Serialize, Deserialize)]

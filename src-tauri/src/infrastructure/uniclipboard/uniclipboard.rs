@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 
-use crate::application::clipboard_content_receiver_service::ClipboardContentReceiver;
 use crate::application::download_decision_service::DownloadDecisionMaker;
 use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::event::publish_clipboard_new_content;
@@ -35,7 +34,6 @@ pub struct ClipboardSyncService {
     /// Last payload to prevent duplicate processing (echo cancellation)
     last_payload: Arc<RwLock<Option<Payload>>>,
     download_decision_maker: DownloadDecisionMaker,
-    content_receiver: ClipboardContentReceiver,
 }
 
 impl ClipboardSyncService {
@@ -46,11 +44,6 @@ impl ClipboardSyncService {
         record_manager: ClipboardRecordManager,
         file_storage: FileStorageManager,
     ) -> Self {
-        let content_receiver = ClipboardContentReceiver::new(
-            Arc::new(file_storage.clone()),
-            Arc::new(record_manager.clone()),
-        );
-
         Self {
             device_id,
             clipboard,
@@ -60,7 +53,6 @@ impl ClipboardSyncService {
             is_running: Arc::new(AtomicBool::new(false)),
             last_payload: Arc::new(RwLock::new(None)),
             download_decision_maker: DownloadDecisionMaker::new(),
-            content_receiver,
         }
     }
 
@@ -158,15 +150,27 @@ impl ClipboardSyncService {
 
                     match result {
                         Ok(record_id) => {
-                            info!("Record saved with ID: {}, publishing clipboard-new-content event", record_id);
+                            info!(
+                                "Record saved with ID: {}, publishing clipboard-new-content event",
+                                record_id
+                            );
                             publish_clipboard_new_content(record_id.clone());
                             info!("Event published to event bus");
 
-                            // Step 3: Push to remote
+                            // Step 3: Push to remote (include content in message)
+                            let content_bytes = match payload.to_bytes() {
+                                Ok(bytes) => bytes,
+                                Err(e) => {
+                                    error!("Failed to serialize payload: {}", e);
+                                    *last_payload.write().await = prev_payload;
+                                    continue;
+                                }
+                            };
+
                             let sync_message = ClipboardTransferMessage::from((
                                 metadata,
                                 device_id.clone(),
-                                record_id,
+                                content_bytes,
                             ));
 
                             if let Err(e) = remote_sync.push(sync_message).await {
@@ -194,35 +198,45 @@ impl ClipboardSyncService {
         let last_payload = self.last_payload.clone();
         let record_manager = self.record_manager.clone();
         let download_decision_maker = self.download_decision_maker.clone();
-        let content_receiver = self.content_receiver.clone();
+        let file_storage = self.file_storage.clone();
 
         tokio::spawn(async move {
             while is_running.load(Ordering::SeqCst) {
                 match remote_sync.pull(Some(Duration::from_secs(10))).await {
                     Ok(message) => {
+                        info!("Pulled clipboard message from remote sync (message-id: {})", message.message_id);
+
                         // Check download policy
                         if !download_decision_maker.should_download(&message).await {
-                            info!("Content type not in download scope, skipping");
+                            info!("Content type {:?} not in download scope, skipping", message.metadata.get_content_type());
                             continue;
                         }
 
-                        if download_decision_maker.exceeds_max_size(&message) {
-                            info!("Content exceeds max size, skipping");
-                            continue;
-                        }
+                        info!("Content type {:?} accepted by download policy", message.metadata.get_content_type());
 
-                        // Save to record
-                        if let Err(e) = record_manager
-                            .add_record_with_transfer_message(&message)
-                            .await
-                        {
-                            error!("Failed to add clipboard record: {:?}", e);
-                        }
+                        // Build Payload directly from message (content is already included)
+                        let payload = match Payload::try_from(&message) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                error!("Failed to build payload from message: {:?}", e);
+                                continue;
+                            }
+                        };
 
-                        // Receive and process content
-                        match content_receiver.receive(message).await {
-                            Ok(payload) => {
-                                info!("Setting local clipboard: {}", payload);
+                        // Store content to local file system
+                        let file_path = match file_storage.store(&payload).await {
+                            Ok(path) => path,
+                            Err(e) => {
+                                error!("Failed to store content: {:?}", e);
+                                continue;
+                            }
+                        };
+
+                        // Save to database
+                        let metadata = (&payload, &file_path).into();
+                        match record_manager.add_or_update_record_with_metadata(&metadata).await {
+                            Ok(record_id) => {
+                                info!("Saved clipboard record to database: {}", record_id);
 
                                 // Atomically capture old value and write new value
                                 let prev_payload = std::mem::replace(
@@ -235,24 +249,12 @@ impl ClipboardSyncService {
                                     error!("Failed to set clipboard content: {:?}", e);
                                     *last_payload.write().await = prev_payload;
                                 } else {
-                                    // Publish event for latest record
-                                    if let Ok(records) = record_manager
-                                        .get_records(
-                                            Some(OrderBy::UpdatedAtDesc),
-                                            Some(1),
-                                            Some(0),
-                                            Some(Filter::All),
-                                        )
-                                        .await
-                                    {
-                                        if let Some(latest) = records.first() {
-                                            publish_clipboard_new_content(latest.id.clone());
-                                        }
-                                    }
+                                    info!("Successfully wrote clipboard content to local clipboard");
+                                    publish_clipboard_new_content(record_id);
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to receive clipboard content: {:?}", e);
+                                error!("Failed to save record: {:?}", e);
                             }
                         }
                     }

@@ -270,6 +270,17 @@ impl Payload {
             Payload::File(_) => "file",
         }
     }
+
+    /// 将 Payload 序列化为字节数组（用于 P2P 传输）
+    pub fn to_bytes(&self) -> Result<Vec<u8>, anyhow::Error> {
+        match self {
+            Payload::Text(p) => Ok(p.content.as_ref().to_vec()),
+            Payload::Image(p) => Ok(p.content.as_ref().to_vec()),
+            Payload::File(_) => {
+                anyhow::bail!("File type serialization not implemented yet")
+            }
+        }
+    }
 }
 
 // 友好的展示大小
@@ -443,6 +454,62 @@ impl From<(&ClipboardTransferMessage, Bytes)> for Payload {
             ),
             _ => {
                 unimplemented!()
+            }
+        }
+    }
+}
+
+/// 从 ClipboardTransferMessage 直接创建 Payload（P2P 接收，消息已包含内容）
+impl TryFrom<&ClipboardTransferMessage> for Payload {
+    type Error = anyhow::Error;
+
+    fn try_from(msg: &ClipboardTransferMessage) -> Result<Self, Self::Error> {
+        let bytes = Bytes::from(msg.content.clone());
+        match &msg.metadata {
+            ClipboardMetadata::Text(_) => {
+                Ok(Payload::new_text(
+                    bytes,
+                    msg.sender_id.clone(),
+                    msg.metadata.get_timestamp(),
+                ))
+            }
+            ClipboardMetadata::Image(image) => {
+                Ok(Payload::new_image(
+                    bytes,
+                    msg.sender_id.clone(),
+                    msg.metadata.get_timestamp(),
+                    image.width,
+                    image.height,
+                    image.format.clone(),
+                    image.size,
+                ))
+            }
+            ClipboardMetadata::Link(_) => {
+                // Link 类型作为文本处理
+                Ok(Payload::new_text(
+                    bytes,
+                    msg.sender_id.clone(),
+                    msg.metadata.get_timestamp(),
+                ))
+            }
+            ClipboardMetadata::CodeSnippet(_) => {
+                // CodeSnippet 类型作为文本处理
+                Ok(Payload::new_text(
+                    bytes,
+                    msg.sender_id.clone(),
+                    msg.metadata.get_timestamp(),
+                ))
+            }
+            ClipboardMetadata::RichText(_) => {
+                // RichText 类型暂时作为文本处理
+                Ok(Payload::new_text(
+                    bytes,
+                    msg.sender_id.clone(),
+                    msg.metadata.get_timestamp(),
+                ))
+            }
+            ClipboardMetadata::File(_) => {
+                anyhow::bail!("File type not supported in P2P mode yet")
             }
         }
     }

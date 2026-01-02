@@ -6,7 +6,7 @@ use crate::domain::clipboard_metadata::ClipboardMetadata;
 
 /// 剪贴板传输消息
 ///
-/// 用于网络传输剪贴板内容的元数据
+/// 用于 P2P 网络传输剪贴板内容（包含完整内容）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardTransferMessage {
     /// 元数据
@@ -15,19 +15,19 @@ pub struct ClipboardTransferMessage {
     pub message_id: String,
     /// 发送者设备ID
     pub sender_id: String,
-    /// 发送者的记录ID，用于下载文件
-    pub record_id: String,
+    /// 实际内容（Text 或 Image 的字节数据）
+    pub content: Vec<u8>,
 }
 
 impl ClipboardTransferMessage {
     /// 创建新的传输消息
-    pub fn new(metadata: ClipboardMetadata, sender_id: String, record_id: String) -> Self {
+    pub fn new(metadata: ClipboardMetadata, sender_id: String, content: Vec<u8>) -> Self {
         let message_id = format!("{}_{}", metadata.get_key(), Utc::now().timestamp_millis());
         Self {
             metadata,
             message_id,
             sender_id,
-            record_id,
+            content,
         }
     }
 }
@@ -47,15 +47,15 @@ impl Display for ClipboardTransferMessage {
     }
 }
 
-/// 从元数据、发送者ID和记录ID创建传输消息
-impl From<(ClipboardMetadata, String, String)> for ClipboardTransferMessage {
-    fn from((metadata, sender_id, record_id): (ClipboardMetadata, String, String)) -> Self {
+/// 从元数据、发送者ID和内容创建传输消息
+impl From<(ClipboardMetadata, String, Vec<u8>)> for ClipboardTransferMessage {
+    fn from((metadata, sender_id, content): (ClipboardMetadata, String, Vec<u8>)) -> Self {
         let message_id = format!("{}_{}", metadata.get_key(), Utc::now().timestamp_millis());
         Self {
             metadata,
             message_id,
             sender_id,
-            record_id,
+            content,
         }
     }
 }
