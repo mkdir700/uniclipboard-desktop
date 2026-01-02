@@ -66,13 +66,10 @@ impl UnifiedEncryptor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_unified_encryptor() {
-        let temp_dir = TempDir::new().unwrap();
-        let salt_file = temp_dir.path().join(".test_salt");
-        let key_manager = Arc::new(UnifiedKeyManager::new(salt_file));
+        let key_manager = Arc::new(UnifiedKeyManager::new());
         let encryptor = UnifiedEncryptor::new(key_manager.clone());
 
         // Initialize with password
@@ -99,9 +96,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_encrypt_without_initialization() {
-        let temp_dir = TempDir::new().unwrap();
-        let salt_file = temp_dir.path().join(".test_salt");
-        let key_manager = Arc::new(UnifiedKeyManager::new(salt_file));
+        let key_manager = Arc::new(UnifiedKeyManager::new());
         let encryptor = UnifiedEncryptor::new(key_manager);
 
         let plaintext = b"Hello, World!";
@@ -116,9 +111,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_decrypt_invalid_ciphertext() {
-        let temp_dir = TempDir::new().unwrap();
-        let salt_file = temp_dir.path().join(".test_salt");
-        let key_manager = Arc::new(UnifiedKeyManager::new(salt_file));
+        let key_manager = Arc::new(UnifiedKeyManager::new());
         let encryptor = UnifiedEncryptor::new(key_manager.clone());
 
         key_manager
@@ -135,11 +128,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_encrypt_decrypt_different_managers_same_password() {
-        let temp_dir = TempDir::new().unwrap();
-        let salt_file = temp_dir.path().join(".test_salt");
+        // Simulate two devices using the same password
 
         // Create first manager and encrypt
-        let key_manager1 = Arc::new(UnifiedKeyManager::new(salt_file.clone()));
+        let key_manager1 = Arc::new(UnifiedKeyManager::new());
         let encryptor1 = UnifiedEncryptor::new(key_manager1.clone());
         key_manager1
             .initialize_from_password("test_password")
@@ -149,8 +141,8 @@ mod tests {
         let plaintext = b"Shared secret";
         let ciphertext = encryptor1.encrypt(plaintext).await.unwrap();
 
-        // Create second manager with same salt and decrypt
-        let key_manager2 = Arc::new(UnifiedKeyManager::new(salt_file));
+        // Create second manager with same password and decrypt
+        let key_manager2 = Arc::new(UnifiedKeyManager::new());
         let encryptor2 = UnifiedEncryptor::new(key_manager2.clone());
         key_manager2
             .initialize_from_password("test_password")
@@ -159,5 +151,29 @@ mod tests {
 
         let decrypted = encryptor2.decrypt(&ciphertext).await.unwrap();
         assert_eq!(decrypted, plaintext);
+    }
+
+    #[tokio::test]
+    async fn test_different_passwords_cannot_decrypt() {
+        let key_manager1 = Arc::new(UnifiedKeyManager::new());
+        let encryptor1 = UnifiedEncryptor::new(key_manager1.clone());
+        key_manager1
+            .initialize_from_password("password1")
+            .await
+            .unwrap();
+
+        let plaintext = b"Secret message";
+        let ciphertext = encryptor1.encrypt(plaintext).await.unwrap();
+
+        // Try to decrypt with different password
+        let key_manager2 = Arc::new(UnifiedKeyManager::new());
+        let encryptor2 = UnifiedEncryptor::new(key_manager2.clone());
+        key_manager2
+            .initialize_from_password("password2")
+            .await
+            .unwrap();
+
+        let result = encryptor2.decrypt(&ciphertext).await;
+        assert!(result.is_err());
     }
 }

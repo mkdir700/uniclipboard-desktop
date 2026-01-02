@@ -43,10 +43,7 @@ pub async fn initialize_unified_encryption(password: String) -> Result<(), Strin
         if let Some(manager) = &*guard {
             manager.clone()
         } else {
-            let manager = Arc::new(
-                UnifiedKeyManager::from_password_manager()
-                    .map_err(|e| format!("Failed to create key manager: {}", e))?,
-            );
+            let manager = Arc::new(UnifiedKeyManager::new());
             *guard = Some(manager.clone());
             manager
         }
