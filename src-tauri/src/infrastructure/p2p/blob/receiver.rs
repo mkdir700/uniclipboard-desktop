@@ -358,7 +358,7 @@ mod tests {
     fn test_invalid_session() {
         let mut receiver = BlobReceiver::new(100);
 
-        let header = FrameHeader::metadata(200, 3, [0; 16]);
+        let header = FrameHeader::metadata(200, 3, 0, [0; 16]);
         let frame = Frame::new(header, vec![]);
 
         let result = receiver.handle_frame(frame).unwrap();
@@ -369,7 +369,7 @@ mod tests {
     fn test_metadata_reception() {
         let mut receiver = BlobReceiver::new(300);
 
-        let header = FrameHeader::metadata(300, 5, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        let header = FrameHeader::metadata(300, 5, 0, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
         let frame = Frame::new(header, vec![]);
 
         let result = receiver.handle_frame(frame).unwrap();
