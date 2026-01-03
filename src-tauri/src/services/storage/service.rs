@@ -181,6 +181,14 @@ impl StorageService {
         Ok(record.map(|r| ClipboardItemResponse::from((r, full_content))))
     }
 
+    /// Get a single clipboard record (DbClipboardRecord) by ID.
+    ///
+    /// This is used when you need the raw database record, not the response format.
+    pub async fn get_clipboard_record_by_id(&self, id: &str) -> Result<Option<DbClipboardRecord>> {
+        let mut conn = self.db.get()?;
+        Ok(dao::clipboard_record::get_clipboard_record_by_id(&mut conn, id)?)
+    }
+
     /// Save a clipboard item with automatic deduplication.
     ///
     /// If a record with the same content_hash already exists, it will be updated
