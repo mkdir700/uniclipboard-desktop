@@ -91,27 +91,30 @@ pub fn configure_quic(cfg: quic::Config) -> quic::Config {
     info!("╔══════════════════════════════════════════╗");
     info!("║     QUIC Transport Configuration          ║");
     info!("╚══════════════════════════════════════════╝");
-    info!("Handshake timeout: 10s");
-    info!("Idle timeout: 60s");
-    info!("Keep-alive interval: 15s");
-    info!("MTU upper bound: 1452 bytes");
+    info!("Handshake timeout: 30s (increased from 10s)");
+    info!("Idle timeout: 120s (increased from 60s)");
+    info!("Keep-alive interval: 10s (more aggressive)");
+    info!("MTU upper bound: 1400 bytes (more conservative)");
     info!("Max concurrent streams: 64");
     info!("Max stream data: 16 MiB");
     info!("Max connection data: 64 MiB");
 
-    // MTU: 给个上界，通常对跨网段/复杂网络更稳。
-    // 如果你更想追求吞吐，可以去掉 mtu_upper_bound，让 PMTUD 自己探测。
-    let mut cfg = cfg.mtu_upper_bound(1452);
+    // MTU: 使用更保守的 1400 字节上限，避免包分片问题
+    // 标准以太网 MTU 是 1500，减去 IP+UDP 头后约 1452
+    // 使用 1400 给予更多余量，减少潜在的包丢失风险
+    let mut cfg = cfg.mtu_upper_bound(1400);
 
-    // 握手超时：demo 里给到 10s，避免弱网偶发失败
-    cfg.handshake_timeout = Duration::from_secs(10);
+    // 握手超时：增加到 30s，应对局域网内的延迟峰值
+    // 诊断日志显示 10s 超时确实在生效，但握手无法在 10s 内完成
+    cfg.handshake_timeout = Duration::from_secs(30);
 
-    // idle 超时：字段单位是 ms（u32）
-    // 60s 比较保守；如果你希望更"不断线"，可以拉到 120s~300s
-    cfg.max_idle_timeout = 60_000;
+    // idle 超时：增加到 120s，避免意外断开
+    // 字段单位是 ms（u32）
+    cfg.max_idle_timeout = 120_000;
 
-    // keep-alive：必须小于双方 idle_timeout 才有效
-    cfg.keep_alive_interval = Duration::from_secs(15);
+    // keep-alive：更积极的保活策略，设置为 10s
+    // 必须小于双方 idle_timeout 才有效
+    cfg.keep_alive_interval = Duration::from_secs(10);
 
     // 并发双向流上限：避免一个 peer 开太多流把你打爆
     cfg.max_concurrent_stream_limit = 64;
