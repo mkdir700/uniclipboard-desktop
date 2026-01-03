@@ -8,7 +8,7 @@ use libp2p::{
 };
 use libp2p_stream::Control;
 use log::{debug, error, info, warn};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
@@ -149,6 +149,10 @@ pub struct NetworkManager {
     connections_established: u64,
     connections_failed_outgoing: u64,
     connections_failed_incoming: u64,
+    /// Peers currently being dialed (prevent duplicate dials)
+    dialing_peers: HashSet<PeerId>,
+    /// Timestamp of last dial attempt per peer (for rate limiting)
+    last_dial_attempt: HashMap<PeerId, Instant>,
 }
 
 impl NetworkManager {
@@ -177,7 +181,6 @@ impl NetworkManager {
                 UniClipboardBehaviour::new(local_peer_id, &local_key, &device_name, &our_device_id)
                     .expect("Failed to create behaviour")
             })?
-            .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(None))
             .build();
 
         // ⚠️ Critical: Must get control AFTER swarm is built
@@ -201,6 +204,8 @@ impl NetworkManager {
             connections_established: 0,
             connections_failed_outgoing: 0,
             connections_failed_incoming: 0,
+            dialing_peers: HashSet::new(),
+            last_dial_attempt: HashMap::new(),
         })
     }
 
@@ -250,14 +255,24 @@ impl NetworkManager {
         mut stream: Stream,
         event_tx: mpsc::Sender<NetworkEvent>,
     ) -> Result<(), String> {
-        info!("Incoming BlobStream from {}", peer);
+        info!("[BlobRecv] Incoming BlobStream from {}", peer);
 
         // Create a receiver with a placeholder session_id (will be set from first frame)
         let mut receiver = BlobReceiver::new(0);
+        info!("[BlobRecv] BlobReceiver created with session_id=0");
 
         loop {
-            let frame_bytes = read_len_prefixed(&mut stream).await?;
-            let frame = Frame::from_bytes(&frame_bytes).map_err(|e| e.to_string())?;
+            info!("[BlobRecv] Waiting for frame...");
+            let frame_bytes = read_len_prefixed(&mut stream).await.map_err(|e| {
+                error!("[BlobRecv] read_len_prefixed failed: {}", e);
+                e.to_string()
+            })?;
+            info!("[BlobRecv] Read {} bytes", frame_bytes.len());
+
+            let frame = Frame::from_bytes(&frame_bytes).map_err(|e| {
+                error!("[BlobRecv] Frame::from_bytes failed: {}", e);
+                e.to_string()
+            })?;
 
             let session_id = frame.session_id();
 
@@ -359,15 +374,11 @@ impl NetworkManager {
         // Get physical LAN IP for QUIC listening
         // QUIC cannot bind to 0.0.0.0 reliably when multiple interfaces exist (e.g., VPN/tunnel)
         // Must explicitly bind to a physical LAN IP to avoid handshake issues
-        let local_ip = crate::utils::helpers::get_physical_lan_ip()
-            .unwrap_or_else(|| {
-                warn!("No physical LAN IP found, falling back to 0.0.0.0 (QUIC may fail)");
-                "0.0.0.0".to_string()
-            });
-        info!(
-            "P2P NetworkManager binding to {}:31773 (QUIC)",
-            local_ip
-        );
+        let local_ip = crate::utils::helpers::get_physical_lan_ip().unwrap_or_else(|| {
+            warn!("No physical LAN IP found, falling back to 0.0.0.0 (QUIC may fail)");
+            "0.0.0.0".to_string()
+        });
+        info!("P2P NetworkManager binding to {}:31773 (QUIC)", local_ip);
 
         // Start listening on TCP
         // Use a fixed port (31773) so cached addresses remain valid across app restarts.
@@ -444,9 +455,47 @@ impl NetworkManager {
                         for (peer_id, addr) in peers {
                             debug!("mDNS discovered: {} at {}", peer_id, addr);
 
-                            // Add to dial queue
+                            // Check if already connected
+                            if self.connected_peers.contains_key(&peer_id) {
+                                debug!("Skipping dial: already connected to {}", peer_id);
+                                // Still track discovered peer for UI updates
+                                let discovered = DiscoveredPeer {
+                                    peer_id: peer_id.to_string(),
+                                    device_name: None,
+                                    device_id: None,
+                                    addresses: vec![addr.to_string()],
+                                    discovered_at: Utc::now(),
+                                    is_paired: false,
+                                };
+                                self.discovered_peers.insert(peer_id, discovered.clone());
+                                let _ = self
+                                    .event_tx
+                                    .send(NetworkEvent::PeerDiscovered(discovered))
+                                    .await;
+                                continue;
+                            }
+
+                            // Check if already dialing
+                            if self.dialing_peers.contains(&peer_id) {
+                                debug!("Skipping dial: already dialing {}", peer_id);
+                                continue;
+                            }
+
+                            // Check if recent dial attempt (avoid rapid retry)
+                            if let Some(last_attempt) = self.last_dial_attempt.get(&peer_id) {
+                                if last_attempt.elapsed() < Duration::from_secs(30) {
+                                    debug!("Skipping dial: recent attempt to {}", peer_id);
+                                    continue;
+                                }
+                            }
+
+                            // Mark as dialing
+                            self.dialing_peers.insert(peer_id);
+                            self.last_dial_attempt.insert(peer_id, Instant::now());
+
                             if let Err(e) = self.swarm.dial(addr.clone()) {
                                 warn!("Failed to dial {}: {}", peer_id, e);
+                                self.dialing_peers.remove(&peer_id);
                             }
 
                             // Track discovered peer
@@ -739,14 +788,24 @@ impl NetworkManager {
                 }
             }
 
-            SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+            SwarmEvent::ConnectionEstablished {
+                peer_id, endpoint, ..
+            } => {
+                // Clean up dialing state
+                self.dialing_peers.remove(&peer_id);
+                self.last_dial_attempt.remove(&peer_id);
+
                 self.connections_established += 1;
                 info!("╔══════════════════════════════════════════╗");
                 info!("║     Connection Established               ║");
                 info!("╚══════════════════════════════════════════╝");
                 info!("Peer ID: {}", peer_id);
                 info!("Endpoint: {:?}", endpoint);
-                info!("Total established: {}", self.connections_established);
+                info!(
+                    "Total established: {} | Active connections: {}",
+                    self.connections_established,
+                    self.connected_peers.len()
+                );
                 debug!("Connection established with {}", peer_id);
 
                 // Note: Incoming BlobStream connections are handled by the accept loop in run()
@@ -769,6 +828,9 @@ impl NetworkManager {
             }
 
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                // Clean up dialing state
+                self.dialing_peers.remove(&peer_id);
+
                 debug!("Connection closed with {}", peer_id);
 
                 // Note: active_blob_receives now tracks by session_id, not peer_id.
@@ -816,11 +878,19 @@ impl NetworkManager {
                 error!("Peer ID: {:?}", peer_id);
                 error!("Error Source: {:?}", std::error::Error::source(&error));
                 error!("Error Message: {}", error);
-                error!("Total failed outgoing: {}", self.connections_failed_outgoing);
+                error!(
+                    "Total failed outgoing: {}",
+                    self.connections_failed_outgoing
+                );
                 warn!("Outgoing connection error to {:?}: {}", peer_id, error);
             }
 
-            SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
+            SwarmEvent::IncomingConnectionError {
+                local_addr,
+                send_back_addr,
+                error,
+                ..
+            } => {
                 self.connections_failed_incoming += 1;
                 error!("╔══════════════════════════════════════════╗");
                 error!("║     Incoming Connection Failed           ║");
@@ -829,7 +899,10 @@ impl NetworkManager {
                 error!("Send back addr: {}", send_back_addr);
                 error!("Error Source: {:?}", std::error::Error::source(&error));
                 error!("Error Message: {}", error);
-                error!("Total failed incoming: {}", self.connections_failed_incoming);
+                error!(
+                    "Total failed incoming: {}",
+                    self.connections_failed_incoming
+                );
                 warn!("Incoming connection error: {}", error);
             }
 
@@ -848,11 +921,17 @@ impl NetworkManager {
                 data,
                 respond_to,
             } => {
+                info!(
+                    "[SendClipboard] Received command for peer {}, data size: {} bytes",
+                    peer_id,
+                    data.len()
+                );
+
                 // Parse peer_id
                 let peer = match peer_id.parse::<PeerId>() {
                     Ok(p) => p,
                     Err(e) => {
-                        warn!("Invalid peer_id '{}': {}", peer_id, e);
+                        warn!("[SendClipboard] Invalid peer_id '{}': {}", peer_id, e);
                         let _ = self
                             .event_tx
                             .send(NetworkEvent::Error(format!(
@@ -865,9 +944,12 @@ impl NetworkManager {
                     }
                 };
 
+                info!("[SendClipboard] Peer ID parsed: {}", peer);
+
                 // Allocate session_id
                 let session_id = self.next_session_id;
                 self.next_session_id = self.next_session_id.wrapping_add(1);
+                info!("[SendClipboard] Allocated session_id: {}", session_id);
 
                 // Clone control and event_tx for the spawned task
                 let mut control = self.stream_control.clone();
@@ -875,60 +957,104 @@ impl NetworkManager {
 
                 // Spawn the send task to avoid blocking the swarm event loop
                 tokio::spawn(async move {
+                    info!(
+                        "[SendClipboard] Task started for peer {}, session_id={}",
+                        peer, session_id
+                    );
+
                     let result: Result<(), String> = async {
+                        info!("[SendClipboard] Opening stream to peer {}...", peer);
                         // Open stream to peer
                         let mut stream = control
                             .open_stream(peer, StreamProtocol::new(BLOBSTREAM_PROTOCOL))
                             .await
-                            .map_err(|e| format!("open_stream failed: {}", e))?;
+                            .map_err(|e| {
+                                error!("[SendClipboard] open_stream failed: {}", e);
+                                format!("open_stream failed: {}", e)
+                            })?;
+
+                        info!("[SendClipboard] Stream opened successfully");
 
                         // Create sender
                         let mut sender = BlobSender::new(data, session_id);
                         let total_frames = sender.total_frames();
 
                         info!(
-                            "Sending BlobStream: session_id={}, total_frames={}, peer={}",
-                            session_id, total_frames, peer
+                            "[SendClipboard] BlobSender created: session_id={}, total_frames={}, data_size={}",
+                            session_id, total_frames, sender.metadata().size
                         );
 
                         // Send metadata frame
                         let frame = sender
                             .make_metadata_frame()
-                            .map_err(|e| format!("make_metadata_frame failed: {}", e))?;
+                            .map_err(|e| {
+                                error!("[SendClipboard] make_metadata_frame failed: {}", e);
+                                format!("make_metadata_frame failed: {}", e)
+                            })?;
                         let frame_bytes = frame
                             .to_bytes()
-                            .map_err(|e| format!("frame serialization failed: {}", e))?;
-                        write_len_prefixed(&mut stream, &frame_bytes).await?;
+                            .map_err(|e| {
+                                error!("[SendClipboard] frame serialization failed: {}", e);
+                                format!("frame serialization failed: {}", e)
+                            })?;
+
+                        info!("[SendClipboard] Metadata frame size: {} bytes", frame_bytes.len());
+                        write_len_prefixed(&mut stream, &frame_bytes).await.map_err(|e| {
+                            error!("[SendClipboard] write_len_prefixed (metadata) failed: {}", e);
+                            format!("write_len_prefixed failed: {}", e)
+                        })?;
+                        info!("[SendClipboard] Metadata frame sent");
 
                         // Send data frames
+                        let mut frame_count = 0;
                         while let Some(frame) = sender
                             .next_frame()
-                            .map_err(|e| format!("next_frame failed: {}", e))?
+                            .map_err(|e| {
+                                error!("[SendClipboard] next_frame failed: {}", e);
+                                format!("next_frame failed: {}", e)
+                            })?
                         {
-                            let frame_bytes = frame
-                                .to_bytes()
-                                .map_err(|e| format!("frame serialization failed: {}", e))?;
-                            write_len_prefixed(&mut stream, &frame_bytes).await?;
+                            let frame_bytes = frame.to_bytes().map_err(|e| {
+                                error!("[SendClipboard] frame serialization failed: {}", e);
+                                format!("frame serialization failed: {}", e)
+                            })?;
+                            frame_count += 1;
+                            info!("[SendClipboard] Sending data frame {}: {} bytes", frame_count, frame_bytes.len());
+                            write_len_prefixed(&mut stream, &frame_bytes).await.map_err(|e| {
+                                error!("[SendClipboard] write_len_prefixed (data frame {}) failed: {}", frame_count, e);
+                                format!("write_len_prefixed failed: {}", e)
+                            })?;
                         }
 
                         // Send complete frame
                         let frame = sender.make_complete_frame();
                         let frame_bytes = frame
                             .to_bytes()
-                            .map_err(|e| format!("frame serialization failed: {}", e))?;
-                        write_len_prefixed(&mut stream, &frame_bytes).await?;
+                            .map_err(|e| {
+                                error!("[SendClipboard] frame serialization failed: {}", e);
+                                format!("frame serialization failed: {}", e)
+                            })?;
 
-                        // Note: libp2p::Stream will be closed automatically when dropped
-                        // No need to explicitly call close() or shutdown()
+                        info!("[SendClipboard] Complete frame size: {} bytes", frame_bytes.len());
+                        write_len_prefixed(&mut stream, &frame_bytes).await.map_err(|e| {
+                            error!("[SendClipboard] write_len_prefixed (complete) failed: {}", e);
+                            format!("write_len_prefixed failed: {}", e)
+                        })?;
+                        info!("[SendClipboard] Complete frame sent");
 
                         info!(
-                            "BlobStream send complete: session_id={}, peer={}",
-                            session_id, peer
+                            "[SendClipboard] BlobStream send complete: session_id={}, frames_sent={}, peer={}",
+                            session_id, frame_count + 2, peer
                         );
 
                         Ok(())
                     }
                     .await;
+
+                    info!(
+                        "[SendClipboard] Task finished for peer {}, session_id={}, result: {:?}",
+                        peer, session_id, result
+                    );
 
                     // Respond to caller
                     let _ = respond_to.send(result.clone());
