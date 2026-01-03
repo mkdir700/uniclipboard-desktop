@@ -10,6 +10,7 @@ mod interface;
 mod message;
 mod models;
 mod plugins;
+mod services;
 mod utils;
 
 use application::device_service::get_device_manager;
@@ -149,12 +150,13 @@ fn run_app(user_setting: Setting, device_id: String) {
 
     // Create command channels BEFORE setup
     let (clipboard_cmd_tx, clipboard_cmd_rx) = mpsc::channel(100);
-    let (p2p_cmd_tx, p2p_cmd_rx) = mpsc::channel(100);
 
     // Create AppRuntimeHandle with config
     let config = Arc::new(user_setting.clone());
-    let runtime_handle =
-        AppRuntimeHandle::new(clipboard_cmd_tx.clone(), p2p_cmd_tx.clone(), config);
+    let runtime_handle = AppRuntimeHandle::new(clipboard_cmd_tx.clone(), config);
+
+    // Create a placeholder for P2PService (will be initialized in setup)
+    let p2p_service_placeholder = Arc::new(std::sync::Mutex::new(None));
 
     Builder::default()
         .plugin(logging::get_builder().build())
@@ -172,6 +174,7 @@ fn run_app(user_setting: Setting, device_id: String) {
             api::event::EventListenerState::default(),
         )))
         .manage(runtime_handle)
+        .manage(p2p_service_placeholder.clone())
         .setup(move |app| {
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("")
@@ -233,14 +236,30 @@ fn run_app(user_setting: Setting, device_id: String) {
                     }
                 };
 
-                // Step 2: Create AppRuntime (encryption is now ready)
+                // Step 2: Create P2PService
+                let p2p_service = match P2PService::new(device_name.clone(), app_handle.clone()).await {
+                    Ok(service) => {
+                        log::info!("P2PService created successfully");
+
+                        // Store the service in the placeholder
+                        let mut placeholder = p2p_service_placeholder.lock().unwrap();
+                        *placeholder = Some(service);
+
+                        placeholder
+                    }
+                    Err(e) => {
+                        error!("Failed to create P2PService: {}", e);
+                        return;
+                    }
+                };
+
+                // Step 3: Create AppRuntime
                 let app_runtime = match AppRuntime::new_with_channels(
                     user_setting.clone(),
                     device_id,
                     device_name,
-                    app_handle,
+                    app_handle.clone(),
                     clipboard_cmd_rx,
-                    p2p_cmd_rx,
                 )
                 .await
                 {

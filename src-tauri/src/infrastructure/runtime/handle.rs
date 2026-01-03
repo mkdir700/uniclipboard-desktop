@@ -59,62 +59,6 @@ pub enum ClipboardCommand {
     },
 }
 
-/// Commands that can be sent to the P2P subsystem
-#[derive(Debug)]
-pub enum P2PCommand {
-    /// Get local peer ID
-    GetLocalPeerId {
-        respond_to: tokio::sync::oneshot::Sender<Result<String, String>>,
-    },
-    /// Get discovered peers
-    GetPeers {
-        respond_to: tokio::sync::oneshot::Sender<
-            Result<Vec<crate::infrastructure::p2p::DiscoveredPeer>, String>,
-        >,
-    },
-    /// Get local device info (peer_id + device_name)
-    GetLocalDeviceInfo {
-        respond_to: tokio::sync::oneshot::Sender<Result<LocalDeviceInfo, String>>,
-    },
-    /// Get paired peers from storage
-    GetPairedPeers {
-        respond_to:
-            tokio::sync::oneshot::Sender<Result<Vec<crate::domain::pairing::PairedPeer>, String>>,
-    },
-    /// Initiate pairing with a peer
-    InitiatePairing {
-        peer_id: String,
-        device_name: String,
-        respond_to: tokio::sync::oneshot::Sender<Result<String, String>>,
-    },
-    /// Verify PIN for pairing
-    VerifyPin {
-        session_id: String,
-        pin_matches: bool,
-        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
-    },
-    /// Reject pairing request
-    RejectPairing {
-        session_id: String,
-        peer_id: String,
-        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
-    },
-    /// Unpair a device
-    UnpairDevice {
-        peer_id: String,
-        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
-    },
-    /// Accept pairing request (responder side)
-    AcceptPairing {
-        session_id: String,
-        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
-    },
-    /// Get paired peers with connection status
-    GetPairedPeersWithStatus {
-        respond_to: tokio::sync::oneshot::Sender<Result<Vec<PairedPeerWithStatus>, String>>,
-    },
-}
-
 /// Local device info
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -146,8 +90,6 @@ pub struct PairedPeerWithStatus {
 pub struct AppRuntimeHandle {
     /// Sender for clipboard commands
     pub clipboard_tx: mpsc::Sender<ClipboardCommand>,
-    /// Sender for P2P commands
-    pub p2p_tx: mpsc::Sender<P2PCommand>,
     /// Application configuration (immutable, shared via Arc)
     pub config: Arc<Setting>,
 }
@@ -156,12 +98,10 @@ impl AppRuntimeHandle {
     /// Create a new runtime handle
     pub fn new(
         clipboard_tx: mpsc::Sender<ClipboardCommand>,
-        p2p_tx: mpsc::Sender<P2PCommand>,
         config: Arc<Setting>,
     ) -> Self {
         Self {
             clipboard_tx,
-            p2p_tx,
             config,
         }
     }
