@@ -1,4 +1,3 @@
-use crate::infrastructure::storage::db::models::device::DbDevice;
 use crate::utils::helpers::{generate_device_id, get_current_platform};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -176,73 +175,5 @@ impl Display for Device {
             self.port.clone().unwrap_or_default(),
             self.server_port.clone().unwrap_or_default()
         )
-    }
-}
-
-// 将 Device 转换为 DbDevice
-impl From<&Device> for DbDevice {
-    fn from(device: &Device) -> Self {
-        DbDevice {
-            id: device.id.clone(),
-            ip: device.ip.clone(),
-            port: device.port.map(|p| p as i32),
-            server_port: device.server_port.map(|p| p as i32),
-            status: device.status.clone() as i32,
-            self_device: device.self_device,
-            updated_at: device.updated_at.unwrap_or(0) as i32,
-            alias: device.alias.clone(),
-            platform: device.platform.map(|p| p.to_string()),
-            peer_id: device.peer_id.clone(),
-            device_name: device.device_name.clone(),
-            is_paired: device.is_paired,
-            last_seen: device.last_seen,
-        }
-    }
-}
-
-impl From<&DbDevice> for Device {
-    fn from(db_device: &DbDevice) -> Self {
-        let mut device = Device::new(
-            db_device.id.clone(),
-            db_device.ip.clone(),
-            db_device.port.map(|p| p as u16),
-            db_device.server_port.map(|p| p as u16),
-        );
-        device.self_device = db_device.self_device;
-        device.status = DeviceStatus::try_from(db_device.status).unwrap_or(DeviceStatus::Unknown);
-        device.updated_at = Some(db_device.updated_at);
-        device.alias = db_device.alias.clone();
-        device.platform = db_device
-            .platform
-            .as_ref()
-            .map(|p| Platform::from_str(p).unwrap_or(Platform::Unknown));
-        device.peer_id = db_device.peer_id.clone();
-        device.device_name = db_device.device_name.clone();
-        device.is_paired = db_device.is_paired;
-        device.last_seen = db_device.last_seen;
-        device
-    }
-}
-
-impl From<DbDevice> for Device {
-    fn from(db_device: DbDevice) -> Self {
-        let mut device = Device::new(
-            db_device.id,
-            db_device.ip,
-            db_device.port.map(|p| p as u16),
-            db_device.server_port.map(|p| p as u16),
-        );
-        device.self_device = db_device.self_device;
-        device.status = DeviceStatus::try_from(db_device.status).unwrap_or(DeviceStatus::Unknown);
-        device.updated_at = Some(db_device.updated_at);
-        device.alias = db_device.alias;
-        device.platform = db_device
-            .platform
-            .map(|p| Platform::from_str(&p).unwrap_or(Platform::Unknown));
-        device.peer_id = db_device.peer_id;
-        device.device_name = db_device.device_name;
-        device.is_paired = db_device.is_paired;
-        device.last_seen = db_device.last_seen;
-        device
     }
 }
