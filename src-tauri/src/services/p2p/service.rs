@@ -11,7 +11,7 @@ use crate::application::device_service;
 use crate::domain::pairing::PairedPeer;
 use crate::error::{AppError, Result};
 use crate::infrastructure::p2p::{
-    ConnectedPeer, DiscoveredPeer, NetworkCommand, NetworkEvent, NetworkManager,
+    ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkCommand, NetworkEvent, NetworkManager,
 };
 use crate::infrastructure::storage::peer_storage::PeerStorage;
 use chrono::Utc;
@@ -21,8 +21,11 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, RwLock};
+
+/// Clipboard message handler type
+type ClipboardHandler = Box<dyn Fn(ClipboardMessage) -> futures::future::BoxFuture<'static, ()> + Send + Sync>;
 
 /// PIN length for pairing verification
 const PIN_LENGTH: usize = 6;
@@ -79,14 +82,14 @@ impl PairingSession {
 }
 
 /// Local device info
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct LocalDeviceInfo {
     pub peer_id: String,
     pub device_name: String,
 }
 
 /// Paired peer with connection status
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct PairedPeerWithStatus {
     pub peer_id: String,
     pub device_name: String,
@@ -122,6 +125,8 @@ pub struct P2PService {
     peer_storage: Arc<PeerStorage>,
     /// Tauri AppHandle (for emitting events)
     app_handle: AppHandle,
+    /// Clipboard message handler (set by AppServices to wire Libp2pSync)
+    clipboard_handler: Arc<RwLock<Option<ClipboardHandler>>>,
 }
 
 impl P2PService {
@@ -186,6 +191,7 @@ impl P2PService {
         let pairing_sessions = Arc::new(RwLock::new(HashMap::new()));
         let discovered_peers = Arc::new(RwLock::new(HashMap::new()));
         let connected_peers = Arc::new(RwLock::new(HashMap::new()));
+        let clipboard_handler: Arc<RwLock<Option<ClipboardHandler>>> = Arc::new(RwLock::new(None));
 
         // Clone for event handler
         let service_for_events = Self {
@@ -198,6 +204,7 @@ impl P2PService {
             connected_peers: connected_peers.clone(),
             peer_storage: peer_storage.clone(),
             app_handle: app_handle.clone(),
+            clipboard_handler: clipboard_handler.clone(),
         };
 
         // Spawn event handling task
@@ -217,6 +224,7 @@ impl P2PService {
             connected_peers,
             peer_storage,
             app_handle,
+            clipboard_handler,
         })
     }
 
@@ -258,6 +266,28 @@ impl P2PService {
     /// Check if a specific peer is connected
     pub async fn is_peer_connected(&self, peer_id: &str) -> bool {
         self.connected_peers.read().await.contains_key(peer_id)
+    }
+
+    // ========== Service Integration ==========
+
+    /// Get the network command channel sender.
+    ///
+    /// This is used by AppServices to create a Libp2pSync instance that can
+    /// send clipboard broadcast commands to the NetworkManager.
+    pub async fn get_network_cmd_tx(&self) -> Result<mpsc::Sender<NetworkCommand>> {
+        Ok(self.network_cmd_tx.clone())
+    }
+
+    /// Set the clipboard message handler.
+    ///
+    /// This is called by AppServices to wire Libp2pSync's handle_incoming_message
+    /// method as the handler for incoming clipboard messages from the P2P network.
+    ///
+    /// The handler will be called in `handle_network_events` when a
+    /// `NetworkEvent::ClipboardReceived` event is received.
+    pub async fn set_clipboard_handler(&self, handler: ClipboardHandler) {
+        let mut clipboard_handler = self.clipboard_handler.write().await;
+        *clipboard_handler = Some(handler);
     }
 
     // ========== Pairing ==========
@@ -403,7 +433,11 @@ impl P2PService {
             return Err(AppError::validation("Pairing session expired"));
         }
 
-        let peer_id = session.peer_id;
+        // Get peer_id and PIN (need to clone peer_id since we need both)
+        let peer_id = session.peer_id.clone();
+        let pin = session
+            .get_pin()
+            .ok_or_else(|| AppError::p2p("PIN not found in session"))?;
 
         if !pin_matches {
             warn!("PIN verification failed for session {}", session_id);
@@ -422,11 +456,6 @@ impl P2PService {
             self.pairing_sessions.write().await.remove(session_id);
             return Ok(());
         }
-
-        // Get the stored PIN and compute hash
-        let pin = session
-            .get_pin()
-            .ok_or_else(|| AppError::p2p("PIN not found in session"))?;
 
         info!(
             "Computing Argon2id hash for PIN verification, session: {}, peer: {}",
@@ -575,8 +604,12 @@ impl P2PService {
                         "Handling incoming clipboard message from device '{}' (device-id: {})",
                         msg.origin_device_name, msg.origin_device_id
                     );
-                    // Note: P2P clipboard sync is handled by Libp2pSync
-                    // which is initialized in AppRuntime
+
+                    // Call the registered clipboard handler if set
+                    let handler = self.clipboard_handler.read().await;
+                    if let Some(ref handler) = *handler {
+                        handler(msg).await;
+                    }
                 }
                 NetworkEvent::PeerConnected(connected) => {
                     self.connected_peers

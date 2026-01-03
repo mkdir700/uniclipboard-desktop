@@ -15,14 +15,13 @@ mod utils;
 
 use application::device_service::get_device_manager;
 use config::setting::{Setting, SETTING};
-use infrastructure::runtime::{AppRuntime, AppRuntimeHandle};
 use infrastructure::security::password::PasswordManager;
 use infrastructure::storage::db::pool::DB_POOL;
 use log::error;
+use services::AppServices;
 use std::sync::Arc;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_decorum::WebviewWindowExt;
-use tokio::sync::mpsc;
 use utils::logging;
 
 fn main() {
@@ -148,15 +147,13 @@ fn run_app(user_setting: Setting, device_id: String) {
     use tauri_plugin_single_instance;
     use tauri_plugin_stronghold;
 
-    // Create command channels BEFORE setup
-    let (clipboard_cmd_tx, clipboard_cmd_rx) = mpsc::channel(100);
-
-    // Create AppRuntimeHandle with config
+    // Create config Arc for sharing
     let config = Arc::new(user_setting.clone());
-    let runtime_handle = AppRuntimeHandle::new(clipboard_cmd_tx.clone(), config);
+    let device_name = user_setting.general.device_name.clone();
 
     // Create a placeholder for P2PService (will be initialized in setup)
-    let p2p_service_placeholder = Arc::new(std::sync::Mutex::new(None));
+    // TODO: This will be removed in phase 7 when API layer is updated
+    let p2p_service_placeholder = Arc::new(std::sync::Mutex::new(None::<Arc<services::p2p::P2PService>>));
 
     Builder::default()
         .plugin(logging::get_builder().build())
@@ -173,9 +170,77 @@ fn run_app(user_setting: Setting, device_id: String) {
         .manage(Arc::new(std::sync::Mutex::new(
             api::event::EventListenerState::default(),
         )))
-        .manage(runtime_handle)
         .manage(p2p_service_placeholder.clone())
         .setup(move |app| {
+            // Initialize unified encryption first (required for P2P sync)
+            let app_handle = app.handle().clone();
+            let config_clone = config.clone();
+            let device_id_clone = device_id.clone();
+            let device_name_clone = device_name.clone();
+
+            tauri::async_runtime::spawn(async move {
+                // Step 1: Initialize unified encryption
+                match api::setting::get_encryption_password().await {
+                    Ok(password) => {
+                        log::info!("Encryption password found, initializing unified encryption");
+                        match api::encryption::initialize_unified_encryption(password).await {
+                            Ok(_) => {
+                                log::info!("Unified encryption initialized successfully");
+                            }
+                            Err(e) => {
+                                log::error!("Failed to initialize unified encryption: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // Password not set is OK for first-time users
+                        if e.contains("未设置") || e.contains("not set") {
+                            log::info!(
+                                "No encryption password set, will prompt user during onboarding"
+                            );
+                        } else {
+                            log::error!("Failed to check encryption password: {}", e);
+                        }
+                    }
+                }
+
+                // Step 2: Initialize AppServices (including P2P and Clipboard services)
+                let app_services = match AppServices::new(
+                    config_clone.clone(),
+                    device_id_clone.clone(),
+                    device_name_clone.clone(),
+                    app_handle.clone(),
+                )
+                .await
+                {
+                    Ok(services) => {
+                        log::info!("AppServices initialized successfully");
+                        services
+                    }
+                    Err(e) => {
+                        error!("Failed to initialize AppServices: {}", e);
+                        return;
+                    }
+                };
+
+                // Store P2PService in placeholder for API layer (TODO: remove in phase 7)
+                {
+                    let mut placeholder = p2p_service_placeholder.lock().unwrap();
+                    *placeholder = Some(app_services.p2p.clone());
+                }
+
+                // Step 3: Start ClipboardService (spawns monitoring tasks)
+                match app_services.clipboard.start().await {
+                    Ok(_) => {
+                        log::info!("ClipboardService started successfully");
+                    }
+                    Err(e) => {
+                        error!("Failed to start ClipboardService: {}", e);
+                    }
+                }
+            });
+
+            // Create main window
             let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("")
                 .inner_size(800.0, 600.0)
@@ -199,92 +264,6 @@ fn run_app(user_setting: Setting, device_id: String) {
 
             // macOS specific window styling will be handled by the rounded corners plugin
             // The plugin will set up rounded corners, traffic lights positioning, and transparency
-
-            // 创建 AppRuntime
-            let app_handle = app.handle().clone();
-            let device_name = user_setting.general.device_name.clone();
-
-            // 启动 AppRuntime
-            // Note: Encryption initialization happens first in the same task,
-            // ensuring it completes before AppRuntime is created
-            tauri::async_runtime::spawn(async move {
-                // Step 1: Initialize unified encryption
-                let encryption_init_result = match api::setting::get_encryption_password().await {
-                    Ok(password) => {
-                        log::info!("Encryption password found, initializing unified encryption");
-                        match api::encryption::initialize_unified_encryption(password).await {
-                            Ok(_) => {
-                                log::info!("Unified encryption initialized successfully");
-                                true
-                            }
-                            Err(e) => {
-                                log::error!("Failed to initialize unified encryption: {}", e);
-                                false
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        // Password not set is OK for first-time users
-                        if e.contains("未设置") || e.contains("not set") {
-                            log::info!(
-                                "No encryption password set, will prompt user during onboarding"
-                            );
-                        } else {
-                            log::error!("Failed to check encryption password: {}", e);
-                        }
-                        false
-                    }
-                };
-
-                // Step 2: Create P2PService
-                let p2p_service = match P2PService::new(device_name.clone(), app_handle.clone()).await {
-                    Ok(service) => {
-                        log::info!("P2PService created successfully");
-
-                        // Store the service in the placeholder
-                        let mut placeholder = p2p_service_placeholder.lock().unwrap();
-                        *placeholder = Some(service);
-
-                        placeholder
-                    }
-                    Err(e) => {
-                        error!("Failed to create P2PService: {}", e);
-                        return;
-                    }
-                };
-
-                // Step 3: Create AppRuntime
-                let app_runtime = match AppRuntime::new_with_channels(
-                    user_setting.clone(),
-                    device_id,
-                    device_name,
-                    app_handle.clone(),
-                    clipboard_cmd_rx,
-                )
-                .await
-                {
-                    Ok(runtime) => runtime,
-                    Err(e) => {
-                        error!("Failed to create AppRuntime: {}", e);
-                        // If encryption was not initialized, provide a helpful error
-                        if !encryption_init_result {
-                            error!(
-                                "AppRuntime creation failed - encryption was not initialized. \
-                                 Please set an encryption password first."
-                            );
-                        }
-                        return;
-                    }
-                };
-
-                // Step 3: Start the runtime
-                match app_runtime.start().await {
-                    Ok(_) => {
-                        log::info!("AppRuntime started successfully");
-                    }
-                    Err(e) => log::error!("Failed to start AppRuntime: {}", e),
-                }
-            });
 
             Ok(())
         })

@@ -4,4 +4,4 @@
 
 pub mod service;
 
-pub use service::P2PService;
+pub use service::{PairedPeerWithStatus, P2PService};

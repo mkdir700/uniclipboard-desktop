@@ -9,14 +9,14 @@ use tauri::State;
 
 use crate::domain::pairing::PairedPeer;
 use crate::infrastructure::p2p::DiscoveredPeer;
-use crate::infrastructure::runtime::{LocalDeviceInfo, PairedPeerWithStatus};
-use crate::services::p2p::P2PService;
+use crate::infrastructure::runtime::LocalDeviceInfo;
+use crate::services::p2p::{PairedPeerWithStatus, P2PService};
 
-/// Type alias for the P2PService state
-type P2PServiceState = Arc<Mutex<Option<P2PService>>>;
+/// Type alias for the P2PService state (using Arc<P2PService> since P2PService is not Clone)
+type P2PServiceState = Arc<Mutex<Option<Arc<P2PService>>>>;
 
 /// Helper function to get P2PService from state
-fn get_p2p_service(state: &P2PServiceState) -> Result<P2PService, String> {
+fn get_p2p_service(state: &P2PServiceState) -> Result<Arc<P2PService>, String> {
     let guard = state.lock().map_err(|e| format!("Failed to acquire lock: {}", e))?;
     guard
         .as_ref()
