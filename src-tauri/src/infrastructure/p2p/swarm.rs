@@ -356,11 +356,16 @@ impl NetworkManager {
             }
         });
 
-        // Get preferred local address for listening
-        // On macOS, binding to 0.0.0.0 can cause mDNS routing issues with multiple interfaces
-        let local_ip = crate::utils::helpers::get_preferred_local_address();
+        // Get physical LAN IP for QUIC listening
+        // QUIC cannot bind to 0.0.0.0 reliably when multiple interfaces exist (e.g., VPN/tunnel)
+        // Must explicitly bind to a physical LAN IP to avoid handshake issues
+        let local_ip = crate::utils::helpers::get_physical_lan_ip()
+            .unwrap_or_else(|| {
+                warn!("No physical LAN IP found, falling back to 0.0.0.0 (QUIC may fail)");
+                "0.0.0.0".to_string()
+            });
         info!(
-            "P2P NetworkManager binding to {}:31773 (TCP/QUIC)",
+            "P2P NetworkManager binding to {}:31773 (QUIC)",
             local_ip
         );
 
