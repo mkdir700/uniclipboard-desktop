@@ -145,6 +145,10 @@ pub struct NetworkManager {
     device_name: String,
     /// Our 6-digit device ID (from database)
     our_device_id: String,
+    /// Connection statistics for diagnostics
+    connections_established: u64,
+    connections_failed_outgoing: u64,
+    connections_failed_incoming: u64,
 }
 
 impl NetworkManager {
@@ -162,11 +166,12 @@ impl NetworkManager {
         // Supports both TCP (fallback) and QUIC for better performance
         let swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
-            .with_tcp(
-                transport::build_tcp_config(),
-                transport::build_noise_config,
-                transport::build_yamux_config,
-            )?
+            // NOTE: 暂时禁用 tcp，专注 quic 协议调试
+            // .with_tcp(
+            //     transport::build_tcp_config(),
+            //     transport::build_noise_config,
+            //     transport::build_yamux_config,
+            // )?
             .with_quic_config(transport::configure_quic)
             .with_behaviour(|_key| {
                 UniClipboardBehaviour::new(local_peer_id, &local_key, &device_name, &our_device_id)
@@ -193,11 +198,10 @@ impl NetworkManager {
             stream_control,
             device_name,
             our_device_id,
+            connections_established: 0,
+            connections_failed_outgoing: 0,
+            connections_failed_incoming: 0,
         })
-    }
-
-    pub fn local_peer_id(&self) -> String {
-        self.swarm.local_peer_id().to_string()
     }
 
     /// Clean up expired pending response channels (older than 5 minutes)
@@ -362,19 +366,19 @@ impl NetworkManager {
 
         // Start listening on TCP
         // Use a fixed port (31773) so cached addresses remain valid across app restarts.
-        let tcp_addr: Multiaddr = format!("/ip4/{}/tcp/31773", local_ip)
-            .parse()
-            .expect("Invalid TCP listen address");
-        if let Err(e) = self.swarm.listen_on(tcp_addr) {
-            error!("Failed to start listening on TCP: {}", e);
-            let _ = self
-                .event_tx
-                .send(NetworkEvent::StatusChanged(NetworkStatus::Error(
-                    e.to_string(),
-                )))
-                .await;
-            return;
-        }
+        // let tcp_addr: Multiaddr = format!("/ip4/{}/tcp/31773", local_ip)
+        //     .parse()
+        //     .expect("Invalid TCP listen address");
+        // if let Err(e) = self.swarm.listen_on(tcp_addr) {
+        //     error!("Failed to start listening on TCP: {}", e);
+        //     let _ = self
+        //         .event_tx
+        //         .send(NetworkEvent::StatusChanged(NetworkStatus::Error(
+        //             e.to_string(),
+        //         )))
+        //         .await;
+        //     return;
+        // }
 
         // Start listening on QUIC (UDP)
         // Same port number for consistency, using QUIC protocol
@@ -730,7 +734,14 @@ impl NetworkManager {
                 }
             }
 
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+            SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+                self.connections_established += 1;
+                info!("╔══════════════════════════════════════════╗");
+                info!("║     Connection Established               ║");
+                info!("╚══════════════════════════════════════════╝");
+                info!("Peer ID: {}", peer_id);
+                info!("Endpoint: {:?}", endpoint);
+                info!("Total established: {}", self.connections_established);
                 debug!("Connection established with {}", peer_id);
 
                 // Note: Incoming BlobStream connections are handled by the accept loop in run()
@@ -793,10 +804,27 @@ impl NetworkManager {
             }
 
             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                self.connections_failed_outgoing += 1;
+                error!("╔══════════════════════════════════════════╗");
+                error!("║     Outgoing Connection Failed           ║");
+                error!("╚══════════════════════════════════════════╝");
+                error!("Peer ID: {:?}", peer_id);
+                error!("Error Source: {:?}", std::error::Error::source(&error));
+                error!("Error Message: {}", error);
+                error!("Total failed outgoing: {}", self.connections_failed_outgoing);
                 warn!("Outgoing connection error to {:?}: {}", peer_id, error);
             }
 
-            SwarmEvent::IncomingConnectionError { error, .. } => {
+            SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
+                self.connections_failed_incoming += 1;
+                error!("╔══════════════════════════════════════════╗");
+                error!("║     Incoming Connection Failed           ║");
+                error!("╚══════════════════════════════════════════╝");
+                error!("Local addr: {}", local_addr);
+                error!("Send back addr: {}", send_back_addr);
+                error!("Error Source: {:?}", std::error::Error::source(&error));
+                error!("Error Message: {}", error);
+                error!("Total failed incoming: {}", self.connections_failed_incoming);
                 warn!("Incoming connection error: {}", error);
             }
 
