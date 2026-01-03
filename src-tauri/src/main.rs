@@ -4,6 +4,7 @@ mod api;
 mod application;
 mod config;
 mod domain;
+mod error;
 mod infrastructure;
 mod interface;
 mod message;
