@@ -17,7 +17,3 @@ pub use pairing::{PairingManager, PairingSession};
 pub use pin_hash::{hash_pin, verify_pin};
 pub use protocol::{ClipboardMessage, PairingRequest, ProtocolMessage};
 pub use swarm::{NetworkCommand, NetworkManager};
-pub use transport::{
-    build_noise_config, build_tcp_config, build_transport_config, build_yamux_config,
-    configure_quic,
-};
