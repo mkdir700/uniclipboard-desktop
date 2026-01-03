@@ -1,5 +1,5 @@
 use libp2p::{
-    identify, mdns,
+    identify, mdns, ping,
     request_response::{self, ProtocolSupport},
     swarm::NetworkBehaviour,
     StreamProtocol,
@@ -31,6 +31,8 @@ pub struct UniClipboardBehaviour {
     pub identify: identify::Behaviour,
     /// Stream protocol for BlobStream data transfer
     pub stream: StreamBehaviour,
+    /// Ping protocol for connection keepalive
+    pub ping: ping::Behaviour,
 }
 
 impl UniClipboardBehaviour {
@@ -69,18 +71,25 @@ impl UniClipboardBehaviour {
         // Request-Response for pairing protocol
         let request_response = request_response::Behaviour::new(
             [(StreamProtocol::new(PROTOCOL_NAME), ProtocolSupport::Full)],
-            request_response::Config::default()
-                .with_request_timeout(Duration::from_secs(30)),
+            request_response::Config::default().with_request_timeout(Duration::from_secs(30)),
         );
 
         // Stream for BlobStream data transfer
         let stream = StreamBehaviour::new();
+
+        // Ping for connection keepalive (QUIC, NAT mapping, idle timeout prevention)
+        let ping = ping::Behaviour::new(
+            ping::Config::new()
+                .with_interval(Duration::from_secs(15))
+                .with_timeout(Duration::from_secs(10)),
+        );
 
         Ok(Self {
             mdns,
             request_response,
             identify,
             stream,
+            ping,
         })
     }
 }

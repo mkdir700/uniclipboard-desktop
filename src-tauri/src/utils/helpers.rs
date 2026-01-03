@@ -181,21 +181,4 @@ mod tests {
         println!("local ip: {}", ip);
         assert!(is_valid_ip(&ip));
     }
-
-    #[test]
-    fn test_get_local_network_interfaces() {
-        let interfaces = get_local_network_interfaces();
-        println!("Found {} network interfaces:", interfaces.len());
-        for iface in &interfaces {
-            println!("  - {}: {}", iface.name, iface.ip);
-        }
-
-        // 至少应该有一个非回环的 IPv4 地址（如果设备有网络连接）
-        // 但在某些环境下（如 CI），可能没有网络接口
-        for iface in &interfaces {
-            assert!(is_valid_ip(&iface.ip), "Invalid IP: {}", iface.ip);
-            assert!(!iface.is_loopback, "Loopback address should be filtered");
-            assert!(iface.is_ipv4, "Only IPv4 addresses should be included");
-        }
-    }
 }

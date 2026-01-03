@@ -10,11 +10,8 @@ pub const PROTOCOL_VERSION: u8 = 1;
 /// 分片大小：32KB
 pub const CHUNK_SIZE: usize = 32768;
 
-/// 帧头固定大小（24 字节，对齐到 8 字节边界）
-pub const FRAME_HEADER_SIZE: usize = 24;
-
-// 导出 ChunkSize 作为 CHUNK_SIZE 的别名（用于 sender.rs）
-pub use CHUNK_SIZE as ChunkSize;
+/// 帧头固定大小（36 字节）
+pub const FRAME_HEADER_SIZE: usize = 36;
 
 /// 帧类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,7 +40,7 @@ impl FrameType {
     }
 }
 
-/// 分片帧头（24 字节，对齐到 8 字节边界）
+/// 分片帧头（36 字节）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrameHeader {
     /// 协议版本
@@ -130,6 +127,38 @@ impl FrameHeader {
     pub fn get_frame_type(&self) -> Option<FrameType> {
         FrameType::from_u8(self.frame_type)
     }
+
+    /// 序列化为固定的 36 字节
+    pub fn to_fixed_bytes(&self) -> [u8; 36] {
+        let mut buf = [0u8; 36];
+        buf[0] = self.version;
+        buf[1] = self.frame_type;
+        buf[2] = self.reserved[0];
+        buf[3] = self.reserved[1];
+        buf[4..8].copy_from_slice(&self.session_id.to_be_bytes());
+        buf[8..12].copy_from_slice(&self.sequence.to_be_bytes());
+        buf[12..16].copy_from_slice(&self.total_frames.to_be_bytes());
+        buf[16..20].copy_from_slice(&self.data_length.to_be_bytes());
+        buf[20..36].copy_from_slice(&self.hash_prefix);
+        buf
+    }
+
+    /// 从 36 字节反序列化
+    pub fn from_fixed_bytes(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() < 36 {
+            return Err("Insufficient bytes for FrameHeader".to_string());
+        }
+        Ok(Self {
+            version: bytes[0],
+            frame_type: bytes[1],
+            reserved: [bytes[2], bytes[3]],
+            session_id: u32::from_be_bytes(bytes[4..8].try_into().unwrap()),
+            sequence: u32::from_be_bytes(bytes[8..12].try_into().unwrap()),
+            total_frames: u32::from_be_bytes(bytes[12..16].try_into().unwrap()),
+            data_length: u32::from_be_bytes(bytes[16..20].try_into().unwrap()),
+            hash_prefix: bytes[20..36].try_into().unwrap(),
+        })
+    }
 }
 
 /// 完整帧（头部 + 数据）
@@ -147,16 +176,12 @@ impl Frame {
         Self { header, data }
     }
 
-    /// 序列化为字节（使用 bincode）
+    /// 序列化为字节（使用固定二进制布局）
     pub fn to_bytes(&self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        // 序列化头部
-        let header_bytes = bincode::serialize(&self.header)
-            .map_err(|e| format!("Failed to serialize frame header: {}", e))?;
+        // 使用手动序列化，固定字节头部
+        let header_bytes = self.header.to_fixed_bytes();
 
-        // 计算总长度
         let total_length = header_bytes.len() + self.data.len();
-
-        // 分配缓冲区
         let mut buffer = Vec::with_capacity(total_length);
         buffer.extend_from_slice(&header_bytes);
         buffer.extend_from_slice(&self.data);
@@ -164,9 +189,9 @@ impl Frame {
         Ok(buffer)
     }
 
-    /// 从字节反序列化
+    /// 从字节反序列化（使用固定二进制布局）
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
-        // 检查最小长度（至少要能放下头部）
+        // 检查最小长度
         if bytes.len() < FRAME_HEADER_SIZE {
             return Err(format!(
                 "Frame too short: expected at least {} bytes, got {}",
@@ -176,8 +201,8 @@ impl Frame {
             .into());
         }
 
-        // 反序列化头部
-        let header: FrameHeader = bincode::deserialize(&bytes[..FRAME_HEADER_SIZE])
+        // 从固定字节反序列化头部
+        let header = FrameHeader::from_fixed_bytes(&bytes[..FRAME_HEADER_SIZE])
             .map_err(|e| format!("Failed to deserialize frame header: {}", e))?;
 
         // 检查版本
@@ -238,7 +263,13 @@ mod tests {
 
     #[test]
     fn test_frame_serialization() {
-        let header = FrameHeader::metadata(12345, 100, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+        let header = FrameHeader::data(
+            12345,
+            1,
+            100,
+            5,
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        );
         let data = vec![1u8, 2, 3, 4, 5];
         let frame = Frame::new(header, data.clone());
 
@@ -246,7 +277,7 @@ mod tests {
         let decoded = Frame::from_bytes(&bytes).unwrap();
 
         assert_eq!(decoded.header.version, PROTOCOL_VERSION);
-        assert_eq!(decoded.header.frame_type, FrameType::Metadata as u8);
+        assert_eq!(decoded.header.frame_type, FrameType::Data as u8);
         assert_eq!(decoded.header.session_id, 12345);
         assert_eq!(decoded.header.total_frames, 100);
         assert_eq!(decoded.data, data);

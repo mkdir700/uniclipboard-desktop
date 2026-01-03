@@ -1,7 +1,8 @@
 use chrono::Utc;
 use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use libp2p::{
-    identify, mdns,
+    identify,
+    mdns,
     request_response::{self, ResponseChannel},
     swarm::{Stream, StreamProtocol, SwarmEvent},
     Multiaddr, PeerId, Swarm,
@@ -908,6 +909,11 @@ impl NetworkManager {
 
             SwarmEvent::Dialing { peer_id, .. } => {
                 debug!("Dialing peer: {:?}", peer_id);
+            }
+
+            SwarmEvent::Behaviour(super::behaviour::UniClipboardBehaviourEvent::Ping(event)) => {
+                // Ping events are used for keepalive - log for diagnostics
+                debug!("Ping event: {:?}", event);
             }
 
             _ => {}

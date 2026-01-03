@@ -42,7 +42,7 @@ warp = "0.3.7"  # Web服务器框架
 local-ip-address = "0.6.4"  # 获取本地IP地址
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }  # HTTP客户端，用于内容下载
 # ===== libp2p P2P 网络 =====
-libp2p = { version = "0.56", features = ["tokio", "tcp", "noise", "yamux", "mdns", "gossipsub", "request-response", "identify", "macros", "quic"] }  # P2P网络库
+libp2p = { version = "0.56", features = ["tokio", "tcp", "noise", "yamux", "mdns", "gossipsub", "request-response", "identify", "macros", "quic", "ping"] }  # P2P网络库
 libp2p-stream = { version = "0.4.0-alpha" }  # 流式协议支持（alpha 版本）
 x25519-dalek = { version = "2", features = ["static_secrets", "getrandom"] }  # ECDH密钥交换
 blake3 = "1.5"  # 快速哈希函数，用于分片流协议
