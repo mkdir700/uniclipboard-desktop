@@ -1,11 +1,9 @@
 // P2P transport module with QUIC + TCP fallback
 // Provides transport configuration helpers for libp2p networking
 
-use libp2p::{
-    identity::Keypair,
-    noise, tcp, yamux,
-};
-use log::{debug, info};
+use libp2p::{identity::Keypair, noise, quic, tcp, yamux};
+use log::info;
+use std::time::Duration;
 
 /// Transport configuration module for P2P networking
 ///
@@ -46,7 +44,7 @@ use log::{debug, info};
 /// # Returns
 /// A configured TCP transport
 pub fn build_tcp_config() -> tcp::Config {
-    debug!("Building TCP transport configuration with nodelay=true");
+    info!("Building TCP transport configuration with nodelay=true");
     tcp::Config::default().nodelay(true)
 }
 
@@ -63,9 +61,7 @@ pub fn build_tcp_config() -> tcp::Config {
 ///
 /// # Errors
 /// Returns error if Noise configuration fails
-pub fn build_noise_config(
-    keypair: &Keypair,
-) -> Result<noise::Config, noise::Error> {
+pub fn build_noise_config(keypair: &Keypair) -> Result<noise::Config, noise::Error> {
     info!("Building Noise authentication configuration");
     noise::Config::new(keypair)
 }
@@ -78,78 +74,45 @@ pub fn build_noise_config(
 /// # Returns
 /// A Yamux configuration
 pub fn build_yamux_config() -> yamux::Config {
-    debug!("Building Yamux multiplexing configuration");
+    info!("Building Yamux multiplexing configuration");
     yamux::Config::default()
 }
 
-/// Build a complete TCP + Noise + Yamux transport configuration
+/// A minimal, demo-friendly QUIC configuration profile.
 ///
-/// This is a convenience function that returns all three configurations
-/// needed for SwarmBuilder::with_tcp().
+/// 目标：
+/// - 在 NAT/睡眠唤醒/移动网络下更稳（keep-alive）
+/// - 避免过小窗口导致吞吐差（stream/connection window）
+/// - 限制并发流避免滥用（max_concurrent_stream_limit）
 ///
-/// # Arguments
-/// * `keypair` - The libp2p keypair for authentication
-///
-/// # Returns
-/// A tuple of (tcp::Config, noise::Config, yamux::Config)
-///
-/// # Errors
-/// Returns error if Noise configuration fails
-pub fn build_transport_config(
-    keypair: &Keypair,
-) -> Result<(tcp::Config, noise::Config, yamux::Config), noise::Error> {
-    info!("Building complete transport configuration (TCP + Noise + Yamux)");
-    let tcp = build_tcp_config();
-    let noise = build_noise_config(keypair)?;
-    let yamux = build_yamux_config();
-    debug!("Transport configuration built successfully");
-    Ok((tcp, noise, yamux))
-}
+/// 你可以直接：
+/// `.with_quic_config(transport::configure_quic_for_demo)`
+pub fn configure_quic(cfg: quic::Config) -> quic::Config {
+    info!("Applying demo QUIC tuning");
 
-/// Configure QUIC transport for SwarmBuilder
-///
-/// This function provides QUIC configuration parameters for use with
-/// SwarmBuilder::with_quic_config() method.
-///
-/// # QUIC Configuration
-/// Note: libp2p 0.56's QUIC implementation uses default Quinn configuration
-/// internally. Custom configuration should be done directly in swarm.rs
-/// when calling SwarmBuilder::with_quic_config().
-///
-/// # Usage Example
-/// ```rust,no_run
-/// use libp2p::{SwarmBuilder, identity::Keypair};
-///
-/// # async fn example(keypair: Keypair) {
-/// // Configure QUIC with custom parameters
-/// let swarm = SwarmBuilder::with_existing_identity(keypair)
-///     .with_tokio()
-///     .with_quic_config(|config| {
-///         // Apply custom QUIC configuration here
-///         config
-///     })
-///     .with_behaviour(|_| MyBehaviour::default())
-///     .unwrap()
-///     .build();
-/// # }
-/// ```
-///
-/// # Arguments
-/// * `config` - A function that configures the QUIC transport
-///
-/// # Returns
-/// The identity function (pass-through for SwarmBuilder)
-///
-/// # Note
-/// This function is currently a placeholder for future QUIC customization.
-/// For now, use SwarmBuilder::with_quic() directly in swarm.rs.
-pub fn configure_quic<F>(config: F) -> F
-where
-    F: FnOnce(libp2p::quic::Config) -> libp2p::quic::Config,
-{
-    info!("Configuring QUIC transport parameters");
-    debug!("QUIC configuration function registered");
-    config
+    // MTU: 给个上界，通常对跨网段/复杂网络更稳。
+    // 如果你更想追求吞吐，可以去掉 mtu_upper_bound，让 PMTUD 自己探测。
+    let mut cfg = cfg.mtu_upper_bound(1452);
+
+    // 握手超时：demo 里给到 10s，避免弱网偶发失败
+    cfg.handshake_timeout = Duration::from_secs(10);
+
+    // idle 超时：字段单位是 ms（u32）
+    // 60s 比较保守；如果你希望更“不断线”，可以拉到 120s~300s
+    cfg.max_idle_timeout = 60_000;
+
+    // keep-alive：必须小于双方 idle_timeout 才有效
+    cfg.keep_alive_interval = Duration::from_secs(15);
+
+    // 并发双向流上限：避免一个 peer 开太多流把你打爆
+    cfg.max_concurrent_stream_limit = 64;
+
+    // 窗口：避免默认值偏小导致大 blob 的吞吐受限
+    // 这里给到 16MiB / stream，64MiB / connection，足够 clipboard demo
+    cfg.max_stream_data = 16 * 1024 * 1024;
+    cfg.max_connection_data = 64 * 1024 * 1024;
+
+    cfg
 }
 
 #[cfg(test)]
@@ -175,27 +138,5 @@ mod tests {
         let yamux_config = build_yamux_config();
         // Just verify it doesn't panic - Yamux config is opaque
         let _ = yamux_config;
-    }
-
-    #[test]
-    fn test_build_transport_config() {
-        let keypair = Keypair::generate_ed25519();
-        let result = build_transport_config(&keypair);
-        assert!(result.is_ok(), "Transport config build should succeed");
-    }
-
-    #[test]
-    fn test_configure_quic() {
-        // Test that configure_quic is a valid pass-through function
-        use libp2p::quic::Config;
-
-        let keypair = Keypair::generate_ed25519();
-        let identity_fn = |config: Config| config;
-        let configured_fn = configure_quic(identity_fn);
-
-        // Verify the function works by creating a config and passing it through
-        let base_config = Config::new(&keypair);
-        let _ = configured_fn(base_config);
-        // If we got here without panicking, the pass-through works
     }
 }

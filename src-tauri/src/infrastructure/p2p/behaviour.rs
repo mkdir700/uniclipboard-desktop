@@ -4,6 +4,7 @@ use libp2p::{
     swarm::NetworkBehaviour,
     StreamProtocol,
 };
+use libp2p_stream::Behaviour as StreamBehaviour;
 use std::time::Duration;
 
 use super::codec::UniClipboardCodec;
@@ -16,6 +17,7 @@ const PROTOCOL_NAME: &str = "/uniclipboard/1.0.0";
 /// - mDNS: For local device discovery
 /// - Request-Response: For device pairing protocol
 /// - Identify: For peer identification and agent version info
+/// - Stream: For BlobStream data transfer (large files)
 ///
 /// Note: GossipSub has been removed in v2.0.0 as we now use BlobStream
 /// for clipboard content transfer instead of pub/sub broadcasting.
@@ -27,6 +29,8 @@ pub struct UniClipboardBehaviour {
     pub request_response: request_response::Behaviour<UniClipboardCodec>,
     /// Identify protocol for peer information
     pub identify: identify::Behaviour,
+    /// Stream protocol for BlobStream data transfer
+    pub stream: StreamBehaviour,
 }
 
 impl UniClipboardBehaviour {
@@ -69,10 +73,14 @@ impl UniClipboardBehaviour {
                 .with_request_timeout(Duration::from_secs(30)),
         );
 
+        // Stream for BlobStream data transfer
+        let stream = StreamBehaviour::new();
+
         Ok(Self {
             mdns,
             request_response,
             identify,
+            stream,
         })
     }
 }

@@ -1,21 +1,23 @@
 use chrono::Utc;
-use futures::StreamExt;
+use futures::{AsyncReadExt, AsyncWriteExt, StreamExt};
 use libp2p::{
-    identify, mdns, noise,
+    identify, mdns,
     request_response::{self, ResponseChannel},
-    swarm::SwarmEvent,
+    swarm::{Stream, StreamProtocol, SwarmEvent},
     Multiaddr, PeerId, Swarm,
 };
+use libp2p_stream::Control;
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use super::behaviour::UniClipboardBehaviour;
-use super::blob::receiver::BlobReceiver;
-use super::blob::sender::BlobSender;
+use super::blob::{
+    receiver::BlobReceiver, sender::BlobSender, Frame, FrameHandleResult, BLOBSTREAM_PROTOCOL,
+};
 use super::events::{ConnectedPeer, DiscoveredPeer, NetworkEvent, NetworkStatus};
-use super::protocol::{ClipboardMessage, DeviceAnnounceMessage, PairingMessage, ProtocolMessage};
+use super::protocol::{ClipboardMessage, PairingMessage, ProtocolMessage};
 use super::transport;
 use super::{ReqPairingRequest, ReqPairingResponse};
 
@@ -130,12 +132,15 @@ pub struct NetworkManager {
     /// Each session represents an ongoing chunked data transfer to a peer
     active_blob_sends: HashMap<u32, (PeerId, BlobSender)>,
     /// Active BlobStream receive sessions
-    /// Maps peer_id -> BlobReceiver
+    /// Maps session_id -> BlobReceiver
     /// Each receiver handles incoming chunked data from a peer
-    active_blob_receives: HashMap<PeerId, BlobReceiver>,
+    active_blob_receives: HashMap<u32, BlobReceiver>,
     /// Session ID counter for BlobStream transfers
     /// Incremented for each new BlobStream session
     next_session_id: u32,
+    /// Stream control for BlobStream
+    /// Used to open outgoing streams and accept incoming streams
+    stream_control: Control,
     /// Current device name (updated when settings change)
     device_name: String,
     /// Our 6-digit device ID (from database)
@@ -154,6 +159,7 @@ impl NetworkManager {
         info!("Local peer ID: {}", local_peer_id);
 
         // Create swarm with transport configuration module
+        // Supports both TCP (fallback) and QUIC for better performance
         let swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
             .with_tcp(
@@ -161,12 +167,16 @@ impl NetworkManager {
                 transport::build_noise_config,
                 transport::build_yamux_config,
             )?
+            .with_quic_config(transport::configure_quic)
             .with_behaviour(|_key| {
                 UniClipboardBehaviour::new(local_peer_id, &local_key, &device_name, &our_device_id)
                     .expect("Failed to create behaviour")
             })?
             .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
+
+        // ⚠️ Critical: Must get control AFTER swarm is built
+        let stream_control = swarm.behaviour().stream.new_control();
 
         Ok(Self {
             swarm,
@@ -180,6 +190,7 @@ impl NetworkManager {
             active_blob_sends: HashMap::new(),
             active_blob_receives: HashMap::new(),
             next_session_id: 0,
+            stream_control,
             device_name,
             our_device_id,
         })
@@ -220,19 +231,142 @@ impl NetworkManager {
         });
     }
 
+    /// Handle incoming BlobStream connection
+    ///
+    /// This is a static method that runs in a separate task for each incoming stream.
+    /// It reads length-prefixed frames and processes them with a BlobReceiver.
+    ///
+    /// # Arguments
+    ///
+    /// * `peer` - The peer ID of the sender
+    /// * `stream` - The incoming stream
+    /// * `event_tx` - Channel to send network events to
+    async fn handle_incoming_blob(
+        peer: PeerId,
+        mut stream: Stream,
+        event_tx: mpsc::Sender<NetworkEvent>,
+    ) -> Result<(), String> {
+        info!("Incoming BlobStream from {}", peer);
+
+        // Create a receiver with a placeholder session_id (will be set from first frame)
+        let mut receiver = BlobReceiver::new(0);
+
+        loop {
+            let frame_bytes = read_len_prefixed(&mut stream).await?;
+            let frame = Frame::from_bytes(&frame_bytes).map_err(|e| e.to_string())?;
+
+            let session_id = frame.session_id();
+
+            // Update receiver session_id on first frame
+            if receiver.session_id() == 0 && session_id != 0 {
+                receiver = BlobReceiver::new(session_id);
+                debug!(
+                    "BlobStream receiver initialized with session_id={}",
+                    session_id
+                );
+            }
+
+            match receiver.handle_frame(frame).map_err(|e| e.to_string())? {
+                FrameHandleResult::MetadataReceived => {
+                    info!(
+                        "BlobStream metadata received: session_id={}, peer={}",
+                        session_id, peer
+                    );
+                    // TODO: Emit progress event to UI if needed
+                }
+                FrameHandleResult::DataReceived { complete } => {
+                    if complete {
+                        debug!(
+                            "BlobStream all data received: session_id={}, peer={}",
+                            session_id, peer
+                        );
+                    }
+                }
+                FrameHandleResult::TransferComplete => {
+                    info!(
+                        "BlobStream transfer complete: session_id={}, peer={}",
+                        session_id, peer
+                    );
+
+                    // Assemble the received data
+                    let data = receiver.assemble().map_err(|e| e.to_string())?;
+
+                    // Create a ClipboardMessage from the received data
+                    // Note: BlobStream transfers raw encrypted clipboard content
+                    let clipboard_message = super::protocol::ClipboardMessage {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        content_hash: blake3::hash(&data).to_hex().to_string(),
+                        encrypted_content: data,
+                        timestamp: Utc::now(),
+                        origin_device_id: String::new(), // Not available at this layer
+                        origin_device_name: String::new(), // Not available at this layer
+                    };
+
+                    // Send clipboard received event
+                    let _ = event_tx
+                        .send(NetworkEvent::ClipboardReceived(clipboard_message))
+                        .await;
+
+                    break;
+                }
+                FrameHandleResult::InvalidSession => {
+                    warn!(
+                        "BlobStream invalid session: expected {}, got {}",
+                        receiver.session_id(),
+                        session_id
+                    );
+                    // Continue anyway, might be a different session
+                }
+                FrameHandleResult::UnknownFrame => {
+                    warn!("BlobStream unknown frame type from {}", peer);
+                }
+                FrameHandleResult::HashMismatch => {
+                    warn!("BlobStream hash mismatch for chunk from {}", peer);
+                    // Continue anyway, let higher layers handle corruption
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn run(&mut self) {
+        // Start accepting incoming BlobStream connections
+        // This must be polled continuously, otherwise streams will be dropped
+        let mut incoming = self
+            .stream_control
+            .clone()
+            .accept(StreamProtocol::new(BLOBSTREAM_PROTOCOL))
+            .expect("blob protocol already registered?");
+
+        let event_tx = self.event_tx.clone();
+        tokio::spawn(async move {
+            while let Some((peer, stream)) = incoming.next().await {
+                let event_tx = event_tx.clone();
+                // Spawn each stream in its own task to avoid blocking the accept loop
+                tokio::spawn(async move {
+                    if let Err(e) = Self::handle_incoming_blob(peer, stream, event_tx).await {
+                        warn!("blob recv error from {}: {}", peer, e);
+                    }
+                });
+            }
+        });
+
         // Get preferred local address for listening
         // On macOS, binding to 0.0.0.0 can cause mDNS routing issues with multiple interfaces
         let local_ip = crate::utils::helpers::get_preferred_local_address();
-        info!("P2P NetworkManager binding to {}:31773", local_ip);
+        info!(
+            "P2P NetworkManager binding to {}:31773 (TCP/QUIC)",
+            local_ip
+        );
 
-        // Start listening on the preferred interface
+        // Start listening on TCP
         // Use a fixed port (31773) so cached addresses remain valid across app restarts.
-        let listen_addr: Multiaddr = format!("/ip4/{}/tcp/31773", local_ip)
+        let tcp_addr: Multiaddr = format!("/ip4/{}/tcp/31773", local_ip)
             .parse()
-            .expect("Invalid listen address");
-        if let Err(e) = self.swarm.listen_on(listen_addr) {
-            error!("Failed to start listening: {}", e);
+            .expect("Invalid TCP listen address");
+        if let Err(e) = self.swarm.listen_on(tcp_addr) {
+            error!("Failed to start listening on TCP: {}", e);
             let _ = self
                 .event_tx
                 .send(NetworkEvent::StatusChanged(NetworkStatus::Error(
@@ -240,6 +374,18 @@ impl NetworkManager {
                 )))
                 .await;
             return;
+        }
+
+        // Start listening on QUIC (UDP)
+        // Same port number for consistency, using QUIC protocol
+        let quic_addr: Multiaddr = format!("/ip4/{}/udp/31773/quic-v1", local_ip)
+            .parse()
+            .expect("Invalid QUIC listen address");
+        if let Err(e) = self.swarm.listen_on(quic_addr) {
+            warn!("Failed to start listening on QUIC: {}", e);
+            // QUIC is optional, continue with TCP only
+        } else {
+            info!("QUIC listener started successfully");
         }
 
         let _ = self
@@ -587,40 +733,8 @@ impl NetworkManager {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 debug!("Connection established with {}", peer_id);
 
-                // TODO: Handle incoming BlobStream connections
-                //
-                // When a new connection is established, we need to check if the peer
-                // is opening a BlobStream protocol stream. This requires:
-                //
-                // 1. Listen for new stream events from the peer
-                // 2. Check if the stream protocol matches our BlobStream protocol name
-                // 3. Create a BlobReceiver for the incoming session
-                // 4. Store it in active_blob_receives for tracking
-                //
-                // Example structure (pseudo-code):
-                // ```
-                // // This would be handled in a separate SwarmEvent::NewStream branch
-                // // when the peer opens a new stream with our protocol
-                // let receiver = BlobReceiver::new(session_id);
-                // self.active_blob_receives.insert(peer_id, receiver);
-                //
-                // // Then, as frames arrive:
-                // while let Some(frame) = read_frame_from_stream(stream).await? {
-                //     match receiver.handle_frame(frame)? {
-                //         FrameHandleResult::MetadataReceived => {
-                //             // Notify frontend about incoming transfer
-                //         }
-                //         FrameHandleResult::DataReceived { complete } => {
-                //             // Update progress
-                //         }
-                //         FrameHandleResult::TransferComplete => {
-                //             let data = receiver.assemble()?;
-                //             // Emit NetworkEvent::ClipboardReceived(data)
-                //         }
-                //         _ => {}
-                //     }
-                // }
-                // ```
+                // Note: Incoming BlobStream connections are handled by the accept loop in run()
+                // via libp2p-stream::Control::accept(), not here.
 
                 let connected = ConnectedPeer {
                     peer_id: peer_id.to_string(),
@@ -641,13 +755,9 @@ impl NetworkManager {
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 debug!("Connection closed with {}", peer_id);
 
-                // Clean up BlobStream receiver session for this peer
-                if self.active_blob_receives.remove(&peer_id).is_some() {
-                    debug!(
-                        "Removed BlobStream receiver session for peer {} on connection close",
-                        peer_id
-                    );
-                }
+                // Note: active_blob_receives now tracks by session_id, not peer_id.
+                // Incoming streams are handled in self-contained tasks that complete independently.
+                // If we want to track receives per peer, we would need to store (session_id, peer_id) pairs.
 
                 // Clean up any active BlobStream send sessions to this peer
                 let sessions_to_remove: Vec<u32> = self
@@ -705,51 +815,93 @@ impl NetworkManager {
                 data,
                 respond_to,
             } => {
-                // TODO: Implement BlobStream send logic
-                //
-                // This requires the following steps:
-                //
-                // 1. Parse peer_id and validate connection
-                // 2. Create a new BlobSender with the data
-                // 3. Generate a unique session_id using self.next_session_id
-                // 4. Open a new stream to the peer using Swarm::open_stream()
-                // 5. Send frames sequentially:
-                //    - Metadata frame (contains session info, hash, total frames)
-                //    - Data frames (chunked data, 32KB per frame)
-                //    - Complete frame (signals end of transfer)
-                // 6. Store the session in active_blob_sends for tracking
-                // 7. Handle errors and respond via respond_to channel
-                //
-                // Note: libp2p's Swarm::open_stream() requires:
-                // - The peer to be already connected
-                // - A protocol name to negotiate the stream
-                // - Async handling of the stream write operations
-                //
-                // Example structure (pseudo-code):
-                // ```
-                // let peer = peer_id.parse::<PeerId>().map_err(|e| e.to_string())?;
-                // let session_id = self.next_session_id;
-                // self.next_session_id += 1;
-                //
-                // let sender = BlobSender::new(data, session_id);
-                // self.active_blob_sends.insert(session_id, (peer, sender));
-                //
-                // // Open stream and send frames
-                // let mut stream = self.swarm.open_stream(&peer, ...).await?;
-                // while let Some(frame) = sender.next_frame()? {
-                //     stream.write_all(&frame.to_bytes()).await?;
-                // }
-                // stream.write_all(&sender.make_complete_frame().to_bytes()).await?;
-                //
-                // let _ = respond_to.send(Ok(()));
-                // ```
+                // Parse peer_id
+                let peer = match peer_id.parse::<PeerId>() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warn!("Invalid peer_id '{}': {}", peer_id, e);
+                        let _ = self
+                            .event_tx
+                            .send(NetworkEvent::Error(format!(
+                                "Failed to send clipboard: invalid peer_id '{}': {}",
+                                peer_id, e
+                            )))
+                            .await;
+                        let _ = respond_to.send(Err(format!("Invalid peer_id: {}", e)));
+                        return;
+                    }
+                };
 
-                warn!(
-                    "SendClipboard command received for peer {}: BlobStream integration not yet implemented",
-                    peer_id
-                );
-                let _ = respond_to
-                    .send(Err("BlobStream integration is pending implementation".to_string()));
+                // Allocate session_id
+                let session_id = self.next_session_id;
+                self.next_session_id = self.next_session_id.wrapping_add(1);
+
+                // Clone control and event_tx for the spawned task
+                let mut control = self.stream_control.clone();
+                let _event_tx = self.event_tx.clone();
+
+                // Spawn the send task to avoid blocking the swarm event loop
+                tokio::spawn(async move {
+                    let result: Result<(), String> = async {
+                        // Open stream to peer
+                        let mut stream = control
+                            .open_stream(peer, StreamProtocol::new(BLOBSTREAM_PROTOCOL))
+                            .await
+                            .map_err(|e| format!("open_stream failed: {}", e))?;
+
+                        // Create sender
+                        let mut sender = BlobSender::new(data, session_id);
+                        let total_frames = sender.total_frames();
+
+                        info!(
+                            "Sending BlobStream: session_id={}, total_frames={}, peer={}",
+                            session_id, total_frames, peer
+                        );
+
+                        // Send metadata frame
+                        let frame = sender
+                            .make_metadata_frame()
+                            .map_err(|e| format!("make_metadata_frame failed: {}", e))?;
+                        let frame_bytes = frame
+                            .to_bytes()
+                            .map_err(|e| format!("frame serialization failed: {}", e))?;
+                        write_len_prefixed(&mut stream, &frame_bytes).await?;
+
+                        // Send data frames
+                        while let Some(frame) = sender
+                            .next_frame()
+                            .map_err(|e| format!("next_frame failed: {}", e))?
+                        {
+                            let frame_bytes = frame
+                                .to_bytes()
+                                .map_err(|e| format!("frame serialization failed: {}", e))?;
+                            write_len_prefixed(&mut stream, &frame_bytes).await?;
+                        }
+
+                        // Send complete frame
+                        let frame = sender.make_complete_frame();
+                        let frame_bytes = frame
+                            .to_bytes()
+                            .map_err(|e| format!("frame serialization failed: {}", e))?;
+                        write_len_prefixed(&mut stream, &frame_bytes).await?;
+
+                        // Note: libp2p::Stream will be closed automatically when dropped
+                        // No need to explicitly call close() or shutdown()
+
+                        info!(
+                            "BlobStream send complete: session_id={}, peer={}",
+                            session_id, peer
+                        );
+
+                        Ok(())
+                    }
+                    .await;
+
+                    // Respond to caller
+                    let _ = respond_to.send(result.clone());
+
+                    result
+                });
             }
 
             NetworkCommand::BroadcastClipboard { message } => {
@@ -1027,6 +1179,52 @@ impl NetworkManager {
             | NetworkCommand::GetPeers => {}
         }
     }
+}
+
+/// 写入长度前缀的帧（u32 BE + payload）
+///
+/// # Arguments
+///
+/// * `stream` - 可写流
+/// * `payload` - 要写入的数据
+async fn write_len_prefixed(stream: &mut Stream, payload: &[u8]) -> Result<(), String> {
+    let len = payload.len() as u32;
+    stream
+        .write_all(&len.to_be_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
+    stream.write_all(payload).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 读取长度前缀的帧（u32 BE + payload）
+///
+/// # Arguments
+///
+/// * `stream` - 可读流
+async fn read_len_prefixed(stream: &mut Stream) -> Result<Vec<u8>, String> {
+    let mut len_buf = [0u8; 4];
+    stream
+        .read_exact(&mut len_buf)
+        .await
+        .map_err(|e| e.to_string())?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+
+    // 限制单帧大小为 1MB，防止恶意数据
+    const MAX_FRAME_SIZE: usize = 1024 * 1024;
+    if len > MAX_FRAME_SIZE {
+        return Err(format!(
+            "Frame too large: {} bytes (max {})",
+            len, MAX_FRAME_SIZE
+        ));
+    }
+
+    let mut buf = vec![0u8; len];
+    stream
+        .read_exact(&mut buf)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(buf)
 }
 
 impl std::fmt::Debug for NetworkCommand {
