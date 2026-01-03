@@ -177,7 +177,7 @@ impl NetworkManager {
                 UniClipboardBehaviour::new(local_peer_id, &local_key, &device_name, &our_device_id)
                     .expect("Failed to create behaviour")
             })?
-            .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60)))
+            .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(None))
             .build();
 
         // ⚠️ Critical: Must get control AFTER swarm is built
