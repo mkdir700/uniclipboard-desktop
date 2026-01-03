@@ -5,7 +5,8 @@
 use serde::{Deserialize, Serialize};
 
 /// 分片流协议版本
-pub const PROTOCOL_VERSION: u8 = 1;
+/// v2: 添加 data_size 字段到元数据帧
+pub const PROTOCOL_VERSION: u8 = 2;
 
 /// 分片大小：32KB
 pub const CHUNK_SIZE: usize = 32768;
@@ -52,13 +53,19 @@ pub struct FrameHeader {
     /// 会话 ID（用于区分不同的传输会话）
     pub session_id: u32,
     /// 序列号（当前帧的序号）
+    /// 对于元数据帧，此字段编码 data_size 的低 32 位
     pub sequence: u32,
     /// 总帧数（元数据帧中设置）
     pub total_frames: u32,
     /// 数据长度（当前帧的数据部分长度）
+    /// 对于元数据帧，此字段编码 data_size 的高 32 位
     pub data_length: u32,
     /// BLAKE3 哈希前 16 字节（用于完整性校验）
     pub hash_prefix: [u8; 16],
+    /// 数据总大小（仅用于元数据帧，v2 协议新增）
+    /// 在序列化时编码到 sequence 和 data_length 字段
+    #[serde(skip)]
+    pub data_size: u64,
 }
 
 impl FrameHeader {
@@ -80,19 +87,27 @@ impl FrameHeader {
             total_frames,
             data_length,
             hash_prefix,
+            data_size: 0,
         }
     }
 
-    /// 创建元数据帧头
-    pub fn metadata(session_id: u32, total_frames: u32, hash_prefix: [u8; 16]) -> Self {
-        Self::new(
-            FrameType::Metadata,
+    /// 创建元数据帧头（v2 协议）
+    pub fn metadata(session_id: u32, total_frames: u32, data_size: u64, hash_prefix: [u8; 16]) -> Self {
+        let size_bytes = data_size.to_be_bytes();
+        let sequence = u32::from_be_bytes([size_bytes[4], size_bytes[5], size_bytes[6], size_bytes[7]]);
+        let data_length = u32::from_be_bytes([size_bytes[0], size_bytes[1], size_bytes[2], size_bytes[3]]);
+
+        Self {
+            version: PROTOCOL_VERSION,
+            frame_type: FrameType::Metadata as u8,
+            reserved: [0; 2],
             session_id,
-            0,
+            sequence,
             total_frames,
-            0,
+            data_length,
             hash_prefix,
-        )
+            data_size,
+        }
     }
 
     /// 创建数据帧头
@@ -103,24 +118,47 @@ impl FrameHeader {
         data_length: u32,
         hash_prefix: [u8; 16],
     ) -> Self {
-        Self::new(
-            FrameType::Data,
+        Self {
+            version: PROTOCOL_VERSION,
+            frame_type: FrameType::Data as u8,
+            reserved: [0; 2],
             session_id,
             sequence,
             total_frames,
             data_length,
             hash_prefix,
-        )
+            data_size: 0,
+        }
     }
 
     /// 创建完成帧头
     pub fn complete(session_id: u32) -> Self {
-        Self::new(FrameType::Complete, session_id, 0, 0, 0, [0; 16])
+        Self {
+            version: PROTOCOL_VERSION,
+            frame_type: FrameType::Complete as u8,
+            reserved: [0; 2],
+            session_id,
+            sequence: 0,
+            total_frames: 0,
+            data_length: 0,
+            hash_prefix: [0; 16],
+            data_size: 0,
+        }
     }
 
     /// 创建错误帧头
     pub fn error(session_id: u32) -> Self {
-        Self::new(FrameType::Error, session_id, 0, 0, 0, [0; 16])
+        Self {
+            version: PROTOCOL_VERSION,
+            frame_type: FrameType::Error as u8,
+            reserved: [0; 2],
+            session_id,
+            sequence: 0,
+            total_frames: 0,
+            data_length: 0,
+            hash_prefix: [0; 16],
+            data_size: 0,
+        }
     }
 
     /// 获取帧类型
@@ -148,15 +186,30 @@ impl FrameHeader {
         if bytes.len() < 36 {
             return Err("Insufficient bytes for FrameHeader".to_string());
         }
+
+        let frame_type = bytes[1];
+        let sequence = u32::from_be_bytes(bytes[8..12].try_into().unwrap());
+        let data_length = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
+
+        // 对于元数据帧，从 sequence 和 data_length 字段解码 data_size
+        let data_size = if frame_type == FrameType::Metadata as u8 {
+            let high = data_length as u64;
+            let low = sequence as u64;
+            (high << 32) | low
+        } else {
+            0
+        };
+
         Ok(Self {
             version: bytes[0],
-            frame_type: bytes[1],
+            frame_type,
             reserved: [bytes[2], bytes[3]],
             session_id: u32::from_be_bytes(bytes[4..8].try_into().unwrap()),
-            sequence: u32::from_be_bytes(bytes[8..12].try_into().unwrap()),
+            sequence,
             total_frames: u32::from_be_bytes(bytes[12..16].try_into().unwrap()),
-            data_length: u32::from_be_bytes(bytes[16..20].try_into().unwrap()),
+            data_length,
             hash_prefix: bytes[20..36].try_into().unwrap(),
+            data_size,
         })
     }
 }

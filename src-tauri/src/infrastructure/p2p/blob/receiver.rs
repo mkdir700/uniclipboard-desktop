@@ -2,11 +2,12 @@
 //!
 //! 负责接收帧、重组数据并验证完整性。
 
-use crate::infrastructure::p2p::blob::frame::{Frame, FrameType};
+use crate::infrastructure::p2p::blob::frame::{Frame, FrameType, CHUNK_SIZE};
 use crate::infrastructure::p2p::blob::sender::BlobMetadata;
 use anyhow::{anyhow, ensure, Context, Result};
 use log::{debug, info, trace, warn};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 /// 帧处理结果
 #[derive(Debug, Clone, PartialEq)]
@@ -105,8 +106,10 @@ impl BlobReceiver {
         );
 
         debug!(
-            "Received metadata frame: session_id={}, total_frames={}",
-            self.session_id, frame.header.total_frames
+            "Received metadata frame: session_id={}, total_frames={}, data_size={}",
+            self.session_id,
+            frame.header.total_frames,
+            frame.header.data_size
         );
 
         // 从 hash_prefix 重建完整哈希（暂时存储前缀，完整校验在 assemble 时进行）
@@ -117,13 +120,33 @@ impl BlobReceiver {
         // 暂时使用部分哈希，完整哈希在 assemble 时验证
         let partial_hash = hex::encode(&hash_bytes[..]);
 
-        self.expected_hash = Some(partial_hash);
+        self.expected_hash = Some(partial_hash.clone());
         self.expected_total_frames = Some(frame.header.total_frames);
 
+        // 计算数据帧数量（总帧数 - metadata帧 - complete帧）
+        let chunk_count = if frame.header.total_frames >= 2 {
+            frame.header.total_frames - 2
+        } else {
+            return Err(anyhow!("Invalid total_frames: {}", frame.header.total_frames));
+        };
+
+        // 创建 BlobMetadata（使用 frame.header.data_size 获取实际数据大小）
+        let metadata = BlobMetadata {
+            id: Uuid::new_v4().to_string(),
+            size: frame.header.data_size,
+            chunk_size: CHUNK_SIZE as u32,
+            chunk_count,
+            hash: partial_hash,
+        };
+
+        self.metadata = Some(metadata);
+
         info!(
-            "Metadata received: session_id={}, total_frames={}",
+            "Metadata received: session_id={}, total_frames={}, chunk_count={}, data_size={}",
             self.session_id,
-            frame.header.total_frames
+            frame.header.total_frames,
+            chunk_count,
+            frame.header.data_size
         );
 
         Ok(FrameHandleResult::MetadataReceived)

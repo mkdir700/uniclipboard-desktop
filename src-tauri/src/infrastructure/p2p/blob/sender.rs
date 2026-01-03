@@ -102,8 +102,8 @@ impl BlobSender {
     /// 创建元数据帧
     pub fn make_metadata_frame(&self) -> Result<Frame> {
         debug!(
-            "Creating metadata frame: session_id={}, total_frames={}",
-            self.session_id, self.total_frames
+            "Creating metadata frame: session_id={}, total_frames={}, data_size={}",
+            self.session_id, self.total_frames, self.metadata.size
         );
 
         // 从完整哈希中提取前 16 字节
@@ -113,7 +113,12 @@ impl BlobSender {
         let mut hash_prefix = [0u8; 16];
         hash_prefix.copy_from_slice(&hash_bytes[..16]);
 
-        let header = FrameHeader::metadata(self.session_id, self.total_frames, hash_prefix);
+        let header = FrameHeader::metadata(
+            self.session_id,
+            self.total_frames,
+            self.metadata.size,
+            hash_prefix,
+        );
 
         Ok(Frame::new(header, vec![]))
     }
