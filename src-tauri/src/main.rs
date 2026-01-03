@@ -7,6 +7,7 @@ mod domain;
 mod infrastructure;
 mod interface;
 mod message;
+mod models;
 mod plugins;
 mod utils;
 
