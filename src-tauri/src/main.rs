@@ -10,6 +10,7 @@ mod interface;
 mod message;
 mod models;
 mod plugins;
+mod services;
 mod utils;
 
 use application::device_service::get_device_manager;

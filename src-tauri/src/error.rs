@@ -170,6 +170,24 @@ impl From<std::io::Error> for AppError {
     }
 }
 
+/// Convert from `diesel::r2d2::PoolError` to `AppError`.
+///
+/// This implementation maps r2d2 pool errors to storage errors.
+impl From<diesel::r2d2::PoolError> for AppError {
+    fn from(err: diesel::r2d2::PoolError) -> Self {
+        AppError::storage(format!("Connection pool error: {}", err))
+    }
+}
+
+/// Convert from `serde_json::Error` to `AppError`.
+///
+/// This implementation maps JSON serialization errors to internal errors.
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        AppError::internal(format!("JSON error: {}", err))
+    }
+}
+
 /// Convert from `AppError` to `String`.
 ///
 /// This implementation is used for Tauri command return values,

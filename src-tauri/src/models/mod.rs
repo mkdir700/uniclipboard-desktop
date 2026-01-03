@@ -19,6 +19,6 @@ pub mod p2p;
 
 // Re-export commonly used types
 pub use clipboard::{ClipboardItem, ClipboardMetadata, ClipboardStats, CodeItem, FileItem, ImageItem, LinkItem, TextItem};
-pub use device::{Device, DeviceStatus, Platform};
-pub use network::{ConnectionRequestDecision, ConnectionRequestMessage, ConnectionResponseMessage, ManualConnectionRequest, ManualConnectionResponse, NetworkInterface};
+pub use device::Device;
+pub use network::{ConnectionRequestDecision, ConnectionRequestMessage, ConnectionResponseMessage, DeviceStatus, ManualConnectionRequest, ManualConnectionResponse, NetworkInterface, Platform};
 pub use p2p::{ConnectedPeer, DiscoveredPeer, PairedPeer};
