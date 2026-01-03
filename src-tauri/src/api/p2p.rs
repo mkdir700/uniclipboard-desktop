@@ -2,15 +2,27 @@
 //!
 //! 提供基于 libp2p 的设备发现、配对和剪贴板同步功能
 
-use log::{error, info, warn};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 use crate::domain::pairing::PairedPeer;
 use crate::infrastructure::p2p::DiscoveredPeer;
-use crate::infrastructure::runtime::{
-    AppRuntimeHandle, LocalDeviceInfo, P2PCommand, PairedPeerWithStatus,
-};
+use crate::infrastructure::runtime::{LocalDeviceInfo, PairedPeerWithStatus};
+use crate::services::p2p::P2PService;
+
+/// Type alias for the P2PService state
+type P2PServiceState = Arc<Mutex<Option<P2PService>>>;
+
+/// Helper function to get P2PService from state
+fn get_p2p_service(state: &P2PServiceState) -> Result<P2PService, String> {
+    let guard = state.lock().map_err(|e| format!("Failed to acquire lock: {}", e))?;
+    guard
+        .as_ref()
+        .cloned()
+        .ok_or_else(|| "P2PService not initialized".to_string())
+}
 
 /// P2P 设备信息
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -60,37 +72,20 @@ pub struct P2PPinVerifyRequest {
 
 /// 获取本地 Peer ID
 #[tauri::command]
-pub async fn get_local_peer_id(app_handle: State<'_, AppRuntimeHandle>) -> Result<String, String> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::GetLocalPeerId { respond_to: tx })
-        .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    rx.await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
-        .map_err(|e| e.to_string())
+pub async fn get_local_peer_id(
+    service: State<'_, P2PServiceState>,
+) -> Result<String, String> {
+    let service = get_p2p_service(&service)?;
+    Ok(service.local_peer_id().to_string())
 }
 
 /// 获取发现的 P2P 设备列表
 #[tauri::command]
 pub async fn get_p2p_peers(
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<Vec<P2PPeerInfo>, String> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::GetPeers { respond_to: tx })
-        .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    let peers = rx
-        .await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
-        .map_err(|e| e.to_string())?;
+    let service = get_p2p_service(&service)?;
+    let peers = service.discovered_peers().await;
 
     // Convert DiscoveredPeer to P2PPeerInfo
     Ok(peers
@@ -109,31 +104,14 @@ pub async fn get_p2p_peers(
 #[tauri::command]
 pub async fn initiate_p2p_pairing(
     request: P2PPairingRequest,
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<P2PPairingResponse, String> {
     info!("Initiating P2P pairing with peer: {}", request.peer_id);
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    // Get device name from hostname
-    let device_name = gethostname::gethostname()
-        .to_str()
-        .unwrap_or("Unknown Device")
-        .to_string();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::InitiatePairing {
-            peer_id: request.peer_id,
-            device_name,
-            respond_to: tx,
-        })
+    let service = get_p2p_service(&service)?;
+    let session_id = service
+        .initiate_pairing(request.peer_id)
         .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    let session_id = rx
-        .await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
         .map_err(|e| e.to_string())?;
 
     Ok(P2PPairingResponse {
@@ -147,27 +125,17 @@ pub async fn initiate_p2p_pairing(
 #[tauri::command]
 pub async fn verify_p2p_pairing_pin(
     request: P2PPinVerifyRequest,
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<(), String> {
     info!(
         "Verifying PIN for session: {}, matches: {}",
         request.session_id, request.pin_matches
     );
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::VerifyPin {
-            session_id: request.session_id,
-            pin_matches: request.pin_matches,
-            respond_to: tx,
-        })
+    let service = get_p2p_service(&service)?;
+    service
+        .verify_pin(&request.session_id, request.pin_matches)
         .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    rx.await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
         .map_err(|e| e.to_string())
 }
 
@@ -176,27 +144,17 @@ pub async fn verify_p2p_pairing_pin(
 pub async fn reject_p2p_pairing(
     session_id: String,
     peer_id: String,
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<(), String> {
     info!(
         "Rejecting P2P pairing: session={}, peer={}",
         session_id, peer_id
     );
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::RejectPairing {
-            session_id,
-            peer_id,
-            respond_to: tx,
-        })
+    let service = get_p2p_service(&service)?;
+    service
+        .reject_pairing(&session_id, peer_id)
         .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    rx.await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
         .map_err(|e| e.to_string())
 }
 
@@ -204,104 +162,71 @@ pub async fn reject_p2p_pairing(
 #[tauri::command]
 pub async fn unpair_p2p_device(
     peer_id: String,
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<(), String> {
     info!("Unpairing P2P device: {}", peer_id);
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::UnpairDevice {
-            peer_id,
-            respond_to: tx,
-        })
+    let service = get_p2p_service(&service)?;
+    service
+        .unpair_device(&peer_id)
         .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    rx.await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
+        .map_err(|e| e.to_string())
 }
 
 /// 接受 P2P 配对请求（接收方）
 #[tauri::command]
 pub async fn accept_p2p_pairing(
     session_id: String,
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<(), String> {
     info!("Accepting P2P pairing: session={}", session_id);
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::AcceptPairing {
-            session_id,
-            respond_to: tx,
-        })
+    let service = get_p2p_service(&service)?;
+    service
+        .accept_pairing(&session_id)
         .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    rx.await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
+        .map_err(|e| e.to_string())
 }
 
 /// 获取本地设备信息
 #[tauri::command]
 pub async fn get_local_device_info(
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<LocalDeviceInfo, String> {
     info!("Getting local device info");
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::GetLocalDeviceInfo { respond_to: tx })
-        .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    rx.await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
-        .map_err(|e| e.to_string())
+    let service = get_p2p_service(&service)?;
+    let device_info = service.local_device_info();
+    Ok(LocalDeviceInfo {
+        peer_id: device_info.peer_id,
+        device_name: device_info.device_name,
+    })
 }
 
 /// 获取已配对的设备列表
 #[tauri::command]
 pub async fn get_paired_peers(
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<Vec<PairedPeer>, String> {
     info!("Getting paired peers");
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::GetPairedPeers { respond_to: tx })
+    let service = get_p2p_service(&service)?;
+    service
+        .paired_peers()
         .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    rx.await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
         .map_err(|e| e.to_string())
 }
 
 /// 获取已配对的设备列表（带连接状态）
 #[tauri::command]
 pub async fn get_paired_peers_with_status(
-    app_handle: State<'_, AppRuntimeHandle>,
+    service: State<'_, P2PServiceState>,
 ) -> Result<Vec<PairedPeerWithStatus>, String> {
     info!("Getting paired peers with connection status");
 
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    app_handle
-        .p2p_tx
-        .send(P2PCommand::GetPairedPeersWithStatus { respond_to: tx })
+    let service = get_p2p_service(&service)?;
+    service
+        .paired_peers_with_status()
         .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    rx.await
-        .map_err(|e| format!("Failed to receive response: {}", e))?
         .map_err(|e| e.to_string())
 }

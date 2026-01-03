@@ -2,7 +2,6 @@
 //!
 //! Single owner of all core application components.
 use anyhow::Result;
-use chrono::Utc;
 use log::info;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -11,9 +10,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::config::Setting;
 use crate::infrastructure::clipboard::LocalClipboard;
-use crate::infrastructure::p2p::pairing::PairingCommand;
-use crate::infrastructure::runtime::p2p_runtime::P2PRuntime;
-use crate::infrastructure::runtime::{AppRuntimeHandle, ClipboardCommand, P2PCommand};
+use crate::infrastructure::runtime::{AppRuntimeHandle, ClipboardCommand};
 use crate::infrastructure::storage::file_storage::FileStorageManager;
 use crate::infrastructure::storage::record_manager::ClipboardRecordManager;
 use crate::infrastructure::uniclipboard::ClipboardSyncService;
@@ -22,99 +19,57 @@ use crate::interface::RemoteClipboardSync;
 /// Application runtime - single owner of all core components
 pub struct AppRuntime {
     clipboard_service: ClipboardSyncService,
-    p2p_runtime: Arc<P2PRuntime>,
     config: Arc<Setting>,
     is_running: Arc<AtomicBool>,
-    // Channels for commands from Tauri handlers
+    // Channel for commands from Tauri handlers
     clipboard_cmd_rx: Option<mpsc::Receiver<ClipboardCommand>>,
-    p2p_cmd_rx: Option<mpsc::Receiver<P2PCommand>>,
-    // Stored senders to create handles
+    // Stored sender to create handles
     clipboard_cmd_tx: mpsc::Sender<ClipboardCommand>,
-    p2p_cmd_tx: mpsc::Sender<P2PCommand>,
 }
 
 impl AppRuntime {
     /// Constructs a new AppRuntime with the given command receivers and initializes core services.
     ///
-    /// Initializes file storage, clipboard record manager, the platform clipboard, the P2P runtime,
-    /// and the ClipboardSyncService (using P2P-based remote sync when available). The returned
-    /// AppRuntime has shared configuration and runtime handles wrapped in `Arc`, `is_running` set
-    /// to `false`, the provided command receivers stored, and placeholder senders (to be replaced).
+    /// Initializes file storage, clipboard record manager, the platform clipboard,
+    /// and the ClipboardSyncService.
     ///
-    /// # Examples
+    /// # Returns
     ///
-    /// ```
-    /// # use std::sync::Arc;
-    /// # use tauri::AppHandle;
-    /// # use tokio::sync::mpsc;
-    /// # // assume `Setting`, `ClipboardCommand`, `P2PCommand` and `new_with_channels` are in scope
-    /// # let setting: Setting = Default::default();
-    /// # let device_id = "dev".to_string();
-    /// # let device_name = "device".to_string();
-    /// # let app_handle: AppHandle = unsafe { std::mem::zeroed() }; // placeholder for example
-    /// let (clipboard_tx, clipboard_rx) = mpsc::channel(16);
-    /// let (p2p_tx, p2p_rx) = mpsc::channel(16);
-    /// let runtime = tokio::runtime::Runtime::new().unwrap();
-    /// let app_runtime = runtime.block_on(async {
-    ///     new_with_channels(
-    ///         setting,
-    ///         device_id,
-    ///         device_name,
-    ///         app_handle,
-    ///         clipboard_rx,
-    ///         p2p_rx,
-    ///     ).await.unwrap()
-    /// });
-    /// ```
+    /// `Ok(Self)` with the initialized AppRuntime on success, or an error if initialization fails.
     pub async fn new_with_channels(
         user_setting: Setting,
         device_id: String,
         device_name: String,
-        app_handle: AppHandle,
+        _app_handle: AppHandle,
         clipboard_cmd_rx: mpsc::Receiver<ClipboardCommand>,
-        p2p_cmd_rx: mpsc::Receiver<P2PCommand>,
     ) -> Result<Self> {
         let config = Arc::new(user_setting.clone());
 
         // 1. Initialize core managers
         let file_storage = FileStorageManager::new()?;
-        let record_manager =
-            ClipboardRecordManager::new(user_setting.storage.max_history_items as usize);
+        let record_manager = ClipboardRecordManager::new(
+            user_setting.storage.max_history_items as usize,
+        );
 
         // 2. Initialize Platform Clipboard
         let clipboard = Arc::new(LocalClipboard::with_user_setting(user_setting.clone())?);
 
-        // 3. Initialize P2P Runtime with AppHandle
-        let p2p_runtime = Arc::new(P2PRuntime::new(device_name.clone(), app_handle).await?);
-
-        // 4. Initialize ClipboardSyncService
-        // Use P2P sync directly if available
-        let remote_sync: Option<Arc<dyn RemoteClipboardSync>> =
-            p2p_runtime.p2p_sync().map(|s| s as Arc<dyn RemoteClipboardSync>);
-
-        if remote_sync.is_some() {
-            log::info!("P2P sync handler configured");
-        } else {
-            log::info!("P2P sync handler not configured (encryption not set up)");
-        }
-
+        // 3. Initialize ClipboardSyncService (without P2P sync initially)
+        // P2P sync will be initialized separately via P2PService
         let clipboard_service = ClipboardSyncService::new(
             device_id,
             clipboard,
-            remote_sync,
+            None, // No remote sync initially - P2P sync is separate
             record_manager,
             file_storage,
         );
 
         Ok(Self {
             clipboard_service,
-            p2p_runtime,
             config,
             is_running: Arc::new(AtomicBool::new(false)),
             clipboard_cmd_rx: Some(clipboard_cmd_rx),
-            p2p_cmd_rx: Some(p2p_cmd_rx),
             clipboard_cmd_tx: mpsc::channel(100).0, // Will be replaced, unused
-            p2p_cmd_tx: mpsc::channel(100).0,       // Will be replaced, unused
         })
     }
 
@@ -126,7 +81,6 @@ impl AppRuntime {
         app_handle: AppHandle,
     ) -> Result<Self> {
         let (clipboard_cmd_tx, clipboard_cmd_rx) = mpsc::channel(100);
-        let (p2p_cmd_tx, p2p_cmd_rx) = mpsc::channel(100);
 
         let mut runtime = Self::new_with_channels(
             user_setting,
@@ -134,13 +88,11 @@ impl AppRuntime {
             device_name,
             app_handle,
             clipboard_cmd_rx,
-            p2p_cmd_rx,
         )
         .await?;
 
-        // Store the senders
+        // Store the sender
         runtime.clipboard_cmd_tx = clipboard_cmd_tx;
-        runtime.p2p_cmd_tx = p2p_cmd_tx;
 
         Ok(runtime)
     }
@@ -161,9 +113,7 @@ impl AppRuntime {
             .clipboard_cmd_rx
             .take()
             .expect("Clipboard RX channel missing");
-        let mut p2p_cmd_rx = self.p2p_cmd_rx.take().expect("P2P RX channel missing");
 
-        let p2p_runtime = self.p2p_runtime.clone(); // Clone Arc for the loop
         let is_running = self.is_running.clone();
 
         // Wrap clipboard_service in Arc to be used by ClipboardService wrapper
@@ -176,78 +126,75 @@ impl AppRuntime {
                 break;
             }
 
-            tokio::select! {
-                Some(cmd) = clipboard_cmd_rx.recv() => {
-                    let service = crate::application::clipboard_service::ClipboardService::new(
-                         clipboard_service_arc.clone()
+            // Only handle clipboard commands now
+            if let Some(cmd) = clipboard_cmd_rx.recv().await {
+                let service =
+                    crate::application::clipboard_service::ClipboardService::new(
+                        clipboard_service_arc.clone(),
                     );
 
-                    match cmd {
-                         ClipboardCommand::GetStats { respond_to } => {
-                            let result = service.get_clipboard_stats().await.map_err(|e| e.to_string());
-                            let _ = respond_to.send(result);
-                        }
-                        ClipboardCommand::GetItems {
-                            order_by,
-                            limit,
-                            offset,
-                            filter,
-                            respond_to,
-                        } => {
-                            let result = service
-                                .get_clipboard_items(order_by, limit, offset, filter)
-                                .await
-                                .map_err(|e| e.to_string());
-                            let _ = respond_to.send(result);
-                        }
-                        ClipboardCommand::GetItem {
-                            id,
-                            full_content,
-                            respond_to,
-                        } => {
-                            let result = service
-                                .get_clipboard_item(&id, full_content)
-                                .await
-                                .map_err(|e| e.to_string());
-                            let _ = respond_to.send(result);
-                        }
-                        ClipboardCommand::DeleteItem { id, respond_to } => {
-                            let result = service
-                                .delete_clipboard_item(&id)
-                                .await
-                                .map_err(|e| e.to_string());
-                            let _ = respond_to.send(result);
-                        }
-                        ClipboardCommand::ClearItems { respond_to } => {
-                            let result = service
-                                .clear_clipboard_items()
-                                .await
-                                .map_err(|e| e.to_string());
-                            let _ = respond_to.send(result);
-                        }
-                        ClipboardCommand::CopyItem { id, respond_to } => {
-                            let result = service
-                                .copy_clipboard_item(&id)
-                                .await
-                                .map_err(|e| e.to_string());
-                            let _ = respond_to.send(result);
-                        }
-                        ClipboardCommand::ToggleFavorite {
-                            id,
-                            is_favorited,
-                            respond_to,
-                        } => {
-                            let result = if is_favorited {
-                                service.favorite_clipboard_item(&id).await
-                            } else {
-                                service.unfavorite_clipboard_item(&id).await
-                            };
-                            let _ = respond_to.send(result.map_err(|e| e.to_string()));
-                        }
+                match cmd {
+                    ClipboardCommand::GetStats { respond_to } => {
+                        let result = service.get_clipboard_stats().await.map_err(|e| e.to_string());
+                        let _ = respond_to.send(result);
                     }
-                }
-                Some(cmd) = p2p_cmd_rx.recv() => {
-                   Self::handle_p2p_command(cmd, &p2p_runtime).await;
+                    ClipboardCommand::GetItems {
+                        order_by,
+                        limit,
+                        offset,
+                        filter,
+                        respond_to,
+                    } => {
+                        let result = service
+                            .get_clipboard_items(order_by, limit, offset, filter)
+                            .await
+                            .map_err(|e| e.to_string());
+                        let _ = respond_to.send(result);
+                    }
+                    ClipboardCommand::GetItem {
+                        id,
+                        full_content,
+                        respond_to,
+                    } => {
+                        let result = service
+                            .get_clipboard_item(&id, full_content)
+                            .await
+                            .map_err(|e| e.to_string());
+                        let _ = respond_to.send(result);
+                    }
+                    ClipboardCommand::DeleteItem { id, respond_to } => {
+                        let result = service
+                            .delete_clipboard_item(&id)
+                            .await
+                            .map_err(|e| e.to_string());
+                        let _ = respond_to.send(result);
+                    }
+                    ClipboardCommand::ClearItems { respond_to } => {
+                        let result = service
+                            .clear_clipboard_items()
+                            .await
+                            .map_err(|e| e.to_string());
+                        let _ = respond_to.send(result);
+                    }
+                    ClipboardCommand::CopyItem { id, respond_to } => {
+                        let result = service
+                            .copy_clipboard_item(&id)
+                            .await
+                            .map_err(|e| e.to_string());
+                        let _ = respond_to.send(result);
+                    }
+                    ClipboardCommand::ToggleFavorite {
+                        id,
+                        is_favorited,
+                        respond_to,
+                    } => {
+                        let result = if is_favorited {
+                            service.favorite_clipboard_item(&id).await
+                        } else {
+                            service.unfavorite_clipboard_item(&id).await
+                        };
+                        let _ = respond_to.send(result.map_err(|e| e.to_string()));
+                    }
                 }
             }
         }
@@ -255,169 +202,8 @@ impl AppRuntime {
         Ok(())
     }
 
-    async fn handle_p2p_command(cmd: P2PCommand, p2p_runtime: &Arc<P2PRuntime>) {
-        match cmd {
-            P2PCommand::GetLocalPeerId { respond_to } => {
-                let _ = respond_to.send(Ok(p2p_runtime.local_peer_id().to_string()));
-            }
-            P2PCommand::GetPeers { respond_to } => {
-                let peers = p2p_runtime.discovered_peers().await;
-                let _ = respond_to.send(Ok(peers));
-            }
-            P2PCommand::GetLocalDeviceInfo { respond_to } => {
-                use crate::infrastructure::runtime::LocalDeviceInfo;
-                let device_info = LocalDeviceInfo {
-                    peer_id: p2p_runtime.local_peer_id().to_string(),
-                    device_name: p2p_runtime.device_name().to_string(),
-                };
-                let _ = respond_to.send(Ok(device_info));
-            }
-            P2PCommand::GetPairedPeers { respond_to } => {
-                let peers = p2p_runtime.get_paired_peers().unwrap_or_else(|e| {
-                    log::error!("Failed to get peers: {}", e);
-                    Vec::new()
-                });
-                let _ = respond_to.send(Ok(peers));
-            }
-            P2PCommand::InitiatePairing {
-                peer_id,
-                device_name,
-                respond_to,
-            } => {
-                let (tx, rx) = oneshot::channel();
-                let local_peer_id = p2p_runtime.local_peer_id().to_string();
-                let _ = p2p_runtime
-                    .pairing_cmd_tx()
-                    .send(PairingCommand::Initiate {
-                        peer_id,
-                        device_name,
-                        local_peer_id,
-                        respond_to: tx,
-                    })
-                    .await;
-
-                tokio::spawn(async move {
-                    let result = match rx.await {
-                        Ok(res) => res.map_err(|e| e.to_string()),
-                        Err(_) => Err("Pairing actor dropped response".to_string()),
-                    };
-                    let _ = respond_to.send(result);
-                });
-            }
-            P2PCommand::VerifyPin {
-                session_id,
-                pin_matches,
-                respond_to,
-            } => {
-                let (tx, rx) = oneshot::channel();
-
-                let _ = p2p_runtime
-                    .pairing_cmd_tx()
-                    .send(PairingCommand::VerifyPin {
-                        session_id,
-                        pin_match: pin_matches,
-                        respond_to: tx,
-                    })
-                    .await;
-
-                tokio::spawn(async move {
-                    let result = match rx.await {
-                        Ok(res) => res.map_err(|e| e.to_string()),
-                        Err(_) => Err("Pairing actor dropped response".to_string()),
-                    };
-                    let _ = respond_to.send(result);
-                });
-            }
-            P2PCommand::RejectPairing {
-                session_id,
-                peer_id,
-                respond_to,
-            } => {
-                let (tx, rx) = oneshot::channel();
-                let _ = p2p_runtime
-                    .pairing_cmd_tx()
-                    .send(PairingCommand::Reject {
-                        session_id,
-                        peer_id,
-                        respond_to: tx,
-                    })
-                    .await;
-
-                tokio::spawn(async move {
-                    let result = match rx.await {
-                        Ok(res) => res.map_err(|e| e.to_string()),
-                        Err(_) => Err("Pairing actor dropped response".to_string()),
-                    };
-                    let _ = respond_to.send(result);
-                });
-            }
-            P2PCommand::UnpairDevice {
-                peer_id,
-                respond_to,
-            } => {
-                let result = p2p_runtime.unpair_peer(&peer_id).map_err(|e| e.to_string());
-                let _ = respond_to.send(result);
-            }
-            P2PCommand::AcceptPairing {
-                session_id,
-                respond_to,
-            } => {
-                let (tx, rx) = oneshot::channel();
-                let _ = p2p_runtime
-                    .pairing_cmd_tx()
-                    .send(PairingCommand::AcceptPairing {
-                        session_id,
-                        respond_to: tx,
-                    })
-                    .await;
-
-                tokio::spawn(async move {
-                    let result = match rx.await {
-                        Ok(res) => res.map_err(|e| e.to_string()),
-                        Err(_) => Err("Pairing actor dropped response".to_string()),
-                    };
-                    let _ = respond_to.send(result);
-                });
-            }
-            P2PCommand::GetPairedPeersWithStatus { respond_to } => {
-                use crate::infrastructure::runtime::PairedPeerWithStatus;
-
-                // Get paired peers from storage
-                let paired_peers = p2p_runtime.get_paired_peers().unwrap_or_else(|e| {
-                    log::error!("Failed to get peers: {}", e);
-                    Vec::new()
-                });
-
-                // Get currently connected peers
-                let connected_map = p2p_runtime.connected_peers().await;
-
-                // Merge connection status
-                let peers_with_status: Vec<PairedPeerWithStatus> = paired_peers
-                    .into_iter()
-                    .map(|p| {
-                        let connected = connected_map.contains_key(&p.peer_id);
-                        PairedPeerWithStatus {
-                            peer_id: p.peer_id,
-                            device_name: p.device_name,
-                            paired_at: p.paired_at.to_rfc3339(),
-                            last_seen: p.last_seen.map(|dt: chrono::DateTime<Utc>| dt.to_rfc3339()),
-                            last_known_addresses: p.last_known_addresses,
-                            connected,
-                        }
-                    })
-                    .collect();
-
-                let _ = respond_to.send(Ok(peers_with_status));
-            }
-        }
-    }
-
     /// Get the runtime handle
     pub fn handle(&self) -> AppRuntimeHandle {
-        AppRuntimeHandle::new(
-            self.clipboard_cmd_tx.clone(),
-            self.p2p_cmd_tx.clone(),
-            self.config.clone(),
-        )
+        AppRuntimeHandle::new(self.clipboard_cmd_tx.clone(), self.config.clone())
     }
 }

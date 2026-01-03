@@ -1,6 +1,7 @@
-//! Application service layer
+//! Services layer
 //!
-//! 高层服务模块，封装基础设施层实现，为应用层提供简洁接口。
+//! High-level service interfaces for application logic.
 
+pub mod p2p;
 pub mod storage;
 pub mod clipboard;
