@@ -710,6 +710,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "blake3"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3888aaa89e4b2a40fca9848e400f6a658a5a3978de7be858e209cafa8be9a4a0"
+dependencies = [
+ "arrayref",
+ "arrayvec",
+ "cc",
+ "cfg-if",
+ "constant_time_eq 0.3.1",
+]
+
+[[package]]
 name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8847,6 +8860,8 @@ dependencies = [
  "argon2",
  "async-trait",
  "base64 0.22.1",
+ "bincode",
+ "blake3",
  "bytes",
  "chrono",
  "clipboard-rs",
@@ -8862,6 +8877,7 @@ dependencies = [
  "futures",
  "futures-util",
  "gethostname",
+ "hex",
  "image",
  "iota_stronghold",
  "lazy_static",

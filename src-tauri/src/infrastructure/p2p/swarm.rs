@@ -1,22 +1,23 @@
 use chrono::Utc;
 use futures::StreamExt;
 use libp2p::{
-    gossipsub, identify, mdns, noise,
+    identify, mdns, noise,
     request_response::{self, ResponseChannel},
     swarm::SwarmEvent,
-    tcp, yamux, Multiaddr, PeerId, Swarm,
+    Multiaddr, PeerId, Swarm,
 };
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
-use super::behaviour::{
-    PairingRequest as ReqPairingRequest, PairingResponse as ReqPairingResponse,
-    UniClipboardBehaviour,
-};
+use super::behaviour::UniClipboardBehaviour;
+use super::blob::receiver::BlobReceiver;
+use super::blob::sender::BlobSender;
 use super::events::{ConnectedPeer, DiscoveredPeer, NetworkEvent, NetworkStatus};
 use super::protocol::{ClipboardMessage, DeviceAnnounceMessage, PairingMessage, ProtocolMessage};
+use super::transport;
+use super::{ReqPairingRequest, ReqPairingResponse};
 
 /// Holds a pending pairing response channel with metadata
 /// This is only available to the receiver of a request-response call
@@ -71,6 +72,18 @@ pub enum NetworkCommand {
         device_name: String,
         device_id: String,
     },
+    /// Send clipboard data to a specific peer via BlobStream.
+    ///
+    /// This command initiates a chunked stream transfer of clipboard content,
+    /// which is more efficient than broadcasting for large data.
+    SendClipboard {
+        peer_id: String,
+        data: Vec<u8>,
+        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
+    #[deprecated(
+        note = "BroadcastClipboard is deprecated in v2.0.0. Use SendClipboard with BlobStream instead."
+    )]
     BroadcastClipboard {
         message: ClipboardMessage,
     },
@@ -112,6 +125,17 @@ pub struct NetworkManager {
     pending_challenges: HashMap<String, PendingChallengeRequest>,
     /// Peers confirmed ready for broadcast (subscribed to clipboard topic).
     ready_peers: HashMap<PeerId, Instant>,
+    /// Active BlobStream send sessions
+    /// Maps session_id -> (peer_id, BlobSender)
+    /// Each session represents an ongoing chunked data transfer to a peer
+    active_blob_sends: HashMap<u32, (PeerId, BlobSender)>,
+    /// Active BlobStream receive sessions
+    /// Maps peer_id -> BlobReceiver
+    /// Each receiver handles incoming chunked data from a peer
+    active_blob_receives: HashMap<PeerId, BlobReceiver>,
+    /// Session ID counter for BlobStream transfers
+    /// Incremented for each new BlobStream session
+    next_session_id: u32,
     /// Current device name (updated when settings change)
     device_name: String,
     /// Our 6-digit device ID (from database)
@@ -129,13 +153,13 @@ impl NetworkManager {
         let local_peer_id = PeerId::from(local_key.public());
         info!("Local peer ID: {}", local_peer_id);
 
-        // Create swarm
+        // Create swarm with transport configuration module
         let swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
             .with_tcp(
-                tcp::Config::default(),
-                noise::Config::new,
-                yamux::Config::default,
+                transport::build_tcp_config(),
+                transport::build_noise_config,
+                transport::build_yamux_config,
             )?
             .with_behaviour(|_key| {
                 UniClipboardBehaviour::new(local_peer_id, &local_key, &device_name, &our_device_id)
@@ -153,6 +177,9 @@ impl NetworkManager {
             pending_responses: HashMap::new(),
             pending_challenges: HashMap::new(),
             ready_peers: HashMap::new(),
+            active_blob_sends: HashMap::new(),
+            active_blob_receives: HashMap::new(),
+            next_session_id: 0,
             device_name,
             our_device_id,
         })
@@ -194,11 +221,6 @@ impl NetworkManager {
     }
 
     pub async fn run(&mut self) {
-        // Subscribe to clipboard topic
-        if let Err(e) = self.swarm.behaviour_mut().subscribe_clipboard() {
-            error!("Failed to subscribe to clipboard topic: {}", e);
-        }
-
         // Get preferred local address for listening
         // On macOS, binding to 0.0.0.0 can cause mDNS routing issues with multiple interfaces
         let local_ip = crate::utils::helpers::get_preferred_local_address();
@@ -301,101 +323,6 @@ impl NetworkManager {
                     }
                 }
             }
-
-            SwarmEvent::Behaviour(super::behaviour::UniClipboardBehaviourEvent::Gossipsub(
-                event,
-            )) => match event {
-                gossipsub::Event::Message { message, .. } => {
-                    match ProtocolMessage::from_bytes(&message.data) {
-                        Ok(ProtocolMessage::Clipboard(clipboard_msg)) => {
-                            info!(
-                                "Received P2P clipboard message from device '{}' (device-id: {}, timestamp: {})",
-                                clipboard_msg.origin_device_name,
-                                clipboard_msg.origin_device_id,
-                                clipboard_msg.timestamp
-                            );
-                            let _ = self
-                                .event_tx
-                                .send(NetworkEvent::ClipboardReceived(clipboard_msg))
-                                .await;
-                        }
-                        Ok(ProtocolMessage::DeviceAnnounce(announce_msg)) => {
-                            debug!(
-                                "Received device announce from {}: {}",
-                                announce_msg.peer_id, announce_msg.device_name
-                            );
-
-                            let _ = self
-                                .event_tx
-                                .send(NetworkEvent::PeerNameUpdated {
-                                    peer_id: announce_msg.peer_id.clone(),
-                                    device_name: announce_msg.device_name.clone(),
-                                })
-                                .await;
-
-                            // Update local discovered_peers cache
-                            if let Ok(pid) = announce_msg.peer_id.parse::<PeerId>() {
-                                if let Some(discovered) = self.discovered_peers.get_mut(&pid) {
-                                    let old_name = discovered.device_name.clone();
-                                    discovered.device_name = Some(announce_msg.device_name.clone());
-
-                                    if old_name != discovered.device_name {
-                                        let _ = self
-                                            .event_tx
-                                            .send(NetworkEvent::PeerDiscovered(discovered.clone()))
-                                            .await;
-                                    }
-                                }
-                            }
-                        }
-                        Ok(msg) => {
-                            debug!("Received non-clipboard message via gossipsub: {:?}", msg);
-                        }
-                        Err(e) => {
-                            warn!("Failed to parse gossipsub message: {}", e);
-                        }
-                    }
-                }
-                gossipsub::Event::Subscribed { peer_id, topic } => {
-                    info!("Peer {} subscribed to topic {}", peer_id, topic);
-
-                    if topic.to_string().contains("clipboard") {
-                        self.ready_peers.insert(peer_id, Instant::now());
-
-                        let _ = self
-                            .event_tx
-                            .send(NetworkEvent::PeerReady {
-                                peer_id: peer_id.to_string(),
-                            })
-                            .await;
-                    }
-
-                    // Announce our device name
-                    let local_peer_id = self.swarm.local_peer_id().to_string();
-                    let announce_msg = DeviceAnnounceMessage {
-                        peer_id: local_peer_id,
-                        device_name: self.device_name.clone(),
-                        timestamp: Utc::now(),
-                    };
-                    let protocol_msg = ProtocolMessage::DeviceAnnounce(announce_msg);
-                    if let Err(e) = self.swarm.behaviour_mut().publish_clipboard(&protocol_msg) {
-                        debug!("Failed to announce device name: {}", e);
-                    }
-                }
-                gossipsub::Event::Unsubscribed { peer_id, topic } => {
-                    if topic.to_string().contains("clipboard") {
-                        self.ready_peers.remove(&peer_id);
-
-                        let _ = self
-                            .event_tx
-                            .send(NetworkEvent::PeerNotReady {
-                                peer_id: peer_id.to_string(),
-                            })
-                            .await;
-                    }
-                }
-                _ => {}
-            },
 
             SwarmEvent::Behaviour(
                 super::behaviour::UniClipboardBehaviourEvent::RequestResponse(event),
@@ -649,7 +576,10 @@ impl NetworkManager {
                         &device_id,
                         Some(device_name),
                     ) {
-                        warn!("Failed to update device {} with peer_id {}: {}", device_id, peer_id, e);
+                        warn!(
+                            "Failed to update device {} with peer_id {}: {}",
+                            device_id, peer_id, e
+                        );
                     }
                 }
             }
@@ -657,11 +587,40 @@ impl NetworkManager {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 debug!("Connection established with {}", peer_id);
 
-                // Add peer to gossipsub mesh explicitly
-                self.swarm
-                    .behaviour_mut()
-                    .gossipsub
-                    .add_explicit_peer(&peer_id);
+                // TODO: Handle incoming BlobStream connections
+                //
+                // When a new connection is established, we need to check if the peer
+                // is opening a BlobStream protocol stream. This requires:
+                //
+                // 1. Listen for new stream events from the peer
+                // 2. Check if the stream protocol matches our BlobStream protocol name
+                // 3. Create a BlobReceiver for the incoming session
+                // 4. Store it in active_blob_receives for tracking
+                //
+                // Example structure (pseudo-code):
+                // ```
+                // // This would be handled in a separate SwarmEvent::NewStream branch
+                // // when the peer opens a new stream with our protocol
+                // let receiver = BlobReceiver::new(session_id);
+                // self.active_blob_receives.insert(peer_id, receiver);
+                //
+                // // Then, as frames arrive:
+                // while let Some(frame) = read_frame_from_stream(stream).await? {
+                //     match receiver.handle_frame(frame)? {
+                //         FrameHandleResult::MetadataReceived => {
+                //             // Notify frontend about incoming transfer
+                //         }
+                //         FrameHandleResult::DataReceived { complete } => {
+                //             // Update progress
+                //         }
+                //         FrameHandleResult::TransferComplete => {
+                //             let data = receiver.assemble()?;
+                //             // Emit NetworkEvent::ClipboardReceived(data)
+                //         }
+                //         _ => {}
+                //     }
+                // }
+                // ```
 
                 let connected = ConnectedPeer {
                     peer_id: peer_id.to_string(),
@@ -682,11 +641,30 @@ impl NetworkManager {
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 debug!("Connection closed with {}", peer_id);
 
-                // Remove peer from gossipsub explicit peers
-                self.swarm
-                    .behaviour_mut()
-                    .gossipsub
-                    .remove_explicit_peer(&peer_id);
+                // Clean up BlobStream receiver session for this peer
+                if self.active_blob_receives.remove(&peer_id).is_some() {
+                    debug!(
+                        "Removed BlobStream receiver session for peer {} on connection close",
+                        peer_id
+                    );
+                }
+
+                // Clean up any active BlobStream send sessions to this peer
+                let sessions_to_remove: Vec<u32> = self
+                    .active_blob_sends
+                    .iter()
+                    .filter(|(_, (p, _))| *p == peer_id)
+                    .map(|(session_id, _)| *session_id)
+                    .collect();
+
+                for session_id in sessions_to_remove {
+                    if self.active_blob_sends.remove(&session_id).is_some() {
+                        debug!(
+                            "Removed BlobStream send session {} for peer {} on connection close",
+                            session_id, peer_id
+                        );
+                    }
+                }
 
                 if self.ready_peers.remove(&peer_id).is_some() {
                     let _ = self
@@ -722,23 +700,63 @@ impl NetworkManager {
 
     async fn handle_command(&mut self, command: NetworkCommand) {
         match command {
+            NetworkCommand::SendClipboard {
+                peer_id,
+                data,
+                respond_to,
+            } => {
+                // TODO: Implement BlobStream send logic
+                //
+                // This requires the following steps:
+                //
+                // 1. Parse peer_id and validate connection
+                // 2. Create a new BlobSender with the data
+                // 3. Generate a unique session_id using self.next_session_id
+                // 4. Open a new stream to the peer using Swarm::open_stream()
+                // 5. Send frames sequentially:
+                //    - Metadata frame (contains session info, hash, total frames)
+                //    - Data frames (chunked data, 32KB per frame)
+                //    - Complete frame (signals end of transfer)
+                // 6. Store the session in active_blob_sends for tracking
+                // 7. Handle errors and respond via respond_to channel
+                //
+                // Note: libp2p's Swarm::open_stream() requires:
+                // - The peer to be already connected
+                // - A protocol name to negotiate the stream
+                // - Async handling of the stream write operations
+                //
+                // Example structure (pseudo-code):
+                // ```
+                // let peer = peer_id.parse::<PeerId>().map_err(|e| e.to_string())?;
+                // let session_id = self.next_session_id;
+                // self.next_session_id += 1;
+                //
+                // let sender = BlobSender::new(data, session_id);
+                // self.active_blob_sends.insert(session_id, (peer, sender));
+                //
+                // // Open stream and send frames
+                // let mut stream = self.swarm.open_stream(&peer, ...).await?;
+                // while let Some(frame) = sender.next_frame()? {
+                //     stream.write_all(&frame.to_bytes()).await?;
+                // }
+                // stream.write_all(&sender.make_complete_frame().to_bytes()).await?;
+                //
+                // let _ = respond_to.send(Ok(()));
+                // ```
+
+                warn!(
+                    "SendClipboard command received for peer {}: BlobStream integration not yet implemented",
+                    peer_id
+                );
+                let _ = respond_to
+                    .send(Err("BlobStream integration is pending implementation".to_string()));
+            }
+
             NetworkCommand::BroadcastClipboard { message } => {
-                let protocol_msg = ProtocolMessage::Clipboard(message.clone());
-                match self.swarm.behaviour_mut().publish_clipboard(&protocol_msg) {
-                    Ok(_) => {
-                        debug!("Broadcast clipboard message: {}", message.id);
-                        let _ = self
-                            .event_tx
-                            .send(NetworkEvent::ClipboardSent {
-                                id: message.id,
-                                peer_count: self.connected_peers.len(),
-                            })
-                            .await;
-                    }
-                    Err(e) => {
-                        warn!("Failed to broadcast clipboard: {}", e);
-                    }
-                }
+                // GossipSub has been removed, clipboard broadcast is now handled by BlobStream
+                warn!(
+                    "BroadcastClipboard command is deprecated in v2.0.0 (use SendClipboard with BlobStream instead)"
+                );
             }
 
             NetworkCommand::SendPairingRequest { peer_id, message } => {
@@ -935,26 +953,6 @@ impl NetworkManager {
             } => {
                 info!("Reconnecting to peers");
 
-                let mesh_peers: std::collections::HashSet<PeerId> = self
-                    .swarm
-                    .behaviour()
-                    .gossipsub
-                    .all_mesh_peers()
-                    .cloned()
-                    .collect();
-
-                for peer_id in &mesh_peers {
-                    if !self.ready_peers.contains_key(peer_id) {
-                        self.ready_peers.insert(*peer_id, Instant::now());
-                        let _ = self
-                            .event_tx
-                            .send(NetworkEvent::PeerReady {
-                                peer_id: peer_id.to_string(),
-                            })
-                            .await;
-                    }
-                }
-
                 let mut dialed_peers: std::collections::HashSet<PeerId> =
                     std::collections::HashSet::new();
 
@@ -1020,22 +1018,8 @@ impl NetworkManager {
 
             NetworkCommand::AnnounceDeviceName { device_name } => {
                 self.device_name = device_name.clone();
-
-                let local_peer_id = self.swarm.local_peer_id().to_string();
-                let announce_msg = DeviceAnnounceMessage {
-                    peer_id: local_peer_id,
-                    device_name,
-                    timestamp: Utc::now(),
-                };
-                let protocol_msg = ProtocolMessage::DeviceAnnounce(announce_msg);
-                match self.swarm.behaviour_mut().publish_clipboard(&protocol_msg) {
-                    Ok(_) => {
-                        debug!("Broadcast device name announcement");
-                    }
-                    Err(e) => {
-                        warn!("Failed to broadcast device name announcement: {}", e);
-                    }
-                }
+                debug!("Device name updated to: {}", device_name);
+                // Device announcement is now handled via Identify protocol
             }
 
             NetworkCommand::StartListening
@@ -1048,6 +1032,11 @@ impl NetworkManager {
 impl std::fmt::Debug for NetworkCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::SendClipboard { peer_id, .. } => f
+                .debug_struct("SendClipboard")
+                .field("peer_id", peer_id)
+                .field("data_size", &"[REDACTED]")
+                .finish(),
             Self::SendPairingChallenge {
                 peer_id,
                 session_id,
