@@ -8,10 +8,8 @@ use clipboard_rs::common::RustImage;
 use clipboard_rs::{Clipboard, ClipboardContext};
 use clipboard_rs::{ClipboardHandler, RustImageData};
 use log::{debug, info};
-use std::fs;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
-use twox_hash::xxh3::hash64;
 
 pub struct RsClipboard(Arc<Mutex<dyn ClipboardContextTrait>>, Arc<Notify>, Setting);
 

@@ -306,7 +306,6 @@ impl ClipboardSyncService {
         let last_payload = self.last_payload.clone();
         let record_manager = self.record_manager.clone();
         let file_storage = self.file_storage.clone();
-        let device_id = self.device_id.clone();
 
         tokio::spawn(async move {
             while is_running.load(Ordering::SeqCst) {

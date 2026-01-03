@@ -1,5 +1,4 @@
 use crate::domain::clipboard_metadata::ClipboardMetadata;
-use crate::domain::transfer_message::ClipboardTransferMessage;
 use crate::infrastructure::storage::db::schema::clipboard_records;
 use anyhow::Result;
 use chrono::Utc;
@@ -9,9 +8,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::db::dao::clipboard_record;
-use super::db::models::clipboard_record::{
-    DbClipboardRecord, ExtraInfo, FileExtra, Filter, OrderBy,
-};
+use super::db::models::clipboard_record::{DbClipboardRecord, Filter, OrderBy};
 use super::db::pool::DB_POOL;
 
 #[derive(Serialize, Deserialize, Debug)]

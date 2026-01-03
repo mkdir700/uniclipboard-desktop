@@ -7,7 +7,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clipboard_rs::{ClipboardWatcher, ClipboardWatcherContext};
 use log::error;
-use log::{debug, info};
+use log::info;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
