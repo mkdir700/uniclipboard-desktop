@@ -311,7 +311,7 @@ impl PairingManager {
             session_id: session_id.clone(),
             device_name,
             device_id: self.our_device_id.clone(), // Our 6-digit stable ID
-            peer_id: local_peer_id,               // Our current libp2p PeerId
+            peer_id: local_peer_id,                // Our current libp2p PeerId
         };
 
         let message = super::protocol::ProtocolMessage::Pairing(
@@ -380,7 +380,10 @@ impl PairingManager {
             (
                 session.peer_id.clone(),
                 session.peer_device_name.clone(),
-                session.peer_device_id.clone().ok_or_else(|| anyhow!("Peer device ID not found in session"))?,
+                session
+                    .peer_device_id
+                    .clone()
+                    .ok_or_else(|| anyhow!("Peer device ID not found in session"))?,
             )
         };
 
@@ -742,7 +745,14 @@ mod tests {
         let (cmd_tx, _) = mpsc::channel(100);
         let (event_tx, _) = mpsc::channel(100);
         let (_, command_rx) = mpsc::channel(100);
-        PairingManager::new(cmd_tx, event_tx, command_rx, "Test Device".to_string())
+        PairingManager::new(
+            cmd_tx,
+            event_tx,
+            command_rx,
+            "Test Device".to_string(),
+            "test-device-id".to_string(),
+            "test-peer-id".to_string(),
+        )
     }
 }
 
