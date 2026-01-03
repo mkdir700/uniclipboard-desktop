@@ -92,7 +92,7 @@ pub fn configure_quic(cfg: quic::Config) -> quic::Config {
     info!("║     QUIC Transport Configuration          ║");
     info!("╚══════════════════════════════════════════╝");
     info!("Handshake timeout: 30s (increased from 10s)");
-    info!("Idle timeout: 120s (increased from 60s)");
+    info!("Idle timeout: 300s (5 minutes) - optimized for clipboard low-frequency usage");
     info!("Keep-alive interval: 10s (more aggressive)");
     info!("MTU upper bound: 1400 bytes (more conservative)");
     info!("Max concurrent streams: 64");
@@ -108,9 +108,10 @@ pub fn configure_quic(cfg: quic::Config) -> quic::Config {
     // 诊断日志显示 10s 超时确实在生效，但握手无法在 10s 内完成
     cfg.handshake_timeout = Duration::from_secs(30);
 
-    // idle 超时：增加到 120s，避免意外断开
+    // idle 超时：增加到 300s (5分钟)，适应剪贴板低频使用场景
     // 字段单位是 ms（u32）
-    cfg.max_idle_timeout = 120_000;
+    // 剪贴板是低频事件（用户可能几分钟才复制一次），2分钟无活动就可能断开
+    cfg.max_idle_timeout = 300_000;
 
     // keep-alive：更积极的保活策略，设置为 10s
     // 必须小于双方 idle_timeout 才有效
