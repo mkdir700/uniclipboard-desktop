@@ -317,7 +317,10 @@ impl ClipboardSyncService {
 
                 match sync.pull(Some(Duration::from_secs(10))).await {
                     Ok(message) => {
-                        info!("Pulled clipboard message from remote sync (message-id: {})", message.message_id);
+                        info!(
+                            "Pulled clipboard message from remote sync (message-id: {})",
+                            message.message_id
+                        );
 
                         // Check download policy
                         let content_type = message.metadata.get_content_type();
@@ -334,11 +337,17 @@ impl ClipboardSyncService {
                         };
 
                         if !should_download {
-                            info!("Content type {:?} not in download scope, skipping", content_type);
+                            info!(
+                                "Content type {:?} not in download scope, skipping",
+                                content_type
+                            );
                             continue;
                         }
 
-                        info!("Content type {:?} accepted by download policy", content_type);
+                        info!(
+                            "Content type {:?} accepted by download policy",
+                            content_type
+                        );
 
                         // Build Payload directly from message (content is already included)
                         let payload = match Payload::try_from(&message) {
@@ -360,7 +369,10 @@ impl ClipboardSyncService {
 
                         // Save to database
                         let metadata = (&payload, &file_path).into();
-                        match record_manager.add_or_update_record_with_metadata(&metadata).await {
+                        match record_manager
+                            .add_or_update_record_with_metadata(&metadata)
+                            .await
+                        {
                             Ok(record_id) => {
                                 info!("Saved clipboard record to database: {}", record_id);
 
@@ -375,7 +387,9 @@ impl ClipboardSyncService {
                                     error!("Failed to set clipboard content: {:?}", e);
                                     *last_payload.write().await = prev_payload;
                                 } else {
-                                    info!("Successfully wrote clipboard content to local clipboard");
+                                    info!(
+                                        "Successfully wrote clipboard content to local clipboard"
+                                    );
                                     publish_clipboard_new_content(record_id);
                                 }
                             }

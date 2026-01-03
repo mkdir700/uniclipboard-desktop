@@ -208,10 +208,12 @@ impl RemoteClipboardSync for Libp2pSync {
         info!("Pulling clipboard message from P2P internal channel");
         // We just wait for messages on the channel
         let mut rx = self.clipboard_rx.lock().await;
-        let msg = rx.recv()
+        let msg = rx
+            .recv()
             .await
             .ok_or_else(|| anyhow!("Clipboard channel closed"))?;
-        info!("Received clipboard message from internal channel: type={:?}, size={} bytes",
+        info!(
+            "Received clipboard message from internal channel: type={:?}, size={} bytes",
             msg.metadata.get_content_type(),
             msg.metadata.get_size()
         );

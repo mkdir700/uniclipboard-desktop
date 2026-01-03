@@ -89,8 +89,9 @@ impl AppRuntime {
 
         // 4. Initialize ClipboardSyncService
         // Use P2P sync directly if available
-        let remote_sync: Option<Arc<dyn RemoteClipboardSync>> =
-            p2p_runtime.p2p_sync().map(|s| s as Arc<dyn RemoteClipboardSync>);
+        let remote_sync: Option<Arc<dyn RemoteClipboardSync>> = p2p_runtime
+            .p2p_sync()
+            .map(|s| s as Arc<dyn RemoteClipboardSync>);
 
         if remote_sync.is_some() {
             log::info!("P2P sync handler configured");

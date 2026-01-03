@@ -285,7 +285,8 @@ impl P2PRuntime {
                         }
 
                         // Also save to DeviceManager (database) for clipboard sync
-                        let device_manager = crate::application::device_service::get_device_manager();
+                        let device_manager =
+                            crate::application::device_service::get_device_manager();
                         match device_manager.get(&peer_device_id) {
                             Ok(Some(mut existing_device)) => {
                                 // Update existing device with new peer_id and info
@@ -294,7 +295,11 @@ impl P2PRuntime {
                                 existing_device.is_paired = true;
                                 existing_device.last_seen = Some(Utc::now().timestamp() as i32);
                                 if let Err(e) = device_manager.add(existing_device) {
-                                    log::error!("Failed to update paired device {}: {}", peer_device_id, e);
+                                    log::error!(
+                                        "Failed to update paired device {}: {}",
+                                        peer_device_id,
+                                        e
+                                    );
                                 }
                             }
                             Ok(None) => {
@@ -311,7 +316,11 @@ impl P2PRuntime {
                                 new_device.is_paired = true;
                                 new_device.last_seen = Some(Utc::now().timestamp() as i32);
                                 if let Err(e) = device_manager.add(new_device) {
-                                    log::error!("Failed to add paired device {}: {}", peer_device_id, e);
+                                    log::error!(
+                                        "Failed to add paired device {}: {}",
+                                        peer_device_id,
+                                        e
+                                    );
                                 }
                             }
                             Err(e) => {

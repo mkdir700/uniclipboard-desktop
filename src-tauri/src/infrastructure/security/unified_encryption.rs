@@ -220,7 +220,10 @@ mod tests {
     #[tokio::test]
     async fn test_unified_encryption() {
         let encryption = UnifiedEncryption::new();
-        encryption.initialize_from_password("test_password").await.unwrap();
+        encryption
+            .initialize_from_password("test_password")
+            .await
+            .unwrap();
         assert!(encryption.is_ready().await);
 
         let plaintext = b"Hello, World!";
@@ -241,7 +244,10 @@ mod tests {
     #[tokio::test]
     async fn test_clear() {
         let encryption = UnifiedEncryption::new();
-        encryption.initialize_from_password("test_password").await.unwrap();
+        encryption
+            .initialize_from_password("test_password")
+            .await
+            .unwrap();
         assert!(encryption.is_ready().await);
 
         encryption.clear().await;

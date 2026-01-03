@@ -649,7 +649,10 @@ impl NetworkManager {
                         &device_id,
                         Some(device_name),
                     ) {
-                        warn!("Failed to update device {} with peer_id {}: {}", device_id, peer_id, e);
+                        warn!(
+                            "Failed to update device {} with peer_id {}: {}",
+                            device_id, peer_id, e
+                        );
                     }
                 }
             }
