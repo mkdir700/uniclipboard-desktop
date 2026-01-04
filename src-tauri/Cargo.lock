@@ -8825,6 +8825,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
 
 [[package]]
+name = "uc-app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uc-core",
+]
+
+[[package]]
+name = "uc-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tokio",
+ "twox-hash",
+]
+
+[[package]]
 name = "uds_windows"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8946,6 +8975,8 @@ dependencies = [
  "tokio-util",
  "toml 0.8.23",
  "twox-hash",
+ "uc-app",
+ "uc-core",
  "uuid",
  "warp",
  "winapi",

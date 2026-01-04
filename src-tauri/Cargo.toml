@@ -18,6 +18,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# ===== Workspace crates =====
+uc-core = { path = "crates/uc-core" }
+uc-app = { path = "crates/uc-app" }
+
 # ===== Tauri 相关依赖 =====
 tauri = { version = "2", features = [] }  # Tauri 框架核心库
 tauri-plugin-opener = "2"  # 用于打开文件或URL的Tauri插件
@@ -142,3 +146,10 @@ serial_test = "3.1.1"
 enigo = "0.2.1"
 arboard = "3.4.1"
 ctor = "0.2.8"
+
+[workspace]
+members = [
+    "crates/uc-core",
+    "crates/uc-app",
+]
+resolver = "2"
