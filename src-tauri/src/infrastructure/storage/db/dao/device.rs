@@ -151,7 +151,11 @@ pub fn update_device_peer_id(conn: &mut SqliteConnection, id: &str, peer_id: &st
     Ok(())
 }
 
-pub fn update_device_last_seen(conn: &mut SqliteConnection, id: &str, last_seen: i32) -> Result<()> {
+pub fn update_device_last_seen(
+    conn: &mut SqliteConnection,
+    id: &str,
+    last_seen: i32,
+) -> Result<()> {
     diesel::update(devices::table.find(id))
         .set(devices::last_seen.eq(last_seen))
         .execute(conn)
