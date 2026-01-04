@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 # ===== Workspace crates =====
 uc-core = { path = "crates/uc-core" }
 uc-app = { path = "crates/uc-app" }
+uc-network = { path = "crates/uc-network" }
 
 # ===== Tauri 相关依赖 =====
 tauri = { version = "2", features = [] }  # Tauri 框架核心库
@@ -151,5 +152,6 @@ ctor = "0.2.8"
 members = [
     "crates/uc-core",
     "crates/uc-app",
+    "crates/uc-network",
 ]
 resolver = "2"

@@ -8836,6 +8836,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "uc-core",
+ "uc-network",
 ]
 
 [[package]]
@@ -8851,6 +8852,30 @@ dependencies = [
  "serde_json",
  "tokio",
  "twox-hash",
+]
+
+[[package]]
+name = "uc-network"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "bincode",
+ "blake3",
+ "chrono",
+ "futures",
+ "hex",
+ "libp2p",
+ "libp2p-stream",
+ "log",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tokio",
+ "uc-core",
+ "uuid",
+ "x25519-dalek",
 ]
 
 [[package]]
@@ -8977,6 +9002,7 @@ dependencies = [
  "twox-hash",
  "uc-app",
  "uc-core",
+ "uc-network",
  "uuid",
  "warp",
  "winapi",

@@ -3,5 +3,8 @@
 pub mod events;
 pub mod protocol;
 
-pub use events::{NetworkEvent, NetworkStatus, DiscoveredPeer, ConnectedPeer};
-pub use protocol::{ProtocolMessage, PairingMessage, ClipboardMessage, HeartbeatMessage, DeviceAnnounceMessage};
+pub use events::{ConnectedPeer, DiscoveredPeer, NetworkEvent, NetworkStatus};
+pub use protocol::{
+    ClipboardMessage, DeviceAnnounceMessage, HeartbeatMessage, PairingChallenge, PairingConfirm,
+    PairingMessage, PairingRequest, PairingResponse, ProtocolMessage,
+};
