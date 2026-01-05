@@ -20,8 +20,8 @@ pub struct ClipboardItemRow {
     /// item 级内容 hash
     pub content_hash: String,
 
-    /// 本地落盘路径（加密后的 payload）
-    pub store_path: Option<String>,
+    /// blob 存储 ID
+    pub blob_id: Option<String>,
 
     /// 内容大小（字节）
     pub size: Option<i32>,
@@ -38,7 +38,7 @@ pub struct NewClipboardItemRow<'a> {
     pub index_in_record: i32,
     pub content_type: &'a str,
     pub content_hash: &'a str,
-    pub store_path: Option<&'a str>,
+    pub blob_id: Option<&'a str>,
     pub size: Option<i32>,
     pub mime: Option<&'a str>,
 }
@@ -51,12 +51,34 @@ pub struct NewClipboardItemRowOwned {
     pub index_in_record: i32,
     pub content_type: String,
     pub content_hash: String,
-    pub store_path: Option<String>,
+    pub blob_id: Option<String>,
     pub size: Option<i32>,
     pub mime: Option<String>,
 }
 
 impl<'a> From<&'a NewClipboardItemRowOwned> for NewClipboardItemRow<'a> {
+    /// Creates a `NewClipboardItemRow` that borrows string data from the given owned instance.
+    ///
+    /// The returned `NewClipboardItemRow` contains references to the `owned` instance's string fields;
+    /// `blob_id` and `mime` are converted from `Option<String>` to `Option<&str>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let owned = NewClipboardItemRowOwned {
+    ///     id: "id".to_string(),
+    ///     record_id: "rec".to_string(),
+    ///     index_in_record: 0,
+    ///     content_type: "text".to_string(),
+    ///     content_hash: "hash".to_string(),
+    ///     blob_id: Some("blob".to_string()),
+    ///     size: Some(42),
+    ///     mime: Some("text/plain".to_string()),
+    /// };
+    /// let borrowed: NewClipboardItemRow = (&owned).into();
+    /// assert_eq!(borrowed.id, owned.id.as_str());
+    /// assert_eq!(borrowed.blob_id, owned.blob_id.as_deref());
+    /// ```
     fn from(owned: &'a NewClipboardItemRowOwned) -> Self {
         NewClipboardItemRow {
             id: &owned.id,
@@ -64,7 +86,7 @@ impl<'a> From<&'a NewClipboardItemRowOwned> for NewClipboardItemRow<'a> {
             index_in_record: owned.index_in_record,
             content_type: &owned.content_type,
             content_hash: &owned.content_hash,
-            store_path: owned.store_path.as_deref(),
+            blob_id: owned.blob_id.as_deref(),
             size: owned.size,
             mime: owned.mime.as_deref(),
         }

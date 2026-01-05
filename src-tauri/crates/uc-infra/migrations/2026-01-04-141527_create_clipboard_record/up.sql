@@ -65,9 +65,8 @@ CREATE TABLE t_clipboard_item (
   -- 该 item 的内容 hash（用于 item 级去重、快速比较、以及 watcher 防回环）
   content_hash     TEXT NOT NULL,
 
-  -- 内容存储路径：指向本地落盘文件（建议存加密后的 payload 文件路径）
-  -- 对于小文本你也可以不落盘，此字段可为 NULL
-  store_path       TEXT,
+  -- 内容存储的 Blob ID：用于从 Blob 存储系统获取内容
+  blob_id          TEXT,
 
   -- 条目大小（字节数），用于清理策略与传输策略（例如大文件走 chunk）
   size             INTEGER,

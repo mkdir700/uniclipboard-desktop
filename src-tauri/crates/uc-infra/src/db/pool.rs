@@ -1,63 +1,69 @@
-use anyhow::{anyhow, Result};
-use diesel::prelude::*;
-use diesel::r2d2::{self, ConnectionManager};
-use once_cell::sync::Lazy;
-use std::env;
+use anyhow::Result;
+use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::sqlite::SqliteConnection;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use log::info;
 
-use crate::config::get_config_dir;
-use crate::infrastructure::storage::db::migrations::run_migrations;
+/// Embed all diesel migrations at compile time
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
-// 定义连接池类型
-pub type DbPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
+/// Type alias for SQLite connection pool
+pub type DbPool = Pool<ConnectionManager<SqliteConnection>>;
 
-// 定义一个用于管理数据库连接池的结构体
-pub struct DbManager {
-    pub pool: DbPool,
+/// Initialize the database connection pool and apply embedded migrations.
+///
+/// This must be called once at application startup. On success it returns a ready-to-use
+/// `DbPool` with all pending Diesel migrations applied.
+///
+/// # Errors
+///
+/// Returns an `anyhow::Error` if obtaining a connection from the pool or applying migrations fails.
+///
+/// # Panics
+///
+/// Panics if creating the r2d2 connection pool fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// let pool = init_db_pool(":memory:").expect("failed to initialize DB pool");
+/// // use `pool` to acquire connections: let conn = pool.get().unwrap();
+/// ```
+pub fn init_db_pool(database_url: &str) -> Result<DbPool> {
+    let manager = ConnectionManager::<SqliteConnection>::new(database_url);
+
+    let pool = Pool::builder()
+        .build(manager)
+        .expect("Failed to create database pool");
+
+    run_migrations(&pool)?;
+
+    Ok(pool)
 }
 
-impl DbManager {
-    // 创建一个新的 DbManager 实例
-    pub fn new() -> Result<Self, diesel::r2d2::PoolError> {
-        // 从环境变量中获取数据库 URL, 如果环境变量中没有设置 DATABASE_URL，则使用默认的配置目录
-        let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-            let config_dir = get_config_dir().unwrap();
-            config_dir
-                .join("uniclipboard.db")
-                .to_str()
-                .unwrap()
-                .to_string()
-        });
+/// Apply the embedded Diesel migrations using the supplied connection pool.
+///
+/// Obtains a connection from `pool` and runs all pending embedded migrations compiled into
+/// `MIGRATIONS`. Logs progress and returns when migrations complete.
+///
+/// # Errors
+///
+/// Returns an error if acquiring a connection from the pool fails or if applying migrations fails.
+///
+/// # Examples
+///
+/// ```
+/// # use uc_infra::db::{init_db_pool, run_migrations};
+/// let pool = init_db_pool("file::memory:?mode=memory&cache=shared").unwrap();
+/// run_migrations(&pool).unwrap();
+/// ```
+fn run_migrations(pool: &DbPool) -> Result<()> {
+    let mut conn = pool.get()?;
 
-        // 创建连接管理器
-        let manager = ConnectionManager::<SqliteConnection>::new(database_url);
+    info!("Running database migrations...");
+    conn.run_pending_migrations(MIGRATIONS)
+        .map_err(|e| anyhow::anyhow!("Migration failed: {}", e))?;
+    info!("Database migrations completed");
 
-        // 创建连接池
-        let pool = r2d2::Pool::builder().build(manager)?;
-
-        Ok(DbManager { pool })
-    }
-
-    pub fn init(&self) -> Result<()> {
-        self.run_migrations()
-    }
-
-    // 运行数据库迁移
-    pub fn run_migrations(&self) -> Result<()> {
-        let mut conn = self
-            .get_connection()
-            .map_err(|e| anyhow!("Failed to get connection: {}", e))?;
-        run_migrations(&mut conn).map_err(|e| anyhow!("Failed to run migrations: {}", e))
-    }
-
-    // 获取数据库连接
-    pub fn get_connection(
-        &self,
-    ) -> Result<r2d2::PooledConnection<ConnectionManager<SqliteConnection>>, diesel::r2d2::PoolError>
-    {
-        self.pool.get()
-    }
+    Ok(())
 }
-
-// 创建一个全局的数据库连接池
-pub static DB_POOL: Lazy<DbManager> =
-    Lazy::new(|| DbManager::new().expect("Failed to create DB manager"));

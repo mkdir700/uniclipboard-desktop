@@ -79,6 +79,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
+use crate::clipboard::meta_keys;
 use crate::clipboard::MimeType;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -183,13 +184,81 @@ impl ClipboardItem {
 }
 
 impl ClipboardContent {
-    /// Compute a hash of the clipboard content for deduplication
+    /// Computes a hexadecimal deduplication hash for this clipboard snapshot.
+    ///
+    /// The hash is derived deterministically from the snapshot's schema version and its items and
+    /// intended for use as a deduplication key.
+    ///
+    /// # Returns
+    ///
+    /// A lowercase hexadecimal string representing the computed hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::BTreeMap;
+    ///
+    /// let content = ClipboardContent {
+    ///     v: 1,
+    ///     ts_ms: 0,
+    ///     items: Vec::new(),
+    ///     meta: BTreeMap::new(),
+    /// };
+    /// let h1 = content.content_hash();
+    /// let h2 = content.content_hash();
+    /// assert_eq!(h1, h2);
+    /// ```
     pub fn content_hash(&self) -> String {
         use std::hash::DefaultHasher;
         let mut hasher = DefaultHasher::new();
         self.v.hash(&mut hasher);
         self.items.hash(&mut hasher);
         format!("{:x}", hasher.finish())
+    }
+
+    /// Retrieve the device identifier stored in the snapshot's metadata.
+    ///
+    /// Looks up the metadata entry keyed by `meta_keys::sys::DEVICE_ID` and returns its string value if present.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::BTreeMap;
+    /// use crate::clipboard::meta_keys;
+    /// // Construct a minimal ClipboardContent with the device id in meta.
+    /// let mut meta = BTreeMap::new();
+    /// meta.insert(meta_keys::sys::DEVICE_ID.to_string(), "device-123".to_string());
+    /// let content = ClipboardContent { v: 1, ts_ms: 0, items: vec![], meta };
+    /// assert_eq!(content.get_device_id(), Some("device-123"));
+    /// ```
+    pub fn get_device_id(&self) -> Option<&str> {
+        self.meta.get(meta_keys::sys::DEVICE_ID).map(|s| s.as_str())
+    }
+
+    /// Returns the origin identifier stored in the content's metadata, if present.
+    ///
+    /// The origin is read from the metadata key `meta_keys::sys::ORIGIN`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::BTreeMap;
+    /// use crate::clipboard::{meta_keys, ClipboardContent, ClipboardItem, ClipboardData, MimeType};
+    ///
+    /// let mut meta = BTreeMap::new();
+    /// meta.insert(meta_keys::sys::ORIGIN.to_string(), "remote-device".to_string());
+    ///
+    /// let content = ClipboardContent {
+    ///     v: 1,
+    ///     ts_ms: 0,
+    ///     items: Vec::new(),
+    ///     meta,
+    /// };
+    ///
+    /// assert_eq!(content.get_origin(), Some("remote-device"));
+    /// ```
+    pub fn get_origin(&self) -> Option<&str> {
+        self.meta.get(meta_keys::sys::ORIGIN).map(|s| s.as_str())
     }
 }
 
