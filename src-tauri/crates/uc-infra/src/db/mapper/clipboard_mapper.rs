@@ -81,6 +81,9 @@ impl From<&ClipboardContent> for NewClipboardRecordRowOwned {
 /// assert_eq!(item.mime.0, "text/plain");
 /// assert_eq!(item.meta.get(&meta_keys::sys::SIZE_BYTES.to_string()).unwrap(), "123");
 /// ```
+/// This is a helper function rather than a `From` impl because the actual
+/// clipboard data is stored externally (referenced by `blob_id`), and
+/// must be provided separately.
 pub fn map_item_row_to_item(row: &ClipboardItemRow, data: ClipboardData) -> ClipboardItem {
     let mut meta = BTreeMap::new();
     if let Some(size) = row.size {
