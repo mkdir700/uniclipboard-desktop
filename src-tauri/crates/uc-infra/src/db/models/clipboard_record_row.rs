@@ -37,3 +37,29 @@ pub struct NewClipboardRecordRow<'a> {
     pub created_at: i64,
     pub deleted_at: Option<i64>,
 }
+
+/// Owned version of NewClipboardRecordRow for easier construction
+#[derive(Debug, Clone)]
+pub struct NewClipboardRecordRowOwned {
+    pub id: String,
+    pub source_device_id: String,
+    pub origin: String,
+    pub record_hash: String,
+    pub item_count: i32,
+    pub created_at: i64,
+    pub deleted_at: Option<i64>,
+}
+
+impl<'a> From<&'a NewClipboardRecordRowOwned> for NewClipboardRecordRow<'a> {
+    fn from(owned: &'a NewClipboardRecordRowOwned) -> Self {
+        NewClipboardRecordRow {
+            id: &owned.id,
+            source_device_id: &owned.source_device_id,
+            origin: &owned.origin,
+            record_hash: &owned.record_hash,
+            item_count: owned.item_count,
+            created_at: owned.created_at,
+            deleted_at: owned.deleted_at,
+        }
+    }
+}

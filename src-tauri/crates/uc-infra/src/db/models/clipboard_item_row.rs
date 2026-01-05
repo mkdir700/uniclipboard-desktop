@@ -42,3 +42,31 @@ pub struct NewClipboardItemRow<'a> {
     pub size: Option<i32>,
     pub mime: Option<&'a str>,
 }
+
+/// Owned version of NewClipboardItemRow for easier construction
+#[derive(Debug, Clone)]
+pub struct NewClipboardItemRowOwned {
+    pub id: String,
+    pub record_id: String,
+    pub index_in_record: i32,
+    pub content_type: String,
+    pub content_hash: String,
+    pub store_path: Option<String>,
+    pub size: Option<i32>,
+    pub mime: Option<String>,
+}
+
+impl<'a> From<&'a NewClipboardItemRowOwned> for NewClipboardItemRow<'a> {
+    fn from(owned: &'a NewClipboardItemRowOwned) -> Self {
+        NewClipboardItemRow {
+            id: &owned.id,
+            record_id: &owned.record_id,
+            index_in_record: owned.index_in_record,
+            content_type: &owned.content_type,
+            content_hash: &owned.content_hash,
+            store_path: owned.store_path.as_deref(),
+            size: owned.size,
+            mime: owned.mime.as_deref(),
+        }
+    }
+}
