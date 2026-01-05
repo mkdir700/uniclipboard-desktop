@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use std::fs;
+use tokio::fs;
 use uc_core::ports::{BlobMeta, BlobStorePort};
 
 const BLOBS_DIR: &str = "blobs";
@@ -28,6 +28,11 @@ impl FsBlobStore {
     }
 }
 
+fn validate_blob_id(blob_id: &str) -> Result<()> {
+    uuid::Uuid::parse_str(blob_id)?;
+    Ok(())
+}
+
 #[async_trait]
 impl BlobStorePort for FsBlobStore {
     /// Stores a blob by creating a new UUID-named directory under the store root and persisting its metadata and data.
@@ -49,13 +54,13 @@ impl BlobStorePort for FsBlobStore {
     async fn create(&self, meta: BlobMeta, bytes: Vec<u8>) -> Result<String> {
         let blob_id = uuid::Uuid::new_v4().to_string();
         let dir = self.root.join(BLOBS_DIR).join(&blob_id);
-        fs::create_dir_all(&dir)?;
+        fs::create_dir_all(&dir).await?;
 
         let meta_path = dir.join(format!("{}", BLOB_META_FILE_NAME));
-        fs::write(meta_path, serde_json::to_vec(&meta)?)?;
+        fs::write(meta_path, serde_json::to_vec(&meta)?).await?;
 
         let data_path = dir.join(format!("{}", BLOB_DATA_FILE_NAME));
-        fs::write(data_path, bytes)?;
+        fs::write(data_path, bytes).await?;
 
         Ok(blob_id)
     }
@@ -75,13 +80,14 @@ impl BlobStorePort for FsBlobStore {
     /// // use `meta`
     /// ```
     async fn read_meta(&self, blob_id: &str) -> Result<BlobMeta> {
+        validate_blob_id(blob_id)?;
         let path = self
             .root
             .join(BLOBS_DIR)
             .join(blob_id)
             .join(BLOB_META_FILE_NAME);
 
-        let meta_bytes = fs::read(path)?;
+        let meta_bytes = fs::read(path).await?;
         let meta: BlobMeta = serde_json::from_slice(&meta_bytes)?;
         Ok(meta)
     }
@@ -106,13 +112,14 @@ impl BlobStorePort for FsBlobStore {
     /// assert!(!bytes.is_empty());
     /// ```
     async fn read_data(&self, blob_id: &str) -> Result<Vec<u8>> {
+        validate_blob_id(blob_id)?;
         let path = self
             .root
             .join(BLOBS_DIR)
             .join(blob_id)
             .join(BLOB_DATA_FILE_NAME);
 
-        Ok(fs::read(path)?)
+        Ok(fs::read(path).await?)
     }
 
     /// Removes the blob directory and all its contents for the specified blob ID from the store.
@@ -133,8 +140,9 @@ impl BlobStorePort for FsBlobStore {
     ///
     /// `Ok(())` on success, or an `Err` if the directory cannot be removed.
     async fn delete(&self, blob_id: &str) -> Result<()> {
+        validate_blob_id(blob_id)?;
         let path = self.root.join(BLOBS_DIR).join(blob_id);
-        fs::remove_dir_all(path)?;
+        fs::remove_dir_all(path).await?;
         Ok(())
     }
 }
