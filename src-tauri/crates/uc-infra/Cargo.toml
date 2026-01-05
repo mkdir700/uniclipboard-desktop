@@ -35,10 +35,11 @@ diesel_migrations = { version = "2.2.0", features = ["sqlite"] } # Diesel迁移�
 
 # Async runtime (for mpsc channels in ports)
 tokio = { version = "1", features = ["sync"] }
+log = "0.4.29"
 
 [dependencies.uuid]
 version = "1.10.0"
 features = ["v4"]
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["full", "test-util"] }

@@ -3,11 +3,12 @@ use crate::db::models::{
 };
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
+use uc_core::clipboard::meta_keys;
 use uc_core::clipboard::{ClipboardContent, ClipboardData, ClipboardItem, MimeType};
 use uuid::Uuid;
 
-impl From<(&ClipboardItem, &str, i32)> for NewClipboardItemRowOwned {
-    fn from((item, record_id, index): (&ClipboardItem, &str, i32)) -> Self {
+impl From<(&ClipboardItem, &str, &str, i32)> for NewClipboardItemRowOwned {
+    fn from((item, record_id, blob_id, index): (&ClipboardItem, &str, &str, i32)) -> Self {
         let size = item.size_bytes().and_then(|v| v.try_into().ok());
 
         NewClipboardItemRowOwned {
@@ -16,15 +17,17 @@ impl From<(&ClipboardItem, &str, i32)> for NewClipboardItemRowOwned {
             index_in_record: index,
             content_type: item.mime.to_string(),
             content_hash: item_hash(item),
-            store_path: None,
+            blob_id: Some(blob_id.to_string()),
             size,
             mime: Some(item.mime.to_string()),
         }
     }
 }
 
-impl From<(&ClipboardContent, &str, &str)> for NewClipboardRecordRowOwned {
-    fn from((content, device_id, origin): (&ClipboardContent, &str, &str)) -> Self {
+impl From<&ClipboardContent> for NewClipboardRecordRowOwned {
+    fn from(content: &ClipboardContent) -> Self {
+        let device_id = content.get_device_id().unwrap_or("unknown");
+        let origin = content.get_origin().unwrap_or("unknown");
         NewClipboardRecordRowOwned {
             id: Uuid::new_v4().to_string(),
             source_device_id: device_id.to_string(),
@@ -45,10 +48,10 @@ impl From<(&ClipboardContent, &str, &str)> for NewClipboardRecordRowOwned {
 pub fn map_item_row_to_item(row: &ClipboardItemRow, data: ClipboardData) -> ClipboardItem {
     let mut meta = BTreeMap::new();
     if let Some(size) = row.size {
-        meta.insert("sys.size_bytes".to_string(), size.to_string());
+        meta.insert(meta_keys::sys::SIZE_BYTES.to_string(), size.to_string());
     }
-    if let Some(store_path) = &row.store_path {
-        meta.insert("sys.store_path".to_string(), store_path.clone());
+    if let Some(blob_id) = &row.blob_id {
+        meta.insert(meta_keys::sys::BLOB_ID.to_string(), blob_id.clone());
     }
 
     ClipboardItem {

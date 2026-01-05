@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 
 use crate::clipboard::ClipboardContent;
 
@@ -12,7 +12,7 @@ use crate::clipboard::ClipboardContent;
 /// - items 仅作为 snapshot 的组成部分存在
 /// - 所有写入操作必须是原子的（snapshot + items）
 #[async_trait]
-pub trait ClipboardRepository: Send + Sync {
+pub trait ClipboardRepositoryPort: Send + Sync {
     /// 保存一条剪切板快照
     ///
     /// 语义：
@@ -33,29 +33,19 @@ pub trait ClipboardRepository: Send + Sync {
     /// 约定：
     /// - 返回值按时间倒序
     /// - items 可以是完整数据，也可以是部分 / lazy（由 infra 决定）
-    async fn list_recent(
-        &self,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<ClipboardContent>>;
+    async fn list_recent(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardContent>>;
 
     /// 根据 content_hash 获取完整剪切板快照
     ///
     /// 用于：
     /// - UI 选中后回放
     /// - 网络同步后的本地重建
-    async fn get_by_hash(
-        &self,
-        content_hash: &str,
-    ) -> Result<Option<ClipboardContent>>;
+    async fn get_by_hash(&self, content_hash: &str) -> Result<Option<ClipboardContent>>;
 
     /// 软删除一条剪切板快照
     ///
     /// 语义：
     /// - 不会物理删除数据
     /// - snapshot 在默认列表中不可见
-    async fn soft_delete(
-        &self,
-        content_hash: &str,
-    ) -> Result<()>;
+    async fn soft_delete(&self, content_hash: &str) -> Result<()>;
 }

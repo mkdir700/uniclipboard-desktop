@@ -34,3 +34,4 @@ thiserror = "2.0.17"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+mockall = "0.12"

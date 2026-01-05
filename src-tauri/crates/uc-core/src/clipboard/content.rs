@@ -79,6 +79,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
+use crate::clipboard::meta_keys;
 use crate::clipboard::MimeType;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -190,6 +191,14 @@ impl ClipboardContent {
         self.v.hash(&mut hasher);
         self.items.hash(&mut hasher);
         format!("{:x}", hasher.finish())
+    }
+
+    pub fn get_device_id(&self) -> Option<&str> {
+        self.meta.get(meta_keys::sys::DEVICE_ID).map(|s| s.as_str())
+    }
+
+    pub fn get_origin(&self) -> Option<&str> {
+        self.meta.get(meta_keys::sys::ORIGIN).map(|s| s.as_str())
     }
 }
 
