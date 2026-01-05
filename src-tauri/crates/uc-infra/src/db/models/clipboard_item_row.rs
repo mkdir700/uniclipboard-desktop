@@ -57,6 +57,28 @@ pub struct NewClipboardItemRowOwned {
 }
 
 impl<'a> From<&'a NewClipboardItemRowOwned> for NewClipboardItemRow<'a> {
+    /// Creates a `NewClipboardItemRow` that borrows string data from the given owned instance.
+    ///
+    /// The returned `NewClipboardItemRow` contains references to the `owned` instance's string fields;
+    /// `blob_id` and `mime` are converted from `Option<String>` to `Option<&str>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let owned = NewClipboardItemRowOwned {
+    ///     id: "id".to_string(),
+    ///     record_id: "rec".to_string(),
+    ///     index_in_record: 0,
+    ///     content_type: "text".to_string(),
+    ///     content_hash: "hash".to_string(),
+    ///     blob_id: Some("blob".to_string()),
+    ///     size: Some(42),
+    ///     mime: Some("text/plain".to_string()),
+    /// };
+    /// let borrowed: NewClipboardItemRow = (&owned).into();
+    /// assert_eq!(borrowed.id, owned.id.as_str());
+    /// assert_eq!(borrowed.blob_id, owned.blob_id.as_deref());
+    /// ```
     fn from(owned: &'a NewClipboardItemRowOwned) -> Self {
         NewClipboardItemRow {
             id: &owned.id,
