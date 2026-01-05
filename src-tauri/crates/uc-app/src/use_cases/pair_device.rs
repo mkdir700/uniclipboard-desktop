@@ -2,8 +2,11 @@
 
 use anyhow::Result;
 use log::info;
-use uc_core::ports::{NetworkPort, StoragePort};
 use std::sync::Arc;
+use uc_core::{
+    pairing::domain::PairingDomain,
+    ports::{NetworkPort, StoragePort},
+};
 
 /// PairDevice use case - handles device pairing flow
 pub struct PairDevice<N, S>
@@ -11,6 +14,7 @@ where
     N: NetworkPort,
     S: StoragePort,
 {
+    domain: PairingDomain,
     network: Arc<N>,
     storage: Arc<S>,
 }
@@ -20,8 +24,9 @@ where
     N: NetworkPort,
     S: StoragePort,
 {
-    pub fn new(network: Arc<N>, storage: Arc<S>) -> Self {
+    pub fn new(domain: PairingDomain, network: Arc<N>, storage: Arc<S>) -> Self {
         Self {
+            domain,
             network,
             storage,
         }
@@ -36,7 +41,9 @@ where
     /// Verify PIN for pairing
     pub async fn verify_pin(&self, session_id: String, pin_matches: bool) -> Result<()> {
         info!("Verifying PIN for session: {}", session_id);
-        self.network.send_pin_response(session_id, pin_matches).await
+        self.network
+            .send_pin_response(session_id, pin_matches)
+            .await
     }
 
     /// Accept pairing request (responder side)
@@ -47,8 +54,13 @@ where
 
     /// Reject pairing request
     pub async fn reject_pairing(&self, session_id: String, peer_id: String) -> Result<()> {
-        info!("Rejecting pairing: session={}, peer={}", session_id, peer_id);
-        self.network.send_pairing_rejection(session_id, peer_id).await
+        info!(
+            "Rejecting pairing: session={}, peer={}",
+            session_id, peer_id
+        );
+        self.network
+            .send_pairing_rejection(session_id, peer_id)
+            .await
     }
 
     /// Unpair a device

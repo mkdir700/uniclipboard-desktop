@@ -16,10 +16,9 @@ pub mod ports;
 pub mod sync;
 
 // Re-export commonly used types at the crate root
-pub use clipboard::{ContentType, Payload};
 pub use config::AppConfig;
-pub use device::{Device, DeviceStatus, Platform};
-pub use ids::{DeviceId, PeerId, SessionId};
+pub use device::{Device, DeviceStatus, Platform, DeviceId, DeviceName};
+pub use ids::{PeerId, SessionId};
 pub use network::{NetworkEvent, NetworkStatus, ProtocolMessage};
 pub use pairing::{PairedPeer, PairingState};
 pub use sync::SyncState;

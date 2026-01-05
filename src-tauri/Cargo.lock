@@ -8850,8 +8850,26 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "thiserror 2.0.17",
  "tokio",
  "twox-hash",
+]
+
+[[package]]
+name = "uc-infra"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "diesel",
+ "diesel_migrations",
+ "libsqlite3-sys",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uc-core",
+ "uuid",
 ]
 
 [[package]]
@@ -8876,6 +8894,63 @@ dependencies = [
  "uc-core",
  "uuid",
  "x25519-dalek",
+]
+
+[[package]]
+name = "uc-platform"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "arboard",
+ "argon2",
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "clipboard-rs",
+ "clipboard-win",
+ "diesel",
+ "diesel_migrations",
+ "dirs 6.0.0",
+ "image",
+ "iota_stronghold",
+ "libsqlite3-sys",
+ "log",
+ "once_cell",
+ "png 0.17.16",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "tauri-plugin-stronghold",
+ "tokio",
+ "tokio-util",
+ "uc-core",
+ "uuid",
+ "winapi",
+]
+
+[[package]]
+name = "uc-tauri"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cocoa 0.26.1",
+ "log",
+ "objc",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin-stronghold",
+ "tokio",
+ "uc-app",
+ "uc-core",
+ "uc-network",
+ "uc-platform",
+ "uuid",
 ]
 
 [[package]]
@@ -9002,7 +9077,10 @@ dependencies = [
  "twox-hash",
  "uc-app",
  "uc-core",
+ "uc-infra",
  "uc-network",
+ "uc-platform",
+ "uc-tauri",
  "uuid",
  "warp",
  "winapi",

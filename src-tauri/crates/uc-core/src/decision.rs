@@ -1,5 +1,4 @@
-use crate::clipboard::Payload;
-use crate::ids::DeviceId;
+use crate::{clipboard::ClipboardContent, device::DeviceId};
 
 /// Domain 对外输出的统一“业务决策”
 ///
@@ -15,16 +14,22 @@ pub enum DomainDecision {
     /// =============== 剪切板同步 ============
 
     /// 本地剪贴板内容成为当前版本（需要被持久化）
-    PersistLocalClipboard { payload: Payload },
+    PersistLocalClipboard { content: ClipboardContent },
 
     /// 将本地内容广播给其他设备
-    BroadcastClipboard { payload: Payload },
+    BroadcastClipboard { content: ClipboardContent },
 
     /// 将远端内容应用到本地
-    ApplyRemoteClipboard { payload: Payload, origin: DeviceId },
+    ApplyRemoteClipboard {
+        content: ClipboardContent,
+        origin: DeviceId,
+    },
 
     /// 发现同步冲突
-    EnterConflict { payload: Payload, origin: DeviceId },
+    EnterConflict {
+        content: ClipboardContent,
+        origin: DeviceId,
+    },
 
     /// =============== 配对 ==================
 

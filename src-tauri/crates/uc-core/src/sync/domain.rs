@@ -17,18 +17,18 @@ impl SyncDomain {
     pub fn apply(&mut self, event: SyncEvent) -> DomainDecision {
         match (&self.state, event) {
             // 本地变化：开始同步
-            (SyncState::Idle, SyncEvent::LocalClipboardChanged { payload }) => {
+            (SyncState::Idle, SyncEvent::LocalClipboardChanged { content }) => {
                 self.state = SyncState::Sending;
-                self.last_hash = Some(payload.content_hash());
+                self.last_hash = Some(content.content_hash());
 
-                DomainDecision::BroadcastClipboard { payload }
+                DomainDecision::BroadcastClipboard { content: content }
             }
 
             // 远端变化
             (
                 SyncState::Idle,
                 SyncEvent::RemoteClipboardReceived {
-                    payload,
+                    content,
                     content_hash,
                     origin,
                 },
@@ -41,19 +41,25 @@ impl SyncDomain {
                 self.state = SyncState::Receiving;
                 self.last_hash = Some(content_hash);
 
-                DomainDecision::ApplyRemoteClipboard { payload, origin }
+                DomainDecision::ApplyRemoteClipboard {
+                    content: content,
+                    origin,
+                }
             }
 
             // 同步中又来了新内容 → 冲突
             (
                 SyncState::Receiving,
                 SyncEvent::RemoteClipboardReceived {
-                    payload, origin, ..
+                    content, origin, ..
                 },
             ) => {
                 self.state = SyncState::Conflict;
 
-                DomainDecision::EnterConflict { payload, origin }
+                DomainDecision::EnterConflict {
+                    content: content,
+                    origin,
+                }
             }
 
             _ => DomainDecision::Ignore,

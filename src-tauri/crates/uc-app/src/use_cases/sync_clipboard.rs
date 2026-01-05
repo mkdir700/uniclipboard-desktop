@@ -75,15 +75,17 @@ where
                 debug!("Domain decided to ignore");
             }
 
-            DomainDecision::PersistLocalClipboard { payload } => {
+            DomainDecision::PersistLocalClipboard { content: payload } => {
                 // TODO: self.storage.save(payload).await?
             }
 
-            DomainDecision::BroadcastClipboard { payload } => {
+            DomainDecision::BroadcastClipboard { content: payload } => {
                 // TODO: self.network.broadcast_clipboard(payload).await?
             }
 
-            DomainDecision::ApplyRemoteClipboard { payload, .. } => {
+            DomainDecision::ApplyRemoteClipboard {
+                content: payload, ..
+            } => {
                 // TODO: self.clipboard.write(payload).await?
             }
 

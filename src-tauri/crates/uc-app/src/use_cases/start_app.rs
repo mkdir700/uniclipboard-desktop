@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use log::info;
-use uc_core::clipboard::Payload;
+use uc_core::clipboard::ClipboardContent;
 use uc_core::device::Device;
 use uc_core::network::{ClipboardMessage, NetworkEvent};
 use uc_core::ports::{ClipboardPort, NetworkPort, StoragePort};
@@ -77,7 +77,7 @@ where
 /// Context returned after successful application startup
 pub struct AppContext {
     pub current_device: Device,
-    pub clipboard_rx: tokio::sync::mpsc::Receiver<Payload>,
+    pub clipboard_rx: tokio::sync::mpsc::Receiver<ClipboardContent>,
     pub network_event_rx: tokio::sync::mpsc::Receiver<NetworkEvent>,
     pub remote_clipboard_rx: tokio::sync::mpsc::Receiver<ClipboardMessage>,
 }

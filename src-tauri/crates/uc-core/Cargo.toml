@@ -29,6 +29,8 @@ bytes = "1.7"
 
 # Async runtime (for mpsc channels in ports)
 tokio = { version = "1", features = ["sync"] }
+thiserror = "2.0.17"
+
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

@@ -4,5 +4,6 @@
 
 pub mod adapters;
 pub mod use_cases;
+pub mod models;
 
 pub use use_cases::{pair_device, start_app, sync_clipboard};

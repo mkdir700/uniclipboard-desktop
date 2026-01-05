@@ -1,9 +1,7 @@
 //! Clipboard domain models.
+mod content;
+mod data;
+mod mime;
 
-pub mod content_type;
-pub mod metadata;
-pub mod payload;
-
-pub use content_type::ContentType;
-pub use metadata::{TextMetadata, ImageMetadata, FileMetadata};
-pub use payload::{Payload, TextPayload, ImagePayload, FilePayload, FileInfo};
+pub use content::{ClipboardContent, ClipboardData, ClipboardItem};
+pub use mime::MimeType;
