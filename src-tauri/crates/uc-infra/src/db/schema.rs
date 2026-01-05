@@ -7,7 +7,7 @@ diesel::table! {
         index_in_record -> Integer,
         content_type -> Text,
         content_hash -> Text,
-        store_path -> Nullable<Text>,
+        blob_id -> Nullable<Text>,
         size -> Nullable<Integer>,
         mime -> Nullable<Text>,
     }
