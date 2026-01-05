@@ -28,13 +28,25 @@ pub struct DieselClipboardRepository {
 }
 
 impl DieselClipboardRepository {
-    /// 创建新的 repository 实例
+    /// Create a new `DieselClipboardRepository` with the given database pool and blob store.
     ///
-    /// # 参数
-    /// - `pool`: 数据库连接池
-    /// - `storage_dir`: 文件存储目录
-    /// - `device_id`: 当前设备 ID
-    /// - `origin_val`: 来源标识 ("local" 或 "remote")
+    /// # Parameters
+    ///
+    /// - `pool`: Database connection pool used for repository operations.
+    /// - `blob_store`: Shared blob store implementation for storing and retrieving item blobs.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Self)` with the constructed repository on success.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// // let pool: DbPool = ...;
+    /// // let blob_store: Arc<dyn BlobStorePort> = Arc::new(...);
+    /// // let repo = DieselClipboardRepository::new(pool, blob_store).unwrap();
+    /// ```
     pub fn new(pool: DbPool, blob_store: Arc<dyn BlobStorePort>) -> Result<Self> {
         Ok(Self { pool, blob_store })
     }
@@ -42,12 +54,28 @@ impl DieselClipboardRepository {
 
 #[async_trait]
 impl ClipboardRepositoryPort for DieselClipboardRepository {
-    /// 保存剪切板快照
+    /// Saves a clipboard snapshot and its items, storing item blobs in the configured blob store.
     ///
-    /// 实现要点：
-    /// 1. 先检查 content_hash 是否已存在（幂等性）
-    /// 2. 使用事务确保原子性
-    /// 3. 将每个 item 的数据存储到文件系统
+    /// Performs an idempotent insert by checking the content hash, writes the clipboard record inside
+    /// a database transaction, stores each item's blob, and rolls back database changes if any blob
+    /// storage fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if database operations or blob storage fail.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::sync::Arc;
+    /// # use uc_infra::db::repositories::clipboard::DieselClipboardRepository;
+    /// # use uc_infra::port::blob::BlobStorePort;
+    /// # use uc_core::models::clipboard::ClipboardContent;
+    /// # async fn example(repo: &DieselClipboardRepository, content: ClipboardContent) -> anyhow::Result<()> {
+    /// repo.save(content).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn save(&self, content: ClipboardContent) -> Result<()> {
         let hash_val = content.content_hash();
         let mut conn = self.pool.get()?;
@@ -133,7 +161,21 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         Ok(())
     }
 
-    /// 检查 content_hash 是否已存在
+    /// Checks whether a clipboard snapshot with the given content hash exists.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // Assume `repo` is an initialized `DieselClipboardRepository`.
+    /// # async fn _example(repo: &crate::DieselClipboardRepository) {
+    /// let found = repo.exists("some_content_hash").await.unwrap();
+    /// assert!(found == true || found == false);
+    /// # }
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// `true` if a record with the provided content hash exists, `false` otherwise.
     async fn exists(&self, hash_val: &str) -> Result<bool> {
         let mut conn = self.pool.get()?;
 
@@ -145,9 +187,18 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         Ok(count > 0)
     }
 
-    /// 获取最近的剪切板快照列表（仅元数据）
+    /// Retrieve recent clipboard snapshot metadata ordered by newest first.
     ///
-    /// 返回的 ClipboardContent.items 为空
+    /// The returned `ClipboardContent` values contain only record-level metadata; each `ClipboardContent.items` is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example(repo: &impl ClipboardRepositoryPort) -> Result<(), Box<dyn std::error::Error>> {
+    /// let recent = repo.list_recent(10, 0).await?;
+    /// assert!(recent.len() <= 10);
+    /// # Ok(()) }
+    /// ```
     async fn list_recent(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardContent>> {
         let mut conn = self.pool.get()?;
 
@@ -167,9 +218,28 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         Ok(contents)
     }
 
-    /// 根据 content_hash 获取完整剪切板快照
+    /// Fetches a complete clipboard snapshot for the given content hash, including all items with hydrated data.
     ///
-    /// 包含所有 items 的实际数据
+    /// This returns the full ClipboardContent when a non-deleted record with the specified `hash_val` exists; otherwise returns `None`.
+    ///
+    /// # Parameters
+    ///
+    /// - `hash_val`: The content hash used to look up the clipboard record.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ClipboardContent)` containing the record metadata and a vector of hydrated items when found, `None` if no matching non-deleted record exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Example usage (synchronous wrapper for the async method)
+    /// # use futures::executor::block_on;
+    /// # // `repo` should be a prepared DieselClipboardRepository instance
+    /// # let repo = /* DieselClipboardRepository::new(...) */ unimplemented!();
+    /// let result = block_on(repo.get_by_hash("some-content-hash"));
+    /// // `result` is Ok(Some(content)) if found, Ok(None) if not
+    /// ```
     async fn get_by_hash(&self, hash_val: &str) -> Result<Option<ClipboardContent>> {
         let mut conn = self.pool.get()?;
 
@@ -214,7 +284,19 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         Ok(Some(content))
     }
 
-    /// 软删除剪切板快照
+    /// Marks the clipboard snapshot identified by `hash_val` as deleted by setting its `deleted_at` timestamp to the current time.
+    ///
+    /// If no record matches `hash_val`, the function makes no changes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // In an async context where `repo` implements `soft_delete`:
+    /// # async fn example(repo: &impl ClipboardRepositoryPort) -> anyhow::Result<()> {
+    /// repo.soft_delete("content-hash-123").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn soft_delete(&self, hash_val: &str) -> Result<()> {
         let mut conn = self.pool.get()?;
 
