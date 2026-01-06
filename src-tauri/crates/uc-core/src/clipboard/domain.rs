@@ -1,34 +1,7 @@
-use base64::alphabet::ParseAlphabetError;
-
 use super::decision::ClipboardContentActionDecision;
 use super::event::ClipboardContentActionEvent;
 use crate::clipboard::decision::RejectReason;
-use crate::clipboard::event::ClipboardContentAction;
 use crate::ports::ClipboardHistoryPort;
-
-/// Map a permission flag to a clipboard content action decision.
-///
-/// Returns `Allow` when the flag indicates permission; otherwise returns `Reject` with
-/// `RejectReason::PolicyDenied`.
-///
-/// # Examples
-///
-/// ```
-/// let decision = check_permission(true);
-/// assert!(matches!(decision, ClipboardContentActionDecision::Allow));
-///
-/// let decision = check_permission(false);
-/// assert!(matches!(decision, ClipboardContentActionDecision::Reject { reason: RejectReason::PolicyDenied }));
-/// ```
-fn check_permission(permission: bool) -> ClipboardContentActionDecision {
-    if permission {
-        ClipboardContentActionDecision::Allow
-    } else {
-        ClipboardContentActionDecision::Reject {
-            reason: RejectReason::PolicyDenied,
-        }
-    }
-}
 
 pub struct ClipboardContentDecisionDomain<H>
 where
