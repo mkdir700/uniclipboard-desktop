@@ -41,6 +41,18 @@ impl<C> PollingClipboardRuntime<C>
 where
     C: LocalClipboardPort,
 {
+    /// Creates a new PollingClipboardRuntime that holds the provided shared ClipboardWatcher.
+    ///
+    /// The returned runtime starts in a stopped state (no background task spawned) and will use the
+    /// supplied `Arc<ClipboardWatcher<C>>` when started.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// let watcher = Arc::new(ClipboardWatcher::new());
+    /// let runtime = PollingClipboardRuntime::new(watcher);
+    /// ```
     pub fn new(watcher: Arc<ClipboardWatcher<C>>) -> Self {
         Self {
             watcher,
@@ -55,6 +67,20 @@ impl<C> ClipboardRuntimePort for PollingClipboardRuntime<C>
 where
     C: LocalClipboardPort + 'static,
 {
+    /// Starts the polling clipboard runtime and spawns a background task that periodically invokes the watcher to detect clipboard changes.
+    ///
+    /// This operation is idempotent: calling `start` when the runtime is already running has no effect. On success, a background task is spawned and its handle is stored so the runtime can be stopped later. Errors encountered while checking the clipboard are logged as warnings.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tokio::sync::mpsc;
+    ///
+    /// # async fn example<R: 'static>(runtime: &crate::PollingClipboardRuntime<R>) {
+    /// let (tx, _rx) = mpsc::channel(1);
+    /// runtime.start(tx).await.unwrap();
+    /// # }
+    /// ```
     async fn start(&self, _tx: mpsc::Sender<PlatformEvent>) -> Result<()> {
         if self
             .running

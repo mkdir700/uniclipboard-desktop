@@ -15,6 +15,24 @@ trait TimestampExt {
 }
 
 impl TimestampExt for i64 {
+    /// Converts an integer representing milliseconds since the Unix epoch into a `DateTime<Utc>`,
+    /// falling back to `DateTime::UNIX_EPOCH` if the milliseconds value is out of range or invalid.
+    ///
+    /// # Returns
+    ///
+    /// A `DateTime<Utc>` corresponding to `self` milliseconds since the Unix epoch, or `DateTime::UNIX_EPOCH` if conversion fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::{DateTime, Utc};
+    ///
+    /// let dt = 0i64.to_datetime();
+    /// assert_eq!(dt, DateTime::UNIX_EPOCH);
+    ///
+    /// let dt = 1_000i64.to_datetime(); // 1 second after epoch
+    /// assert_eq!(dt.timestamp_millis(), 1_000);
+    /// ```
     fn to_datetime(self) -> DateTime<Utc> {
         DateTime::from_timestamp_millis(self).unwrap_or_else(|| DateTime::UNIX_EPOCH)
     }
@@ -200,15 +218,16 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         Ok(count > 0)
     }
 
-    /// Retrieve recent clipboard snapshot metadata ordered by newest first.
+    /// List recent clipboard content views ordered by newest first.
     ///
-    /// The returned `ClipboardContent` values contain only record-level metadata; each `ClipboardContent.items` is empty.
+    /// Returns a vector of `ClipboardContentView` containing record-level metadata and per-item
+    /// view entries (mime and size), limited by `limit` and offset by `offset`.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// # async fn example(repo: &impl ClipboardRepositoryPort) -> Result<(), Box<dyn std::error::Error>> {
-    /// let recent = repo.list_recent(10, 0).await?;
+    /// let recent = repo.list_recent_views(10, 0).await?;
     /// assert!(recent.len() <= 10);
     /// # Ok(()) }
     /// ```
@@ -327,13 +346,12 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
     }
 
     /// Marks the clipboard snapshot identified by `hash_val` as deleted by setting its `deleted_at` timestamp to the current time.
-    ///
-    /// If no record matches `hash_val`, the function makes no changes.
+    /// If no record matches `hash_val`, no changes are made.
     ///
     /// # Examples
     ///
-    /// ```
-    /// // In an async context where `repo` implements `soft_delete`:
+    /// ```no_run
+    /// // Async context where `repo` implements `ClipboardRepositoryPort`
     /// # async fn example(repo: &impl ClipboardRepositoryPort) -> anyhow::Result<()> {
     /// repo.soft_delete("content-hash-123").await?;
     /// # Ok(())
@@ -365,6 +383,26 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
 
 #[async_trait]
 impl ClipboardHistoryPort for DieselClipboardRepository {
+    /// Determines whether all blobs referenced by the non-deleted clipboard record identified by `hash` exist.
+    ///
+    /// Checks the record (excluding soft-deleted records) and inspects each associated item to verify that a blob id is present and that the blob store contains the blob.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ClipboardDecisionSnapshot)` where `blobs_exist` is `true` if every item references an existing blob and `false` if any item is missing a blob id or the blob does not exist; `None` if no matching non-deleted record is found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use uc_infra::db::repositories::DieselClipboardRepository;
+    /// # use uc_core::clipboard::ClipboardDecisionSnapshot;
+    /// # async fn example(repo: &DieselClipboardRepository) -> Result<(), Box<dyn std::error::Error>> {
+    /// let decision = repo.get_snapshot_decision("some-hash").await?;
+    /// if let Some(ClipboardDecisionSnapshot { blobs_exist }) = decision {
+    ///     println!("All blobs present: {}", blobs_exist);
+    /// }
+    /// # Ok(()) }
+    /// ```
     async fn get_snapshot_decision(&self, hash: &str) -> Result<Option<ClipboardDecisionSnapshot>> {
         let mut conn = self.pool.get()?;
 

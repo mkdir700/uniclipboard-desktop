@@ -92,21 +92,22 @@ impl BlobStorePort for FsBlobStore {
         Ok(meta)
     }
 
-    /// Reads the binary data for a blob identified by `blob_id`.
+    /// Read the blob's binary data for the given blob ID.
     ///
     /// # Returns
     ///
-    /// The contents of the blob's data file as a `Vec<u8>`.
+    /// A vector of bytes (`Vec<u8>`) containing the contents of the blob's data file.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use std::path::PathBuf;
-    /// # use uc_infra::fs::blob_store::FsBlobStore;
-    /// # use tokio::runtime::Runtime;
+    /// use std::path::PathBuf;
+    /// use uc_infra::fs::blob_store::FsBlobStore;
+    /// use tokio::runtime::Runtime;
+    ///
     /// let rt = Runtime::new().unwrap();
     /// let store = FsBlobStore::new(PathBuf::from("/tmp"));
-    /// // `read_data` returns the raw bytes stored for the blob id.
+    ///
     /// // This example assumes a blob with id "example" exists at `/tmp/blobs/example/data.bin`.
     /// let bytes = rt.block_on(async { store.read_data("example").await }).unwrap();
     /// assert!(!bytes.is_empty());
@@ -122,6 +123,26 @@ impl BlobStorePort for FsBlobStore {
         Ok(fs::read(path).await?)
     }
 
+    /// Checks whether the blob's data file exists in the store.
+    ///
+    /// Validates the provided `blob_id` and then determines if `<root>/blobs/<blob_id>/data.bin` is present.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the blob's data file exists, `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # // Illustrative example; adjust paths and setup in real tests.
+    /// # use uc_infra::fs::blob_store::FsBlobStore;
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let store = FsBlobStore::new("/tmp/store".into());
+    /// let found = store.exists("550e8400-e29b-41d4-a716-446655440000").await?;
+    /// println!("exists: {}", found);
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn exists(&self, blob_id: &str) -> Result<bool> {
         validate_blob_id(blob_id)?;
         let path = self
@@ -133,9 +154,9 @@ impl BlobStorePort for FsBlobStore {
         Ok(path.exists())
     }
 
-    /// Removes the blob directory and all its contents for the specified blob ID from the store.
+    /// Removes the blob directory and all contents for the given blob ID.
     ///
-    /// The directory removed is `<root>/blobs/<blob_id>`.
+    /// The directory removed is located at `<root>/blobs/<blob_id>`.
     ///
     /// # Examples
     ///
@@ -147,9 +168,9 @@ impl BlobStorePort for FsBlobStore {
     /// let _ = block_on(store.delete("example-blob-id"));
     /// ```
     ///
-    /// # Returns
+    /// # Errors
     ///
-    /// `Ok(())` on success, or an `Err` if the directory cannot be removed.
+    /// Returns an `Err` if the blob ID is invalid or if the directory cannot be removed.
     async fn delete(&self, blob_id: &str) -> Result<()> {
         validate_blob_id(blob_id)?;
         let path = self.root.join(BLOBS_DIR).join(blob_id);
@@ -157,4 +178,3 @@ impl BlobStorePort for FsBlobStore {
         Ok(())
     }
 }
-

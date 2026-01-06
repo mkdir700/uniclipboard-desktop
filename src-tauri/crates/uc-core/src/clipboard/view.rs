@@ -8,6 +8,17 @@ pub enum ClipboardOrigin {
 }
 
 impl From<&str> for ClipboardOrigin {
+    /// Create a ClipboardOrigin from a string slice.
+    ///
+    /// Maps the string `"local"` to `ClipboardOrigin::Local` and `"remote"` to
+    /// `ClipboardOrigin::Remote`. Any other value yields `ClipboardOrigin::Local`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let origin = ClipboardOrigin::from("remote");
+    /// assert_eq!(origin, ClipboardOrigin::Remote);
+    /// ```
     fn from(s: &str) -> Self {
         match s {
             "local" => ClipboardOrigin::Local,
@@ -18,6 +29,25 @@ impl From<&str> for ClipboardOrigin {
 }
 
 impl From<String> for ClipboardOrigin {
+    /// Converts an owned string into a `ClipboardOrigin`.
+    ///
+    /// Maps the exact string `"local"` to `ClipboardOrigin::Local` and `"remote"` to
+    /// `ClipboardOrigin::Remote`. Any other value defaults to `ClipboardOrigin::Local`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crate::clipboard::view::ClipboardOrigin;
+    ///
+    /// let o1 = ClipboardOrigin::from("local".to_string());
+    /// assert_eq!(o1, ClipboardOrigin::Local);
+    ///
+    /// let o2 = ClipboardOrigin::from("remote".to_string());
+    /// assert_eq!(o2, ClipboardOrigin::Remote);
+    ///
+    /// let o3 = ClipboardOrigin::from("unknown".to_string());
+    /// assert_eq!(o3, ClipboardOrigin::Local);
+    /// ```
     fn from(s: String) -> Self {
         match s.as_str() {
             "local" => ClipboardOrigin::Local,
@@ -31,12 +61,28 @@ impl From<String> for ClipboardOrigin {
 pub struct ClipboardRecordId(pub String);
 
 impl From<String> for ClipboardRecordId {
+    /// Wraps an owned `String` as a `ClipboardRecordId`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let id = ClipboardRecordId::from("abc123".to_string());
+    /// assert_eq!(id, ClipboardRecordId("abc123".to_string()));
+    /// ```
     fn from(s: String) -> Self {
         Self(s)
     }
 }
 
 impl From<&str> for ClipboardRecordId {
+    /// Creates a ClipboardRecordId from a string slice.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let id = ClipboardRecordId::from("abc");
+    /// assert_eq!(id.0, "abc");
+    /// ```
     fn from(s: &str) -> Self {
         Self(s.to_string())
     }

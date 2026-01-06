@@ -24,6 +24,27 @@ impl MacOSClipboard {
 
 #[async_trait]
 impl LocalClipboardPort for MacOSClipboard {
+    /// Read the current macOS clipboard and produce a structured ClipboardContent.
+    ///
+    /// Attempts to read clipboard data with the following priority: files ("file/uri-list"),
+    /// image ("image/png"), then text ("text/plain"). If a supported type is found,
+    /// the result contains a single item with that MIME type and corresponding data;
+    /// otherwise an error is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[tokio::test]
+    /// async fn example_read_clipboard() {
+    ///     let cb = MacOSClipboard::new().expect("create clipboard");
+    ///     // May return an error if clipboard is empty or contains unsupported data.
+    ///     let _content = cb.read().await.expect("read clipboard");
+    /// }
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// `ClipboardContent` containing one item with the highest-priority supported clipboard data; an error if the clipboard is empty or contains an unsupported type.
     async fn read(&self) -> Result<ClipboardContent> {
         let inner = self.inner.clone();
         let result = spawn_blocking(move || {

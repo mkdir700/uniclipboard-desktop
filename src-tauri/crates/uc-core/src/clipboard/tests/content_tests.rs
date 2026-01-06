@@ -147,6 +147,14 @@ fn test_item_data_len_bytes_empty() {
     assert_eq!(item.data_len(), 0);
 }
 
+/// Ensures `ClipboardItem::size_bytes()` returns the `size_bytes` value from the item's metadata.
+///
+/// # Examples
+///
+/// ```
+/// let item = create_item_with_size(MimeType("image/png".to_string()), 1024);
+/// assert_eq!(item.size_bytes(), Some(1024));
+/// ```
 #[test]
 fn test_item_size_bytes_from_meta() {
     let item = create_item_with_size(MimeType("image/png".to_string()), 1024);
@@ -175,6 +183,16 @@ fn test_item_size_bytes_invalid_meta() {
     assert_eq!(item.size_bytes(), None);
 }
 
+/// Verifies that a clipboard containing multiple items reports the correct item count and MIME types.
+///
+/// # Examples
+///
+/// ```
+/// let content = create_multi_item_clipboard();
+/// assert_eq!(content.items.len(), 2);
+/// assert_eq!(content.items[0].mime.0, "text/plain");
+/// assert_eq!(content.items[1].mime.0, "text/html");
+/// ```
 #[test]
 fn test_multi_item_clipboard() {
     let content = create_multi_item_clipboard();
@@ -195,6 +213,15 @@ fn test_image_clipboard() {
     }
 }
 
+/// Verifies equality semantics for `ClipboardData::Text` variants with identical text.
+///
+/// # Examples
+///
+/// ```
+/// let a = ClipboardData::Text { text: "hello".to_string() };
+/// let b = ClipboardData::Text { text: "hello".to_string() };
+/// assert_eq!(a, b);
+/// ```
 #[test]
 fn test_clipboard_data_equality_text() {
     let data1 = ClipboardData::Text { text: "hello".to_string() };
@@ -209,6 +236,18 @@ fn test_clipboard_data_equality_bytes() {
     assert_eq!(data1, data2);
 }
 
+/// Asserts that textual and binary clipboard data with identical bytes are not equal.
+///
+/// This test verifies that `ClipboardData::Text` and `ClipboardData::Bytes` variants
+/// are considered different even when the UTF-8 bytes of the text match the byte vector.
+///
+/// # Examples
+///
+/// ```
+/// let data1 = ClipboardData::Text { text: "hello".to_string() };
+/// let data2 = ClipboardData::Bytes { bytes: vec![104, 101, 108, 108, 111] };
+/// assert_ne!(data1, data2);
+/// ```
 #[test]
 fn test_clipboard_data_inequality() {
     let data1 = ClipboardData::Text { text: "hello".to_string() };
@@ -216,6 +255,24 @@ fn test_clipboard_data_inequality() {
     assert_ne!(data1, data2);
 }
 
+/// Verifies that two `ClipboardItem` instances with identical `mime`, `data`, and `meta` are equal.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::BTreeMap;
+/// let item1 = ClipboardItem {
+///     mime: MimeType::text_plain(),
+///     data: ClipboardData::Text { text: "test".to_string() },
+///     meta: BTreeMap::new(),
+/// };
+/// let item2 = ClipboardItem {
+///     mime: MimeType::text_plain(),
+///     data: ClipboardData::Text { text: "test".to_string() },
+///     meta: BTreeMap::new(),
+/// };
+/// assert_eq!(item1, item2);
+/// ```
 #[test]
 fn test_clipboard_item_equality() {
     let item1 = ClipboardItem {
