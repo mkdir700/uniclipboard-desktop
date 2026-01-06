@@ -1,13 +1,20 @@
 {
 	"folders": [
 		{
-			"path": "."
+			"path": ".",
+			"name": "root"
 		},
 		{
 			"path": "src-tauri/crates/uc-core"
 		},
 		{
 			"path": "src-tauri/crates/uc-infra"
+		},
+		{
+			"path": "src-tauri/crates/uc-app"
+		},
+		{
+			"path": "src-tauri/crates/uc-platform"
 		}
 	],
 	"settings": {
