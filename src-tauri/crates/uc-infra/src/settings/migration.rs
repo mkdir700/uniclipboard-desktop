@@ -43,11 +43,19 @@ impl SettingsMigrator {
     /// let migrated = migrator.migrate_to_latest(settings);
     /// ```
     pub fn migrate_to_latest(&self, mut settings: Settings) -> Settings {
+        let mut iterations = 0;
+        const MAX_ITERATIONS: u32 = 100;
+
         loop {
             let current = settings.schema_version;
 
             if current >= CURRENT_SCHEMA_VERSION {
                 break;
+            }
+
+            iterations += 1;
+            if iterations > MAX_ITERATIONS {
+                panic!("migration loop exceeded {} iterations, possible infinite loop", MAX_ITERATIONS);
             }
 
             let migration = self
@@ -56,7 +64,14 @@ impl SettingsMigrator {
                 .find(|m| m.from_version() == current)
                 .unwrap_or_else(|| panic!("no migration found from version {}", current));
 
-            settings = migration.migrate(settings);
+            let new_settings = migration.migrate(settings);
+            if new_settings.schema_version <= current {
+                panic!(
+                    "migration from version {} did not increment schema_version",
+                    current
+                );
+            }
+            settings = new_settings;
         }
 
         settings
