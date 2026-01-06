@@ -11,7 +11,7 @@ pub mod clipboard_repository;
 pub mod device_repository;
 pub mod errors;
 pub mod network;
-pub mod storage;
+pub mod settings;
 
 pub use blob::meta::BlobMeta;
 pub use blob::port::BlobStorePort;
@@ -19,4 +19,4 @@ pub use clipboard::ClipboardPort;
 pub use device_repository::DeviceRepositoryPort;
 pub use errors::DeviceRepositoryError;
 pub use network::NetworkPort;
-pub use storage::StoragePort;
+pub use settings::{SettingsMigrationPort, SettingsPort};
