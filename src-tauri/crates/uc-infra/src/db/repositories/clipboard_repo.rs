@@ -257,7 +257,6 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
 
             let mut items = Vec::new();
             for item_row in item_rows {
-                let mime = &item_row.mime;
                 let item_view = ClipboardItemView {
                     mime: item_row.mime,
                     size: item_row.size as u64,
