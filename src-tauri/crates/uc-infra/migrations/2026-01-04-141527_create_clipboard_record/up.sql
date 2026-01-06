@@ -69,7 +69,7 @@ CREATE TABLE t_clipboard_item (
   blob_id          TEXT,
 
   -- 条目大小（字节数），用于清理策略与传输策略（例如大文件走 chunk）
-  size             BIGINT NOT NULL,
+  size             BIGINT NULL,
 
   -- MIME 类型：例如 'text/plain'、'image/png'、'application/octet-stream'
   mime             TEXT,

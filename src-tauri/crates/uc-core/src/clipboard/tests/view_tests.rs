@@ -115,36 +115,63 @@ fn test_clipboard_record_id_clone() {
 /// ```
 /// let view = ClipboardItemView {
 ///     mime: Some("text/plain".to_string()),
-///     size: 100,
+///     size: Some(100),
 /// };
 /// assert_eq!(view.mime, Some("text/plain".to_string()));
-/// assert_eq!(view.size, 100);
+/// assert_eq!(view.size, Some(100));
 /// ```
 #[test]
 fn test_clipboard_item_view_new() {
     let view = ClipboardItemView {
         mime: Some("text/plain".to_string()),
-        size: 100,
+        size: Some(100),
     };
     assert_eq!(view.mime, Some("text/plain".to_string()));
-    assert_eq!(view.size, 100);
+    assert_eq!(view.size, Some(100));
 }
 
 #[test]
 fn test_clipboard_item_view_without_mime() {
     let view = ClipboardItemView {
         mime: None,
-        size: 0,
+        size: Some(0),
     };
     assert_eq!(view.mime, None);
-    assert_eq!(view.size, 0);
+    assert_eq!(view.size, Some(0));
+}
+
+#[test]
+fn test_clipboard_item_view_unknown_size() {
+    let view = ClipboardItemView {
+        mime: Some("application/octet-stream".to_string()),
+        size: None,
+    };
+    assert_eq!(view.mime, Some("application/octet-stream".to_string()));
+    assert_eq!(view.size, None);
+}
+
+#[test]
+fn test_clipboard_item_view_distinction_between_zero_and_unknown() {
+    let zero_size = ClipboardItemView {
+        mime: Some("text/plain".to_string()),
+        size: Some(0),
+    };
+    let unknown_size = ClipboardItemView {
+        mime: Some("text/plain".to_string()),
+        size: None,
+    };
+
+    // Verify that Some(0) and None are distinct
+    assert_eq!(zero_size.size, Some(0));
+    assert_eq!(unknown_size.size, None);
+    assert_ne!(zero_size.size, unknown_size.size);
 }
 
 #[test]
 fn test_clipboard_item_view_serialization() {
     let view = ClipboardItemView {
         mime: Some("text/plain".to_string()),
-        size: 100,
+        size: Some(100),
     };
     let json = serde_json::to_string(&view).unwrap();
     assert!(json.contains("\"mime\":\"text/plain\""));
@@ -163,7 +190,7 @@ fn test_clipboard_content_view_new() {
         items: vec![
             ClipboardItemView {
                 mime: Some("text/plain".to_string()),
-                size: 100,
+                size: Some(100),
             },
         ],
         created_at,

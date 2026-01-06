@@ -259,7 +259,7 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
             for item_row in item_rows {
                 let item_view = ClipboardItemView {
                     mime: item_row.mime,
-                    size: item_row.size as u64,
+                    size: item_row.size.and_then(|v| v.try_into().ok()),
                 };
                 items.push(item_view);
             }

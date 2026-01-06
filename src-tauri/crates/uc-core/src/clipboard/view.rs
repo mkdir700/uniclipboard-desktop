@@ -130,6 +130,6 @@ pub struct ClipboardItemView {
     /// MIME（仅用于展示 / icon / 预览判断）
     pub mime: Option<String>,
 
-    /// 大小提示（用于 UI 展示，不保证精确）
-    pub size: u64,
+    /// 大小提示（用于 UI 展示，不保证精确），None 表示大小未知
+    pub size: Option<u64>,
 }
