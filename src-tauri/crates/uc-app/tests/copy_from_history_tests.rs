@@ -1,7 +1,7 @@
 //! Tests for [`CopyFromHistoryToSystemClipboard`] use case.
 
 use std::sync::Arc;
-use uc_app::use_cases::clipboard::copy_from_history_to_system_clipbaord::CopyFromHistoryToSystemClipboard;
+use uc_app::use_cases::clipboard::copy_from_history_to_system_clipboard::CopyFromHistoryToSystemClipboard;
 use uc_core::clipboard::*;
 use uc_core::ports::{ClipboardRepositoryPort, LocalClipboardPort};
 use std::collections::BTreeMap;
