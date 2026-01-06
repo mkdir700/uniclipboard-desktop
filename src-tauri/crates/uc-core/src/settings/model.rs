@@ -122,6 +122,18 @@ pub struct Settings {
     // pub network: NetworkSettings,
 }
 
+/// The current schema version used for settings persistence.
+///
+/// # Returns
+///
+/// The schema version as a `u32`.
+///
+/// # Examples
+///
+/// ```
+/// let v = current_schema_version();
+/// assert_eq!(v, CURRENT_SCHEMA_VERSION);
+/// ```
 fn current_schema_version() -> u32 {
     CURRENT_SCHEMA_VERSION
 }

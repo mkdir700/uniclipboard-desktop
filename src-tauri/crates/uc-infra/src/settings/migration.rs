@@ -6,6 +6,16 @@ pub struct SettingsMigrator {
 }
 
 impl SettingsMigrator {
+    /// Creates a new `SettingsMigrator` with its migrations list initialized.
+    ///
+    /// The migrations vector is currently empty with placeholder comments where future
+    /// migrations can be added.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let migrator = SettingsMigrator::new();
+    /// ```
     pub fn new() -> Self {
         Self {
             migrations: vec![
@@ -15,6 +25,23 @@ impl SettingsMigrator {
         }
     }
 
+    /// Migrates a Settings instance forward until its schema_version equals CURRENT_SCHEMA_VERSION.
+    ///
+    /// Applies successive migrations from the migrator's migration list starting at the settings'
+    /// current `schema_version`. Panics if no migration is available for the next required version.
+    ///
+    /// # Returns
+    ///
+    /// The `Settings` value after applying all required migrations, updated to `CURRENT_SCHEMA_VERSION`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// let migrator = SettingsMigrator::new();
+    /// // `settings` should be obtained from storage or created by the caller.
+    /// let settings = /* obtain Settings */;
+    /// let migrated = migrator.migrate_to_latest(settings);
+    /// ```
     pub fn migrate_to_latest(&self, mut settings: Settings) -> Settings {
         loop {
             let current = settings.schema_version;
