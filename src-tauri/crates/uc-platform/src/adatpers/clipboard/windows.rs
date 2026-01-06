@@ -5,7 +5,7 @@ use clipboard_rs::{Clipboard, ClipboardContext, RustImageData};
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;
 use uc_core::clipboard::{ClipboardContent, ClipboardData, ClipboardItem, MimeType};
-use uc_core::ports::ClipboardPort;
+use uc_core::ports::LocalClipboardPort;
 
 /// Windows clipboard implementation using clipboard-rs and clipboard-win
 pub struct WindowsClipboard {
@@ -23,7 +23,22 @@ impl WindowsClipboard {
 }
 
 #[async_trait]
-impl ClipboardPort for WindowsClipboard {
+impl LocalClipboardPort for WindowsClipboard {
+    /// Reads the current system clipboard and returns the first supported item as ClipboardContent.
+    ///
+    /// Tries clipboard formats in this order: file list (`file/uri-list`), Windows BMP image (`image/bmp`), then plain text (`text/plain`). If a supported item is found it is returned as a single-item `ClipboardContent` with a current timestamp; if the clipboard is empty or contains only unsupported types an error is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[tokio::test]
+    /// async fn read_clipboard_example() {
+    ///     // `WindowsClipboard::new()` is expected to construct the clipboard adapter.
+    ///     let clipboard = WindowsClipboard::new().expect("create clipboard");
+    ///     let content = clipboard.read().await.expect("read clipboard");
+    ///     assert!(!content.items.is_empty());
+    /// }
+    /// ```
     async fn read(&self) -> Result<ClipboardContent> {
         let inner = self.inner.clone();
         let result = spawn_blocking(move || {
@@ -312,7 +327,7 @@ mod tests {
             meta: Default::default(),
         };
 
-        clipboard.write(content.clone()).await.unwrap();
+        clipboard.write(content).await.unwrap();
 
         let read = clipboard.read().await.unwrap();
         assert_eq!(read.items.len(), 1);

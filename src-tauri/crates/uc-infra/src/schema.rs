@@ -8,7 +8,7 @@ diesel::table! {
         content_type -> Text,
         content_hash -> Text,
         blob_id -> Nullable<Text>,
-        size -> Nullable<Integer>,
+        size -> BigInt,
         mime -> Nullable<Text>,
     }
 }

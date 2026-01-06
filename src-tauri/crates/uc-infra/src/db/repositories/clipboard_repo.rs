@@ -1,10 +1,42 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use log::warn;
 use std::sync::Arc;
-use uc_core::clipboard::ClipboardContent;
+use uc_core::clipboard::{
+    ClipboardContent, ClipboardContentView, ClipboardDecisionSnapshot, ClipboardItemView,
+};
 use uuid::Uuid;
+
+/// Extension trait for converting i64 timestamps to DateTime<Utc>
+trait TimestampExt {
+    fn to_datetime(self) -> DateTime<Utc>;
+}
+
+impl TimestampExt for i64 {
+    /// Converts an integer representing milliseconds since the Unix epoch into a `DateTime<Utc>`,
+    /// falling back to `DateTime::UNIX_EPOCH` if the milliseconds value is out of range or invalid.
+    ///
+    /// # Returns
+    ///
+    /// A `DateTime<Utc>` corresponding to `self` milliseconds since the Unix epoch, or `DateTime::UNIX_EPOCH` if conversion fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::{DateTime, Utc};
+    ///
+    /// let dt = 0i64.to_datetime();
+    /// assert_eq!(dt, DateTime::UNIX_EPOCH);
+    ///
+    /// let dt = 1_000i64.to_datetime(); // 1 second after epoch
+    /// assert_eq!(dt.timestamp_millis(), 1_000);
+    /// ```
+    fn to_datetime(self) -> DateTime<Utc> {
+        DateTime::from_timestamp_millis(self).unwrap_or_else(|| DateTime::UNIX_EPOCH)
+    }
+}
 
 use crate::db::schema::t_clipboard_item::dsl as dsl_item;
 use crate::db::schema::t_clipboard_record::dsl as dsl_record;
@@ -17,8 +49,7 @@ use crate::db::{
     pool::DbPool,
 };
 use crate::fs::clipboard_item_hydrator;
-use uc_core::ports::clipboard_repository::ClipboardRepositoryPort;
-use uc_core::ports::BlobStorePort;
+use uc_core::ports::{BlobStorePort, ClipboardHistoryPort, ClipboardRepositoryPort};
 
 use log::{error, info};
 
@@ -187,39 +218,68 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         Ok(count > 0)
     }
 
-    /// Retrieve recent clipboard snapshot metadata ordered by newest first.
+    /// List recent clipboard content views ordered by newest first.
     ///
-    /// The returned `ClipboardContent` values contain only record-level metadata; each `ClipboardContent.items` is empty.
+    /// Returns a vector of `ClipboardContentView` containing record-level metadata and per-item
+    /// view entries (mime and size), limited by `limit` and offset by `offset`.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// # async fn example(repo: &impl ClipboardRepositoryPort) -> Result<(), Box<dyn std::error::Error>> {
-    /// let recent = repo.list_recent(10, 0).await?;
+    /// let recent = repo.list_recent_views(10, 0).await?;
     /// assert!(recent.len() <= 10);
     /// # Ok(()) }
     /// ```
-    async fn list_recent(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardContent>> {
+    async fn list_recent_views(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<ClipboardContentView>> {
         let mut conn = self.pool.get()?;
 
-        let records = dsl_record::t_clipboard_record
+        // 查询 record
+        let record_rows: Vec<ClipboardRecordRow> = dsl_record::t_clipboard_record
             .filter(dsl_record::deleted_at.is_null())
             .order(dsl_record::created_at.desc())
             .limit(limit as i64)
             .offset(offset as i64)
-            .load::<ClipboardRecordRow>(&mut conn)?;
+            .load(&mut conn)?;
 
-        // 转换为 ClipboardContent（不包含 items 数据）
-        let contents: Vec<ClipboardContent> = records
-            .into_iter()
-            .map(|row| map_record_row_to_content(&row))
-            .collect();
+        let mut views = Vec::new();
 
-        Ok(contents)
+        for record in record_rows {
+            // 查询关联的 items
+            let item_rows = dsl_item::t_clipboard_item
+                .filter(dsl_item::record_id.eq(&record.id))
+                .order(dsl_item::index_in_record.asc())
+                .load::<ClipboardItemRow>(&mut conn)?;
+
+            let mut items = Vec::new();
+            for item_row in item_rows {
+                let item_view = ClipboardItemView {
+                    mime: item_row.mime,
+                    size: item_row.size.and_then(|v| v.try_into().ok()),
+                };
+                items.push(item_view);
+            }
+
+            let content_view = ClipboardContentView {
+                id: record.id.into(),
+                source_device_id: record.source_device_id,
+                origin: record.origin.into(),
+                record_hash: record.record_hash,
+                item_count: record.item_count,
+                created_at: record.created_at.to_datetime(),
+                items,
+            };
+            views.push(content_view);
+        }
+
+        Ok(views)
     }
 
-    /// Fetches a complete clipboard snapshot for the given content hash, including all items with hydrated data.
-    ///
+    /// Fetches a complete clipboard snapshot for the given content hash, including all items with hydrated data.   ///
     /// This returns the full ClipboardContent when a non-deleted record with the specified `hash_val` exists; otherwise returns `None`.
     ///
     /// # Parameters
@@ -285,13 +345,12 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
     }
 
     /// Marks the clipboard snapshot identified by `hash_val` as deleted by setting its `deleted_at` timestamp to the current time.
-    ///
-    /// If no record matches `hash_val`, the function makes no changes.
+    /// If no record matches `hash_val`, no changes are made.
     ///
     /// # Examples
     ///
-    /// ```
-    /// // In an async context where `repo` implements `soft_delete`:
+    /// ```no_run
+    /// // Async context where `repo` implements `ClipboardRepositoryPort`
     /// # async fn example(repo: &impl ClipboardRepositoryPort) -> anyhow::Result<()> {
     /// repo.soft_delete("content-hash-123").await?;
     /// # Ok(())
@@ -318,5 +377,75 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl ClipboardHistoryPort for DieselClipboardRepository {
+    /// Determines whether all blobs referenced by the non-deleted clipboard record identified by `hash` exist.
+    ///
+    /// Checks the record (excluding soft-deleted records) and inspects each associated item to verify that a blob id is present and that the blob store contains the blob.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ClipboardDecisionSnapshot)` where `blobs_exist` is `true` if every item references an existing blob and `false` if any item is missing a blob id or the blob does not exist; `None` if no matching non-deleted record is found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use uc_infra::db::repositories::DieselClipboardRepository;
+    /// # use uc_core::clipboard::ClipboardDecisionSnapshot;
+    /// # async fn example(repo: &DieselClipboardRepository) -> Result<(), Box<dyn std::error::Error>> {
+    /// let decision = repo.get_snapshot_decision("some-hash").await?;
+    /// if let Some(ClipboardDecisionSnapshot { blobs_exist }) = decision {
+    ///     println!("All blobs present: {}", blobs_exist);
+    /// }
+    /// # Ok(()) }
+    /// ```
+    async fn get_snapshot_decision(&self, hash: &str) -> Result<Option<ClipboardDecisionSnapshot>> {
+        let mut conn = self.pool.get()?;
+
+        // 查询 record
+        let record_row = dsl_record::t_clipboard_record
+            .filter(dsl_record::record_hash.eq(hash))
+            .filter(dsl_record::deleted_at.is_null())
+            .first::<ClipboardRecordRow>(&mut conn)
+            .optional()?;
+
+        let record = match record_row {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        // 查询关联的 items
+        let item_rows = dsl_item::t_clipboard_item
+            .filter(dsl_item::record_id.eq(&record.id))
+            .order(dsl_item::index_in_record.asc())
+            .load::<ClipboardItemRow>(&mut conn)?;
+
+        // 检查所有 blob 是否存在以确定 can_read 权限
+        let mut blobs_exist = true;
+        for item_row in &item_rows {
+            let blob_id = match &item_row.blob_id {
+                Some(id) => id,
+                None => {
+                    warn!("Clipboard item {} has no blob_id", item_row.id);
+                    blobs_exist = false;
+                    break;
+                }
+            };
+            if !self.blob_store.exists(blob_id).await? {
+                warn!(
+                    "Clipboard item {} references non-existent blob {}",
+                    item_row.id, blob_id
+                );
+                blobs_exist = false;
+                break;
+            }
+        }
+
+        let decision_snapshot = ClipboardDecisionSnapshot { blobs_exist };
+
+        Ok(Some(decision_snapshot))
     }
 }

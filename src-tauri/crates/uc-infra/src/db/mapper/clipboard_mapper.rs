@@ -8,9 +8,10 @@ use uc_core::clipboard::{ClipboardContent, ClipboardData, ClipboardItem, MimeTyp
 use uuid::Uuid;
 
 impl From<(&ClipboardItem, &str, &str, i32)> for NewClipboardItemRowOwned {
-    /// Create a NewClipboardItemRowOwned from a ClipboardItem, a record ID, a blob ID, and an index.
+    /// Constructs a database row from a clipboard item and metadata.
     ///
-    /// The resulting record has a freshly generated `id`, `record_id` and `index_in_record` taken from the inputs, `content_type` and `mime` derived from the item's MIME type, `content_hash` computed for the item, `blob_id` set to the provided blob identifier, and `size` set when `item.size_bytes()` returns a value.
+    /// Generates a unique row ID, preserves the item's MIME type information,
+    /// computes a content hash, and stores the item size if available.
     ///
     /// # Examples
     ///
@@ -22,8 +23,6 @@ impl From<(&ClipboardItem, &str, &str, i32)> for NewClipboardItemRowOwned {
     /// assert_eq!(row.blob_id.as_deref(), Some("blob-1"));
     /// ```
     fn from((item, record_id, blob_id, index): (&ClipboardItem, &str, &str, i32)) -> Self {
-        let size = item.size_bytes().and_then(|v| v.try_into().ok());
-
         NewClipboardItemRowOwned {
             id: Uuid::new_v4().to_string(),
             record_id: record_id.to_string(),
@@ -31,7 +30,7 @@ impl From<(&ClipboardItem, &str, &str, i32)> for NewClipboardItemRowOwned {
             content_type: item.mime.to_string(),
             content_hash: item_hash(item),
             blob_id: Some(blob_id.to_string()),
-            size,
+            size: item.size_bytes().and_then(|v| v.try_into().ok()),
             mime: Some(item.mime.to_string()),
         }
     }
@@ -67,23 +66,27 @@ impl From<&ClipboardContent> for NewClipboardRecordRowOwned {
 
 /// Build a ClipboardItem from a database row and externally provided clipboard data.
 ///
-/// The function uses metadata from `row` (size and blob id) and the supplied `data` to
-/// construct a ClipboardItem; it does not access any external store itself.
+/// Uses size and optional blob id from `row` to populate the item's metadata; the function
+/// does not access external storage and expects actual clipboard bytes to be supplied via `data`.
 ///
 /// # Examples
 ///
-/// ```ignore
-/// // Prepare a ClipboardItemRow (fields omitted for brevity) and ClipboardData,
-/// // then convert them into a ClipboardItem:
-/// let row = ClipboardItemRow { size: Some(123), blob_id: Some("blob-uuid".into()), mime: Some("text/plain".into()), content_type: "text/plain".into(), ..Default::default() };
+/// ```
+/// // Construct minimal inputs and convert them into a ClipboardItem.
+/// let row = ClipboardItemRow {
+///     size: Some(123),
+///     blob_id: Some("blob-uuid".into()),
+///     mime: Some("text/plain".into()),
+///     content_type: "text/plain".into(),
+///     ..Default::default()
+/// };
 /// let data = ClipboardData::Bytes(b"hello".to_vec());
 /// let item = map_item_row_to_item(&row, data);
+///
 /// assert_eq!(item.mime.0, "text/plain");
 /// assert_eq!(item.meta.get(&meta_keys::sys::SIZE_BYTES.to_string()).unwrap(), "123");
+/// assert_eq!(item.meta.get(&meta_keys::sys::BLOB_ID.to_string()).unwrap(), "blob-uuid");
 /// ```
-/// This is a helper function rather than a `From` impl because the actual
-/// clipboard data is stored externally (referenced by `blob_id`), and
-/// must be provided separately.
 pub fn map_item_row_to_item(row: &ClipboardItemRow, data: ClipboardData) -> ClipboardItem {
     let mut meta = BTreeMap::new();
     if let Some(size) = row.size {
@@ -114,6 +117,22 @@ pub fn map_record_row_to_content(record_row: &ClipboardRecordRow) -> ClipboardCo
     }
 }
 
+/// Compute a lowercase hexadecimal hash for a `ClipboardItem`.
+///
+/// The result is derived from the item's `Hash` implementation and represented as a
+/// lowercase hex string.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Construct or obtain a ClipboardItem named `item` in your codebase, then:
+/// let hex = item_hash(&item);
+/// println!("item hash: {}", hex);
+/// ```
+///
+/// # Returns
+///
+/// A `String` containing the lowercase hexadecimal representation of the item's hash.
 fn item_hash(item: &ClipboardItem) -> String {
     use std::collections::hash_map::DefaultHasher;
 

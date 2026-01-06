@@ -5,7 +5,7 @@ use clipboard_rs::{Clipboard, ClipboardContext, RustImageData};
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;
 use uc_core::clipboard::{ClipboardContent, ClipboardData, ClipboardItem, MimeType};
-use uc_core::ports::ClipboardPort;
+use uc_core::ports::LocalClipboardPort;
 
 /// macOS clipboard implementation using clipboard-rs
 pub struct MacOSClipboard {
@@ -23,7 +23,28 @@ impl MacOSClipboard {
 }
 
 #[async_trait]
-impl ClipboardPort for MacOSClipboard {
+impl LocalClipboardPort for MacOSClipboard {
+    /// Read the current macOS clipboard and produce a structured ClipboardContent.
+    ///
+    /// Attempts to read clipboard data with the following priority: files ("file/uri-list"),
+    /// image ("image/png"), then text ("text/plain"). If a supported type is found,
+    /// the result contains a single item with that MIME type and corresponding data;
+    /// otherwise an error is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[tokio::test]
+    /// async fn example_read_clipboard() {
+    ///     let cb = MacOSClipboard::new().expect("create clipboard");
+    ///     // May return an error if clipboard is empty or contains unsupported data.
+    ///     let _content = cb.read().await.expect("read clipboard");
+    /// }
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// `ClipboardContent` containing one item with the highest-priority supported clipboard data; an error if the clipboard is empty or contains an unsupported type.
     async fn read(&self) -> Result<ClipboardContent> {
         let inner = self.inner.clone();
         let result = spawn_blocking(move || {
@@ -147,7 +168,7 @@ mod tests {
             meta: Default::default(),
         };
 
-        clipboard.write(content.clone()).await.unwrap();
+        clipboard.write(content).await.unwrap();
 
         let read = clipboard.read().await.unwrap();
         assert_eq!(read.items.len(), 1);

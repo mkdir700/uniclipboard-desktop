@@ -23,8 +23,8 @@ pub struct ClipboardItemRow {
     /// blob 存储 ID
     pub blob_id: Option<String>,
 
-    /// 内容大小（字节）
-    pub size: Option<i32>,
+    /// 内容大小（字节），NULL 表示大小未知
+    pub size: Option<i64>,
 
     /// MIME 类型
     pub mime: Option<String>,
@@ -39,7 +39,7 @@ pub struct NewClipboardItemRow<'a> {
     pub content_type: &'a str,
     pub content_hash: &'a str,
     pub blob_id: Option<&'a str>,
-    pub size: Option<i32>,
+    pub size: Option<i64>,
     pub mime: Option<&'a str>,
 }
 
@@ -52,14 +52,13 @@ pub struct NewClipboardItemRowOwned {
     pub content_type: String,
     pub content_hash: String,
     pub blob_id: Option<String>,
-    pub size: Option<i32>,
+    pub size: Option<i64>,
     pub mime: Option<String>,
 }
 
 impl<'a> From<&'a NewClipboardItemRowOwned> for NewClipboardItemRow<'a> {
-    /// Creates a `NewClipboardItemRow` that borrows string data from the given owned instance.
+    /// Create a `NewClipboardItemRow` that borrows string data from the given owned instance.
     ///
-    /// The returned `NewClipboardItemRow` contains references to the `owned` instance's string fields;
     /// `blob_id` and `mime` are converted from `Option<String>` to `Option<&str>`.
     ///
     /// # Examples
@@ -75,9 +74,12 @@ impl<'a> From<&'a NewClipboardItemRowOwned> for NewClipboardItemRow<'a> {
     ///     size: Some(42),
     ///     mime: Some("text/plain".to_string()),
     /// };
+    ///
     /// let borrowed: NewClipboardItemRow = (&owned).into();
     /// assert_eq!(borrowed.id, owned.id.as_str());
     /// assert_eq!(borrowed.blob_id, owned.blob_id.as_deref());
+    /// assert_eq!(borrowed.mime, owned.mime.as_deref());
+    /// assert_eq!(borrowed.size, owned.size);
     /// ```
     fn from(owned: &'a NewClipboardItemRowOwned) -> Self {
         NewClipboardItemRow {
