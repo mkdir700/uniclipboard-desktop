@@ -5,7 +5,7 @@ use clipboard_rs::{Clipboard, ClipboardContext, RustImageData};
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;
 use uc_core::clipboard::{ClipboardContent, ClipboardData, ClipboardItem, MimeType};
-use uc_core::ports::ClipboardPort;
+use uc_core::ports::LocalClipboardPort;
 
 /// macOS clipboard implementation using clipboard-rs
 pub struct MacOSClipboard {
@@ -23,7 +23,7 @@ impl MacOSClipboard {
 }
 
 #[async_trait]
-impl ClipboardPort for MacOSClipboard {
+impl LocalClipboardPort for MacOSClipboard {
     async fn read(&self) -> Result<ClipboardContent> {
         let inner = self.inner.clone();
         let result = spawn_blocking(move || {
@@ -147,7 +147,7 @@ mod tests {
             meta: Default::default(),
         };
 
-        clipboard.write(content.clone()).await.unwrap();
+        clipboard.write(content).await.unwrap();
 
         let read = clipboard.read().await.unwrap();
         assert_eq!(read.items.len(), 1);

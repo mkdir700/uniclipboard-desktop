@@ -22,7 +22,10 @@ impl From<(&ClipboardItem, &str, &str, i32)> for NewClipboardItemRowOwned {
     /// assert_eq!(row.blob_id.as_deref(), Some("blob-1"));
     /// ```
     fn from((item, record_id, blob_id, index): (&ClipboardItem, &str, &str, i32)) -> Self {
-        let size = item.size_bytes().and_then(|v| v.try_into().ok());
+        let size = item
+            .size_bytes()
+            .and_then(|v| v.try_into().ok())
+            .unwrap_or(0);
 
         NewClipboardItemRowOwned {
             id: Uuid::new_v4().to_string(),
@@ -86,9 +89,7 @@ impl From<&ClipboardContent> for NewClipboardRecordRowOwned {
 /// must be provided separately.
 pub fn map_item_row_to_item(row: &ClipboardItemRow, data: ClipboardData) -> ClipboardItem {
     let mut meta = BTreeMap::new();
-    if let Some(size) = row.size {
-        meta.insert(meta_keys::sys::SIZE_BYTES.to_string(), size.to_string());
-    }
+    meta.insert(meta_keys::sys::SIZE_BYTES.to_string(), row.size.to_string());
     if let Some(blob_id) = &row.blob_id {
         meta.insert(meta_keys::sys::BLOB_ID.to_string(), blob_id.clone());
     }

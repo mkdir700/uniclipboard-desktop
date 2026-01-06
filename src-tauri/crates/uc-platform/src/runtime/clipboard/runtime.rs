@@ -26,11 +26,11 @@ use tokio::{
 
 use crate::ports::ClipboardRuntimePort;
 use crate::{ipc::PlatformEvent, runtime::clipboard::ClipboardWatcher};
-use uc_core::ports::ClipboardPort;
+use uc_core::ports::LocalClipboardPort;
 
 pub struct PollingClipboardRuntime<C>
 where
-    C: ClipboardPort,
+    C: LocalClipboardPort,
 {
     watcher: Arc<ClipboardWatcher<C>>,
     running: AtomicBool,
@@ -39,7 +39,7 @@ where
 
 impl<C> PollingClipboardRuntime<C>
 where
-    C: ClipboardPort,
+    C: LocalClipboardPort,
 {
     pub fn new(watcher: Arc<ClipboardWatcher<C>>) -> Self {
         Self {
@@ -53,7 +53,7 @@ where
 #[async_trait]
 impl<C> ClipboardRuntimePort for PollingClipboardRuntime<C>
 where
-    C: ClipboardPort + 'static,
+    C: LocalClipboardPort + 'static,
 {
     async fn start(&self, _tx: mpsc::Sender<PlatformEvent>) -> Result<()> {
         if self

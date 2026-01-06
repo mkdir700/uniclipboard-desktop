@@ -1,10 +1,24 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use log::warn;
 use std::sync::Arc;
-use uc_core::clipboard::ClipboardContent;
+use uc_core::clipboard::{
+    ClipboardContent, ClipboardContentView, ClipboardDecisionSnapshot, ClipboardItemView,
+};
 use uuid::Uuid;
+
+/// Extension trait for converting i64 timestamps to DateTime<Utc>
+trait TimestampExt {
+    fn to_datetime(self) -> DateTime<Utc>;
+}
+
+impl TimestampExt for i64 {
+    fn to_datetime(self) -> DateTime<Utc> {
+        DateTime::from_timestamp_millis(self).unwrap_or_else(|| DateTime::UNIX_EPOCH)
+    }
+}
 
 use crate::db::schema::t_clipboard_item::dsl as dsl_item;
 use crate::db::schema::t_clipboard_record::dsl as dsl_record;
@@ -17,8 +31,7 @@ use crate::db::{
     pool::DbPool,
 };
 use crate::fs::clipboard_item_hydrator;
-use uc_core::ports::clipboard_repository::ClipboardRepositoryPort;
-use uc_core::ports::BlobStorePort;
+use uc_core::ports::{BlobStorePort, ClipboardHistoryPort, ClipboardRepositoryPort};
 
 use log::{error, info};
 
@@ -199,27 +212,56 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
     /// assert!(recent.len() <= 10);
     /// # Ok(()) }
     /// ```
-    async fn list_recent(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardContent>> {
+    async fn list_recent_views(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<ClipboardContentView>> {
         let mut conn = self.pool.get()?;
 
-        let records = dsl_record::t_clipboard_record
+        // 查询 record
+        let record_rows: Vec<ClipboardRecordRow> = dsl_record::t_clipboard_record
             .filter(dsl_record::deleted_at.is_null())
             .order(dsl_record::created_at.desc())
             .limit(limit as i64)
             .offset(offset as i64)
-            .load::<ClipboardRecordRow>(&mut conn)?;
+            .load(&mut conn)?;
 
-        // 转换为 ClipboardContent（不包含 items 数据）
-        let contents: Vec<ClipboardContent> = records
-            .into_iter()
-            .map(|row| map_record_row_to_content(&row))
-            .collect();
+        let mut views = Vec::new();
 
-        Ok(contents)
+        for record in record_rows {
+            // 查询关联的 items
+            let item_rows = dsl_item::t_clipboard_item
+                .filter(dsl_item::record_id.eq(&record.id))
+                .order(dsl_item::index_in_record.asc())
+                .load::<ClipboardItemRow>(&mut conn)?;
+
+            let mut items = Vec::new();
+            for item_row in item_rows {
+                let mime = &item_row.mime;
+                let item_view = ClipboardItemView {
+                    mime: item_row.mime,
+                    size: item_row.size as u64,
+                };
+                items.push(item_view);
+            }
+
+            let content_view = ClipboardContentView {
+                id: record.id.into(),
+                source_device_id: record.source_device_id,
+                origin: record.origin.into(),
+                record_hash: record.record_hash,
+                item_count: record.item_count,
+                created_at: record.created_at.to_datetime(),
+                items,
+            };
+            views.push(content_view);
+        }
+
+        Ok(views)
     }
 
-    /// Fetches a complete clipboard snapshot for the given content hash, including all items with hydrated data.
-    ///
+    /// Fetches a complete clipboard snapshot for the given content hash, including all items with hydrated data.   ///
     /// This returns the full ClipboardContent when a non-deleted record with the specified `hash_val` exists; otherwise returns `None`.
     ///
     /// # Parameters
@@ -318,5 +360,55 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         }
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl ClipboardHistoryPort for DieselClipboardRepository {
+    async fn get_snapshot_decision(&self, hash: &str) -> Result<Option<ClipboardDecisionSnapshot>> {
+        let mut conn = self.pool.get()?;
+
+        // 查询 record
+        let record_row = dsl_record::t_clipboard_record
+            .filter(dsl_record::record_hash.eq(hash))
+            .filter(dsl_record::deleted_at.is_null())
+            .first::<ClipboardRecordRow>(&mut conn)
+            .optional()?;
+
+        let record = match record_row {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        // 查询关联的 items
+        let item_rows = dsl_item::t_clipboard_item
+            .filter(dsl_item::record_id.eq(&record.id))
+            .order(dsl_item::index_in_record.asc())
+            .load::<ClipboardItemRow>(&mut conn)?;
+
+        // 检查所有 blob 是否存在以确定 can_read 权限
+        let mut blobs_exist = true;
+        for item_row in &item_rows {
+            let blob_id = match &item_row.blob_id {
+                Some(id) => id,
+                None => {
+                    warn!("Clipboard item {} has no blob_id", item_row.id);
+                    blobs_exist = false;
+                    break;
+                }
+            };
+            if !self.blob_store.exists(blob_id).await? {
+                warn!(
+                    "Clipboard item {} references non-existent blob {}",
+                    item_row.id, blob_id
+                );
+                blobs_exist = false;
+                break;
+            }
+        }
+
+        let decision_snapshot = ClipboardDecisionSnapshot { blobs_exist };
+
+        Ok(Some(decision_snapshot))
     }
 }

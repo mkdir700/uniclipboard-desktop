@@ -73,13 +73,13 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
-use uc_core::ports::ClipboardPort;
+use uc_core::ports::LocalClipboardPort;
 
 use crate::ipc::PlatformEvent;
 
 pub struct ClipboardWatcher<C>
 where
-    C: ClipboardPort,
+    C: LocalClipboardPort,
 {
     clipboard: Arc<C>,
     tx: mpsc::Sender<PlatformEvent>,
@@ -89,7 +89,7 @@ where
 
 impl<C> ClipboardWatcher<C>
 where
-    C: ClipboardPort + 'static,
+    C: LocalClipboardPort + 'static,
 {
     pub fn new(clipboard: Arc<C>, tx: mpsc::Sender<PlatformEvent>) -> Self {
         Self {

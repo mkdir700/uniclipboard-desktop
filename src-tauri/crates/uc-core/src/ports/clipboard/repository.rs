@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use crate::clipboard::ClipboardContent;
+use crate::clipboard::{ClipboardContent, ClipboardContentView};
 
 /// ClipboardRepository
 ///
@@ -28,12 +28,11 @@ pub trait ClipboardRepositoryPort: Send + Sync {
     /// - 防止远端同步回环
     async fn exists(&self, content_hash: &str) -> Result<bool>;
 
-    /// 获取最近的剪切板快照列表
+    /// 获取最近的剪切板快照列表(按时间倒序)
     ///
     /// 约定：
     /// - 返回值按时间倒序
-    /// - items 可以是完整数据，也可以是部分 / lazy（由 infra 决定）
-    async fn list_recent(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardContent>>;
+    async fn list_recent_views(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardContentView>>;
 
     /// 根据 content_hash 获取完整剪切板快照
     ///
