@@ -110,15 +110,30 @@ impl FileSettingsRepository {
             .await
             .with_context(|| format!("write temp settings failed: {}", tmp_path.display()))?;
 
-        // TODO: Windows 上 rename 覆盖可能不一致；macOS/Linux OK。
-        fs::rename(&tmp_path, &self.path).await.with_context(|| {
-            format!(
-                "rename temp settings to target failed: {} -> {}",
-                tmp_path.display(),
-                self.path.display()
-            )
-        })?;
-
+        #[cfg(windows)]
+        {
+            // On Windows, remove target first to ensure rename succeeds
+            if self.path.exists() {
+                fs::remove_file(&self.path).await.ok(); // Ignore error if file doesn't exist
+            }
+            fs::rename(&tmp_path, &self.path).await.with_context(|| {
+                format!(
+                    "rename temp settings to target failed: {} -> {}",
+                    tmp_path.display(),
+                    self.path.display()
+                )
+            })?;
+        }
+        #[cfg(not(windows))]
+        {
+            fs::rename(&tmp_path, &self.path).await.with_context(|| {
+                format!(
+                    "rename temp settings to target failed: {} -> {}",
+                    tmp_path.display(),
+                    self.path.display()
+                )
+            })?;
+        }
         Ok(())
     }
 }
@@ -151,11 +166,10 @@ impl SettingsPort for FileSettingsRepository {
         };
 
         let settings: Settings = serde_json::from_str(&content)?;
-        let original_version = settings.schema_version;
         let migrator = SettingsMigrator::new();
         let migrated = migrator.migrate_to_latest(settings);
 
-        if original_version < CURRENT_SCHEMA_VERSION {
+        if migrated.schema_version < CURRENT_SCHEMA_VERSION {
             self.save(&migrated).await?;
         }
 
@@ -188,3 +202,4 @@ impl SettingsPort for FileSettingsRepository {
         self.atomic_write(&content).await
     }
 }
+
