@@ -166,12 +166,13 @@ impl SettingsPort for FileSettingsRepository {
         };
 
         let settings: Settings = serde_json::from_str(&content)?;
+        let original_version = settings.schema_version;
         let migrator = SettingsMigrator::new();
         let migrated = migrator
             .migrate_to_latest(settings)
             .map_err(|e| anyhow::anyhow!("settings migration failed: {}", e))?;
 
-        if migrated.schema_version < CURRENT_SCHEMA_VERSION {
+        if original_version < CURRENT_SCHEMA_VERSION {
             self.save(&migrated).await?;
         }
 
