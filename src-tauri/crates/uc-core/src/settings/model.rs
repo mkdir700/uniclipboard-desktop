@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DurationSeconds};
 
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
@@ -51,11 +52,15 @@ pub enum SyncFrequency {
     Interval,
 }
 
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RetentionRule {
     /// 按时间清理
-    ByAge { max_age: Duration },
+    ByAge {
+        #[serde_as(as = "DurationSeconds<u64>")]
+        max_age: Duration,
+    },
 
     /// 按总数量上限
     ByCount { max_items: usize },
@@ -63,6 +68,7 @@ pub enum RetentionRule {
     /// 按内容类型的最大存活时间
     ByContentType {
         content_type: ContentTypes,
+        #[serde_as(as = "DurationSeconds<u64>")]
         max_age: Duration,
     },
 
@@ -70,7 +76,10 @@ pub enum RetentionRule {
     ByTotalSize { max_bytes: u64 },
 
     /// 敏感内容快速过期
-    Sensitive { max_age: Duration },
+    Sensitive {
+        #[serde_as(as = "DurationSeconds<u64>")]
+        max_age: Duration,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

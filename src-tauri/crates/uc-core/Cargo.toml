@@ -30,6 +30,7 @@ bytes = "1.7"
 # Async runtime (for mpsc channels in ports)
 tokio = { version = "1", features = ["sync"] }
 thiserror = "2.0.17"
+serde_with = "3.16.1"
 
 
 [dev-dependencies]
