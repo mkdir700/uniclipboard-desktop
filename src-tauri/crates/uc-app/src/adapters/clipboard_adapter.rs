@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use uc_core::clipboard::Payload;
-use uc_core::ports::ClipboardPort;
+use uc_core::ports::LocalClipboardPort;
 
 /// Adapter that wraps LocalClipboard to implement ClipboardPort
 ///
@@ -22,7 +22,7 @@ impl LocalClipboardAdapter {
 }
 
 #[async_trait]
-impl ClipboardPort for LocalClipboardAdapter {
+impl LocalClipboardPort for LocalClipboardAdapter {
     /// Read current clipboard content
     async fn read(&self) -> anyhow::Result<Payload> {
         // TODO: Implement in Phase 4

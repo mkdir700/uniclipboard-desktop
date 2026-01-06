@@ -3,7 +3,7 @@ use crate::db::models::{
 };
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
-use uc_core::clipboard::meta_keys;
+use uc_core::clipboard::{meta_keys, ClipboardItemSummary};
 use uc_core::clipboard::{ClipboardContent, ClipboardData, ClipboardItem, MimeType};
 use uuid::Uuid;
 
@@ -121,3 +121,4 @@ fn item_hash(item: &ClipboardItem) -> String {
     item.hash(&mut h);
     format!("{:x}", h.finish())
 }
+

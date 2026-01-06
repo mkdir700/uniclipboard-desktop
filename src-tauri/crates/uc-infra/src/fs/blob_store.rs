@@ -122,6 +122,17 @@ impl BlobStorePort for FsBlobStore {
         Ok(fs::read(path).await?)
     }
 
+    async fn exists(&self, blob_id: &str) -> Result<bool> {
+        validate_blob_id(blob_id)?;
+        let path = self
+            .root
+            .join(BLOBS_DIR)
+            .join(blob_id)
+            .join(BLOB_DATA_FILE_NAME);
+
+        Ok(path.exists())
+    }
+
     /// Removes the blob directory and all its contents for the specified blob ID from the store.
     ///
     /// The directory removed is `<root>/blobs/<blob_id>`.
@@ -146,3 +157,4 @@ impl BlobStorePort for FsBlobStore {
         Ok(())
     }
 }
+

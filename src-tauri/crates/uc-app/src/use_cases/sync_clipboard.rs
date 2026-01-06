@@ -6,14 +6,14 @@ use std::sync::Arc;
 use uc_core::clipboard::Payload;
 use uc_core::decision::DomainDecision;
 use uc_core::network::ClipboardMessage;
-use uc_core::ports::{ClipboardPort, NetworkPort, StoragePort};
+use uc_core::ports::{LocalClipboardPort, NetworkPort, StoragePort};
 use uc_core::sync::{SyncDomain, SyncEvent};
 
 /// SyncClipboard use case - handles clipboard synchronization
 pub struct SyncClipboard<N, C, S>
 where
     N: NetworkPort,
-    C: ClipboardPort,
+    C: LocalClipboardPort,
     S: StoragePort,
 {
     domain: SyncDomain,
@@ -25,7 +25,7 @@ where
 impl<N, C, S> SyncClipboard<N, C, S>
 where
     N: NetworkPort,
-    C: ClipboardPort,
+    C: LocalClipboardPort,
     S: StoragePort,
 {
     pub fn new(domain: SyncDomain, network: Arc<N>, clipboard: Arc<C>, storage: Arc<S>) -> Self {

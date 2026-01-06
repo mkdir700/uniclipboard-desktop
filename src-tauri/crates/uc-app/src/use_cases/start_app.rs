@@ -5,14 +5,14 @@ use log::info;
 use uc_core::clipboard::ClipboardContent;
 use uc_core::device::Device;
 use uc_core::network::{ClipboardMessage, NetworkEvent};
-use uc_core::ports::{ClipboardPort, NetworkPort, StoragePort};
+use uc_core::ports::{LocalClipboardPort, NetworkPort, StoragePort};
 use std::sync::Arc;
 
 /// StartApp use case - initializes and starts all application subsystems
 pub struct StartApp<N, C, S>
 where
     N: NetworkPort,
-    C: ClipboardPort,
+    C: LocalClipboardPort,
     S: StoragePort,
 {
     network: Arc<N>,
@@ -23,7 +23,7 @@ where
 impl<N, C, S> StartApp<N, C, S>
 where
     N: NetworkPort,
-    C: ClipboardPort,
+    C: LocalClipboardPort,
     S: StoragePort,
 {
     pub fn new(network: Arc<N>, clipboard: Arc<C>, storage: Arc<S>) -> Self {

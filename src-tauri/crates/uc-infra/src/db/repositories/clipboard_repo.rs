@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use log::warn;
 use std::sync::Arc;
-use uc_core::clipboard::ClipboardContent;
+use uc_core::clipboard::{
+    ClipboardContent, ClipboardContentSummary, ClipboardDecisionSnapshot, ClipboardItemSummary,
+};
 use uuid::Uuid;
 
 use crate::db::schema::t_clipboard_item::dsl as dsl_item;
@@ -17,8 +19,7 @@ use crate::db::{
     pool::DbPool,
 };
 use crate::fs::clipboard_item_hydrator;
-use uc_core::ports::clipboard_repository::ClipboardRepositoryPort;
-use uc_core::ports::BlobStorePort;
+use uc_core::ports::{BlobStorePort, ClipboardHistoryPort, ClipboardRepositoryPort};
 
 use log::{error, info};
 
@@ -199,23 +200,47 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
     /// assert!(recent.len() <= 10);
     /// # Ok(()) }
     /// ```
-    async fn list_recent(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardContent>> {
+    async fn list_recent(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<ClipboardContentSummary>> {
         let mut conn = self.pool.get()?;
 
-        let records = dsl_record::t_clipboard_record
+        // 查询 record
+        let record_row = dsl_record::t_clipboard_record
+            .filter(dsl_record::record_hash.eq(hash_val))
             .filter(dsl_record::deleted_at.is_null())
-            .order(dsl_record::created_at.desc())
-            .limit(limit as i64)
-            .offset(offset as i64)
-            .load::<ClipboardRecordRow>(&mut conn)?;
+            .first::<ClipboardRecordRow>(&mut conn)
+            .optional()?;
 
-        // 转换为 ClipboardContent（不包含 items 数据）
-        let contents: Vec<ClipboardContent> = records
-            .into_iter()
-            .map(|row| map_record_row_to_content(&row))
-            .collect();
+        let record = match record_row {
+            Some(r) => r,
+            None => return Ok(Vec::new()),
+        };
 
-        Ok(contents)
+        // 查询关联的 items
+        let item_rows = dsl_item::t_clipboard_item
+            .filter(dsl_item::record_id.eq(&record.id))
+            .order(dsl_item::index_in_record.asc())
+            .load::<ClipboardItemRow>(&mut conn)?;
+
+        let mut items = Vec::new();
+        for item_row in item_rows {
+            let mime = &item_row.mime;
+
+            let blob_id = match &item_row.blob_id {
+                Some(id) => id,
+                None => {
+                    warn!("Clipboard item {} has no blob_id, skipping", item_row.id);
+                    continue;
+                }
+            };
+            let blob_meta = self.blob_store.read_meta(blob_id).await?;
+            let data = self.blob_store.read_data(blob_id).await?;
+            let item = clipboard_item_hydrator::hydrate(blob_meta, data)?;
+            items.push(item);
+        }
     }
 
     /// Fetches a complete clipboard snapshot for the given content hash, including all items with hydrated data.
@@ -318,5 +343,51 @@ impl ClipboardRepositoryPort for DieselClipboardRepository {
         }
 
         Ok(())
+    }
+}
+
+impl ClipboardHistoryPort for DieselClipboardRepository {
+    async fn get_snapshot_decision(&self, hash: &str) -> Result<Option<ClipboardDecisionSnapshot>> {
+        let mut conn = self.pool.get()?;
+
+        // 查询 record
+        let record_row = dsl_record::t_clipboard_record
+            .filter(dsl_record::record_hash.eq(hash_val))
+            .filter(dsl_record::deleted_at.is_null())
+            .first::<ClipboardRecordRow>(&mut conn)
+            .optional()?;
+
+        let record = match record_row {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        // 查询关联的 items
+        let item_rows = dsl_item::t_clipboard_item
+            .filter(dsl_item::record_id.eq(&record.id))
+            .order(dsl_item::index_in_record.asc())
+            .load::<ClipboardItemRow>(&mut conn)?;
+
+        // 加载每个 item 的数据并转换为 ClipboardItem
+        let mut can_read = true;
+        for item_row in item_rows {
+            let blob_id = match &item_row.blob_id {
+                Some(id) => id,
+                None => {
+                    warn!("Clipboard item {} has no blob_id, skipping", item_row.id);
+                    continue;
+                }
+            };
+            if !self.blob_store.exists(blob_id).await? {
+                warn!(
+                    "Clipboard item {} references non-existent blob {}, skipping",
+                    item_row.id, blob_id
+                );
+                can_read = false;
+                break;
+            }
+        }
+
+        Ok(Some(ClipboardDecisionSnapshot { can_read }))
     }
 }

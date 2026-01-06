@@ -13,7 +13,7 @@ use async_trait::async_trait;
 /// allowing use cases to interact with the clipboard without depending on
 /// platform-specific implementations.
 #[async_trait]
-pub trait ClipboardPort: Send + Sync {
+pub trait LocalClipboardPort: Send + Sync {
     /// Read current clipboard content
     ///
     /// Returns the current clipboard content as a Payload, which can contain
@@ -23,5 +23,5 @@ pub trait ClipboardPort: Send + Sync {
     /// Write content to clipboard
     ///
     /// Sets the clipboard content to the provided payload.
-    async fn write(&self, content: ClipboardContent) -> Result<()>;
+    async fn write(&self, content: &ClipboardContent) -> Result<()>;
 }

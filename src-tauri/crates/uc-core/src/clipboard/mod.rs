@@ -1,7 +1,14 @@
 //! Clipboard domain models.
 mod content;
-mod mime;
+mod decision;
+mod domain;
+mod event;
 pub mod meta_keys;
+mod mime;
+mod snapshot;
+mod view;
 
 pub use content::{ClipboardContent, ClipboardData, ClipboardItem};
 pub use mime::MimeType;
+pub use snapshot::ClipboardDecisionSnapshot;
+pub use view::{ClipboardContentView, ClipboardItemView, ClipboardOrigin, ClipboardRecordId};

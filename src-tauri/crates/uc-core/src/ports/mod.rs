@@ -4,10 +4,20 @@
 //! and infrastructure implementations. This follows Hexagonal Architecture
 //! principles, allowing the core business logic to remain independent of
 //! external dependencies.
+//!
+//! ## Port Placement Guidelines
+//!
+//! Before adding a new port to `uc-core/ports`, ask yourself three questions:
+//!
+//! 1. **Does this port represent a business capability?**
+//! 2. **Will it be depended upon by multiple use cases or domains?**
+//! 3. **Is it implemented by the infrastructure or platform layer?**
+//!
+//! If all three answers are **yes**, place it in `uc-core/ports`.
+//! Otherwise, place it in the relevant `domain` submodule.
 
 pub mod blob;
 pub mod clipboard;
-pub mod clipboard_repository;
 pub mod device_repository;
 pub mod errors;
 pub mod network;
@@ -15,7 +25,7 @@ pub mod settings;
 
 pub use blob::meta::BlobMeta;
 pub use blob::port::BlobStorePort;
-pub use clipboard::ClipboardPort;
+pub use clipboard::{ClipboardRepositoryPort, LocalClipboardPort, ClipboardHistoryPort};
 pub use device_repository::DeviceRepositoryPort;
 pub use errors::DeviceRepositoryError;
 pub use network::NetworkPort;

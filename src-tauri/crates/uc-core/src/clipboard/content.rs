@@ -283,3 +283,4 @@ impl Hash for ClipboardItem {
         self.data.hash(state);
     }
 }
+
