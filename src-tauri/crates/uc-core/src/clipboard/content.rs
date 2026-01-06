@@ -278,9 +278,30 @@ impl Hash for ClipboardData {
 }
 
 impl Hash for ClipboardItem {
+    /// Feeds the clipboard item's identity into the provided hasher by hashing its MIME type and payload.
+    ///
+    /// This implementation produces a deterministic hash based on the `mime` and `data` fields so that
+    /// two `ClipboardItem` instances with equal MIME and payload produce the same hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::hash_map::DefaultHasher;
+    /// use std::hash::{Hash, Hasher};
+    ///
+    /// // Construct a sample ClipboardItem (types assumed to be in scope)
+    /// let item = ClipboardItem {
+    ///     mime: "text/plain".parse().unwrap(),
+    ///     data: ClipboardData::Text("hello".into()),
+    ///     meta: Default::default(),
+    /// };
+    ///
+    /// let mut hasher = DefaultHasher::new();
+    /// item.hash(&mut hasher);
+    /// let _hash = hasher.finish();
+    /// ```
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.mime.hash(state);
         self.data.hash(state);
     }
 }
-

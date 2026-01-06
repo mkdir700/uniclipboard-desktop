@@ -24,6 +24,21 @@ impl WindowsClipboard {
 
 #[async_trait]
 impl LocalClipboardPort for WindowsClipboard {
+    /// Reads the current system clipboard and returns the first supported item as ClipboardContent.
+    ///
+    /// Tries clipboard formats in this order: file list (`file/uri-list`), Windows BMP image (`image/bmp`), then plain text (`text/plain`). If a supported item is found it is returned as a single-item `ClipboardContent` with a current timestamp; if the clipboard is empty or contains only unsupported types an error is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[tokio::test]
+    /// async fn read_clipboard_example() {
+    ///     // `WindowsClipboard::new()` is expected to construct the clipboard adapter.
+    ///     let clipboard = WindowsClipboard::new().expect("create clipboard");
+    ///     let content = clipboard.read().await.expect("read clipboard");
+    ///     assert!(!content.items.is_empty());
+    /// }
+    /// ```
     async fn read(&self) -> Result<ClipboardContent> {
         let inner = self.inner.clone();
         let result = spawn_blocking(move || {

@@ -91,6 +91,20 @@ impl<C> ClipboardWatcher<C>
 where
     C: LocalClipboardPort + 'static,
 {
+    /// Creates a new ClipboardWatcher initialized with the provided clipboard handle and event sender.
+    ///
+    /// The watcher starts with no remembered last hash and no ignore marker set.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use std::sync::Arc;
+    /// use tokio::sync::mpsc;
+    /// // Assume `MyClipboard` implements the required `LocalClipboardPort` trait.
+    /// let clipboard = Arc::new(MyClipboard::new());
+    /// let (tx, _rx) = mpsc::channel(16);
+    /// let watcher = ClipboardWatcher::new(clipboard, tx);
+    /// ```
     pub fn new(clipboard: Arc<C>, tx: mpsc::Sender<PlatformEvent>) -> Self {
         Self {
             clipboard,

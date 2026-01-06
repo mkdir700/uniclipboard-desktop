@@ -3,6 +3,14 @@
 use super::fixtures::*;
 use crate::clipboard::ClipboardDecisionSnapshot;
 
+/// Confirms that creating a `ClipboardDecisionSnapshot` with `true` sets `blobs_exist` to `true`.
+///
+/// # Examples
+///
+/// ```
+/// let snapshot = ClipboardDecisionSnapshot::new(true);
+/// assert_eq!(snapshot.blobs_exist, true);
+/// ```
 #[test]
 fn test_snapshot_new_true() {
     let snapshot = ClipboardDecisionSnapshot::new(true);

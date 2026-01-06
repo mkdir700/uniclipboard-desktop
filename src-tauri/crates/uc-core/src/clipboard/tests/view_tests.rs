@@ -5,6 +5,14 @@ use crate::clipboard::view::*;
 use chrono::{DateTime, Utc};
 use serde_json;
 
+/// Verifies that converting the string "local" into `ClipboardOrigin` yields `ClipboardOrigin::Local`.
+///
+/// # Examples
+///
+/// ```
+/// let origin: ClipboardOrigin = "local".into();
+/// assert!(matches!(origin, ClipboardOrigin::Local));
+/// ```
 #[test]
 fn test_clipboard_origin_from_str_local() {
     let origin: ClipboardOrigin = "local".into();
@@ -100,6 +108,18 @@ fn test_clipboard_record_id_clone() {
     assert_eq!(id1.0, id2.0);
 }
 
+/// Verifies that a ClipboardItemView constructed with a MIME type and size stores those values.
+///
+/// # Examples
+///
+/// ```
+/// let view = ClipboardItemView {
+///     mime: Some("text/plain".to_string()),
+///     size: 100,
+/// };
+/// assert_eq!(view.mime, Some("text/plain".to_string()));
+/// assert_eq!(view.size, 100);
+/// ```
 #[test]
 fn test_clipboard_item_view_new() {
     let view = ClipboardItemView {
