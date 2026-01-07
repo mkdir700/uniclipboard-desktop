@@ -26,19 +26,10 @@ log = "0.4"
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
 
-# Database (diesel)
-diesel = { version = "2.2", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "r2d2"] }
-libsqlite3-sys = { version = "0.30", features = ["bundled"] }
-diesel_migrations = { version = "2.2", features = ["sqlite"] }
-
 # Encryption
-aes-gcm = "0.10"
 sha2 = "0.10"
 base64 = "0.22"
 subtle = "2.5"
-
-# Password hashing
-argon2 = "0.5"
 
 # Clipboard
 clipboard-rs = "0.2"
@@ -63,15 +54,18 @@ bytes = "1.7"
 # Utilities
 once_cell = "1.19"
 
-# Tauri stronghold for password management
-tauri-plugin-stronghold = "2"
-iota_stronghold = "2.1"
+keyring = { version = "3.6.3", features = [
+  "apple-native",
+  "windows-native",
+  "linux-native-sync-persistent",
+] }
+thiserror = "2.0.17"
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = { version = "5.4" }
 winapi = { version = "0.3", features = [
-    "winuser",
-    "basetsd",
-    "minwindef",
-    "winbase",
+  "winuser",
+  "basetsd",
+  "minwindef",
+  "winbase",
 ] }

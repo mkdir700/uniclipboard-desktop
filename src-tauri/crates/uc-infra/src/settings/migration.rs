@@ -30,6 +30,7 @@ impl SettingsMigrator {
     /// # Examples
     ///
     /// ```
+    /// use uc_core::settings::migration::SettingsMigrator;
     /// let migrator = SettingsMigrator::new();
     /// ```
     pub fn new() -> Self {

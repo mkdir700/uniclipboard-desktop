@@ -21,14 +21,19 @@ pub mod clipboard;
 pub mod device_repository;
 pub mod errors;
 pub mod network;
+pub mod security;
 pub mod settings;
 
 pub use blob::meta::BlobMeta;
 pub use blob::port::BlobStorePort;
-pub use clipboard::{ClipboardRepositoryPort, LocalClipboardPort, ClipboardHistoryPort};
+pub use clipboard::{ClipboardHistoryPort, ClipboardRepositoryPort, LocalClipboardPort};
 pub use device_repository::DeviceRepositoryPort;
 pub use errors::DeviceRepositoryError;
 pub use network::NetworkPort;
+pub use security::encryption::EncryptionPort;
+pub use security::encryption_session::EncryptionSessionPort;
+pub use security::key_material::KeyMaterialPort;
+pub use security::keyring::KeyringPort;
 pub use settings::{SettingsMigrationPort, SettingsPort};
 
 #[cfg(test)]

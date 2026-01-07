@@ -26,6 +26,7 @@ serde_json = "1"
 
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0.17"
 
 [dev-dependencies]
 mockall = "0.13"

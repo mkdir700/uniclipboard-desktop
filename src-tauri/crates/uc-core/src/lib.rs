@@ -12,6 +12,7 @@ pub mod ids;
 pub mod network;
 pub mod pairing;
 pub mod ports;
+pub mod security;
 pub mod settings;
 pub mod sync;
 
