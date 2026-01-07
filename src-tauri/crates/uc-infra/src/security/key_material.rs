@@ -38,7 +38,7 @@ where
     }
 
     async fn store_keyslot(&self, keyslot: &KeySlot) -> Result<(), EncryptionError> {
-        let file = KeySlotFile::from(keyslot);
+        let file = KeySlotFile::try_from(keyslot).map_err(|_| EncryptionError::CorruptedKeySlot)?;
         self.keyslot_store.store(&file).await
     }
 
@@ -57,7 +57,8 @@ mod tests {
     use async_trait::async_trait;
     use std::sync::{Arc, Mutex};
     use uc_core::security::model::{
-        AeadAlgorithm, EncryptionFormatVersion, KeyScope, KeySlotVersion, WrappedMasterKey,
+        AeadAlgorithm, EncryptionFormatVersion, KdfParams, KeyScope, KeySlotVersion,
+        WrappedMasterKey,
     };
 
     struct TestKeyringState {
@@ -86,7 +87,12 @@ mod tests {
                 store_kek: None,
                 delete_scope: None,
             }));
-            (Self { state: state.clone() }, state)
+            (
+                Self {
+                    state: state.clone(),
+                },
+                state,
+            )
         }
     }
 
@@ -136,7 +142,12 @@ mod tests {
                 stored_slot: None,
                 delete_called: false,
             }));
-            (Self { state: state.clone() }, state)
+            (
+                Self {
+                    state: state.clone(),
+                },
+                state,
+            )
         }
     }
 
@@ -177,7 +188,9 @@ mod tests {
         KeySlot {
             version: KeySlotVersion::V1,
             scope,
-            wrapped_master_key: WrappedMasterKey {
+            kdf: KdfParams::for_initialization(),
+            salt: vec![1u8; 32],
+            wrapped_master_key: Some(WrappedMasterKey {
                 blob: uc_core::security::model::EncryptedBlob {
                     version: EncryptionFormatVersion::V1,
                     aead: AeadAlgorithm::XChaCha20Poly1305,
@@ -185,7 +198,7 @@ mod tests {
                     ciphertext: vec![2u8; 32],
                     aad_fingerprint: None,
                 },
-            },
+            }),
         }
     }
 
@@ -200,10 +213,7 @@ mod tests {
         let scope = sample_scope("profile-1");
         let kek = sample_kek();
 
-        state
-            .lock()
-            .expect("lock keyring state")
-            .load_result = Some(Ok(kek.clone()));
+        state.lock().expect("lock keyring state").load_result = Some(Ok(kek.clone()));
 
         let loaded = service.load_kek(&scope).await.expect("load kek");
 
@@ -223,15 +233,9 @@ mod tests {
         let scope = sample_scope("profile-2");
         let kek = sample_kek();
 
-        state
-            .lock()
-            .expect("lock keyring state")
-            .store_result = Some(Ok(()));
+        state.lock().expect("lock keyring state").store_result = Some(Ok(()));
 
-        service
-            .store_kek(&scope, &kek)
-            .await
-            .expect("store kek");
+        service.store_kek(&scope, &kek).await.expect("store kek");
 
         let guard = state.lock().expect("lock keyring state");
         assert_eq!(guard.store_scope, Some(scope));
@@ -248,10 +252,7 @@ mod tests {
         };
         let scope = sample_scope("profile-3");
 
-        state
-            .lock()
-            .expect("lock keyring state")
-            .delete_result = Some(Ok(()));
+        state.lock().expect("lock keyring state").delete_result = Some(Ok(()));
 
         service.delete_kek(&scope).await.expect("delete kek");
 
@@ -268,12 +269,9 @@ mod tests {
             keyslot_store,
         };
         let scope = sample_scope("profile-a");
-        let file = KeySlotFile::from(&sample_keyslot(sample_scope("profile-b")));
+        let file = KeySlotFile::try_from(&sample_keyslot(sample_scope("profile-b"))).unwrap();
 
-        state
-            .lock()
-            .expect("lock keyslot state")
-            .load_result = Some(Ok(file));
+        state.lock().expect("lock keyslot state").load_result = Some(Ok(file));
 
         let err = service
             .load_keyslot(&scope)
@@ -293,12 +291,9 @@ mod tests {
         };
         let scope = sample_scope("profile-ok");
         let keyslot = sample_keyslot(scope.clone());
-        let file = KeySlotFile::from(&keyslot);
+        let file = KeySlotFile::try_from(&keyslot).unwrap();
 
-        state
-            .lock()
-            .expect("lock keyslot state")
-            .load_result = Some(Ok(file));
+        state.lock().expect("lock keyslot state").load_result = Some(Ok(file));
 
         let loaded = service.load_keyslot(&scope).await.expect("load keyslot");
 
@@ -315,10 +310,7 @@ mod tests {
         };
         let keyslot = sample_keyslot(sample_scope("profile-store"));
 
-        state
-            .lock()
-            .expect("lock keyslot state")
-            .store_result = Some(Ok(()));
+        state.lock().expect("lock keyslot state").store_result = Some(Ok(()));
 
         service
             .store_keyslot(&keyslot)
@@ -326,7 +318,10 @@ mod tests {
             .expect("store keyslot");
 
         let guard = state.lock().expect("lock keyslot state");
-        assert_eq!(guard.stored_slot, Some(KeySlotFile::from(&keyslot)));
+        assert_eq!(
+            guard.stored_slot,
+            Some(KeySlotFile::try_from(&keyslot).unwrap())
+        );
     }
 
     #[tokio::test]
@@ -338,12 +333,9 @@ mod tests {
             keyslot_store,
         };
         let scope = sample_scope("profile-x");
-        let file = KeySlotFile::from(&sample_keyslot(sample_scope("profile-y")));
+        let file = KeySlotFile::try_from(&sample_keyslot(sample_scope("profile-y"))).unwrap();
 
-        state
-            .lock()
-            .expect("lock keyslot state")
-            .load_result = Some(Ok(file));
+        state.lock().expect("lock keyslot state").load_result = Some(Ok(file));
 
         let err = service
             .delete_keyslot(&scope)
@@ -364,7 +356,7 @@ mod tests {
             keyslot_store,
         };
         let scope = sample_scope("profile-del");
-        let file = KeySlotFile::from(&sample_keyslot(scope.clone()));
+        let file = KeySlotFile::try_from(&sample_keyslot(scope.clone())).unwrap();
 
         {
             let mut guard = state.lock().expect("lock keyslot state");

@@ -9,6 +9,7 @@
 //! - MasterKey encrypts/decrypts clipboard blobs
 
 use chrono::{DateTime, Utc};
+use rand::{rngs::OsRng, TryRngCore};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -40,6 +41,21 @@ pub enum AeadAlgorithm {
 pub struct KdfParams {
     pub alg: KdfAlgorithm,
     pub params: KdfParamsV1,
+}
+
+impl KdfParams {
+    pub fn for_initialization() -> Self {
+        Self {
+            alg: KdfAlgorithm::Argon2id,
+            params: KdfParamsV1::default(),
+        }
+    }
+
+    pub fn salt_len(&self) -> usize {
+        match self.alg {
+            KdfAlgorithm::Argon2id => 16,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,8 +97,37 @@ pub struct KeySlot {
 
     pub scope: KeyScope,
 
+    pub kdf: KdfParams,
+
+    pub salt: Vec<u8>,
+
     /// MasterKey encrypted (wrapped) by KEK.
-    pub wrapped_master_key: WrappedMasterKey,
+    pub wrapped_master_key: Option<WrappedMasterKey>,
+}
+
+impl KeySlot {
+    pub fn draft_v1(scope: KeyScope) -> Result<Self, EncryptionError> {
+        let kdf = KdfParams::for_initialization();
+        let mut salt = vec![0u8; kdf.salt_len()];
+        OsRng
+            .try_fill_bytes(&mut salt)
+            .map_err(|_| EncryptionError::CryptoFailure)?;
+
+        Ok(Self {
+            version: KeySlotVersion::V1,
+            scope,
+            kdf,
+            salt,
+            wrapped_master_key: None,
+        })
+    }
+
+    pub fn finalize(self, wrapped_master_key: WrappedMasterKey) -> Self {
+        Self {
+            wrapped_master_key: Some(wrapped_master_key),
+            ..self
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -126,17 +171,6 @@ pub struct EncryptedBlob {
     pub aad_fingerprint: Option<Vec<u8>>,
 }
 
-/// Runtime state (domain-level, not storage)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EncryptionState {
-    /// No keyslot exists yet; must initialize
-    Uninitialized,
-    /// Keyslot exists but no key in session
-    Locked,
-    /// Session has master key
-    Unlocked,
-}
-
 /// Secrets (newtypes)
 /// =========================
 
@@ -157,6 +191,14 @@ impl fmt::Debug for MasterKey {
 impl MasterKey {
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
+    }
+
+    pub fn generate() -> Result<Self, EncryptionError> {
+        let mut buf = [0u8; Self::LEN];
+        OsRng
+            .try_fill_bytes(&mut buf)
+            .map_err(|_| EncryptionError::CryptoFailure)?;
+        Self::from_bytes(&buf)
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, EncryptionError> {
@@ -222,10 +264,18 @@ impl Kek {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum KeySlotConvertError {
+    #[error("wrapped master key is missing")]
+    MissingWrappedMasterKey,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeySlotFile {
     pub version: KeySlotVersion,
     pub scope: KeyScope,
+    pub kdf: KdfParams,
+    pub salt: Vec<u8>,
     pub wrapped_master_key: EncryptedBlob,
 
     #[serde(default)]
@@ -234,15 +284,24 @@ pub struct KeySlotFile {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-impl From<&KeySlot> for KeySlotFile {
-    fn from(ks: &KeySlot) -> Self {
-        KeySlotFile {
+impl TryFrom<&KeySlot> for KeySlotFile {
+    type Error = KeySlotConvertError;
+
+    fn try_from(ks: &KeySlot) -> Result<Self, Self::Error> {
+        let wrapped_master_key = ks
+            .wrapped_master_key
+            .clone()
+            .ok_or(KeySlotConvertError::MissingWrappedMasterKey)?;
+
+        Ok(KeySlotFile {
             version: ks.version,
             scope: ks.scope.clone(),
-            wrapped_master_key: ks.wrapped_master_key.blob.clone(),
+            kdf: ks.kdf.clone(),
+            salt: ks.salt.clone(),
+            wrapped_master_key: wrapped_master_key.blob.clone(),
             created_at: None,
             updated_at: None,
-        }
+        })
     }
 }
 
@@ -251,9 +310,11 @@ impl From<KeySlotFile> for KeySlot {
         KeySlot {
             version: ksf.version,
             scope: ksf.scope,
-            wrapped_master_key: WrappedMasterKey {
+            kdf: ksf.kdf,
+            salt: ksf.salt,
+            wrapped_master_key: Some(WrappedMasterKey {
                 blob: ksf.wrapped_master_key,
-            },
+            }),
         }
     }
 }

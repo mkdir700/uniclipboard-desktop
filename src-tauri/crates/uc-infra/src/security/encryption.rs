@@ -10,7 +10,7 @@ use uc_core::security::model::{
     KdfParams, Kek, MasterKey, Passphrase,
 };
 
-pub struct EncryptionService;
+pub struct EncryptionRepository;
 
 const CURR_VERSION: EncryptionFormatVersion = EncryptionFormatVersion::V1;
 
@@ -19,7 +19,7 @@ fn aad_fingerprint(aad: &[u8]) -> Vec<u8> {
 }
 
 #[async_trait]
-impl EncryptionPort for EncryptionService {
+impl EncryptionPort for EncryptionRepository {
     async fn derive_kek(
         &self,
         passphrase: &Passphrase,
@@ -183,7 +183,7 @@ mod tests {
 
     #[tokio::test]
     async fn derive_kek_is_deterministic() {
-        let service = EncryptionService;
+        let service = EncryptionRepository;
         let passphrase = Passphrase("test-passphrase".to_string());
         let salt = b"salt-000000000000";
         let kdf = test_kdf_params();
@@ -202,7 +202,7 @@ mod tests {
 
     #[tokio::test]
     async fn derive_kek_changes_with_salt() {
-        let service = EncryptionService;
+        let service = EncryptionRepository;
         let passphrase = Passphrase("test-passphrase".to_string());
         let kdf = test_kdf_params();
         let salt_a = b"salt-aaaaaaaaaaaa";
@@ -222,7 +222,7 @@ mod tests {
 
     #[tokio::test]
     async fn wrap_and_unwrap_master_key_round_trip() {
-        let service = EncryptionService;
+        let service = EncryptionRepository;
         let kek = Kek([1u8; 32]);
         let master_key = MasterKey([2u8; 32]);
 
@@ -245,7 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn unwrap_master_key_wrong_kek_returns_wrong_passphrase() {
-        let service = EncryptionService;
+        let service = EncryptionRepository;
         let kek = Kek([1u8; 32]);
         let wrong_kek = Kek([9u8; 32]);
         let master_key = MasterKey([2u8; 32]);
@@ -265,7 +265,7 @@ mod tests {
 
     #[tokio::test]
     async fn encrypt_then_decrypt_round_trip_with_aad() {
-        let service = EncryptionService;
+        let service = EncryptionRepository;
         let master_key = MasterKey([3u8; 32]);
         let plaintext = b"hello-uniclipboard";
         let aad = b"aad-context";
@@ -293,7 +293,7 @@ mod tests {
 
     #[tokio::test]
     async fn decrypt_blob_wrong_aad_returns_corrupted_blob() {
-        let service = EncryptionService;
+        let service = EncryptionRepository;
         let master_key = MasterKey([3u8; 32]);
         let plaintext = b"hello-uniclipboard";
         let aad = b"aad-context";
@@ -318,7 +318,7 @@ mod tests {
 
     #[tokio::test]
     async fn decrypt_blob_wrong_key_returns_corrupted_blob() {
-        let service = EncryptionService;
+        let service = EncryptionRepository;
         let master_key = MasterKey([3u8; 32]);
         let wrong_key = MasterKey([4u8; 32]);
         let plaintext = b"hello-uniclipboard";

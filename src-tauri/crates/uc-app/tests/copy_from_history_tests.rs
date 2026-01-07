@@ -165,7 +165,7 @@ impl LocalClipboardPort for MockClipboard {
 /// let clipboard = std::sync::Arc::new(MockClipboard { should_error: false });
 /// let uc = create_use_case(repo, clipboard);
 /// ```
-— A `CopyFromHistoryToSystemClipboard` instance configured to use the supplied mock repository and clipboard.
+/// — A `CopyFromHistoryToSystemClipboard` instance configured to use the supplied mock repository and clipboard.
 fn create_use_case(
     repo: Arc<MockRepo>,
     clipboard: Arc<MockClipboard>,

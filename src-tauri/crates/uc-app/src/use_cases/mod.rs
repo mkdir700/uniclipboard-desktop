@@ -3,3 +3,5 @@
 //! 取决于“是否需要用户 / 系统再次做出决策”
 
 pub mod clipboard;
+pub mod initialize_encryption;
+pub mod change_passphrase;

@@ -69,7 +69,7 @@ impl KeySlotStore for JsonKeySlotStore {
 mod tests {
     use super::*;
     use uc_core::security::model::{
-        AeadAlgorithm, EncryptionFormatVersion, KeyScope, KeySlotVersion,
+        AeadAlgorithm, EncryptionFormatVersion, KdfParams, KeyScope, KeySlotVersion
     };
 
     fn make_temp_dir() -> PathBuf {
@@ -84,6 +84,8 @@ mod tests {
             scope: KeyScope {
                 profile_id: "test-profile".to_string(),
             },
+            salt: vec![1u8; 32],
+            kdf: KdfParams::for_initialization(),
             wrapped_master_key: uc_core::security::model::EncryptedBlob {
                 version: EncryptionFormatVersion::V1,
                 aead: AeadAlgorithm::XChaCha20Poly1305,
