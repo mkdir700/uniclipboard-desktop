@@ -16,6 +16,7 @@
 //! If all three answers are **yes**, place it in `uc-core/ports`.
 //! Otherwise, place it in the relevant `domain` submodule.
 
+pub mod autostart;
 pub mod blob;
 pub mod clipboard;
 pub mod device_repository;
@@ -24,6 +25,7 @@ pub mod network;
 pub mod security;
 pub mod settings;
 
+pub use autostart::AutostartPort;
 pub use blob::meta::BlobMeta;
 pub use blob::port::BlobStorePort;
 pub use clipboard::{ClipboardHistoryPort, ClipboardRepositoryPort, LocalClipboardPort};

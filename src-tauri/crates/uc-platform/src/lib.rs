@@ -6,6 +6,7 @@
 //! the operating system, external services, and hardware.
 
 pub mod adatpers;
+pub mod autostart;
 pub mod ipc;
 pub mod ports;
 pub mod runtime;

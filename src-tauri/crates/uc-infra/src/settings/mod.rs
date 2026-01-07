@@ -1,2 +1,2 @@
-pub mod file_repo;
 pub mod migration;
+pub mod repository;

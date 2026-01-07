@@ -1,8 +1,12 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde_json;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::fs;
+use tokio::sync::RwLock;
 use uc_core::{
     ports::SettingsPort,
     settings::model::{Settings, CURRENT_SCHEMA_VERSION},
@@ -12,6 +16,11 @@ use crate::settings::migration::SettingsMigrator;
 
 pub struct FileSettingsRepository {
     path: PathBuf,
+}
+
+pub struct CachedSettingsRepository {
+    inner: Arc<dyn SettingsPort>,
+    cache: RwLock<Option<Settings>>,
 }
 
 impl FileSettingsRepository {
@@ -206,3 +215,51 @@ impl SettingsPort for FileSettingsRepository {
     }
 }
 
+#[async_trait]
+impl SettingsPort for CachedSettingsRepository {
+    /// Loads settings from the repository path, migrates them to the latest schema, and persists migrated settings when necessary.
+    ///
+    /// If the settings file does not exist, returns `Settings::default()`. On success returns the migrated `Settings`. On failure returns an error for I/O or deserialization problems (read errors include context with the settings path).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let repo = FileSettingsRepository::new(std::path::PathBuf::from("/tmp/nonexistent_settings.json"));
+    /// let settings = repo.load().await.unwrap();
+    /// // `settings` is either the migrated contents of the file or `Settings::default()` if the file was missing.
+    /// # }
+    /// ```
+    async fn load(&self) -> Result<Settings> {
+        let mut cache = self.cache.write().await;
+        if let Some(settings) = cache.as_ref() {
+            return Ok(settings.clone());
+        }
+
+        let settings = self.inner.load().await?;
+        *cache = Some(settings.clone());
+        Ok(settings)
+    }
+
+    /// Persist settings as pretty-printed JSON to the repository's configured file.
+    ///
+    /// On success, the settings are written atomically to the underlying file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error with context `"serialize settings failed"` if JSON serialization fails,
+    /// or an I/O error if writing the temporary file or renaming it to the target path fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use uc_infra::settings::{FileSettingsRepository, Settings};
+    /// let repo = FileSettingsRepository::new(std::path::PathBuf::from("/tmp/settings.json"));
+    /// let settings = Settings::default();
+    /// tokio::runtime::Runtime::new().unwrap().block_on(async {
+    ///     repo.save(&settings).await.unwrap();
+    /// });
+    /// ```
+    async fn save(&self, settings: &Settings) -> Result<()> {
+        self.inner.save(&settings).await
+    }
+}
