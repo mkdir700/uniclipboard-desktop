@@ -8852,7 +8852,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "uc-core",
- "uc-network",
 ]
 
 [[package]]
@@ -8953,6 +8952,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
+ "uc-app",
  "uc-core",
  "uuid",
  "winapi",

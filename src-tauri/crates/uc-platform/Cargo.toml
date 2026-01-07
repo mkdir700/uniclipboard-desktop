@@ -7,6 +7,7 @@ description = "Platform-specific implementations for UniClipboard (clipboard, se
 [dependencies]
 # Workspace crates
 uc-core = { path = "../uc-core" }
+uc-app = { path = "../uc-app" }
 tauri = { workspace = true }
 tauri-plugin-autostart = { workspace = true }
 
@@ -34,7 +35,7 @@ diesel = { version = "2.2", features = [
   "returning_clauses_for_sqlite_3_35",
   "r2d2",
 ] }
-libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+libsqlite3-sys = { version = "0.36", features = ["bundled"] }
 diesel_migrations = { version = "2.2", features = ["sqlite"] }
 # Encryption
 sha2 = "0.10"
@@ -47,7 +48,7 @@ arboard = "3.4"
 
 # Image handling
 image = "0.25"
-png = "0.17"
+png = "0.18"
 
 # File system
 dirs = "6.0"

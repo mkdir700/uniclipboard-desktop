@@ -6,8 +6,9 @@
 //! the operating system, external services, and hardware.
 
 pub mod adatpers;
-pub mod autostart;
+pub mod app_runtime;
+pub mod bootstrap;
 pub mod ipc;
+pub mod keyring;
 pub mod ports;
 pub mod runtime;
-pub mod keyring;

@@ -1,3 +1,4 @@
+pub mod app_event_handler;
 pub mod clipboard_runtime;
 pub mod command_executor;
 

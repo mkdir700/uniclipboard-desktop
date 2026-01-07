@@ -16,6 +16,7 @@
 //! If all three answers are **yes**, place it in `uc-core/ports`.
 //! Otherwise, place it in the relevant `domain` submodule.
 
+pub mod app_runtime;
 pub mod autostart;
 pub mod blob;
 pub mod clipboard;
@@ -25,6 +26,7 @@ pub mod network;
 pub mod security;
 pub mod settings;
 
+pub use app_runtime::AppRuntimePort;
 pub use autostart::AutostartPort;
 pub use blob::meta::BlobMeta;
 pub use blob::port::BlobStorePort;
