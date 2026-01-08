@@ -1,0 +1,35 @@
+use anyhow::Result;
+use clipboard_rs::ClipboardHandler;
+
+use crate::clipboard::LocalClipboard;
+use crate::ipc::PlatformEvent;
+// use crate::ports::local_clipboard::LocalClipboardPort;
+use crate::runtime::event_bus::PlatformEventSender;
+
+pub struct ClipboardWatcher {
+    local_clipboard: LocalClipboard,
+    sender: PlatformEventSender,
+}
+
+impl ClipboardWatcher {
+    pub fn new(local_clipoard: LocalClipboard, sender: PlatformEventSender) -> Self {
+        Self {
+            local_clipboard,
+            sender,
+        }
+    }
+}
+
+impl ClipboardHandler for ClipboardWatcher {
+    fn on_clipboard_change(&mut self) {
+        match self.local_clipboard.read() {
+            Ok(snapshot) => self
+                .sender
+                .try_send(PlatformEvent::LocalClipboardChanged(snapshot))?,
+
+            Err(e) => {
+                log::warn!("failed to read clipboard snapshot: {}", e);
+            }
+        }
+    }
+}

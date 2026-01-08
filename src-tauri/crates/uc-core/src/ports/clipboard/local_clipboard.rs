@@ -4,6 +4,7 @@
 //! reading, writing, and monitoring clipboard changes.
 
 use crate::clipboard::ClipboardContent;
+use crate::system::RawClipboardSnapshot;
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -18,10 +19,12 @@ pub trait LocalClipboardPort: Send + Sync {
     ///
     /// Returns the current clipboard content as a Payload, which can contain
     /// text, images, files, or other supported content types.
-    async fn read(&self) -> Result<ClipboardContent>;
+    fn read_snapshot(&self) -> Result<RawClipboardSnapshot>;
+
+    fn write_snapshot(&self, snapshot: RawClipboardSnapshot) -> Result<()>;
 
     /// Write content to clipboard
     ///
     /// Sets the clipboard content to the provided payload.
-    async fn write(&self, content: ClipboardContent) -> Result<()>;
+    fn write(&self, content: ClipboardContent) -> Result<()>;
 }

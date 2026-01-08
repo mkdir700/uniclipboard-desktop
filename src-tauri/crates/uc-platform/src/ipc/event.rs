@@ -18,7 +18,7 @@
 
 use std::time::SystemTime;
 
-use uc_core::clipboard::ClipboardContent;
+use crate::clipboard::
 
 #[derive(Debug, Clone)]
 pub struct PlatformStatus {

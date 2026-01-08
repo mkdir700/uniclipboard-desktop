@@ -68,40 +68,77 @@ Building is handled via GitHub Actions. Trigger manually from GitHub Actions tab
 
 ### Backend (Rust with Tauri 2)
 
-Follows **Clean Architecture** with clear separation of concerns:
+**NOTE**: The backend is currently undergoing a major refactoring from Clean Architecture to Hexagonal Architecture. Both old and new code coexist during the transition.
+
+#### New Architecture (Target)
+
+The new architecture follows **Hexagonal Architecture (Ports and Adapters)** with crate-based modularization:
+
+```
+src-tauri/crates/
+├── uc-core/         # Core domain layer (90% complete)
+│   ├── clipboard/   # Clipboard aggregate root
+│   ├── device/      # Device aggregate root
+│   ├── network/     # Network domain models
+│   ├── security/    # Security domain models
+│   ├── settings/    # Settings domain models
+│   └── ports/       # Port definitions (traits)
+│       ├── clipboard/
+│       ├── security/
+│       └── blob/
+├── uc-infra/        # Infrastructure implementations (60% complete)
+│   ├── db/          # Database layer
+│   │   ├── mapper/  # Entity mappers
+│   │   ├── models/  # Database models
+│   │   └── repositories/ # Repository implementations
+│   ├── security/    # Encryption implementations
+│   └── settings/    # Settings storage
+├── uc-platform/     # Platform adapter layer (70% complete)
+│   ├── adapters/    # Platform-specific adapters
+│   ├── app_runtime/ # Application runtime
+│   ├── ipc/         # IPC event/command system
+│   └── ports/       # Platform port definitions
+└── uc-app/          # Application layer (30% complete)
+    ├── event/       # Event handling
+    ├── state/       # Application state
+    └── use_cases/   # Use case implementations
+```
+
+**Dependency flow**: `uc-app` → `uc-core` ← `uc-infra` / `uc-platform`
+
+**Key architectural changes**:
+
+- **Port/Adapter pattern**: All external dependencies accessed through trait ports
+- **Message-driven runtime**: Async event-based system replacing global state
+- **Crate boundaries**: Enforced separation through Rust module system
+
+#### Legacy Architecture (Being Replaced)
+
+The old architecture follows traditional **Clean Architecture**:
 
 ```
 src-tauri/src/
-├── domain/          # Core business models (Device, ClipboardMetadata, etc.)
-├── interface/       # Trait definitions (SyncProvider, LocalClipboard, Storage)
-├── infrastructure/  # External implementations (DB, network, clipboard, storage)
-│   ├── clipboard/   # Platform-specific clipboard handling
-│   ├── sync/        # WebSocket/WebDAV sync implementations
-│   ├── storage/     # Diesel ORM + SQLite (DAOs, models, migrations)
-│   ├── security/    # AES-GCM encryption, Argon2 password hashing
-│   ├── connection/  # Device connection management
-│   └── web/         # Warp HTTP server for device communication
-├── application/     # Use cases/services (high-level operations)
-├── config/          # Setting management (TOML-based)
-├── api/             # Tauri command handlers (frontend-backend bridge)
-└── main.rs          # Application initialization
+├── domain/          # Core business models
+├── interface/       # Trait definitions
+├── infrastructure/  # External implementations
+│   ├── clipboard/   # Platform-specific clipboard
+│   ├── p2p/         # P2P network (libp2p)
+│   ├── security/    # AES-GCM encryption
+│   ├── storage/     # Diesel ORM + SQLite
+│   └── sync/        # WebSocket/WebDAV sync
+├── application/     # Business services
+├── config/          # TOML-based settings
+├── api/             # Tauri command handlers
+└── main.rs          # Application entry point
 ```
 
-**Key initialization flow** ([main.rs:89-135](src-tauri/src/main.rs#L89-L135)):
+**Status**: Legacy code is still in use. Migration is in progress (~40% overall complete).
 
-1. Initialize logging
-2. Load `Setting` from config (fallback to defaults)
-3. Initialize `PasswordManager` salt file
-4. Initialize database pool (`DB_POOL.init()`)
-5. Register/get current device
-6. Build `AppContext` with all infrastructure components
-7. Build `UniClipboard` instance and start async runtime
+**Concurrency patterns** (legacy):
 
-**Concurrency patterns**:
-
-- Tokio async runtime for all I/O operations
-- `Arc<Mutex<T>>` for shared state across Tauri commands
-- Tauri's async runtime for background tasks (`tauri::async_runtime::spawn`)
+- Tokio async runtime for I/O
+- `Arc<Mutex<T>>` for shared state
+- Global `SETTING` RwLock for configuration
 
 ### Frontend (React 18 + TypeScript + Vite)
 

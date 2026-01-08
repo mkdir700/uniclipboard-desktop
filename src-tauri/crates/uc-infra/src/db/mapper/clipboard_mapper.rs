@@ -1,4 +1,4 @@
-use crate::db::models::{ClipboardRecordRow, NewClipboardItemRow, NewClipboardRecordRow};
+use crate::db::models::{NewClipboardItemRow, NewClipboardRecordRow};
 use uc_core::clipboard::{ClipboardContent, ClipboardItem};
 use uuid::Uuid;
 

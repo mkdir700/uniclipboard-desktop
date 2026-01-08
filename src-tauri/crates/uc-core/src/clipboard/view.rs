@@ -112,21 +112,7 @@ pub struct ClipboardContentView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ClipboardItemKind {
-    Text,
-    Image,
-    File,
-    Link,
-    CodeSnippet,
-    RichText,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardItemView {
-    /// 业务语义上的内容类型
-    // pub kind: ClipboardItemKind,
-
     /// MIME（仅用于展示 / icon / 预览判断）
     pub mime: Option<String>,
 

@@ -2,8 +2,8 @@ use tokio::sync::mpsc;
 
 use crate::ipc::{PlatformCommand, PlatformEvent};
 
-pub type EventBus = mpsc::Sender<PlatformEvent>;
-pub type EventReceiver = mpsc::Receiver<PlatformEvent>;
+pub type PlatformEventSender = mpsc::Sender<PlatformEvent>;
+pub type PlatformEventReceiver = mpsc::Receiver<PlatformEvent>;
 
-pub type CommandBus = mpsc::Sender<PlatformCommand>;
-pub type CommandReceiver = mpsc::Receiver<PlatformCommand>;
+pub type PlatformCommandSender = mpsc::Sender<PlatformCommand>;
+pub type PlatformCommandReceiver = mpsc::Receiver<PlatformCommand>;

@@ -1,35 +1,50 @@
 use std::sync::Arc;
 
-use super::event_bus::{CommandReceiver, EventReceiver};
+use super::event_bus::{PlatformCommandReceiver, PlatformEventReceiver};
+use crate::clipboard::watcher::ClipboardWatcher;
+use crate::clipboard::LocalClipboard;
 use crate::ipc::{PlatformCommand, PlatformEvent};
-use crate::ports::PlatformCommandExecutorPort;
+use crate::ports::{LocalClipboardPort, PlatformCommandExecutorPort};
+use anyhow::Result;
+use clipboard_rs::ClipboardWatcherContext;
 use log::error;
 
 pub struct PlatformRuntime<E>
 where
     E: PlatformCommandExecutorPort,
 {
-    event_rx: EventReceiver,
-    command_rx: CommandReceiver,
+    local_clipboard: Arc<dyn LocalClipboardPort>,
+    event_rx: PlatformEventReceiver,
+    command_rx: PlatformCommandReceiver,
     executor: Arc<E>,
     shutting_down: bool,
-    // 未来可以加：
-    // use_cases: Arc<UseCases>,
+    watcher_join: Option<JoinHandle<()>>,
+    watcher_handle: Option<Arc<ClipboardWatcher<dyn LocalClipboardPort>>>,
 }
 
 impl<E> PlatformRuntime<E>
 where
     E: PlatformCommandExecutorPort,
 {
-    pub fn new(event_rx: EventReceiver, command_rx: CommandReceiver, executor: Arc<E>) -> Self {
-        Self {
+    pub fn new(
+        event_rx: PlatformEventReceiver,
+        command_rx: PlatformCommandReceiver,
+        executor: Arc<E>,
+    ) -> Result<PlatformRuntime<E>, anyhow::Error> {
+        let local_clipboard = Arc::new(LocalClipboard::new()?);
+
+        Ok(Self {
+            local_clipboard,
             event_rx,
             command_rx,
             executor,
             shutting_down: false,
-        }
+            watcher_join: None,
+            watcher_handle: None,
+        })
     }
-    pub async fn run(mut self) {
+
+    pub async fn start(mut self) {
         while !self.shutting_down {
             tokio::select! {
                 Some(event) = self.event_rx.recv() => {
@@ -40,6 +55,24 @@ where
                 }
             }
         }
+    }
+
+    fn start_clipboard_watcher(&mut self) -> Result<()> {
+        let mut watcher_ctx = ClipboardWatcherContext::new()?;
+
+        let handler = ClipboardWatcher::new(self.local_clipboard.clone(), self.event_rx.clone());
+
+        let shutdown = watcher_ctx.add_handler(handler).get_shutdown_channel();
+
+        let join = tokio::task::spawn_blocking(move || {
+            log::info!("start clipboard watch");
+            watcher_ctx.start_watch();
+            log::info!("clipboard watch stopped");
+        });
+
+        self.watcher_join = Some(join);
+        self.watcher_stop = Some(shutdown);
+        Ok(())
     }
 
     async fn handle_event(&self, event: PlatformEvent) {
@@ -56,10 +89,10 @@ where
         match command {
             PlatformCommand::Shutdown => {
                 self.shutting_down = true;
-            },
+            }
             PlatformCommand::ReadClipboard => {
                 todo!()
-            },
+            }
             PlatformCommand::WriteClipboard => {
                 todo!()
             }

@@ -67,7 +67,7 @@ where
     pub async fn execute(&self, hash: &ContentHash) -> Result<()> {
         // 1. Write to system clipboard
         if let Some(content) = self.clipboard_repo.read(hash).await? {
-            self.local_clipboard.write(content).await?;
+            self.local_clipboard.write(content)?;
         }
 
         // 2. TODO: 同步到其他设备，网络 infra 暂未实现
@@ -77,4 +77,3 @@ where
         Ok(())
     }
 }
-

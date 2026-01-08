@@ -34,7 +34,8 @@ libsqlite3-sys = { version = "0.35", features = ["bundled"] }    # SQLite系统�
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] } # Diesel迁移工具
 
 # Async runtime (for mpsc channels in ports)
-tokio = { version = "1", features = ["sync", "fs"] }
+tokio = { version = "1", features = ["sync", "fs", "rt-multi-thread", "macros"] }
+
 log = "0.4.29"
 argon2 = "0.5.3"
 chacha20poly1305 = "0.10.1"

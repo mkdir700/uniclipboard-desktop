@@ -2,8 +2,9 @@ use crate::db::{
     models::{NewClipboardItemRow, NewClipboardRecordRow},
     ports::ClipboardDbPort,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use log::warn;
 use std::sync::Arc;
 use uc_core::{
@@ -11,7 +12,7 @@ use uc_core::{
         ClipboardContent, ClipboardContentView, ClipboardDecisionSnapshot, ClipboardItemView,
         ContentHash, DuplicationHint, TimestampMs,
     },
-    ports::{ClipboardHistoryPort, ClipboardRepositoryPort, blob::port::ClipboardBlobPort},
+    ports::{blob::port::ClipboardBlobPort, ClipboardHistoryPort, ClipboardRepositoryPort},
 };
 
 pub struct ClipboardRepository {
@@ -29,7 +30,7 @@ impl ClipboardRepositoryPort for ClipboardRepository {
         let record_id = uuid::Uuid::new_v4().to_string();
         let record_row = NewClipboardRecordRow::from((&content, record_id.as_str()));
 
-        self.db.insert_record(record_row).await?;
+        self.db.insert_record(record_row)?;
 
         for (idx, item) in content.items.iter().enumerate() {
             let blob_id = self.blob.write(item.clone()).await?;
@@ -37,7 +38,7 @@ impl ClipboardRepositoryPort for ClipboardRepository {
             let item_row =
                 NewClipboardItemRow::from((item, record_id.as_str(), blob_id.as_str(), idx as i32));
 
-            self.db.insert_item(item_row).await?;
+            self.db.insert_item(item_row)?;
         }
 
         Ok(())
@@ -46,7 +47,7 @@ impl ClipboardRepositoryPort for ClipboardRepository {
     async fn duplication_hint(&self, content_hash: &ContentHash) -> Result<DuplicationHint> {
         let hash = content_hash.to_string();
 
-        if self.db.record_exists(hash.clone()).await? {
+        if self.db.record_exists(hash.clone())? {
             Ok(DuplicationHint::Repeated)
         } else {
             Ok(DuplicationHint::New)
@@ -54,7 +55,7 @@ impl ClipboardRepositoryPort for ClipboardRepository {
     }
 
     async fn exists(&self, content_hash: &ContentHash) -> Result<bool> {
-        self.db.record_exists(content_hash.to_string()).await
+        self.db.record_exists(content_hash.to_string())
     }
 
     async fn list_recent_views(
@@ -62,11 +63,11 @@ impl ClipboardRepositoryPort for ClipboardRepository {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<ClipboardContentView>> {
-        let record_rows = self.db.list_recent_records(limit, offset).await?;
+        let record_rows = self.db.list_recent_records(limit, offset)?;
         let mut views = Vec::new();
 
         for record_row in record_rows {
-            let item_rows = self.db.find_items_by_record(record_row.id).await?;
+            let item_rows = self.db.find_items_by_record(record_row.id.clone())?;
             let mut items = Vec::new();
             for item_row in item_rows {
                 let item_view = ClipboardItemView {
@@ -76,13 +77,16 @@ impl ClipboardRepositoryPort for ClipboardRepository {
                 items.push(item_view);
             }
 
+            let created_at = DateTime::<Utc>::from_timestamp_millis(record_row.created_at.clone())
+                .ok_or_else(|| anyhow!("Invalid timestamp"))?;
+
             let content_view = ClipboardContentView {
                 id: record_row.id.into(),
                 source_device_id: record_row.source_device_id,
                 origin: record_row.origin.into(),
                 record_hash: record_row.record_hash,
                 item_count: record_row.item_count,
-                created_at: record_row.created_at.to_datetime(),
+                created_at,
                 items,
             };
             views.push(content_view);
@@ -93,15 +97,11 @@ impl ClipboardRepositoryPort for ClipboardRepository {
 
     async fn read(&self, content_hash: &ContentHash) -> Result<Option<ClipboardContent>> {
         let hash_val = content_hash.to_string();
-        let record_row = self
-            .db
-            .find_record_by_hash(hash_val)
-            .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!("Clipboard content with hash {:?} not found", content_hash)
-            })?;
+        let record_row = self.db.find_record_by_hash(hash_val)?.ok_or_else(|| {
+            anyhow::anyhow!("Clipboard content with hash {:?} not found", content_hash)
+        })?;
 
-        let item_rows = self.db.find_items_by_record(record_row.id).await?;
+        let item_rows = self.db.find_items_by_record(record_row.id)?;
         let mut items = Vec::new();
         for item_row in item_rows {
             let blob_id = match &item_row.blob_id {
@@ -128,8 +128,7 @@ impl ClipboardRepositoryPort for ClipboardRepository {
     }
 
     async fn soft_delete(&self, content_hash: &ContentHash) -> Result<()> {
-        let hash_val = format!("{:x}", hash.as_bytes());
-        self.db.soft_delete_record(hash_val).await
+        self.db.soft_delete_record(content_hash.to_string())
     }
 }
 
@@ -159,14 +158,14 @@ impl ClipboardHistoryPort for ClipboardRepository {
         &self,
         hash: &ContentHash,
     ) -> Result<Option<ClipboardDecisionSnapshot>> {
-        let record_row = self.db.find_record_by_hash(hash.to_string()).await?;
+        let record_row = self.db.find_record_by_hash(hash.to_string())?;
 
         let record = match record_row {
             Some(r) => r,
             None => return Ok(None),
         };
 
-        let item_rows = self.db.find_items_by_record(record.id).await?;
+        let item_rows = self.db.find_items_by_record(record.id)?;
 
         // 检查所有 blob 是否存在以确定 can_read 权限
         let mut blobs_exist = true;

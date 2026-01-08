@@ -1,34 +1,28 @@
+use std::sync::Arc;
+
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::SqliteConnection;
 
 use crate::db::ports::DbExecutor;
 
 pub struct DieselSqliteExecutor {
-    pool: Pool<ConnectionManager<SqliteConnection>>,
+    pool: Arc<Pool<ConnectionManager<SqliteConnection>>>,
 }
 
 impl DieselSqliteExecutor {
     pub fn new(pool: Pool<ConnectionManager<SqliteConnection>>) -> Self {
-        Self { pool }
+        Self {
+            pool: Arc::new(pool),
+        }
     }
 }
 
-#[async_trait::async_trait]
 impl DbExecutor for DieselSqliteExecutor {
-    async fn run(
+    fn run<T>(
         &self,
-        f: Box<
-            dyn FnOnce(&mut SqliteConnection) -> anyhow::Result<()>
-                + Send
-        >,
-    ) -> anyhow::Result<()> {
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-            f(&mut conn)
-        })
-        .await?
+        f: impl FnOnce(&mut SqliteConnection) -> anyhow::Result<T>,
+    ) -> anyhow::Result<T> {
+        let mut conn = self.pool.get()?;
+        f(&mut conn)
     }
 }
-
