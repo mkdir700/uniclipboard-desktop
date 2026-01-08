@@ -23,15 +23,14 @@ thiserror = "2.0"
 async-trait = "0.1"
 
 # ===== 数据库 =====
-diesel = { version = "2.2.0", features = [
+diesel = { version = "2.3.5", features = [
     "sqlite",
     "returning_clauses_for_sqlite_3_35",
     "r2d2",
 ] } # ORM数据库框架
 # build libsqlite3 as part of the build process
 # uncomment this line if you run into setup issues
-libsqlite3-sys = { version = "0.30", features = ["bundled"] } # SQLite系统库绑定
-# libsqlite3-sys = { version = "0.30" }
+libsqlite3-sys = { version = "0.35", features = ["bundled"] }    # SQLite系统库绑定
 diesel_migrations = { version = "2.2.0", features = ["sqlite"] } # Diesel迁移工具
 
 # Async runtime (for mpsc channels in ports)

@@ -77,10 +77,34 @@
 //! extensibility, cross-platform support, and stable synchronization semantics.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 use crate::clipboard::meta_keys;
 use crate::clipboard::MimeType;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum HashAlgorithm {
+    Blake3V1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PayloadHash {
+    pub alg: HashAlgorithm,
+    pub bytes: [u8; 32],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ItemHash {
+    pub alg: HashAlgorithm,
+    pub bytes: [u8; 32],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ContentHash {
+    pub alg: HashAlgorithm,
+    pub bytes: [u8; 32],
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -105,13 +129,27 @@ pub struct ClipboardItem {
     pub meta: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct TimestampMs(i64);
+
+impl TimestampMs {
+    /// Unix epoch milliseconds (UTC)
+    pub fn from_epoch_millis(ms: i64) -> Self {
+        Self(ms)
+    }
+
+    pub fn as_millis(&self) -> i64 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ClipboardContent {
     /// schema version, fixed = 1
     pub v: u32,
 
     /// unix epoch millis
-    pub ts_ms: i64,
+    pub occurred_at: TimestampMs,
 
     /// one clipboard snapshot may contain multiple representations
     pub items: Vec<ClipboardItem>,
@@ -181,6 +219,10 @@ impl ClipboardItem {
     pub fn size_bytes(&self) -> Option<u64> {
         self.meta.get("sys.size_bytes")?.parse().ok()
     }
+
+    pub fn hash(&self) -> ItemHash {
+        ItemHash::compute(self)
+    }
 }
 
 impl ClipboardContent {
@@ -208,12 +250,8 @@ impl ClipboardContent {
     /// let h2 = content.content_hash();
     /// assert_eq!(h1, h2);
     /// ```
-    pub fn content_hash(&self) -> String {
-        use std::hash::DefaultHasher;
-        let mut hasher = DefaultHasher::new();
-        self.v.hash(&mut hasher);
-        self.items.hash(&mut hasher);
-        format!("{:x}", hasher.finish())
+    pub fn content_hash(&self) -> ContentHash {
+        ContentHash::compute(&self.items)
     }
 
     /// Retrieve the device identifier stored in the snapshot's metadata.
@@ -262,46 +300,92 @@ impl ClipboardContent {
     }
 }
 
-impl Hash for ClipboardData {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            ClipboardData::Text { text } => {
-                0u8.hash(state);
-                text.hash(state);
-            }
-            ClipboardData::Bytes { bytes } => {
-                1u8.hash(state);
-                bytes.hash(state);
-            }
+impl PayloadHash {
+    pub fn compute(data: &ClipboardData) -> Self {
+        match data {
+            ClipboardData::Text { text } => Self::hash_bytes(text.as_bytes()),
+            ClipboardData::Bytes { bytes } => Self::hash_bytes(bytes),
         }
+    }
+
+    fn hash_bytes(input: &[u8]) -> Self {
+        let hash = blake3::hash(input);
+        Self {
+            alg: HashAlgorithm::Blake3V1,
+            bytes: hash.into(),
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.bytes
     }
 }
 
-impl Hash for ClipboardItem {
-    /// Feeds the clipboard item's identity into the provided hasher by hashing its MIME type and payload.
-    ///
-    /// This implementation produces a deterministic hash based on the `mime` and `data` fields so that
-    /// two `ClipboardItem` instances with equal MIME and payload produce the same hash.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::collections::hash_map::DefaultHasher;
-    /// use std::hash::{Hash, Hasher};
-    ///
-    /// // Construct a sample ClipboardItem (types assumed to be in scope)
-    /// let item = ClipboardItem {
-    ///     mime: "text/plain".parse().unwrap(),
-    ///     data: ClipboardData::Text("hello".into()),
-    ///     meta: Default::default(),
-    /// };
-    ///
-    /// let mut hasher = DefaultHasher::new();
-    /// item.hash(&mut hasher);
-    /// let _hash = hasher.finish();
-    /// ```
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.mime.hash(state);
-        self.data.hash(state);
+impl ItemHash {
+    pub fn compute(item: &ClipboardItem) -> Self {
+        let payload_hash = PayloadHash::compute(&item.data);
+
+        let mut buf = Vec::new();
+
+        // 1. mime（稳定字符串）
+        buf.extend_from_slice(item.mime.as_str().as_bytes());
+        buf.push(0);
+
+        // 2. data kind（语义必须参与）
+        match &item.data {
+            ClipboardData::Text { .. } => buf.extend_from_slice(b"text"),
+            ClipboardData::Bytes { .. } => buf.extend_from_slice(b"bytes"),
+        }
+        buf.push(0);
+
+        // 3. payload hash（固定 32 bytes）
+        buf.extend_from_slice(&payload_hash.bytes);
+
+        let hash = blake3::hash(&buf);
+
+        Self {
+            alg: HashAlgorithm::Blake3V1,
+            bytes: hash.into(),
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.bytes
+    }
+
+    pub fn to_string(&self) -> String {
+        hex::encode(self.as_bytes())
+    }
+}
+
+impl ContentHash {
+    pub fn compute(items: &[ClipboardItem]) -> Self {
+        let mut item_hashes: Vec<[u8; 32]> = items
+            .iter()
+            .map(|item| ItemHash::compute(item).bytes)
+            .collect();
+
+        // 顺序无关（非常重要）
+        item_hashes.sort();
+
+        let mut buf = Vec::new();
+        for h in item_hashes {
+            buf.extend_from_slice(&h);
+        }
+
+        let hash = blake3::hash(&buf);
+
+        Self {
+            alg: HashAlgorithm::Blake3V1,
+            bytes: hash.into(),
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.bytes
+    }
+
+    pub fn to_string(&self) -> String {
+        hex::encode(self.as_bytes())
     }
 }

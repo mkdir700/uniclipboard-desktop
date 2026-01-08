@@ -1,7 +1,10 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use uc_core::ports::{ClipboardRepositoryPort, LocalClipboardPort};
+use uc_core::{
+    clipboard::ContentHash,
+    ports::{ClipboardRepositoryPort, LocalClipboardPort},
+};
 
 /// Copy a historical clipboard content back into the system clipboard
 ///
@@ -61,13 +64,17 @@ where
     /// // Assume `usecase` is an instance of `CopyFromHistoryToSystemClipboard`.
     /// // usecase.execute("some-hash").await?;
     /// ```
-    pub async fn execute(&self, hash: &str) -> Result<()> {
+    pub async fn execute(&self, hash: &ContentHash) -> Result<()> {
         // 1. Write to system clipboard
-        if let Some(content) = self.clipboard_repo.get_by_hash(hash).await? {
+        if let Some(content) = self.clipboard_repo.read(hash).await? {
             self.local_clipboard.write(content).await?;
         }
 
         // 2. TODO: 同步到其他设备，网络 infra 暂未实现
+        //   其他设备收到剪切板内容后，需要先通过 hash 检查是否存在
+        //   如果存在则重新写入剪切板即可
+        //   如果不存在，则需要接收其他设备发送的剪切板内容，并写入到剪切板
         Ok(())
     }
 }
+

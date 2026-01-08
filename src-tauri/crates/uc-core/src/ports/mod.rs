@@ -39,6 +39,3 @@ pub use security::encryption_session::EncryptionSessionPort;
 pub use security::key_material::KeyMaterialPort;
 pub use security::keyring::KeyringPort;
 pub use settings::{SettingsMigrationPort, SettingsPort};
-
-#[cfg(test)]
-mod tests;

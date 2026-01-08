@@ -11,6 +11,9 @@ impl MimeType {
     pub fn text_html() -> Self {
         Self("text/html".into())
     }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl fmt::Display for MimeType {
@@ -43,3 +46,4 @@ impl FromStr for MimeType {
         Ok(MimeType(s.to_string()))
     }
 }
+

@@ -1,9 +1,11 @@
+use super::content::ContentHash;
+
 /// Event representing a user-initiated action on clipboard content.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClipboardContentActionEvent {
     /// User requested an action on clipboard content identified by hash.
     UserRequested {
-        content_hash: String,
+        content_hash: ContentHash,
         action: ClipboardContentAction,
     },
 }

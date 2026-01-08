@@ -19,6 +19,10 @@ pub struct ClipboardRecordRow {
     /// 本次复制事件包含的 item 数量
     pub item_count: i32,
 
+    pub version: i32,
+
+    pub occurred_at: i64,
+
     /// 创建时间（Unix epoch 毫秒）
     pub created_at: i64,
 
@@ -28,38 +32,12 @@ pub struct ClipboardRecordRow {
 
 #[derive(Debug, Insertable)]
 #[diesel(table_name = t_clipboard_record)]
-pub struct NewClipboardRecordRow<'a> {
-    pub id: &'a str,
-    pub source_device_id: &'a str,
-    pub origin: &'a str,
-    pub record_hash: &'a str,
-    pub item_count: i32,
-    pub created_at: i64,
-    pub deleted_at: Option<i64>,
-}
-
-/// Owned version of NewClipboardRecordRow for easier construction
-#[derive(Debug, Clone)]
-pub struct NewClipboardRecordRowOwned {
+pub struct NewClipboardRecordRow {
     pub id: String,
     pub source_device_id: String,
     pub origin: String,
     pub record_hash: String,
     pub item_count: i32,
-    pub created_at: i64,
-    pub deleted_at: Option<i64>,
-}
-
-impl<'a> From<&'a NewClipboardRecordRowOwned> for NewClipboardRecordRow<'a> {
-    fn from(owned: &'a NewClipboardRecordRowOwned) -> Self {
-        NewClipboardRecordRow {
-            id: &owned.id,
-            source_device_id: &owned.source_device_id,
-            origin: &owned.origin,
-            record_hash: &owned.record_hash,
-            item_count: owned.item_count,
-            created_at: owned.created_at,
-            deleted_at: owned.deleted_at,
-        }
-    }
+    pub version: i32,
+    pub occurred_at: i64,
 }

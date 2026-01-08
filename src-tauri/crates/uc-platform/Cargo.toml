@@ -29,14 +29,6 @@ log = "0.4"
 # Time handling
 chrono = { version = "0.4", features = ["serde"] }
 
-# Database (diesel)
-diesel = { version = "2.2", features = [
-  "sqlite",
-  "returning_clauses_for_sqlite_3_35",
-  "r2d2",
-] }
-libsqlite3-sys = { version = "0.36", features = ["bundled"] }
-diesel_migrations = { version = "2.2", features = ["sqlite"] }
 # Encryption
 sha2 = "0.10"
 base64 = "0.22"

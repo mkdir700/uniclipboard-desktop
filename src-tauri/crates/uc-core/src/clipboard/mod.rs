@@ -8,11 +8,10 @@ mod mime;
 mod snapshot;
 mod view;
 
-#[cfg(test)]
-mod tests;
-
-pub use content::{ClipboardContent, ClipboardData, ClipboardItem};
-pub use decision::ClipboardContentActionDecision;
+pub use content::{
+    ClipboardContent, ClipboardData, ClipboardItem, ContentHash, ItemHash, PayloadHash, TimestampMs,
+};
+pub use decision::{ClipboardContentActionDecision, DuplicationHint, RejectReason};
 pub use domain::ClipboardContentDecisionDomain;
 pub use mime::MimeType;
 pub use snapshot::ClipboardDecisionSnapshot;

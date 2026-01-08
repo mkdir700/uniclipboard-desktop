@@ -19,6 +19,8 @@ diesel::table! {
         source_device_id -> Text,
         origin -> Text,
         record_hash -> Text,
+        version -> Integer,
+        occurred_at -> BigInt,
         item_count -> Integer,
         created_at -> BigInt,
         deleted_at -> Nullable<BigInt>,
@@ -35,8 +37,4 @@ diesel::table! {
 
 diesel::joinable!(t_clipboard_item -> t_clipboard_record (record_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    t_clipboard_item,
-    t_clipboard_record,
-    t_device,
-);
+diesel::allow_tables_to_appear_in_same_query!(t_clipboard_item, t_clipboard_record, t_device,);

@@ -1,4 +1,7 @@
-use crate::{clipboard::ClipboardContent, DeviceId};
+use crate::{
+    clipboard::{ClipboardContent, ContentHash},
+    DeviceId,
+};
 
 #[derive(Debug, Clone)]
 pub enum SyncEvent {
@@ -9,7 +12,7 @@ pub enum SyncEvent {
     RemoteClipboardReceived {
         content: ClipboardContent,
         origin: DeviceId,
-        content_hash: String,
+        content_hash: ContentHash,
     },
 
     /// 冲突已解决（由上层决定）

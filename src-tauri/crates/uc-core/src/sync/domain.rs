@@ -1,9 +1,9 @@
 use super::{SyncEvent, SyncState};
-use crate::decision::DomainDecision;
+use crate::{clipboard::ContentHash, decision::DomainDecision};
 
 pub struct SyncDomain {
     state: SyncState,
-    last_hash: Option<String>,
+    last_hash: Option<ContentHash>,
 }
 
 impl SyncDomain {
@@ -34,7 +34,7 @@ impl SyncDomain {
                 },
             ) => {
                 // 重复内容
-                if self.last_hash.as_deref() == Some(&content_hash) {
+                if self.last_hash == Some(content_hash.clone()) {
                     return DomainDecision::Ignore;
                 }
 

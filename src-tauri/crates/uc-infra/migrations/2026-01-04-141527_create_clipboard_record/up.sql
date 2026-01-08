@@ -30,6 +30,10 @@ CREATE TABLE t_clipboard_record (
   -- 用于 UI 快速展示（“3 个文件”）与完整性校验
   item_count       INTEGER NOT NULL,
 
+  version          INTEGER NOT NULL,
+
+  occurred_at      BIGINT NOT NULL,
+
   -- 创建时间（建议统一用 Unix epoch 毫秒）
   -- 注意：SQLite 的 BIGINT 语义上等价于 INTEGER，但这里保留 BIGINT 便于表达
   created_at       BIGINT NOT NULL,

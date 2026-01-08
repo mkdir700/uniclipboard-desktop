@@ -81,25 +81,6 @@ bytes = "1.7.1"       # 字节处理工具
 dirs = "6.0.0"        # 跨平台目录路径
 gethostname = "1.1.0" # 获取主机名
 
-# ===== 数据库 =====
-diesel = { version = "2.2.0", features = [
-  "sqlite",
-  "returning_clauses_for_sqlite_3_35",
-  "r2d2",
-] } # ORM数据库框架
-# build libsqlite3 as part of the build process
-# uncomment this line if you run into setup issues
-libsqlite3-sys = { version = "0.30", features = ["bundled"] } # SQLite系统库绑定
-# libsqlite3-sys = { version = "0.30" }
-diesel_migrations = { version = "2.2.0", features = ["sqlite"] } # Diesel迁移工具
-
-# ===== 图像处理 =====
-image = "0.25.2" # 图像处理库
-png = "0.17.14"  # PNG图像处理
-
-# ===== 剪贴板 =====
-clipboard-rs = "0.2.1" # 剪贴板操作库
-
 # ===== 日志/错误处理 =====
 anyhow = "1.0.98"      # 错误处理
 log = "0.4.27"         # 日志库
@@ -178,3 +159,4 @@ resolver = "2"
 [workspace.dependencies]
 tauri = "2"
 tauri-plugin-autostart = "2"
+tauri-plugin-log = "2" # Tauri 日志插件（替代 env_logger）

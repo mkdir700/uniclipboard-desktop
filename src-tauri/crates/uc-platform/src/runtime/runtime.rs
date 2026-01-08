@@ -56,6 +56,12 @@ where
         match command {
             PlatformCommand::Shutdown => {
                 self.shutting_down = true;
+            },
+            PlatformCommand::ReadClipboard => {
+                todo!()
+            },
+            PlatformCommand::WriteClipboard => {
+                todo!()
             }
             other => {
                 if let Err(err) = self.executor.execute(other).await {

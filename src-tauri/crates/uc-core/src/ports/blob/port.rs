@@ -1,6 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
+use crate::clipboard::ClipboardItem;
+
 use super::meta::BlobMeta;
 
 #[async_trait]
@@ -11,6 +13,14 @@ pub trait BlobStorePort: Send + Sync {
     async fn exists(&self, blob_id: &str) -> Result<bool>;
     async fn delete(&self, blob_id: &str) -> Result<()>;
 }
+
+#[async_trait]
+pub trait ClipboardBlobPort: Send + Sync {
+    async fn write(&self, item: ClipboardItem) -> Result<String>;
+    async fn read(&self, blob_id: &str) -> Result<ClipboardItem>;
+    async fn exists(&self, blob_id: &str) -> Result<bool>;
+}
+
 #[cfg(test)]
 mockall::mock! {
     pub BlobStore {}
