@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::event_bus::{PlatformCommandReceiver, PlatformEventReceiver};
+use super::event_bus::{PlatformCommandReceiver, PlatformEventReceiver, PlatformEventSender};
 use crate::clipboard::watcher::ClipboardWatcher;
 use crate::clipboard::LocalClipboard;
 use crate::ipc::{PlatformCommand, PlatformEvent};
@@ -18,6 +18,7 @@ where
     E: PlatformCommandExecutorPort,
 {
     local_clipboard: Arc<dyn LocalClipboardPort>,
+    event_tx: PlatformEventSender,
     event_rx: PlatformEventReceiver,
     command_rx: PlatformCommandReceiver,
     executor: Arc<E>,
@@ -31,6 +32,7 @@ where
     E: PlatformCommandExecutorPort,
 {
     pub fn new(
+        event_tx: PlatformEventSender,
         event_rx: PlatformEventReceiver,
         command_rx: PlatformCommandReceiver,
         executor: Arc<E>,
@@ -39,6 +41,7 @@ where
 
         Ok(Self {
             local_clipboard,
+            event_tx,
             event_rx,
             command_rx,
             executor,
@@ -62,9 +65,10 @@ where
     }
 
     fn start_clipboard_watcher(&mut self) -> Result<()> {
-        let mut watcher_ctx = ClipboardWatcherContext::new()?;
+        let mut watcher_ctx = ClipboardWatcherContext::new()
+            .map_err(|e| anyhow::anyhow!("Failed to create watcher context: {}", e))?;
 
-        let handler = ClipboardWatcher::new(self.local_clipboard.clone(), self.event_rx.clone());
+        let handler = ClipboardWatcher::new(self.local_clipboard.clone(), self.event_tx.clone());
 
         let shutdown = watcher_ctx.add_handler(handler).get_shutdown_channel();
 
@@ -79,7 +83,7 @@ where
         Ok(())
     }
 
-    async fn handle_event(&self, event: PlatformEvent) {
+    async fn handle_event(&self, _event: PlatformEvent) {
         // match event {
         //     PlatformEvent::ClipboardChanged { content } => {
         //         // 这里先 log / stub
@@ -98,7 +102,7 @@ where
             PlatformCommand::ReadClipboard => {
                 todo!()
             }
-            PlatformCommand::WriteClipboard => {
+            PlatformCommand::WriteClipboard { content: _ } => {
                 todo!()
             }
             other => {

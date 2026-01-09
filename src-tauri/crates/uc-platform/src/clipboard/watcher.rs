@@ -23,10 +23,15 @@ impl ClipboardWatcher {
 
 impl ClipboardHandler for ClipboardWatcher {
     fn on_clipboard_change(&mut self) {
-        match self.local_clipboard.read() {
-            Ok(snapshot) => self
-                .sender
-                .try_send(PlatformEvent::LocalClipboardChanged(snapshot))?,
+        match self.local_clipboard.read_snapshot() {
+            Ok(snapshot) => {
+                if let Err(err) = self
+                    .sender
+                    .try_send(PlatformEvent::ClipboardChanged { snapshot })
+                {
+                    log::warn!("failed to notify clipboard change: {}", err);
+                }
+            }
 
             Err(e) => {
                 log::warn!("failed to read clipboard snapshot: {}", e);

@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
-use clipboard_rs::{ClipboardHandler, ClipboardWatcherContext};
+use clipboard_rs::{ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext};
 use std::env;
+use std::io::Write;
 use std::sync::mpsc::{self, Sender};
 use std::time::Instant;
 use uc_core::ports::LocalClipboardPort;
@@ -43,6 +44,9 @@ impl ClipboardHandler for ProbeHandler {
 }
 
 fn main() -> Result<()> {
+    let _ = log_line("main: entry");
+    let _ = log_line(&format!("main: args={:?}", env::args().collect::<Vec<_>>()));
+
     let max_events = parse_max_events()?;
 
     println!("clipboard_probe: starting");
@@ -66,7 +70,7 @@ fn main() -> Result<()> {
     }
 
     let handler = ProbeHandler { clipboard, tx };
-    let mut watcher = ClipboardWatcherContext::new()?;
+    let mut watcher = ClipboardWatcherContext::new().map_err(|e| anyhow!(e))?;
     watcher.add_handler(handler);
 
     std::thread::spawn(move || {
@@ -120,6 +124,15 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn log_line(line: &str) -> Result<()> {
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("clipboard_probe.log")?;
+    writeln!(file, "{} {}", chrono::Utc::now().to_rfc3339(), line)?;
+    Ok(())
+}
+
 fn parse_max_events() -> Result<Option<usize>> {
     let mut max_events: Option<usize> = None;
     let mut args = env::args().skip(1);
@@ -169,7 +182,7 @@ fn print_snapshot(snapshot: &RawClipboardSnapshot) {
 }
 
 fn describe_representation(rep: &RawClipboardRepresentation) -> String {
-    let mime = rep.mime.as_deref().unwrap_or("-");
+    let mime = rep.mime.as_ref().map(|m| m.as_str()).unwrap_or("-");
     let preview = if is_text_representation(mime, &rep.format_id) {
         format!("\"{}\"", text_preview(&rep.bytes, 160))
     } else {

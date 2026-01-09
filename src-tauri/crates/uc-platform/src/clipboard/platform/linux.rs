@@ -14,7 +14,8 @@ pub struct LinuxClipboard {
 
 impl LinuxClipboard {
     pub fn new() -> Result<Self> {
-        let context = ClipboardContext::new()?;
+        let context = ClipboardContext::new()
+            .map_err(|e| anyhow::anyhow!("Failed to create clipboard context: {}", e))?;
         Ok(Self {
             inner: Arc::new(Mutex::new(context)),
         })
