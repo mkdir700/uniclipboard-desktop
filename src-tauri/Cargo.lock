@@ -8957,7 +8957,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
- "uc-app",
  "uc-core",
  "uuid",
  "winapi",

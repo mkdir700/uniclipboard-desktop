@@ -1,6 +1,7 @@
 use anyhow::*;
-use clipboard_rs::Clipboard;
-use uc_core::clipboard::{ClipboardContent, RawClipboardRepresentation, RawClipboardSnapshot};
+use clipboard_rs::{Clipboard, ContentFormat};
+use uc_core::clipboard::ClipboardContent;
+use uc_core::system::{RawClipboardRepresentation, RawClipboardSnapshot};
 
 pub struct CommonClipboardImpl;
 

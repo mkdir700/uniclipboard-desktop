@@ -1,18 +1,19 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use clipboard_rs::ClipboardHandler;
 
-use crate::clipboard::LocalClipboard;
 use crate::ipc::PlatformEvent;
-// use crate::ports::local_clipboard::LocalClipboardPort;
 use crate::runtime::event_bus::PlatformEventSender;
+use uc_core::ports::LocalClipboardPort;
 
 pub struct ClipboardWatcher {
-    local_clipboard: LocalClipboard,
+    local_clipboard: Arc<dyn LocalClipboardPort>,
     sender: PlatformEventSender,
 }
 
 impl ClipboardWatcher {
-    pub fn new(local_clipoard: LocalClipboard, sender: PlatformEventSender) -> Self {
+    pub fn new(local_clipboard: Arc<dyn LocalClipboardPort>, sender: PlatformEventSender) -> Self {
         Self {
             local_clipboard,
             sender,

@@ -1,21 +1,19 @@
-use crate::event::AppEvent;
 use anyhow::Result;
 use std::sync::Arc;
-use uc_core::ports::AppRuntimePort;
+use uc_core::ports::UiPort;
 
 pub struct OpenSettingsWindow<A>
 where
-    A: AppRuntimePort<AppEvent>,
+    A: UiPort,
 {
-    app_runtime: Arc<A>,
+    ui: Arc<A>,
 }
 
 impl<A> OpenSettingsWindow<A>
 where
-    A: AppRuntimePort<AppEvent>,
+    A: UiPort,
 {
     pub async fn execute(&self) -> Result<()> {
-        self.app_runtime.emit(AppEvent::OpenSettingsWindow).await;
-        Ok(())
+        self.ui.open_settings().await
     }
 }

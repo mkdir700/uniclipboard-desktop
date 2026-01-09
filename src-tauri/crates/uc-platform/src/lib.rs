@@ -5,7 +5,6 @@
 //! This crate contains infrastructure implementations that interact with
 //! the operating system, external services, and hardware.
 
-pub mod app_runtime;
 pub mod bootstrap;
 pub mod clipboard;
 pub mod ipc;

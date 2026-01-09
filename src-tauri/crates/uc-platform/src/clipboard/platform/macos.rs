@@ -1,7 +1,6 @@
 use super::super::common::CommonClipboardImpl;
 use anyhow::Result;
 use async_trait::async_trait;
-use clipboard_rs::common::RustImage;
 use clipboard_rs::{Clipboard, ClipboardContext, RustImageData};
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;

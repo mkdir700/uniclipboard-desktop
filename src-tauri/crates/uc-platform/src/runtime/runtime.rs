@@ -4,10 +4,14 @@ use super::event_bus::{PlatformCommandReceiver, PlatformEventReceiver};
 use crate::clipboard::watcher::ClipboardWatcher;
 use crate::clipboard::LocalClipboard;
 use crate::ipc::{PlatformCommand, PlatformEvent};
-use crate::ports::{LocalClipboardPort, PlatformCommandExecutorPort};
+use crate::ports::PlatformCommandExecutorPort;
 use anyhow::Result;
-use clipboard_rs::ClipboardWatcherContext;
+use clipboard_rs::{
+    ClipboardWatcher as RSClipboardWatcher, ClipboardWatcherContext, WatcherShutdown,
+};
 use log::error;
+use tokio::task::JoinHandle;
+use uc_core::ports::LocalClipboardPort;
 
 pub struct PlatformRuntime<E>
 where
@@ -19,7 +23,7 @@ where
     executor: Arc<E>,
     shutting_down: bool,
     watcher_join: Option<JoinHandle<()>>,
-    watcher_handle: Option<Arc<ClipboardWatcher<dyn LocalClipboardPort>>>,
+    watcher_handle: Option<WatcherShutdown>,
 }
 
 impl<E> PlatformRuntime<E>
@@ -71,18 +75,19 @@ where
         });
 
         self.watcher_join = Some(join);
-        self.watcher_stop = Some(shutdown);
+        self.watcher_handle = Some(shutdown);
         Ok(())
     }
 
     async fn handle_event(&self, event: PlatformEvent) {
-        match event {
-            PlatformEvent::ClipboardChanged { content } => {
-                // 这里先 log / stub
-                // 下一步：交给 SyncClipboard use case
-            }
-            _ => {}
-        }
+        // match event {
+        //     PlatformEvent::ClipboardChanged { content } => {
+        //         // 这里先 log / stub
+        //         // 下一步：交给 SyncClipboard use case
+        //     }
+        //     _ => {}
+        // }
+        todo!()
     }
 
     async fn handle_command(&mut self, command: PlatformCommand) {

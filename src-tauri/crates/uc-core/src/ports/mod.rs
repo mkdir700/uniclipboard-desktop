@@ -25,6 +25,7 @@ pub mod errors;
 pub mod network;
 pub mod security;
 pub mod settings;
+pub mod ui_port;
 
 pub use app_runtime::AppRuntimePort;
 pub use autostart::AutostartPort;
@@ -39,3 +40,4 @@ pub use security::encryption_session::EncryptionSessionPort;
 pub use security::key_material::KeyMaterialPort;
 pub use security::keyring::KeyringPort;
 pub use settings::{SettingsMigrationPort, SettingsPort};
+pub use ui_port::UiPort;
