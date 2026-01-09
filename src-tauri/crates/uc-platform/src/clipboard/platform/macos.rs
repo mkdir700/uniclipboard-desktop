@@ -38,6 +38,6 @@ impl LocalClipboardPort for MacOSClipboard {
 
     fn write(&self, content: ClipboardContent) -> Result<()> {
         let mut ctx = self.inner.lock().unwrap();
-        CommonClipboardImpl::write_content(ctx, content)
+        CommonClipboardImpl::write_content(&mut ctx, &content)
     }
 }

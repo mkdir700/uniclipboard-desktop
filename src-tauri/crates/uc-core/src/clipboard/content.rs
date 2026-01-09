@@ -79,7 +79,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
-use crate::clipboard::meta_keys;
 use crate::clipboard::MimeType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -153,10 +152,10 @@ pub struct ClipboardContent {
 
     /// one clipboard snapshot may contain multiple representations
     pub items: Vec<ClipboardItem>,
-
-    /// reserved for forward compatibility
-    #[serde(default)]
-    pub meta: BTreeMap<String, String>,
+    
+    pub device_id: String,
+    
+    pub origin: ClipboardOrigin,
 }
 
 impl ClipboardItem {
@@ -253,51 +252,6 @@ impl ClipboardContent {
     pub fn content_hash(&self) -> ContentHash {
         ContentHash::compute(&self.items)
     }
-
-    /// Retrieve the device identifier stored in the snapshot's metadata.
-    ///
-    /// Looks up the metadata entry keyed by `meta_keys::sys::DEVICE_ID` and returns its string value if present.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::collections::BTreeMap;
-    /// use crate::clipboard::meta_keys;
-    /// // Construct a minimal ClipboardContent with the device id in meta.
-    /// let mut meta = BTreeMap::new();
-    /// meta.insert(meta_keys::sys::DEVICE_ID.to_string(), "device-123".to_string());
-    /// let content = ClipboardContent { v: 1, ts_ms: 0, items: vec![], meta };
-    /// assert_eq!(content.get_device_id(), Some("device-123"));
-    /// ```
-    pub fn get_device_id(&self) -> Option<&str> {
-        self.meta.get(meta_keys::sys::DEVICE_ID).map(|s| s.as_str())
-    }
-
-    /// Returns the origin identifier stored in the content's metadata, if present.
-    ///
-    /// The origin is read from the metadata key `meta_keys::sys::ORIGIN`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::collections::BTreeMap;
-    /// use crate::clipboard::{meta_keys, ClipboardContent, ClipboardItem, ClipboardData, MimeType};
-    ///
-    /// let mut meta = BTreeMap::new();
-    /// meta.insert(meta_keys::sys::ORIGIN.to_string(), "remote-device".to_string());
-    ///
-    /// let content = ClipboardContent {
-    ///     v: 1,
-    ///     ts_ms: 0,
-    ///     items: Vec::new(),
-    ///     meta,
-    /// };
-    ///
-    /// assert_eq!(content.get_origin(), Some("remote-device"));
-    /// ```
-    pub fn get_origin(&self) -> Option<&str> {
-        self.meta.get(meta_keys::sys::ORIGIN).map(|s| s.as_str())
-    }
 }
 
 impl PayloadHash {
@@ -387,5 +341,71 @@ impl ContentHash {
 
     pub fn to_string(&self) -> String {
         hex::encode(self.as_bytes())
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ClipboardOrigin {
+    Local,
+    Remote,
+}
+
+impl ClipboardOrigin {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ClipboardOrigin::Local => "local",
+            ClipboardOrigin::Remote => "remote",
+        }
+    }
+}
+
+impl From<&str> for ClipboardOrigin {
+    /// Create a ClipboardOrigin from a string slice.
+    ///
+    /// Maps the string `"local"` to `ClipboardOrigin::Local` and `"remote"` to
+    /// `ClipboardOrigin::Remote`. Any other value yields `ClipboardOrigin::Local`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let origin = ClipboardOrigin::from("remote");
+    /// assert_eq!(origin, ClipboardOrigin::Remote);
+    /// ```
+    fn from(s: &str) -> Self {
+        match s {
+            "local" => ClipboardOrigin::Local,
+            "remote" => ClipboardOrigin::Remote,
+            _ => ClipboardOrigin::Local, // Default to Local for unknown values
+        }
+    }
+}
+
+impl From<String> for ClipboardOrigin {
+    /// Converts an owned string into a `ClipboardOrigin`.
+    ///
+    /// Maps the exact string `"local"` to `ClipboardOrigin::Local` and `"remote"` to
+    /// `ClipboardOrigin::Remote`. Any other value defaults to `ClipboardOrigin::Local`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crate::clipboard::view::ClipboardOrigin;
+    ///
+    /// let o1 = ClipboardOrigin::from("local".to_string());
+    /// assert_eq!(o1, ClipboardOrigin::Local);
+    ///
+    /// let o2 = ClipboardOrigin::from("remote".to_string());
+    /// assert_eq!(o2, ClipboardOrigin::Remote);
+    ///
+    /// let o3 = ClipboardOrigin::from("unknown".to_string());
+    /// assert_eq!(o3, ClipboardOrigin::Local);
+    /// ```
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "local" => ClipboardOrigin::Local,
+            "remote" => ClipboardOrigin::Remote,
+            _ => ClipboardOrigin::Local, // Default to Local for unknown values
+        }
     }
 }

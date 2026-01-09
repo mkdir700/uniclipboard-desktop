@@ -1,6 +1,5 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 
 use crate::db::models::{
@@ -10,35 +9,6 @@ use crate::db::schema::t_clipboard_item::dsl as dsl_item;
 use crate::db::schema::t_clipboard_record::dsl as dsl_record;
 
 use crate::db::ports::{ClipboardDbPort, DbExecutor};
-
-/// Extension trait for converting i64 timestamps to DateTime<Utc>
-trait TimestampExt {
-    fn to_datetime(self) -> DateTime<Utc>;
-}
-
-impl TimestampExt for i64 {
-    /// Converts an integer representing milliseconds since the Unix epoch into a `DateTime<Utc>`,
-    /// falling back to `DateTime::UNIX_EPOCH` if the milliseconds value is out of range or invalid.
-    ///
-    /// # Returns
-    ///
-    /// A `DateTime<Utc>` corresponding to `self` milliseconds since the Unix epoch, or `DateTime::UNIX_EPOCH` if conversion fails.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use chrono::{DateTime, Utc};
-    ///
-    /// let dt = 0i64.to_datetime();
-    /// assert_eq!(dt, DateTime::UNIX_EPOCH);
-    ///
-    /// let dt = 1_000i64.to_datetime(); // 1 second after epoch
-    /// assert_eq!(dt.timestamp_millis(), 1_000);
-    /// ```
-    fn to_datetime(self) -> DateTime<Utc> {
-        DateTime::from_timestamp_millis(self).unwrap_or_else(|| DateTime::UNIX_EPOCH)
-    }
-}
 
 pub struct DieselClipboardRepository<E>
 where

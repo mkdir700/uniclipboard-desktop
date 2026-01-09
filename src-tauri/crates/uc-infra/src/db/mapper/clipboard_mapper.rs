@@ -19,12 +19,10 @@ impl From<(&ClipboardItem, &str, &str, i32)> for NewClipboardItemRow {
 
 impl From<(&ClipboardContent, &str)> for NewClipboardRecordRow {
     fn from((content, record_id): (&ClipboardContent, &str)) -> Self {
-        let device_id = content.get_device_id().unwrap_or("unknown");
-        let origin = content.get_origin().unwrap_or("unknown");
         NewClipboardRecordRow {
             id: record_id.to_string(),
-            source_device_id: device_id.to_string(),
-            origin: origin.to_string(),
+            source_device_id: content.device_id.clone(),
+            origin: content.origin.as_str().to_string(),
             record_hash: content.content_hash().to_string(),
             version: content.v as i32,
             occurred_at: content.occurred_at.as_millis(),

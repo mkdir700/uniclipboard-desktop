@@ -116,13 +116,13 @@ impl ClipboardRepositoryPort for ClipboardRepository {
         }
 
         // 构建完整的 ClipboardContent
-
-        let mut content = ClipboardContent {
+        let content = ClipboardContent {
             v: record_row.version as u32,
             occurred_at: TimestampMs::from_epoch_millis(record_row.occurred_at),
             items,
+            origin: record_row.origin.into(),
+            device_id: record_row.source_device_id,
         };
-        content.items = items;
 
         Ok(Some(content))
     }

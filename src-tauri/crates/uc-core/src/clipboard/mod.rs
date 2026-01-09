@@ -9,10 +9,11 @@ mod snapshot;
 mod view;
 
 pub use content::{
-    ClipboardContent, ClipboardData, ClipboardItem, ContentHash, ItemHash, PayloadHash, TimestampMs,
+    ClipboardContent, ClipboardData, ClipboardItem, ClipboardOrigin, ContentHash, ItemHash,
+    PayloadHash, TimestampMs,
 };
 pub use decision::{ClipboardContentActionDecision, DuplicationHint, RejectReason};
 pub use domain::ClipboardContentDecisionDomain;
 pub use mime::MimeType;
 pub use snapshot::ClipboardDecisionSnapshot;
-pub use view::{ClipboardContentView, ClipboardItemView, ClipboardOrigin, ClipboardRecordId};
+pub use view::{ClipboardContentView, ClipboardItemView,  ClipboardRecordId};
