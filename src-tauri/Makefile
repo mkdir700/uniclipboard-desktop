@@ -1,45 +1,46 @@
+# =========================
+# 基础配置
+# =========================
+CARGO ?= cargo
+PKG   := uc-platform
+EXAMPLE := clipboard_probe
+
+# =========================
+# 默认目标
+# =========================
+.PHONY: help
+help:
+	@echo "Available targets:"
+	@echo "  make build        # build uc-platform library"
+	@echo "  make run          # run uc-platform example (clipboard_probe)"
+	@echo "  make check        # cargo check for uc-platform"
+	@echo "  make clean        # cargo clean"
+
+# =========================
+# 构建
+# =========================
+.PHONY: build
+build:
+	$(CARGO) build -p $(PKG)
+
+# =========================
+# 运行 example
+# =========================
+.PHONY: run
 run:
-	cargo run
+	$(CARGO) run -p $(PKG) --example $(EXAMPLE)
 
-test:
-	cargo test --features integration_tests,hardware_tests
+# =========================
+# 快速检查（不产物）
+# =========================
+.PHONY: check
+check:
+	$(CARGO) check -p $(PKG)
 
-ci:
-	cargo test --features vendored_openssl
+# =========================
+# 清理
+# =========================
+.PHONY: clean
+clean:
+	$(CARGO) clean
 
-coverage:
-	cargo tarpaulin --out Html --output-dir ./tarpaulin-report
-
-# 继承覆盖测试，需要真机设备
-icoverage:
-	cargo tarpaulin --config tarpaulin.toml
-
-generate-migrations:
-	diesel migration generate
-
-db-upgrade:
-	export DATABASE_URL=uniclipboard.db && diesel migration run && diesel print-schema > src/infrastructure/storage/db/schema.rs
-
-db-downgrade:
-	export DATABASE_URL=uniclipboard.db && diesel migration redo
-
-build-all:
-	make build-linux
-	make build-windows
-	make build-macos
-	mkdir -p dist
-	cp target/release/uniclipboard dist/uniclipboard-macos
-	cp target/x86_64-unknown-linux-gnu/release/uniclipboard dist/uniclipboard-linux
-	cp target/x86_64-pc-windows-gnu/release/uniclipboard.exe dist/uniclipboard-windows.exe
-
-build-linux:
-	cargo build --release --target x86_64-unknown-linux-gnu
-	upx --best --lzma target/release/uniclipboard
-
-build-windows:
-	cargo build --release --target x86_64-pc-windows-gnu
-	upx --best --lzma target/x86_64-pc-windows-gnu/release/uniclipboard.exe
-
-build-macos:
-	cargo build --release --target aarch64-apple-darwin
-	upx --best --lzma target/aarch64-apple-darwin/release/uniclipboard

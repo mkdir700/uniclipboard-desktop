@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use anyhow::Result;
 use clipboard_rs::ClipboardHandler;
 
 use crate::ipc::PlatformEvent;

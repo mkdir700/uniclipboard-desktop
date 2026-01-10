@@ -58,3 +58,11 @@ impl FromStr for MimeType {
         Ok(MimeType(s.to_string()))
     }
 }
+
+impl std::ops::Deref for MimeType {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}

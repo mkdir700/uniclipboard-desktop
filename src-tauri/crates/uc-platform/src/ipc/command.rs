@@ -1,4 +1,4 @@
-use uc_core::clipboard::ClipboardContent;
+use clipboard_rs::ClipboardContent;
 
 pub enum PlatformCommand {
     /// 读取剪切板内容

@@ -5,7 +5,7 @@ use std::io::Write;
 use std::sync::mpsc::{self, Sender};
 use std::time::Instant;
 use uc_core::ports::LocalClipboardPort;
-use uc_core::system::{SystemClipboardRepresentation, SystemClipboardSnapshot};
+use uc_core::{SystemClipboardRepresentation, SystemClipboardSnapshot};
 use uc_platform::clipboard::LocalClipboard;
 
 struct ProbeEvent {

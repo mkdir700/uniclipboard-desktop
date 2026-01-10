@@ -1,5 +1,5 @@
 use std::time::SystemTime;
-use uc_core::system::SystemClipboardSnapshot;
+use uc_core::SystemClipboardSnapshot;
 
 #[derive(Debug, Clone)]
 pub struct PlatformStatus {
