@@ -43,11 +43,11 @@ pub use hash::*;
 
 pub use app_runtime::AppRuntimePort;
 pub use autostart::AutostartPort;
+pub use clipboard::LocalClipboardPort;
 pub use clipboard::SelectRepresentationPolicyPort;
 pub use clipboard::{
     ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, PlatformClipboardPort,
 };
-pub use clipboard::{ClipboardHistoryPort, LocalClipboardPort};
 pub use device_repository::DeviceRepositoryPort;
 pub use errors::DeviceRepositoryError;
 pub use network::NetworkPort;

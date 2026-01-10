@@ -1,15 +1,14 @@
 use anyhow::Result;
 
+use crate::clipboard::{ClipboardEntry, ClipboardSelectionDecision};
 use crate::ids::EntryId;
-use crate::persistence::{NewClipboardEntry, NewClipboardSelection};
-use crate::ClipboardEntry;
 
 #[async_trait::async_trait]
 pub trait ClipboardEntryWriterPort: Send + Sync {
     async fn insert_entry(
         &self,
-        entry: &NewClipboardEntry,
-        selection: &NewClipboardSelection,
+        entry: &ClipboardEntry,
+        selection: &ClipboardSelectionDecision,
     ) -> Result<()>;
 }
 

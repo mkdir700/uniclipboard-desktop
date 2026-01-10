@@ -30,3 +30,19 @@ pub struct ClipboardEvent {
     pub source_device: String,
     pub snapshot_hash: String,
 }
+
+impl ClipboardEvent {
+    pub fn new(
+        event_id: EventId,
+        captured_at_ms: i64,
+        source_device: String,
+        snapshot_hash: String,
+    ) -> Self {
+        Self {
+            event_id,
+            captured_at_ms,
+            source_device,
+            snapshot_hash,
+        }
+    }
+}

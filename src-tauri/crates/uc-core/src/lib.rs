@@ -6,16 +6,12 @@
 
 // Public module exports
 pub mod clipboard;
-pub mod decision;
 pub mod device;
 pub mod ids;
 pub mod network;
-pub mod pairing;
-pub mod persistence;
 pub mod ports;
 pub mod security;
 pub mod settings;
-pub mod sync;
 
 // Re-export commonly used types at the crate root
 pub use clipboard::*;
@@ -23,8 +19,6 @@ pub use device::{Device, DeviceId, DeviceName, DeviceStatus, Platform};
 pub use ids::BlobId;
 pub use ids::{PeerId, SessionId};
 pub use network::{NetworkEvent, NetworkStatus, ProtocolMessage};
-pub use pairing::{PairedPeer, PairingState};
-pub use sync::SyncState;
 
 // 不知道如何分类，临时定义在这里
 pub struct MaterializeResult {

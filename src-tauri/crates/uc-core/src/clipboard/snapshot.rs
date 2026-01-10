@@ -1,7 +1,7 @@
 use crate::ids::{FormatId, SnapshotId};
 use crate::BlobId;
 
-pub struct NewSnapshotRepresentation {
+pub struct SnapshotRepresentation {
     pub id: SnapshotId,
     pub format_id: FormatId,
     pub mime_type: Option<String>,
@@ -10,7 +10,7 @@ pub struct NewSnapshotRepresentation {
     pub blob_id: Option<BlobId>,
 }
 
-impl NewSnapshotRepresentation {
+impl SnapshotRepresentation {
     pub fn new(
         id: SnapshotId,
         format_id: FormatId,
