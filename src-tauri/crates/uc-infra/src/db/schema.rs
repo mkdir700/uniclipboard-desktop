@@ -4,10 +4,11 @@ diesel::table! {
     blob (blob_id) {
         blob_id -> Nullable<Text>,
         storage_path -> Text,
-        size_bytes -> Integer,
+        storage_backend -> Text,
+        size_bytes -> BigInt,
         content_hash -> Text,
         encryption_algo -> Nullable<Text>,
-        created_at_ms -> Integer,
+        created_at_ms -> BigInt,
     }
 }
 
@@ -15,18 +16,18 @@ diesel::table! {
     clipboard_entry (entry_id) {
         entry_id -> Nullable<Text>,
         event_id -> Text,
-        created_at_ms -> Integer,
+        created_at_ms -> BigInt,
         title -> Nullable<Text>,
-        total_size -> Integer,
+        total_size -> BigInt,
         pinned -> Bool,
-        deleted_at_ms -> Nullable<Integer>,
+        deleted_at_ms -> Nullable<BigInt>,
     }
 }
 
 diesel::table! {
     clipboard_event (event_id) {
         event_id -> Nullable<Text>,
-        captured_at_ms -> Integer,
+        captured_at_ms -> BigInt,
         source_device -> Text,
         snapshot_hash -> Text,
     }
@@ -48,7 +49,7 @@ diesel::table! {
         event_id -> Text,
         format_id -> Text,
         mime_type -> Nullable<Text>,
-        size_bytes -> Integer,
+        size_bytes -> BigInt,
         inline_data -> Nullable<Binary>,
         blob_id -> Nullable<Text>,
     }

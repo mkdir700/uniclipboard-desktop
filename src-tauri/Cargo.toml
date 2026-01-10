@@ -91,7 +91,6 @@ regex = "1.9.5"                                       # 正则表达式
 rand = "0.9.1"                                        # 随机数生成
 chrono = { version = "0.4.38", features = ["serde"] } # 日期和时间处理
 once_cell = "1.19.0"                                  # 延迟初始化
-lazy_static = "1.4.0"                                 # 延迟静态变量
 dotenvy = "0.15"                                      # 环境变量管理
 tauri-plugin-stronghold = "2"
 argon2 = "0.5.3"
@@ -159,4 +158,3 @@ resolver = "2"
 [workspace.dependencies]
 tauri = "2"
 tauri-plugin-autostart = "2"
-tauri-plugin-log = "2" # Tauri 日志插件（替代 env_logger）

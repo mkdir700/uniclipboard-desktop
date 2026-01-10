@@ -57,7 +57,7 @@ mod tests {
     use async_trait::async_trait;
     use std::sync::{Arc, Mutex};
     use uc_core::security::model::{
-        AeadAlgorithm, EncryptionFormatVersion, KdfParams, KeyScope, KeySlotVersion,
+        EncryptionAlgo, EncryptionFormatVersion, KdfParams, KeyScope, KeySlotVersion,
         WrappedMasterKey,
     };
 
@@ -193,7 +193,7 @@ mod tests {
             wrapped_master_key: Some(WrappedMasterKey {
                 blob: uc_core::security::model::EncryptedBlob {
                     version: EncryptionFormatVersion::V1,
-                    aead: AeadAlgorithm::XChaCha20Poly1305,
+                    aead: EncryptionAlgo::XChaCha20Poly1305,
                     nonce: vec![1u8; 24],
                     ciphertext: vec![2u8; 32],
                     aad_fingerprint: None,

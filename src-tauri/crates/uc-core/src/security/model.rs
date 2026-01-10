@@ -31,9 +31,18 @@ pub enum KdfAlgorithm {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AeadAlgorithm {
+pub enum EncryptionAlgo {
     /// Only supported XChaCha20-Poly1305 for now
     XChaCha20Poly1305,
+}
+
+impl fmt::Display for EncryptionAlgo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            EncryptionAlgo::XChaCha20Poly1305 => "xchacha20-poly1305",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 /// KDF params
@@ -161,7 +170,7 @@ pub struct WrappedMasterKey {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EncryptedBlob {
     pub version: EncryptionFormatVersion,
-    pub aead: AeadAlgorithm,
+    pub aead: EncryptionAlgo,
     pub nonce: Vec<u8>,
     pub ciphertext: Vec<u8>,
 
@@ -383,7 +392,7 @@ pub enum EncryptionError {
 impl EncryptedBlob {
     pub fn validate_basic(&self) -> Result<(), EncryptionError> {
         match (self.aead.clone(), self.nonce.len()) {
-            (AeadAlgorithm::XChaCha20Poly1305, 24) => {}
+            (EncryptionAlgo::XChaCha20Poly1305, 24) => {}
             (alg, n) => {
                 return Err(EncryptionError::InvalidParameter(format!(
                     "invalid nonce length for {:?}: {}",

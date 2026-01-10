@@ -41,6 +41,7 @@ argon2 = "0.5.3"
 chacha20poly1305 = "0.10.1"
 rand = "0.9.2"
 blake3 = "1.8.2"
+hex = "0.4.3"
 
 [dependencies.uuid]
 version = "1.10.0"

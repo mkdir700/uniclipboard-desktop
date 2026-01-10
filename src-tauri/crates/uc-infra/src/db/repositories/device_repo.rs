@@ -4,80 +4,70 @@ use diesel::prelude::*;
 use uc_core::device::{Device, DeviceId};
 use uc_core::ports::{DeviceRepositoryError, DeviceRepositoryPort};
 
-use crate::db::{models::DeviceRow, pool::DbPool, schema::t_device::dsl::*};
+use crate::db::ports::DbExecutor;
+use crate::db::ports::Mapper;
+use crate::db::{models::DeviceRow, schema::t_device::dsl::*};
 
-pub struct DieselDeviceRepository {
-    pool: DbPool,
+pub struct DieselDeviceRepository<E, M> {
+    executor: E,
+    mapper: M,
 }
 
-impl DieselDeviceRepository {
-    pub fn new(pool: DbPool) -> Self {
-        Self { pool }
+impl<E, M> DieselDeviceRepository<E, M> {
+    pub fn new(executor: E, mapper: M) -> Self {
+        Self { executor, mapper }
     }
 }
 
 #[async_trait]
-impl DeviceRepositoryPort for DieselDeviceRepository {
+impl<E, M> DeviceRepositoryPort for DieselDeviceRepository<E, M>
+where
+    E: DbExecutor,
+    M: Mapper<Device, DeviceRow>,
+{
     async fn find_by_id(
         &self,
         device_id: &DeviceId,
     ) -> Result<Option<Device>, DeviceRepositoryError> {
-        let mut conn = self
-            .pool
-            .get()
-            .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
-
-        let row = t_device
-            .filter(id.eq(device_id.as_str()))
-            .first::<DeviceRow>(&mut conn)
-            .optional()
-            .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
-
-        Ok(row.map(Device::from))
+        unimplemented!()
     }
 
     async fn save(&self, device: Device) -> Result<(), DeviceRepositoryError> {
-        let mut conn = self
-            .pool
-            .get()
-            .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
-
-        let row = DeviceRow::from(&device);
-
-        diesel::insert_into(t_device)
-            .values(&row)
-            .on_conflict(id)
-            .do_update()
-            .set(name.eq(row.name.clone()))
-            .execute(&mut conn)
-            .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
-
-        Ok(())
+        unimplemented!()
+        // self.executor.run(|conn| {
+        //     let row = DeviceRow::from(&device);
+        //     diesel::insert_into(t_device)
+        //         .values(&row)
+        //         .on_conflict(id)
+        //         .do_update()
+        //         .set(name.eq(row.name.clone()))
+        //         .execute(conn)
+        //         .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
+        //     Ok(())
+        // })?;
+        // Ok(())
     }
 
     async fn delete(&self, device_id: &DeviceId) -> Result<(), DeviceRepositoryError> {
-        let mut conn = self
-            .pool
-            .get()
-            .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
+        unimplemented!()
+        // self.executor.run(|conn| {
+        //     diesel::delete(t_device.filter(id.eq(device_id.as_str())))
+        //         .execute(conn)
+        //         .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
+        //     Ok(())
+        // })?;
 
-        diesel::delete(t_device.filter(id.eq(device_id.as_str())))
-            .execute(&mut conn)
-            .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
-
-        Ok(())
+        // Ok(())
     }
 
     async fn list_all(&self) -> Result<Vec<Device>, DeviceRepositoryError> {
-        let mut conn = self
-            .pool
-            .get()
-            .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
+        unimplemented!()
+        // self.executor.run(|conn| {
+        //     let rows = t_device
+        //         .load::<DeviceRow>(&mut conn)
+        //         .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
 
-        let rows = t_device
-            .load::<DeviceRow>(&mut conn)
-            .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
-
-        Ok(rows.into_iter().map(Device::from).collect())
+        //     Ok(rows.into_iter().map(Device::from).collect())
+        // })?
     }
 }

@@ -54,6 +54,20 @@ macro_rules! impl_id {
                     &self.0
                 }
             }
+
+            impl Into<String> for $name {
+                fn into(self) -> String {
+                    self.0
+                }
+            }
+            
+            impl std::ops::Deref for $name {
+                type Target = String;
+
+                fn deref(&self) -> &Self::Target {
+                    &self.0
+                }
+            }
         )*
     };
 }

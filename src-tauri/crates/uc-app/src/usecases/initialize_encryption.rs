@@ -9,7 +9,7 @@ use uc_core::{
         EncryptionPort, KeyMaterialPort,
     },
     security::{
-        model::{AeadAlgorithm, EncryptionError, KeySlot, MasterKey, Passphrase, WrappedMasterKey},
+        model::{EncryptionAlgo, EncryptionError, KeySlot, MasterKey, Passphrase, WrappedMasterKey},
         state::{EncryptionState, EncryptionStateError},
     },
 };
@@ -72,7 +72,7 @@ where
         // 4. wrap MasterKey
         let blob = self
             .encryption
-            .wrap_master_key(&kek, &master_key, AeadAlgorithm::XChaCha20Poly1305)
+            .wrap_master_key(&kek, &master_key, EncryptionAlgo::XChaCha20Poly1305)
             .await?;
 
         let keyslot = keyslot_draft.finalize(WrappedMasterKey { blob });

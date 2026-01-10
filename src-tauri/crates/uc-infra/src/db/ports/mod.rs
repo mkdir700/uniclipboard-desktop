@@ -1,5 +1,5 @@
-mod clipboard;
 mod executor;
+mod mapper;
 
-pub use clipboard::ClipboardDbPort;
 pub use executor::DbExecutor;
+pub use mapper::Mapper;

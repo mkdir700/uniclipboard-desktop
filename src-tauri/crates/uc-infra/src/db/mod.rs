@@ -1,7 +1,7 @@
 pub mod connection;
 pub mod error;
 pub mod executor;
-pub mod mapper;
+pub mod mappers;
 pub mod models;
 pub mod pool;
 pub mod ports;

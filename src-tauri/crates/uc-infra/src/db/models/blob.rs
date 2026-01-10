@@ -1,12 +1,26 @@
-CREATE TABLE blob (
-    blob_id         TEXT PRIMARY KEY,
-    storage_path    TEXT NOT NULL,
-    size_bytes      INTEGER NOT NULL,
+use crate::db::schema::blob;
+use diesel::prelude::*;
 
-    content_hash    TEXT NOT NULL,
-    encryption_algo TEXT,
-    created_at_ms   INTEGER NOT NULL
-);
+#[derive(Queryable)]
+#[diesel(table_name = blob)]
+pub struct BlobRow {
+    pub blob_id: String,
+    pub storage_backend: String,
+    pub storage_path: String,
+    pub encryption_algo: Option<String>,
+    pub size_bytes: i64,
+    pub content_hash: String,
+    pub created_at_ms: i64,
+}
 
-CREATE INDEX idx_blob_hash
-ON blob (content_hash);
+#[derive(Insertable)]
+#[diesel(table_name = blob)]
+pub struct NewBlobRow {
+    pub blob_id: String,
+    pub storage_backend: String,
+    pub storage_path: String,
+    pub encryption_algo: Option<String>,
+    pub size_bytes: i64,
+    pub content_hash: String,
+    pub created_at_ms: i64,
+}

@@ -4,11 +4,10 @@ use anyhow::Result;
 use uc_core::BlobId;
 use uuid::Uuid;
 
+use uc_core::clipboard::{ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision};
+use uc_core::ids::{EntryId, EventId};
 use uc_core::ports::{BlobRepositoryPort, PlatformClipboardPort, SelectRepresentationPolicyPort};
 use uc_core::ports::{ClipboardEntryWriterPort, ClipboardEventWriterPort};
-
-use crate::command::{EntryId, EventId};
-use crate::command::{NewBlobRecord, NewClipboardEntry, NewClipboardEvent, NewClipboardSelection};
 
 // 1. 从 platform 获取 Raw Snapshot（事实）
 // 2. 生成 ClipboardEvent（时间点）

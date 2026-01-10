@@ -2,7 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE clipboard_event (
     event_id        TEXT PRIMARY KEY,
-    captured_at_ms  INTEGER NOT NULL,
+    captured_at_ms  BIGINT NOT NULL,
     source_device   TEXT NOT NULL,
     snapshot_hash   TEXT NOT NULL
 );
@@ -13,10 +13,11 @@ ON clipboard_event (captured_at_ms DESC);
 CREATE TABLE blob (
     blob_id         TEXT PRIMARY KEY,
     storage_path    TEXT NOT NULL,
-    size_bytes      INTEGER NOT NULL,
+    storage_backend TEXT NOT NULL,
+    size_bytes      BIGINT NOT NULL,
     content_hash    TEXT NOT NULL UNIQUE,
     encryption_algo TEXT,
-    created_at_ms   INTEGER NOT NULL
+    created_at_ms   BIGINT NOT NULL
 );
 
 CREATE TABLE clipboard_snapshot_representation (
@@ -24,7 +25,7 @@ CREATE TABLE clipboard_snapshot_representation (
     event_id        TEXT NOT NULL,
     format_id       TEXT NOT NULL,
     mime_type       TEXT,
-    size_bytes      INTEGER NOT NULL,
+    size_bytes      BIGINT NOT NULL,
 
     inline_data     BLOB,
     blob_id         TEXT,
@@ -51,12 +52,12 @@ CREATE TABLE clipboard_entry (
     entry_id        TEXT PRIMARY KEY,
     event_id        TEXT NOT NULL UNIQUE,
 
-    created_at_ms   INTEGER NOT NULL,
+    created_at_ms   BIGINT NOT NULL,
     title           TEXT,
-    total_size      INTEGER NOT NULL,
+    total_size      BIGINT NOT NULL,
 
     pinned          BOOLEAN NOT NULL DEFAULT 0,
-    deleted_at_ms   INTEGER,
+    deleted_at_ms   BIGINT,
 
     FOREIGN KEY(event_id)
       REFERENCES clipboard_event(event_id)

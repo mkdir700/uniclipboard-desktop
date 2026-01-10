@@ -5,4 +5,4 @@ mod key_material;
 mod hashing;
 
 pub use encryption_session::InMemoryEncryptionSession;
-pub use hashing::Sha256Hasher;
+pub use hashing::Blake3Hasher;

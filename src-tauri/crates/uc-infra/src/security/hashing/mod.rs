@@ -1,3 +1,3 @@
-mod sha256_hasher;
+mod blake_hasher;
 
-pub use sha256_hasher::Sha256Hasher;
+pub use blake_hasher::Blake3Hasher;

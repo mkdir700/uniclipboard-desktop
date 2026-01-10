@@ -1,36 +1,64 @@
-use crate::db::schema::{clipboard_event, clipboard_snapshot_representation};
+use crate::db::{
+    models::{
+        clipboard_event::NewClipboardEventRow,
+        snapshot_representation::NewSnapshotRepresentationRow,
+    },
+    ports::{DbExecutor, Mapper},
+    schema::{clipboard_event, clipboard_snapshot_representation},
+};
 use anyhow::Result;
 use diesel::prelude::*;
-use uc_core::ports::ClipboardEventWriterPort;
+use uc_core::{
+    clipboard::{ClipboardEvent, SnapshotRepresentation},
+    ids::EventId,
+    ports::ClipboardEventWriterPort,
+};
 
-pub struct DieselClipboardEventRepository {
-    executor: DieselSqliteExecutor,
+pub struct DieselClipboardEventRepository<E, ME, MS> {
+    executor: E,
+    event_mapper: ME,
+    snapshot_mapper: MS,
 }
 
-impl DieselClipboardEventRepository {
-    pub fn new(executor: DieselSqliteExecutor) -> Self {
-        Self { executor }
+impl<E, ME, MS> DieselClipboardEventRepository<E, ME, MS> {
+    pub fn new(executor: E, event_mapper: ME, snapshot_mapper: MS) -> Self {
+        Self {
+            executor,
+            event_mapper,
+            snapshot_mapper,
+        }
     }
 }
 
 #[async_trait::async_trait]
-impl ClipboardEventWriterPort for DieselClipboardEventRepository {
+impl<E, ME, MS> ClipboardEventWriterPort for DieselClipboardEventRepository<E, ME, MS>
+where
+    E: DbExecutor,
+    ME: Mapper<ClipboardEvent, NewClipboardEventRow>,
+    for<'a> MS: Mapper<(&'a SnapshotRepresentation, &'a EventId), NewSnapshotRepresentationRow>,
+{
     async fn insert_event(
         &self,
-        event: NewClipboardEvent,
-        reps: Vec<NewSnapshotRepresentation>,
+        event: &ClipboardEvent,
+        reps: &Vec<SnapshotRepresentation>,
     ) -> Result<()> {
-        self.executor.with_conn(|conn| {
+        let new_event: NewClipboardEventRow = self.event_mapper.to_row(event);
+        let new_reps: Vec<NewSnapshotRepresentationRow> = reps
+            .iter()
+            .map(|rep| self.snapshot_mapper.to_row(&(rep, &event.event_id)))
+            .collect();
+
+        self.executor.run(|conn| {
             conn.transaction(|conn| {
                 diesel::insert_into(clipboard_event::table)
-                    .values(&event)
+                    .values(&new_event)
                     .execute(conn)?;
 
-                for rep in reps {
+                for rep in new_reps {
                     diesel::insert_into(clipboard_snapshot_representation::table)
                         .values((
                             clipboard_snapshot_representation::id.eq(rep.id),
-                            clipboard_snapshot_representation::event_id.eq(&event.event_id),
+                            clipboard_snapshot_representation::event_id.eq(&new_event.event_id),
                             clipboard_snapshot_representation::format_id.eq(rep.format_id),
                             clipboard_snapshot_representation::mime_type.eq(rep.mime_type),
                             clipboard_snapshot_representation::size_bytes.eq(rep.size_bytes),

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::security::model::{
-    AeadAlgorithm, EncryptedBlob, EncryptionError, KdfParams, Kek, MasterKey, Passphrase,
+    EncryptionAlgo, EncryptedBlob, EncryptionError, KdfParams, Kek, MasterKey, Passphrase,
 };
 
 #[async_trait]
@@ -36,7 +36,7 @@ pub trait EncryptionPort: Send + Sync {
         &self,
         kek: &Kek,
         master_key: &MasterKey,
-        aead: AeadAlgorithm,
+        aead: EncryptionAlgo,
     ) -> Result<EncryptedBlob, EncryptionError>;
 
     /// Unwrap (decrypt) MasterKey using KEK.
@@ -62,7 +62,7 @@ pub trait EncryptionPort: Send + Sync {
         master_key: &MasterKey,
         plaintext: &[u8],
         aad: &[u8],
-        aead: AeadAlgorithm,
+        aead: EncryptionAlgo,
     ) -> Result<EncryptedBlob, EncryptionError>;
 
     /// Decrypt blob using MasterKey.

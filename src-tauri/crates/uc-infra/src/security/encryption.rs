@@ -6,7 +6,7 @@ use chacha20poly1305::aead::Aead;
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use uc_core::ports::EncryptionPort;
 use uc_core::security::model::{
-    AeadAlgorithm, EncryptedBlob, EncryptionError, EncryptionFormatVersion, KdfAlgorithm,
+    EncryptionAlgo, EncryptedBlob, EncryptionError, EncryptionFormatVersion, KdfAlgorithm,
     KdfParams, Kek, MasterKey, Passphrase,
 };
 
@@ -53,13 +53,13 @@ impl EncryptionPort for EncryptionRepository {
         &self,
         kek: &Kek,
         master_key: &MasterKey,
-        aead: AeadAlgorithm,
+        aead: EncryptionAlgo,
     ) -> Result<EncryptedBlob, EncryptionError> {
         let mut nonce = vec![0u8; 24];
         rand::rng().fill_bytes(&mut nonce);
 
         let ciphertext = match aead {
-            AeadAlgorithm::XChaCha20Poly1305 => {
+            EncryptionAlgo::XChaCha20Poly1305 => {
                 let cipher = XChaCha20Poly1305::new_from_slice(kek.as_bytes())
                     .map_err(|_| EncryptionError::InvalidKey)?;
                 cipher
@@ -83,7 +83,7 @@ impl EncryptionPort for EncryptionRepository {
         wrapped: &EncryptedBlob,
     ) -> Result<MasterKey, EncryptionError> {
         let plaintext = match wrapped.aead {
-            AeadAlgorithm::XChaCha20Poly1305 => {
+            EncryptionAlgo::XChaCha20Poly1305 => {
                 let cipher = XChaCha20Poly1305::new_from_slice(kek.as_bytes())
                     .map_err(|_| EncryptionError::InvalidKey)?;
                 cipher
@@ -103,13 +103,13 @@ impl EncryptionPort for EncryptionRepository {
         master_key: &MasterKey,
         plaintext: &[u8],
         aad: &[u8],
-        aead: AeadAlgorithm,
+        aead: EncryptionAlgo,
     ) -> Result<EncryptedBlob, EncryptionError> {
         let mut nonce = vec![0u8; 24];
         rand::thread_rng().fill_bytes(&mut nonce);
 
         let ciphertext = match aead {
-            AeadAlgorithm::XChaCha20Poly1305 => {
+            EncryptionAlgo::XChaCha20Poly1305 => {
                 let cipher = XChaCha20Poly1305::new_from_slice(master_key.as_bytes())
                     .map_err(|_| EncryptionError::InvalidKey)?;
                 cipher
@@ -142,7 +142,7 @@ impl EncryptionPort for EncryptionRepository {
         aad: &[u8],
     ) -> Result<Vec<u8>, EncryptionError> {
         let plaintext = match encrypted.aead {
-            AeadAlgorithm::XChaCha20Poly1305 => {
+            EncryptionAlgo::XChaCha20Poly1305 => {
                 let cipher = XChaCha20Poly1305::new_from_slice(master_key.as_bytes())
                     .map_err(|_| EncryptionError::InvalidKey)?;
                 cipher
@@ -166,7 +166,7 @@ mod tests {
     use super::*;
     use uc_core::ports::EncryptionPort;
     use uc_core::security::model::{
-        AeadAlgorithm, EncryptionError, KdfAlgorithm, KdfParams, KdfParamsV1, Kek, MasterKey,
+        EncryptionAlgo, EncryptionError, KdfAlgorithm, KdfParams, KdfParamsV1, Kek, MasterKey,
         Passphrase,
     };
 
@@ -227,7 +227,7 @@ mod tests {
         let master_key = MasterKey([2u8; 32]);
 
         let wrapped = service
-            .wrap_master_key(&kek, &master_key, AeadAlgorithm::XChaCha20Poly1305)
+            .wrap_master_key(&kek, &master_key, EncryptionAlgo::XChaCha20Poly1305)
             .await
             .expect("wrap master key");
 
@@ -251,7 +251,7 @@ mod tests {
         let master_key = MasterKey([2u8; 32]);
 
         let wrapped = service
-            .wrap_master_key(&kek, &master_key, AeadAlgorithm::XChaCha20Poly1305)
+            .wrap_master_key(&kek, &master_key, EncryptionAlgo::XChaCha20Poly1305)
             .await
             .expect("wrap master key");
 
@@ -275,7 +275,7 @@ mod tests {
                 &master_key,
                 plaintext,
                 aad,
-                AeadAlgorithm::XChaCha20Poly1305,
+                EncryptionAlgo::XChaCha20Poly1305,
             )
             .await
             .expect("encrypt blob");
@@ -303,7 +303,7 @@ mod tests {
                 &master_key,
                 plaintext,
                 aad,
-                AeadAlgorithm::XChaCha20Poly1305,
+                EncryptionAlgo::XChaCha20Poly1305,
             )
             .await
             .expect("encrypt blob");
@@ -329,7 +329,7 @@ mod tests {
                 &master_key,
                 plaintext,
                 aad,
-                AeadAlgorithm::XChaCha20Poly1305,
+                EncryptionAlgo::XChaCha20Poly1305,
             )
             .await
             .expect("encrypt blob");

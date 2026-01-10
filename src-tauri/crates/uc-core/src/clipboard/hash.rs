@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::hash::Hash;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -11,4 +12,14 @@ pub enum HashAlgorithm {
 pub struct ContentHash {
     pub alg: HashAlgorithm,
     pub bytes: [u8; 32],
+}
+
+impl fmt::Display for ContentHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let alg = match self.alg {
+            HashAlgorithm::Blake3V1 => "blake3v1",
+        };
+
+        write!(f, "{}:{}", alg, hex::encode(self.bytes))
+    }
 }
