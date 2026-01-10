@@ -30,8 +30,13 @@ pub mod ui_port;
 pub use app_runtime::AppRuntimePort;
 pub use autostart::AutostartPort;
 pub use blob::meta::BlobMeta;
-pub use blob::port::BlobStorePort;
-pub use clipboard::{ClipboardHistoryPort, ClipboardRepositoryPort, LocalClipboardPort};
+pub use blob::{BlobRepositoryPort, BlobStorePort};
+pub use clipboard::SelectRepresentationPolicyPort;
+pub use clipboard::{
+    ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, ClipboardRepositoryPort,
+    PlatformClipboardPort,
+};
+pub use clipboard::{ClipboardHistoryPort, LocalClipboardPort};
 pub use device_repository::DeviceRepositoryPort;
 pub use errors::DeviceRepositoryError;
 pub use network::NetworkPort;

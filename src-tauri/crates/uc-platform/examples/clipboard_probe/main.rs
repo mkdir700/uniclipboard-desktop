@@ -5,13 +5,13 @@ use std::io::Write;
 use std::sync::mpsc::{self, Sender};
 use std::time::Instant;
 use uc_core::ports::LocalClipboardPort;
-use uc_core::system::{RawClipboardRepresentation, RawClipboardSnapshot};
+use uc_core::system::{SystemClipboardRepresentation, SystemClipboardSnapshot};
 use uc_platform::clipboard::LocalClipboard;
 
 struct ProbeEvent {
     observed_ms: i64,
     observed_instant: Instant,
-    snapshot: Option<RawClipboardSnapshot>,
+    snapshot: Option<SystemClipboardSnapshot>,
     error: Option<String>,
 }
 
@@ -167,7 +167,7 @@ fn print_usage() {
     println!("  --help, -h         show this help");
 }
 
-fn print_snapshot(snapshot: &RawClipboardSnapshot) {
+fn print_snapshot(snapshot: &SystemClipboardSnapshot) {
     println!(
         "- snapshot.ts_ms: {} ({})",
         snapshot.ts_ms,
@@ -181,7 +181,7 @@ fn print_snapshot(snapshot: &RawClipboardSnapshot) {
     }
 }
 
-fn describe_representation(rep: &RawClipboardRepresentation) -> String {
+fn describe_representation(rep: &SystemClipboardRepresentation) -> String {
     let mime = rep.mime.as_ref().map(|m| m.as_str()).unwrap_or("-");
     let preview = if is_text_representation(mime, &rep.format_id) {
         format!("\"{}\"", text_preview(&rep.bytes, 160))
@@ -238,7 +238,7 @@ fn hex_preview(bytes: &[u8], max_len: usize) -> String {
     out
 }
 
-fn snapshot_fingerprint(snapshot: &RawClipboardSnapshot) -> u64 {
+fn snapshot_fingerprint(snapshot: &SystemClipboardSnapshot) -> u64 {
     use std::hash::{Hash, Hasher};
 
     let mut hasher = std::collections::hash_map::DefaultHasher::new();

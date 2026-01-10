@@ -6,8 +6,8 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex};
 use tokio::task::spawn_blocking;
 use uc_core::clipboard::{ClipboardContent, MimeType};
+use uc_core::clipboard::{SystemClipboardRepresentation, SystemClipboardSnapshot};
 use uc_core::ports::LocalClipboardPort;
-use uc_core::system::{RawClipboardRepresentation, RawClipboardSnapshot};
 
 /// Windows clipboard implementation using clipboard-rs and clipboard-win
 pub struct WindowsClipboard {
@@ -26,13 +26,13 @@ impl WindowsClipboard {
 
 #[async_trait]
 impl LocalClipboardPort for WindowsClipboard {
-    fn read_snapshot(&self) -> Result<RawClipboardSnapshot> {
+    fn read_snapshot(&self) -> Result<SystemClipboardSnapshot> {
         // FIXME: 禁止使用 unwrap
         let mut ctx = self.inner.lock().unwrap();
         CommonClipboardImpl::read_snapshot(&mut ctx)
     }
 
-    fn write_snapshot(&self, snapshot: RawClipboardSnapshot) -> Result<()> {
+    fn write_snapshot(&self, snapshot: SystemClipboardSnapshot) -> Result<()> {
         let mut ctx = self.inner.lock().unwrap();
         CommonClipboardImpl::write_snapshot(&mut ctx, snapshot)
     }

@@ -3,8 +3,7 @@
 //! This port defines the interface for clipboard operations including
 //! reading, writing, and monitoring clipboard changes.
 
-use crate::clipboard::ClipboardContent;
-use crate::system::RawClipboardSnapshot;
+use crate::clipboard::{ClipboardContent, SystemClipboardSnapshot};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -19,9 +18,9 @@ pub trait LocalClipboardPort: Send + Sync {
     ///
     /// Returns the current clipboard content as a Payload, which can contain
     /// text, images, files, or other supported content types.
-    fn read_snapshot(&self) -> Result<RawClipboardSnapshot>;
+    fn read_snapshot(&self) -> Result<SystemClipboardSnapshot>;
 
-    fn write_snapshot(&self, snapshot: RawClipboardSnapshot) -> Result<()>;
+    fn write_snapshot(&self, snapshot: SystemClipboardSnapshot) -> Result<()>;
 
     /// Write content to clipboard
     ///

@@ -1,7 +1,9 @@
 use anyhow::{anyhow, ensure, Result};
 use clipboard_rs::{common::RustImage, Clipboard, ContentFormat};
-use uc_core::clipboard::{ClipboardContent, ClipboardData, MimeType};
-use uc_core::system::{RawClipboardRepresentation, RawClipboardSnapshot};
+use uc_core::clipboard::{
+    ClipboardContent, ClipboardData, MimeType, SystemClipboardRepresentation,
+    SystemClipboardSnapshot,
+};
 
 pub struct CommonClipboardImpl;
 
@@ -26,14 +28,16 @@ fn data_to_bytes(data: &ClipboardData) -> Result<Vec<u8>> {
 }
 
 impl CommonClipboardImpl {
-    pub fn read_snapshot(ctx: &mut clipboard_rs::ClipboardContext) -> Result<RawClipboardSnapshot> {
+    pub fn read_snapshot(
+        ctx: &mut clipboard_rs::ClipboardContext,
+    ) -> Result<SystemClipboardSnapshot> {
         let available = map_clipboard_err(ctx.available_formats())?;
 
         let mut reps = Vec::new();
 
         if ctx.has(ContentFormat::Text) {
             if let std::result::Result::Ok(text) = ctx.get_text() {
-                reps.push(RawClipboardRepresentation {
+                reps.push(SystemClipboardRepresentation {
                     format_id: "text".into(),
                     mime: Some(MimeType::text_plain()),
                     bytes: text.into_bytes(),
@@ -43,7 +47,7 @@ impl CommonClipboardImpl {
 
         if ctx.has(ContentFormat::Rtf) {
             if let std::result::Result::Ok(rtf) = ctx.get_rich_text() {
-                reps.push(RawClipboardRepresentation {
+                reps.push(SystemClipboardRepresentation {
                     format_id: "rtf".into(),
                     mime: Some(MimeType("text/rtf".to_string())),
                     bytes: rtf.into_bytes(),
@@ -53,7 +57,7 @@ impl CommonClipboardImpl {
 
         if ctx.has(ContentFormat::Html) {
             if let std::result::Result::Ok(html) = ctx.get_html() {
-                reps.push(RawClipboardRepresentation {
+                reps.push(SystemClipboardRepresentation {
                     format_id: "html".into(),
                     mime: Some(MimeType::text_html()),
                     bytes: html.into_bytes(),
@@ -63,7 +67,7 @@ impl CommonClipboardImpl {
 
         if ctx.has(ContentFormat::Files) {
             if let std::result::Result::Ok(files) = ctx.get_files() {
-                reps.push(RawClipboardRepresentation {
+                reps.push(SystemClipboardRepresentation {
                     format_id: "files".into(),
                     mime: Some(MimeType("text/uri-list".to_string())),
                     bytes: files.join("\n").into_bytes(),
@@ -74,7 +78,7 @@ impl CommonClipboardImpl {
         if ctx.has(ContentFormat::Image) {
             if let std::result::Result::Ok(img) = ctx.get_image() {
                 if let std::result::Result::Ok(png) = img.to_png() {
-                    reps.push(RawClipboardRepresentation {
+                    reps.push(SystemClipboardRepresentation {
                         format_id: "image".into(),
                         mime: Some(MimeType("image/png".to_string())),
                         bytes: png.get_bytes().to_vec(),
@@ -92,7 +96,7 @@ impl CommonClipboardImpl {
                 continue;
             }
             if let std::result::Result::Ok(buf) = ctx.get_buffer(&format_id) {
-                reps.push(RawClipboardRepresentation {
+                reps.push(SystemClipboardRepresentation {
                     format_id,
                     mime: None,
                     bytes: buf,
@@ -100,7 +104,7 @@ impl CommonClipboardImpl {
             }
         }
 
-        Ok(RawClipboardSnapshot {
+        Ok(SystemClipboardSnapshot {
             ts_ms: chrono::Utc::now().timestamp_millis(),
             representations: reps,
         })
@@ -108,7 +112,7 @@ impl CommonClipboardImpl {
 
     pub fn write_snapshot(
         ctx: &mut clipboard_rs::ClipboardContext,
-        snapshot: RawClipboardSnapshot,
+        snapshot: SystemClipboardSnapshot,
     ) -> Result<()> {
         ensure!(
             snapshot.representations.len() == 1,

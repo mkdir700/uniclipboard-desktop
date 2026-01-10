@@ -1,5 +1,5 @@
 use std::time::SystemTime;
-use uc_core::system::RawClipboardSnapshot;
+use uc_core::system::SystemClipboardSnapshot;
 
 #[derive(Debug, Clone)]
 pub struct PlatformStatus {
@@ -25,7 +25,7 @@ pub enum PlatformEvent {
     Stopped,
 
     /// 本地剪切板发生变化
-    ClipboardChanged { snapshot: RawClipboardSnapshot },
+    ClipboardChanged { snapshot: SystemClipboardSnapshot },
 
     /// 剪切板内容已成功同步到至少一个设备
     ClipboardSynced { peer_count: usize },
