@@ -1,7 +1,6 @@
-use crate::db::schema::{
-    clipboard_entry,
-    clipboard_selection,
-};
+use uc_core::ports::ClipboardEntryWriterPort;
+
+use crate::db::schema::{clipboard_entry, clipboard_selection};
 
 pub struct DieselClipboardEntryRepository {
     executor: DieselSqliteExecutor,
@@ -14,7 +13,7 @@ impl DieselClipboardEntryRepository {
 }
 
 #[async_trait::async_trait]
-impl ClipboardEntryRepository for DieselClipboardEntryRepository {
+impl ClipboardEntryWriterPort for DieselClipboardEntryRepository {
     async fn insert_entry(
         &self,
         entry: NewClipboardEntry,

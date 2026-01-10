@@ -5,7 +5,6 @@ pub enum SelectionTarget {
     DefaultPaste,
 }
 
-/// 选择结果（建议落库：clipboard_selection）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClipboardSelection {
     pub primary_rep_id: String,

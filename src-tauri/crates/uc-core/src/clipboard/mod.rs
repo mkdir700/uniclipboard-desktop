@@ -1,32 +1,22 @@
 //! Clipboard domain models.
-mod blob;
-mod clipboard_entry;
-mod clipboard_event;
-mod clipboard_selection;
-mod content;
 mod decision;
-mod domain;
+mod entry;
 mod event;
-pub mod meta_keys;
+mod hash;
 mod mime;
+mod origin;
 mod policy;
-mod snapshot;
 mod system;
-mod view;
+mod timestamp;
 
-pub use blob::NewBlob;
-pub use clipboard_entry::{NewClipboardEntry, NewClipboardSelection};
-pub use clipboard_event::{NewClipboardEvent, NewSnapshotRepresentation};
-pub use clipboard_selection::ClipboardSelection;
+pub use entry::*;
+pub use event::*;
+pub use policy::ClipboardSelection;
 pub use policy::*;
 pub use system::{SystemClipboardRepresentation, SystemClipboardSnapshot};
 
-pub use content::{
-    ClipboardContent, ClipboardData, ClipboardItem, ClipboardOrigin, ContentHash, ItemHash,
-    PayloadHash, TimestampMs,
-};
 pub use decision::{ClipboardContentActionDecision, DuplicationHint, RejectReason};
-pub use domain::ClipboardContentDecisionDomain;
+pub use hash::{ContentHash, HashAlgorithm};
 pub use mime::MimeType;
-pub use snapshot::ClipboardDecisionSnapshot;
-pub use view::{ClipboardContentView, ClipboardItemView, ClipboardRecordId};
+pub use origin::ClipboardOrigin;
+pub use timestamp::TimestampMs;

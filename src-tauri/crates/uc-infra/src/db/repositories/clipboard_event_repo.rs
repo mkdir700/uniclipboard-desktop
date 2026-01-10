@@ -1,9 +1,7 @@
+use crate::db::schema::{clipboard_event, clipboard_snapshot_representation};
 use anyhow::Result;
 use diesel::prelude::*;
-use crate::db::schema::{
-    clipboard_event,
-    clipboard_snapshot_representation,
-};
+use uc_core::ports::ClipboardEventWriterPort;
 
 pub struct DieselClipboardEventRepository {
     executor: DieselSqliteExecutor,
@@ -16,7 +14,7 @@ impl DieselClipboardEventRepository {
 }
 
 #[async_trait::async_trait]
-impl ClipboardEventRepository for DieselClipboardEventRepository {
+impl ClipboardEventWriterPort for DieselClipboardEventRepository {
     async fn insert_event(
         &self,
         event: NewClipboardEvent,

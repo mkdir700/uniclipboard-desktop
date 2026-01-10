@@ -8882,6 +8882,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "uc-core",
+ "uuid",
 ]
 
 [[package]]
@@ -8903,6 +8904,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "twox-hash",
+ "uuid",
 ]
 
 [[package]]

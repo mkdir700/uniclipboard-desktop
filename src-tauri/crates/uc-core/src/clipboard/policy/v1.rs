@@ -1,4 +1,10 @@
-use crate::clipboard::{SystemClipboardRepresentation, SystemClipboardSnapshot};
+use super::model::SelectionTarget;
+use crate::{
+    clipboard::{
+        ClipboardSelection, PolicyError, SystemClipboardRepresentation, SystemClipboardSnapshot,
+    },
+    ports::SelectRepresentationPolicyPort,
+};
 use std::cmp::Ordering;
 
 /// v1 策略：稳定、可解释、保守
@@ -16,15 +22,15 @@ impl SelectRepresentationPolicyV1 {
     }
 
     fn is_usable(rep: &SystemClipboardRepresentation) -> bool {
-        if rep.size_bytes <= 0 {
+        if rep.size_bytes() <= 0 {
             return false;
         }
-        rep.inline_data.is_some() || rep.blob_id.is_some()
+        true
     }
 
     fn classify(rep: &SystemClipboardRepresentation) -> RepKind {
         // 注意：v1 刻意不引入平台特例，只基于 mime_type + 少量 format_id 兜底
-        let mime = rep.mime_type.as_deref().unwrap_or("");
+        let mime = rep.mime.as_deref().unwrap_or("");
 
         // 文件列表（常见：text/uri-list）
         if mime.eq_ignore_ascii_case("text/uri-list") || mime.starts_with("text/uri-list") {
@@ -105,7 +111,7 @@ impl SelectRepresentationPolicyV1 {
             }
 
             // 2) size：asc（更轻更不容易卡 UI；paste 也更稳）
-            match a.size_bytes.cmp(&b.size_bytes) {
+            match a.size_bytes().cmp(&b.size_bytes()) {
                 Ordering::Equal => {}
                 ord => return ord,
             }

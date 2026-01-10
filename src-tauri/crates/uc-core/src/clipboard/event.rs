@@ -1,4 +1,5 @@
-use super::content::ContentHash;
+use super::hash::ContentHash;
+use crate::ids::EventId;
 
 /// Event representing a user-initiated action on clipboard content.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,4 +22,11 @@ pub enum ClipboardContentAction {
     Pin,
     /// Unpin previously pinned content.
     Unpin,
+}
+
+pub struct ClipboardEvent {
+    pub event_id: EventId,
+    pub captured_at_ms: i64,
+    pub source_device: String,
+    pub snapshot_hash: String,
 }

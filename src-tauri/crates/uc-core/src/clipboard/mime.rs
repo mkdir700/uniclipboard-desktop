@@ -11,6 +11,18 @@ impl MimeType {
     pub fn text_html() -> Self {
         Self("text/html".into())
     }
+    pub fn text_markdown() -> Self {
+        Self("text/markdown".into())
+    }
+    pub fn text_rtf() -> Self {
+        Self("text/rtf".into())
+    }
+    pub fn text_xml() -> Self {
+        Self("text/xml".into())
+    }
+    pub fn uri_list() -> Self {
+        Self("text/uri-list".into())
+    }
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -46,4 +58,3 @@ impl FromStr for MimeType {
         Ok(MimeType(s.to_string()))
     }
 }
-

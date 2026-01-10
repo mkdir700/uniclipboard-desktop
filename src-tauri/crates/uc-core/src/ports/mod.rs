@@ -18,23 +18,34 @@
 
 pub mod app_runtime;
 pub mod autostart;
-pub mod blob;
+mod blob_materializer;
+pub mod blob_repository;
+mod blob_store;
 pub mod clipboard;
+mod clipboard_entry;
+mod clipboard_event;
+mod clock;
 pub mod device_repository;
 pub mod errors;
+mod hash;
 pub mod network;
 pub mod security;
 pub mod settings;
 pub mod ui_port;
 
+pub use blob_materializer::BlobMaterializerPort;
+pub use blob_repository::BlobRepositoryPort;
+pub use blob_store::BlobStorePort;
+pub use clipboard_entry::*;
+pub use clipboard_event::*;
+pub use clock::*;
+pub use hash::*;
+
 pub use app_runtime::AppRuntimePort;
 pub use autostart::AutostartPort;
-pub use blob::meta::BlobMeta;
-pub use blob::{BlobRepositoryPort, BlobStorePort};
 pub use clipboard::SelectRepresentationPolicyPort;
 pub use clipboard::{
-    ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, ClipboardRepositoryPort,
-    PlatformClipboardPort,
+    ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, PlatformClipboardPort,
 };
 pub use clipboard::{ClipboardHistoryPort, LocalClipboardPort};
 pub use device_repository::DeviceRepositoryPort;
