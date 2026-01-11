@@ -11,13 +11,13 @@ use clipboard_rs::{
 };
 use log::error;
 use tokio::task::JoinHandle;
-use uc_core::ports::LocalClipboardPort;
+use uc_core::ports::SystemClipboardPort;
 
 pub struct PlatformRuntime<E>
 where
     E: PlatformCommandExecutorPort,
 {
-    local_clipboard: Arc<dyn LocalClipboardPort>,
+    local_clipboard: Arc<dyn SystemClipboardPort>,
     event_tx: PlatformEventSender,
     event_rx: PlatformEventReceiver,
     command_rx: PlatformCommandReceiver,

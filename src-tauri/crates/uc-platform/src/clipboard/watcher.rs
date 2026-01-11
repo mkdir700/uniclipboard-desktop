@@ -4,15 +4,15 @@ use clipboard_rs::ClipboardHandler;
 
 use crate::ipc::PlatformEvent;
 use crate::runtime::event_bus::PlatformEventSender;
-use uc_core::ports::LocalClipboardPort;
+use uc_core::ports::SystemClipboardPort;
 
 pub struct ClipboardWatcher {
-    local_clipboard: Arc<dyn LocalClipboardPort>,
+    local_clipboard: Arc<dyn SystemClipboardPort>,
     sender: PlatformEventSender,
 }
 
 impl ClipboardWatcher {
-    pub fn new(local_clipboard: Arc<dyn LocalClipboardPort>, sender: PlatformEventSender) -> Self {
+    pub fn new(local_clipboard: Arc<dyn SystemClipboardPort>, sender: PlatformEventSender) -> Self {
         Self {
             local_clipboard,
             sender,

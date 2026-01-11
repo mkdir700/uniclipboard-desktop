@@ -1,40 +1,49 @@
 use crate::db::models::blob::NewBlobRow;
+use crate::db::models::BlobRow;
 use crate::db::ports::DbExecutor;
-use crate::db::ports::Mapper;
+use crate::db::ports::{InsertMapper, RowMapper};
 use crate::db::schema::blob;
 use anyhow::Result;
-use diesel::RunQueryDsl;
+use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl};
 use uc_core::ports::BlobRepositoryPort;
 use uc_core::Blob;
 use uc_core::ContentHash;
 
-pub struct DieselBlobRepository<E, M>
+pub struct DieselBlobRepository<E, IM, RM>
 where
     E: DbExecutor,
-    M: Mapper<Blob, NewBlobRow>,
+    IM: InsertMapper<Blob, NewBlobRow>,
+    RM: RowMapper<BlobRow, Blob>,
 {
     executor: E,
-    mapper: M,
+    insert_mapper: IM,
+    row_mapper: RM,
 }
 
-impl<E, M> DieselBlobRepository<E, M>
+impl<E, IM, RM> DieselBlobRepository<E, IM, RM>
 where
     E: DbExecutor,
-    M: Mapper<Blob, NewBlobRow>,
+    IM: InsertMapper<Blob, NewBlobRow>,
+    RM: RowMapper<BlobRow, Blob>,
 {
-    pub fn new(executor: E, mapper: M) -> Self {
-        Self { executor, mapper }
+    pub fn new(executor: E, insert_mapper: IM, row_mapper: RM) -> Self {
+        Self {
+            executor,
+            insert_mapper,
+            row_mapper,
+        }
     }
 }
 
 #[async_trait::async_trait]
-impl<E, M> BlobRepositoryPort for DieselBlobRepository<E, M>
+impl<E, IM, RM> BlobRepositoryPort for DieselBlobRepository<E, IM, RM>
 where
     E: DbExecutor,
-    M: Mapper<Blob, NewBlobRow>,
+    IM: InsertMapper<Blob, NewBlobRow>,
+    RM: RowMapper<BlobRow, Blob>,
 {
     async fn insert_blob(&self, blob_row: &Blob) -> Result<()> {
-        let new_blob_row = self.mapper.to_row(blob_row);
+        let new_blob_row = self.insert_mapper.to_row(blob_row)?;
         self.executor.run(|conn| {
             diesel::insert_into(blob::table)
                 .values(&new_blob_row)
@@ -44,6 +53,20 @@ where
     }
 
     async fn find_by_hash(&self, content_hash: &ContentHash) -> Result<Option<Blob>> {
-        todo!()
+        let blob_row: Option<BlobRow> = self.executor.run(|conn| {
+            let result: Result<Option<BlobRow>, diesel::result::Error> = blob::table
+                .filter(blob::content_hash.eq(content_hash.to_string()))
+                .first::<BlobRow>(conn)
+                .optional();
+            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
+
+        match blob_row {
+            Some(row) => {
+                let blob = self.row_mapper.to_domain(&row)?;
+                Ok(Some(blob))
+            }
+            None => Ok(None),
+        }
     }
 }

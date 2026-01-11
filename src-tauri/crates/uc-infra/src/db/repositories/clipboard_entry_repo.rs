@@ -1,7 +1,7 @@
 use crate::db::models::NewClipboardEntryRow;
 use crate::db::models::NewClipboardSelectionRow;
 use crate::db::ports::DbExecutor;
-use crate::db::ports::Mapper;
+use crate::db::ports::InsertMapper;
 use crate::db::schema::{clipboard_entry, clipboard_selection};
 use anyhow::Result;
 use diesel::Connection;
@@ -31,8 +31,8 @@ impl<E, ME, MS> DieselClipboardEntryRepository<E, ME, MS> {
 impl<E, ME, MS> ClipboardEntryWriterPort for DieselClipboardEntryRepository<E, ME, MS>
 where
     E: DbExecutor,
-    ME: Mapper<ClipboardEntry, NewClipboardEntryRow>,
-    MS: Mapper<ClipboardSelectionDecision, NewClipboardSelectionRow>,
+    ME: InsertMapper<ClipboardEntry, NewClipboardEntryRow>,
+    MS: InsertMapper<ClipboardSelectionDecision, NewClipboardSelectionRow>,
 {
     async fn insert_entry(
         &self,
@@ -40,8 +40,8 @@ where
         selection: &ClipboardSelectionDecision,
     ) -> Result<()> {
         self.executor.run(|conn| {
-            let new_entry_row = self.entry_mapper.to_row(entry);
-            let new_selection_row = self.selection_mapper.to_row(selection);
+            let new_entry_row = self.entry_mapper.to_row(entry)?;
+            let new_selection_row = self.selection_mapper.to_row(selection)?;
 
             conn.transaction(|conn| {
                 diesel::insert_into(clipboard_entry::table)

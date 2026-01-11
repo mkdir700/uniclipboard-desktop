@@ -1,0 +1,155 @@
+    Blocking waiting for file lock on build directory
+   7.561040208s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint: fingerprint error for uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("uc_app", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app/src/lib.rs", Edition2021) }
+   7.561068875s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-app-3e0a110c0e1ab92c/lib-uc_app`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   7.571393291s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint: fingerprint error for uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("uc_app", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app/src/lib.rs", Edition2021) }
+   7.571408250s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-app-57d766d7d9cfbebf/test-lib-uc_app`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   7.647616041s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: false }/TargetInner { ..: lib_target("uniclipboard_lib", ["staticlib", "cdylib", "rlib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/lib.rs", Edition2021) }
+   7.647633625s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-1837afcf95262f09/lib-uniclipboard_lib`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   7.665136375s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: true }/TargetInner { ..: lib_target("uniclipboard_lib", ["staticlib", "cdylib", "rlib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/lib.rs", Edition2021) }
+   7.665154375s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-3f5033c51ec56d41/test-lib-uniclipboard_lib`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   7.669664875s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: false }/TargetInner { name: "uniclipboard", doc: true, ..: with_path("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/main.rs", Edition2021) }
+   7.669677458s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-8706890e189fecfa/bin-uniclipboard`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+   7.672036583s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: true }/TargetInner { name: "uniclipboard", doc: true, ..: with_path("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/main.rs", Edition2021) }
+   7.672047083s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-58beda5708b1d95c/test-bin-uniclipboard`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: std::backtrace::Backtrace::capture
+   2: cargo_util::paths::read_bytes
+   3: cargo_util::paths::read
+   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   5: cargo::core::compiler::fingerprint::prepare_target
+   6: cargo::core::compiler::compile
+   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   8: cargo::ops::cargo_compile::compile_ws
+   9: cargo::ops::cargo_compile::compile_with_exec
+  10: cargo::ops::cargo_compile::compile
+  11: cargo::commands::check::exec
+  12: <cargo::cli::Exec>::exec
+  13: cargo::main
+  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  15: std::rt::lang_start::<()>::{closure#0}
+  16: std::rt::lang_start_internal
+  17: _main
+    Checking uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app)
+error: could not compile `uc-app` (lib) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `uc-app` (lib test) due to 3 previous errors

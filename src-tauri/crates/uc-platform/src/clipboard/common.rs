@@ -1,6 +1,6 @@
 use anyhow::{anyhow, ensure, Result};
 use clipboard_rs::{common::RustImage, Clipboard, ContentFormat};
-use uc_core::clipboard::{MimeType, SystemClipboardRepresentation, SystemClipboardSnapshot};
+use uc_core::clipboard::{MimeType, ObservedClipboardRepresentation, SystemClipboardSnapshot};
 use uc_core::ids::RepresentationId;
 
 pub struct CommonClipboardImpl;
@@ -21,7 +21,7 @@ impl CommonClipboardImpl {
 
         if ctx.has(ContentFormat::Text) {
             if let std::result::Result::Ok(text) = ctx.get_text() {
-                reps.push(SystemClipboardRepresentation {
+                reps.push(ObservedClipboardRepresentation {
                     id: RepresentationId::new(),
                     format_id: "text".into(),
                     mime: Some(MimeType::text_plain()),
@@ -32,7 +32,7 @@ impl CommonClipboardImpl {
 
         if ctx.has(ContentFormat::Rtf) {
             if let std::result::Result::Ok(rtf) = ctx.get_rich_text() {
-                reps.push(SystemClipboardRepresentation {
+                reps.push(ObservedClipboardRepresentation {
                     id: RepresentationId::new(),
                     format_id: "rtf".into(),
                     mime: Some(MimeType("text/rtf".to_string())),
@@ -43,7 +43,7 @@ impl CommonClipboardImpl {
 
         if ctx.has(ContentFormat::Html) {
             if let std::result::Result::Ok(html) = ctx.get_html() {
-                reps.push(SystemClipboardRepresentation {
+                reps.push(ObservedClipboardRepresentation {
                     id: RepresentationId::new(),
                     format_id: "html".into(),
                     mime: Some(MimeType::text_html()),
@@ -54,7 +54,7 @@ impl CommonClipboardImpl {
 
         if ctx.has(ContentFormat::Files) {
             if let std::result::Result::Ok(files) = ctx.get_files() {
-                reps.push(SystemClipboardRepresentation {
+                reps.push(ObservedClipboardRepresentation {
                     id: RepresentationId::new(),
                     format_id: "files".into(),
                     mime: Some(MimeType("text/uri-list".to_string())),
@@ -66,7 +66,7 @@ impl CommonClipboardImpl {
         if ctx.has(ContentFormat::Image) {
             if let std::result::Result::Ok(img) = ctx.get_image() {
                 if let std::result::Result::Ok(png) = img.to_png() {
-                    reps.push(SystemClipboardRepresentation {
+                    reps.push(ObservedClipboardRepresentation {
                         id: RepresentationId::new(),
                         format_id: "image".into(),
                         mime: Some(MimeType("image/png".to_string())),
@@ -85,7 +85,7 @@ impl CommonClipboardImpl {
                 continue;
             }
             if let std::result::Result::Ok(buf) = ctx.get_buffer(&format_id) {
-                reps.push(SystemClipboardRepresentation {
+                reps.push(ObservedClipboardRepresentation {
                     id: RepresentationId::new(),
                     format_id: format_id.into(),
                     mime: None,

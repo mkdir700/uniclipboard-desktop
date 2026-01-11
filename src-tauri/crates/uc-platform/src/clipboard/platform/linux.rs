@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use clipboard_rs::ClipboardContext;
 use std::sync::{Arc, Mutex};
 use uc_core::clipboard::SystemClipboardSnapshot;
-use uc_core::ports::LocalClipboardPort;
+use uc_core::ports::SystemClipboardPort;
 
 pub struct LinuxClipboard {
     inner: Arc<Mutex<ClipboardContext>>,
@@ -21,7 +21,7 @@ impl LinuxClipboard {
 }
 
 #[async_trait]
-impl LocalClipboardPort for LinuxClipboard {
+impl SystemClipboardPort for LinuxClipboard {
     fn read_snapshot(&self) -> Result<SystemClipboardSnapshot> {
         let mut ctx = self.inner.lock().unwrap();
         CommonClipboardImpl::read_snapshot(&mut ctx)

@@ -5,7 +5,7 @@ use uc_core::device::{Device, DeviceId};
 use uc_core::ports::{DeviceRepositoryError, DeviceRepositoryPort};
 
 use crate::db::ports::DbExecutor;
-use crate::db::ports::Mapper;
+use crate::db::ports::InsertMapper;
 use crate::db::{models::DeviceRow, schema::t_device::dsl::*};
 
 pub struct DieselDeviceRepository<E, M> {
@@ -23,7 +23,7 @@ impl<E, M> DieselDeviceRepository<E, M> {
 impl<E, M> DeviceRepositoryPort for DieselDeviceRepository<E, M>
 where
     E: DbExecutor,
-    M: Mapper<Device, DeviceRow>,
+    M: InsertMapper<Device, DeviceRow>,
 {
     async fn find_by_id(
         &self,

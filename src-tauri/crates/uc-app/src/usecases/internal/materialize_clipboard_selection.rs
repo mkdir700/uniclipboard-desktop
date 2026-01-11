@@ -2,10 +2,8 @@ use crate::models::MaterializedPayload;
 use anyhow::{anyhow, Context, Ok, Result};
 use uc_core::ids::EntryId;
 use uc_core::ports::BlobMaterializerPort;
-use uc_core::ports::{
-    ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, ClockPort, ContentHashPort,
-};
-use uc_core::{ContentHash, SelectionState};
+use uc_core::ports::{ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, ContentHashPort};
+use uc_core::SelectionState;
 
 pub struct MaterializeClipboardSelectionUseCase<CER, CNR, B, CH>
 where
@@ -67,7 +65,7 @@ where
 
                 let rep = self
                     .clipboard_event_repository
-                    .get_representation(event_id, &representation_id)
+                    .get_representation(&event_id, &representation_id)
                     .await?;
 
                 if rep.bytes.is_empty() {
@@ -79,7 +77,7 @@ where
                     });
                 }
 
-                let resolved_mime = mime.or(rep.mime);
+                let resolved_mime = mime.or(rep.format_id.to_mime_type());
 
                 // 2) 阈值策略：小内容可以直接 inline
                 // TODO: 未来支持
@@ -95,7 +93,7 @@ where
                 let content_hash = self.hasher.hash_bytes(&rep.bytes)?;
                 let materialized_blob = self
                     .blob_materializer
-                    .materialize(&rep.bytes, content_hash)
+                    .materialize(&rep.bytes, &content_hash)
                     .await?;
 
                 // 6) 更新 selection 状态
@@ -108,7 +106,7 @@ where
 
                 Ok(MaterializedPayload::Blob {
                     mime: resolved_mime,
-                    blob_id,
+                    blob_id: *blob_id,
                 })
             }
         }

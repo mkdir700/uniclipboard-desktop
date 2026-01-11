@@ -4,8 +4,8 @@ use std::env;
 use std::io::Write;
 use std::sync::mpsc::{self, Sender};
 use std::time::Instant;
-use uc_core::ports::LocalClipboardPort;
-use uc_core::{SystemClipboardRepresentation, SystemClipboardSnapshot};
+use uc_core::ports::SystemClipboardPort;
+use uc_core::{ObservedClipboardRepresentation, SystemClipboardSnapshot};
 use uc_platform::clipboard::LocalClipboard;
 
 struct ProbeEvent {
@@ -181,7 +181,7 @@ fn print_snapshot(snapshot: &SystemClipboardSnapshot) {
     }
 }
 
-fn describe_representation(rep: &SystemClipboardRepresentation) -> String {
+fn describe_representation(rep: &ObservedClipboardRepresentation) -> String {
     let mime = rep.mime.as_ref().map(|m| m.as_str()).unwrap_or("-");
     let preview = if is_text_representation(mime, &rep.format_id) {
         format!("\"{}\"", text_preview(&rep.bytes, 160))

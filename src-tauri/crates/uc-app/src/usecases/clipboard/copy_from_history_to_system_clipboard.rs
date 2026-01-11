@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use uc_core::{
     clipboard::ContentHash,
-    ports::{ClipboardRepositoryPort, LocalClipboardPort},
+    ports::{ClipboardRepositoryPort, SystemClipboardPort},
 };
 
 /// Copy a historical clipboard content back into the system clipboard
@@ -17,7 +17,7 @@ use uc_core::{
 pub struct CopyFromHistoryToSystemClipboard<C, L>
 where
     C: ClipboardRepositoryPort,
-    L: LocalClipboardPort,
+    L: SystemClipboardPort,
 {
     clipboard_repo: Arc<C>,
     local_clipboard: Arc<L>,
@@ -26,7 +26,7 @@ where
 impl<C, L> CopyFromHistoryToSystemClipboard<C, L>
 where
     C: ClipboardRepositoryPort,
-    L: LocalClipboardPort,
+    L: SystemClipboardPort,
 {
     /// Creates a new use case instance that copies clipboard entries from history to the system clipboard.
     ///

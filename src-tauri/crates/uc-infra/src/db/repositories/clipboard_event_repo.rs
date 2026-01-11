@@ -3,13 +3,13 @@ use crate::db::{
         clipboard_event::NewClipboardEventRow,
         snapshot_representation::NewSnapshotRepresentationRow,
     },
-    ports::{DbExecutor, Mapper},
+    ports::{DbExecutor, InsertMapper},
     schema::{clipboard_event, clipboard_snapshot_representation},
 };
 use anyhow::Result;
 use diesel::prelude::*;
 use uc_core::{
-    clipboard::{ClipboardEvent, SnapshotRepresentation},
+    clipboard::{ClipboardEvent, PersistedClipboardRepresentation},
     ids::EventId,
     ports::ClipboardEventWriterPort,
 };
@@ -34,19 +34,22 @@ impl<E, ME, MS> DieselClipboardEventRepository<E, ME, MS> {
 impl<E, ME, MS> ClipboardEventWriterPort for DieselClipboardEventRepository<E, ME, MS>
 where
     E: DbExecutor,
-    ME: Mapper<ClipboardEvent, NewClipboardEventRow>,
-    for<'a> MS: Mapper<(&'a SnapshotRepresentation, &'a EventId), NewSnapshotRepresentationRow>,
+    ME: InsertMapper<ClipboardEvent, NewClipboardEventRow>,
+    for<'a> MS: InsertMapper<
+        (&'a PersistedClipboardRepresentation, &'a EventId),
+        NewSnapshotRepresentationRow,
+    >,
 {
     async fn insert_event(
         &self,
         event: &ClipboardEvent,
-        reps: &Vec<SnapshotRepresentation>,
+        reps: &Vec<PersistedClipboardRepresentation>,
     ) -> Result<()> {
-        let new_event: NewClipboardEventRow = self.event_mapper.to_row(event);
+        let new_event: NewClipboardEventRow = self.event_mapper.to_row(event)?;
         let new_reps: Vec<NewSnapshotRepresentationRow> = reps
             .iter()
             .map(|rep| self.snapshot_mapper.to_row(&(rep, &event.event_id)))
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         self.executor.run(|conn| {
             conn.transaction(|conn| {
