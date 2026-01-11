@@ -17,7 +17,7 @@ pub use policy::ClipboardSelection;
 pub use policy::*;
 pub use selection::*;
 pub use snapshot::*;
-pub use system::{SystemClipboardRepresentation, SystemClipboardSnapshot};
+pub use system::{ObservedClipboardRepresentation, SystemClipboardSnapshot};
 
 pub use decision::{ClipboardContentActionDecision, DuplicationHint, RejectReason};
 pub use hash::{ContentHash, HashAlgorithm};

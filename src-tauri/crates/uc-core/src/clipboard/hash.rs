@@ -23,3 +23,30 @@ impl fmt::Display for ContentHash {
         write!(f, "{}:{}", alg, hex::encode(self.bytes))
     }
 }
+
+impl From<String> for ContentHash {
+    fn from(s: String) -> Self {
+        // Parse the string format "algorithm:hex_bytes"
+        if let Some((alg_part, hex_part)) = s.split_once(':') {
+            let alg = match alg_part {
+                "blake3v1" => HashAlgorithm::Blake3V1,
+                _ => panic!("unsupported hash algorithm: {}", alg_part),
+            };
+
+            let bytes = hex::decode(hex_part)
+                .expect("invalid hex encoding for content hash")
+                .try_into()
+                .expect("invalid byte length for content hash");
+
+            Self { alg, bytes }
+        } else {
+            panic!("invalid content hash format: {}", s);
+        }
+    }
+}
+
+impl From<&str> for ContentHash {
+    fn from(s: &str) -> Self {
+        s.to_string().into()
+    }
+}

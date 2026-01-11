@@ -13,7 +13,7 @@ use async_trait::async_trait;
 /// allowing use cases to interact with the clipboard without depending on
 /// platform-specific implementations.
 #[async_trait]
-pub trait LocalClipboardPort: Send + Sync {
+pub trait SystemClipboardPort: Send + Sync {
     /// Read current clipboard content
     ///
     /// Returns the current clipboard content as a Payload, which can contain

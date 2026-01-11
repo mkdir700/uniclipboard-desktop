@@ -2,10 +2,12 @@ mod clipboard_entry_repository;
 mod clipboard_event_repository;
 mod local_clipboard;
 mod platform_clipboard;
+mod representation_materializer;
 mod select_representation_policy;
 
 pub use clipboard_entry_repository::ClipboardEntryRepositoryPort;
 pub use clipboard_event_repository::ClipboardEventRepositoryPort;
-pub use local_clipboard::LocalClipboardPort;
+pub use local_clipboard::SystemClipboardPort;
 pub use platform_clipboard::PlatformClipboardPort;
+pub use representation_materializer::ClipboardRepresentationMaterializerPort;
 pub use select_representation_policy::SelectRepresentationPolicyPort;

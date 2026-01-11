@@ -1,7 +1,7 @@
 use super::model::SelectionTarget;
 use crate::{
     clipboard::{
-        ClipboardSelection, PolicyError, SystemClipboardRepresentation, SystemClipboardSnapshot,
+        ClipboardSelection, ObservedClipboardRepresentation, PolicyError, SystemClipboardSnapshot,
     },
     ports::SelectRepresentationPolicyPort,
 };
@@ -21,14 +21,14 @@ impl SelectRepresentationPolicyV1 {
         Self
     }
 
-    fn is_usable(rep: &SystemClipboardRepresentation) -> bool {
+    fn is_usable(rep: &ObservedClipboardRepresentation) -> bool {
         if rep.size_bytes() <= 0 {
             return false;
         }
         true
     }
 
-    fn classify(rep: &SystemClipboardRepresentation) -> RepKind {
+    fn classify(rep: &ObservedClipboardRepresentation) -> RepKind {
         // 注意：v1 刻意不引入平台特例，只基于 mime_type + 少量 format_id 兜底
         if rep.mime.is_none() {
             return RepKind::Unknown;
@@ -91,8 +91,8 @@ impl SelectRepresentationPolicyV1 {
     fn select_one<'a>(
         snapshot: &'a SystemClipboardSnapshot,
         target: SelectionTarget,
-    ) -> Option<&'a SystemClipboardRepresentation> {
-        let mut reps: Vec<&SystemClipboardRepresentation> = snapshot
+    ) -> Option<&'a ObservedClipboardRepresentation> {
+        let mut reps: Vec<&ObservedClipboardRepresentation> = snapshot
             .representations
             .iter()
             .filter(|r| Self::is_usable(r))

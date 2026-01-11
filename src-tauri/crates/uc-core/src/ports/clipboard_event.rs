@@ -1,4 +1,4 @@
-use crate::clipboard::{ClipboardEvent, SnapshotRepresentation};
+use crate::clipboard::{ClipboardEvent, PersistedClipboardRepresentation};
 use crate::ids::EventId;
 use anyhow::Result;
 
@@ -7,7 +7,7 @@ pub trait ClipboardEventWriterPort: Send + Sync {
     async fn insert_event(
         &self,
         event: &ClipboardEvent,
-        representations: &Vec<SnapshotRepresentation>,
+        representations: &Vec<PersistedClipboardRepresentation>,
     ) -> Result<()>;
 }
 

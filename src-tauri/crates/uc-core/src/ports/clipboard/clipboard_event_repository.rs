@@ -1,4 +1,4 @@
-use crate::{ids::EventId, SystemClipboardRepresentation};
+use crate::{ids::EventId, ObservedClipboardRepresentation};
 use anyhow::Result;
 
 #[async_trait::async_trait]
@@ -7,5 +7,5 @@ pub trait ClipboardEventRepositoryPort: Send + Sync {
         &self,
         id: &EventId,
         representation_id: &str,
-    ) -> Result<SystemClipboardRepresentation>;
+    ) -> Result<ObservedClipboardRepresentation>;
 }

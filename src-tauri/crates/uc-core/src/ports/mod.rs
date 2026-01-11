@@ -43,8 +43,9 @@ pub use hash::*;
 
 pub use app_runtime::AppRuntimePort;
 pub use autostart::AutostartPort;
-pub use clipboard::LocalClipboardPort;
+pub use clipboard::ClipboardRepresentationMaterializerPort;
 pub use clipboard::SelectRepresentationPolicyPort;
+pub use clipboard::SystemClipboardPort;
 pub use clipboard::{
     ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, PlatformClipboardPort,
 };

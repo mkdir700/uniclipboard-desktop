@@ -45,6 +45,21 @@ impl fmt::Display for EncryptionAlgo {
     }
 }
 
+impl From<String> for EncryptionAlgo {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "xchacha20-poly1305" => EncryptionAlgo::XChaCha20Poly1305,
+            _ => panic!("unsupported encryption algorithm: {}", s),
+        }
+    }
+}
+
+impl From<&str> for EncryptionAlgo {
+    fn from(s: &str) -> Self {
+        s.to_string().into()
+    }
+}
+
 /// KDF params
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KdfParams {
