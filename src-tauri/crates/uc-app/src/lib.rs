@@ -3,5 +3,8 @@
 //! This crate contains business logic use cases and runtime orchestration.
 
 pub mod bootstrap;
-mod models;
+pub mod models;
+pub mod ports;
 pub mod usecases;
+
+pub use models::ClipboardEntryProjection;

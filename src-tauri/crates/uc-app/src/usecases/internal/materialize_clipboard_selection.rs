@@ -1,114 +1,114 @@
 use crate::models::MaterializedPayload;
-use anyhow::{anyhow, Context, Ok, Result};
+use anyhow::{Ok, Result};
 use uc_core::ids::EntryId;
-use uc_core::ports::BlobMaterializerPort;
-use uc_core::ports::{ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, ContentHashPort};
-use uc_core::SelectionState;
+use uc_core::ports::{
+    BlobMaterializerPort, ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
+    ClipboardSelectionRepositoryPort, ContentHashPort,
+};
+use uc_core::PersistedClipboardRepresentation;
 
-pub struct MaterializeClipboardSelectionUseCase<CER, CNR, B, CH>
+pub struct MaterializeClipboardSelectionUseCase<E, R, B, H, S>
 where
-    CER: ClipboardEventRepositoryPort,
-    CNR: ClipboardEntryRepositoryPort,
+    E: ClipboardEntryRepositoryPort,
+    R: ClipboardRepresentationRepositoryPort,
     B: BlobMaterializerPort,
-    CH: ContentHashPort,
+    H: ContentHashPort,
+    S: ClipboardSelectionRepositoryPort,
 {
-    clipboard_event_repository: CER,
-    clipboard_entry_repository: CNR,
+    entry_repository: E,
+    representation_repository: R,
     blob_materializer: B,
-    hasher: CH,
+    hasher: H,
+    selection_repository: S,
 }
 
-impl<CER, CNR, B, CH> MaterializeClipboardSelectionUseCase<CER, CNR, B, CH>
+impl<E, R, B, H, S> MaterializeClipboardSelectionUseCase<E, R, B, H, S>
 where
-    CER: ClipboardEventRepositoryPort,
-    CNR: ClipboardEntryRepositoryPort,
+    E: ClipboardEntryRepositoryPort,
+    R: ClipboardRepresentationRepositoryPort,
     B: BlobMaterializerPort,
-    CH: ContentHashPort,
+    H: ContentHashPort,
+    S: ClipboardSelectionRepositoryPort,
 {
     pub fn new(
-        clipboard_event_repository: CER,
-        clipboard_entry_repository: CNR,
+        entry_repository: E,
+        representation_repository: R,
         blob_materializer: B,
-        hasher: CH,
+        hasher: H,
+        selection_repository: S,
     ) -> Self {
         Self {
-            clipboard_event_repository,
-            clipboard_entry_repository,
+            entry_repository,
+            representation_repository,
             blob_materializer,
             hasher,
+            selection_repository,
         }
     }
 
     pub async fn execute(&self, entry_id: &EntryId) -> Result<MaterializedPayload> {
-        let selection = self.clipboard_entry_repository.get_selection(entry_id)?;
+        // 1️⃣ 读取 entry（事实）
+        let entry = self
+            .entry_repository
+            .get_entry(entry_id)
+            .await?
+            .ok_or(anyhow::anyhow!("Entry {} has no event id", entry_id))?;
+        let selection_decision = self
+            .selection_repository
+            .get_selection(entry_id)
+            .await?
+            .ok_or(anyhow::anyhow!(
+                "Entry {} has no selection decision",
+                entry_id
+            ))?;
 
-        match selection.state {
-            SelectionState::Inline { mime, bytes } => Ok(MaterializedPayload::Inline {
-                mime: mime,
-                bytes: bytes,
-            }),
+        // 2️⃣ 读取被选中的 representation（事实）
+        let selected_representation_id = selection_decision.selection.primary_rep_id;
+        let rep = self
+            .representation_repository
+            .get_representation(&entry.event_id, &selected_representation_id)
+            .await?;
 
-            SelectionState::MaterializedBlob { mime, blob_id } => Ok(MaterializedPayload::Blob {
-                mime: mime,
-                blob_id: blob_id,
-            }),
-
-            SelectionState::PendingBlob {
-                representation_id,
-                mime,
-            } => {
-                // 1) 找到 event_id & representation bytes
-                // 1) Find event_id & representation bytes
-                let event_id = self
-                    .clipboard_entry_repository
-                    .get_event_id_by_entry_id(entry_id)?;
-
-                let rep = self
-                    .clipboard_event_repository
-                    .get_representation(&event_id, &representation_id)
-                    .await?;
-
-                if rep.bytes.is_empty() {
-                    return Err(anyhow!("representation bytes is empty")).with_context(|| {
-                        format!(
-                            "representation {} for event {} has empty bytes",
-                            representation_id, event_id
-                        )
-                    });
-                }
-
-                let resolved_mime = mime.or(rep.format_id.to_mime_type());
-
-                // 2) 阈值策略：小内容可以直接 inline
-                // TODO: 未来支持
-                // if rep.size_bytes >= 0 && rep.size_bytes <= self.inline_threshold_bytes {
-                //     // 这里也可以选择“仍然 materialize blob”，但一般 inline 更省
-                //     return Ok(MaterializedPayload::Inline {
-                //         mime: mime.or(rep.mime),
-                //         bytes: rep.bytes,
-                //     });
-                // }
-
-                // 3) 计算 hash，用于查重
-                let content_hash = self.hasher.hash_bytes(&rep.bytes)?;
-                let materialized_blob = self
-                    .blob_materializer
-                    .materialize(&rep.bytes, &content_hash)
-                    .await?;
-
-                // 6) 更新 selection 状态
-                let blob_id = materialized_blob.id;
-                self.clipboard_entry_repository.update_selection_to_blob(
-                    entry_id,
-                    blob_id,
-                    resolved_mime.clone(),
-                )?;
-
-                Ok(MaterializedPayload::Blob {
-                    mime: resolved_mime,
-                    blob_id: *blob_id,
-                })
-            }
+        // 3️⃣ 基于事实推导状态（不是存储状态）
+        if rep.is_inline() {
+            return Ok(MaterializedPayload::Inline {
+                mime: rep.mime_type,
+                bytes: rep.inline_data.unwrap(),
+            });
         }
+
+        if let Some(blob_id) = rep.blob_id {
+            return Ok(MaterializedPayload::Blob {
+                mime: rep.mime_type,
+                blob_id,
+            });
+        }
+
+        // 4️⃣ 走到这里，唯一含义：
+        //     “现在没有 blob，但可以 materialize”
+        let raw_bytes = self.load_representation_bytes(&rep).await?;
+        let content_hash = self.hasher.hash_bytes(&raw_bytes)?;
+
+        let blob = self
+            .blob_materializer
+            .materialize(&raw_bytes, &content_hash)
+            .await?;
+
+        // 5️⃣ 更新事实（representation 现在有 blob 了）
+        self.representation_repository
+            .update_blob_id(&rep.id, &blob.blob_id)
+            .await?;
+
+        Ok(MaterializedPayload::Blob {
+            mime: rep.mime_type,
+            blob_id: blob.blob_id,
+        })
+    }
+
+    async fn load_representation_bytes(
+        &self,
+        _rep: &PersistedClipboardRepresentation,
+    ) -> Result<Vec<u8>> {
+        unimplemented!()
     }
 }
