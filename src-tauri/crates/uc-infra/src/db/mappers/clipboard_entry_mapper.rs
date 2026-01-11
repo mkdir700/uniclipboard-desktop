@@ -1,5 +1,5 @@
-use crate::db::models::clipboard_entry::NewClipboardEntryRow;
-use crate::db::ports::InsertMapper;
+use crate::db::models::clipboard_entry::{ClipboardEntryRow, NewClipboardEntryRow};
+use crate::db::ports::{InsertMapper, RowMapper};
 use anyhow::Result;
 use uc_core::clipboard::ClipboardEntry;
 
@@ -15,5 +15,17 @@ impl InsertMapper<ClipboardEntry, NewClipboardEntryRow> for ClipboardEntryRowMap
             total_size: domain.total_size,
             pinned: false, // TODO: implement
         })
+    }
+}
+
+impl RowMapper<ClipboardEntryRow, ClipboardEntry> for ClipboardEntryRowMapper {
+    fn to_domain(&self, row: &ClipboardEntryRow) -> Result<ClipboardEntry> {
+        Ok(ClipboardEntry::new(
+            row.entry_id.clone().into(),
+            row.event_id.clone().into(),
+            row.created_at_ms,
+            row.title.clone(),
+            row.total_size,
+        ))
     }
 }

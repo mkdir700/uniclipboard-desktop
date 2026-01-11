@@ -2,7 +2,7 @@
 
 diesel::table! {
     blob (blob_id) {
-        blob_id -> Nullable<Text>,
+        blob_id -> Text,
         storage_path -> Text,
         storage_backend -> Text,
         size_bytes -> BigInt,
@@ -14,7 +14,7 @@ diesel::table! {
 
 diesel::table! {
     clipboard_entry (entry_id) {
-        entry_id -> Nullable<Text>,
+        entry_id -> Text,
         event_id -> Text,
         created_at_ms -> BigInt,
         title -> Nullable<Text>,
@@ -26,7 +26,7 @@ diesel::table! {
 
 diesel::table! {
     clipboard_event (event_id) {
-        event_id -> Nullable<Text>,
+        event_id -> Text,
         captured_at_ms -> BigInt,
         source_device -> Text,
         snapshot_hash -> Text,
@@ -35,8 +35,9 @@ diesel::table! {
 
 diesel::table! {
     clipboard_selection (entry_id) {
-        entry_id -> Nullable<Text>,
+        entry_id -> Text,
         primary_rep_id -> Text,
+        secondary_rep_ids -> Text,
         preview_rep_id -> Text,
         paste_rep_id -> Text,
         policy_version -> Text,
@@ -45,7 +46,7 @@ diesel::table! {
 
 diesel::table! {
     clipboard_snapshot_representation (id) {
-        id -> Nullable<Text>,
+        id -> Text,
         event_id -> Text,
         format_id -> Text,
         mime_type -> Nullable<Text>,

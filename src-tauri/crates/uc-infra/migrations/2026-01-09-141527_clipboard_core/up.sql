@@ -1,7 +1,7 @@
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE clipboard_event (
-    event_id        TEXT PRIMARY KEY,
+    event_id        TEXT PRIMARY KEY NOT NULL,
     captured_at_ms  BIGINT NOT NULL,
     source_device   TEXT NOT NULL,
     snapshot_hash   TEXT NOT NULL
@@ -11,7 +11,7 @@ CREATE INDEX idx_clipboard_event_time
 ON clipboard_event (captured_at_ms DESC);
 
 CREATE TABLE blob (
-    blob_id         TEXT PRIMARY KEY,
+    blob_id         TEXT PRIMARY KEY NOT NULL,
     storage_path    TEXT NOT NULL,
     storage_backend TEXT NOT NULL,
     size_bytes      BIGINT NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE blob (
 );
 
 CREATE TABLE clipboard_snapshot_representation (
-    id              TEXT PRIMARY KEY,
+    id              TEXT PRIMARY KEY NOT NULL,
     event_id        TEXT NOT NULL,
     format_id       TEXT NOT NULL,
     mime_type       TEXT,
@@ -49,7 +49,7 @@ CREATE INDEX idx_snapshot_event
 ON clipboard_snapshot_representation (event_id);
 
 CREATE TABLE clipboard_entry (
-    entry_id        TEXT PRIMARY KEY,
+    entry_id        TEXT PRIMARY KEY NOT NULL,
     event_id        TEXT NOT NULL UNIQUE,
 
     created_at_ms   BIGINT NOT NULL,
@@ -67,9 +67,10 @@ CREATE INDEX idx_entry_time
 ON clipboard_entry (created_at_ms DESC);
 
 CREATE TABLE clipboard_selection (
-    entry_id            TEXT PRIMARY KEY,
+    entry_id            TEXT PRIMARY KEY NOT NULL,
 
     primary_rep_id      TEXT NOT NULL,
+    secondary_rep_ids   TEXT NOT NULL, -- xxx,yyy,zzz
     preview_rep_id      TEXT NOT NULL,
     paste_rep_id        TEXT NOT NULL,
 

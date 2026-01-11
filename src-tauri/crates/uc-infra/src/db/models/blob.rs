@@ -4,7 +4,7 @@ use diesel::prelude::*;
 #[derive(Queryable)]
 #[diesel(table_name = blob)]
 pub struct BlobRow {
-    pub blob_id: Option<String>,
+    pub blob_id: String,
     pub storage_path: String,
     pub storage_backend: String,
     pub size_bytes: i64,

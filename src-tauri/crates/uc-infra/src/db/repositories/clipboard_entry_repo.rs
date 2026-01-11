@@ -1,40 +1,46 @@
+use crate::db::models::ClipboardEntryRow;
 use crate::db::models::NewClipboardEntryRow;
 use crate::db::models::NewClipboardSelectionRow;
 use crate::db::ports::DbExecutor;
-use crate::db::ports::InsertMapper;
+use crate::db::ports::{InsertMapper, RowMapper};
 use crate::db::schema::{clipboard_entry, clipboard_selection};
 use anyhow::Result;
+use diesel::query_dsl::methods::FilterDsl;
 use diesel::Connection;
+use diesel::ExpressionMethods;
+use diesel::OptionalExtension;
 use diesel::RunQueryDsl;
-use uc_core::{
-    clipboard::{ClipboardEntry, ClipboardSelectionDecision},
-    ports::ClipboardEntryWriterPort,
-};
+use uc_core::clipboard::{ClipboardEntry, ClipboardSelectionDecision};
+use uc_core::ids::EntryId;
+use uc_core::ports::ClipboardEntryRepositoryPort;
 
-pub struct DieselClipboardEntryRepository<E, ME, MS> {
+pub struct DieselClipboardEntryRepository<E, ME, MS, RE> {
     executor: E,
     entry_mapper: ME,
     selection_mapper: MS,
+    row_entry_mapper: RE,
 }
 
-impl<E, ME, MS> DieselClipboardEntryRepository<E, ME, MS> {
-    pub fn new(executor: E, entry_mapper: ME, selection_mapper: MS) -> Self {
+impl<E, ME, MS, RE> DieselClipboardEntryRepository<E, ME, MS, RE> {
+    pub fn new(executor: E, entry_mapper: ME, selection_mapper: MS, row_entry_mapper: RE) -> Self {
         Self {
             executor,
             entry_mapper,
             selection_mapper,
+            row_entry_mapper,
         }
     }
 }
 
 #[async_trait::async_trait]
-impl<E, ME, MS> ClipboardEntryWriterPort for DieselClipboardEntryRepository<E, ME, MS>
+impl<E, ME, MS, RE> ClipboardEntryRepositoryPort for DieselClipboardEntryRepository<E, ME, MS, RE>
 where
     E: DbExecutor,
     ME: InsertMapper<ClipboardEntry, NewClipboardEntryRow>,
     MS: InsertMapper<ClipboardSelectionDecision, NewClipboardSelectionRow>,
+    RE: RowMapper<ClipboardEntryRow, ClipboardEntry>,
 {
-    async fn insert_entry(
+    async fn save_entry_and_selection(
         &self,
         entry: &ClipboardEntry,
         selection: &ClipboardSelectionDecision,
@@ -54,6 +60,24 @@ where
 
                 Ok(())
             })
+        })
+    }
+
+    async fn get_entry(&self, entry_id: &EntryId) -> Result<Option<ClipboardEntry>> {
+        let entry_id_str = entry_id.to_string();
+        self.executor.run(|conn| {
+            let entry_row = clipboard_entry::table
+                .filter(clipboard_entry::entry_id.eq(&entry_id_str))
+                .first::<ClipboardEntryRow>(conn)
+                .optional()?;
+
+            match entry_row {
+                Some(row) => {
+                    let entry = self.row_entry_mapper.to_domain(&row)?;
+                    Ok(Some(entry))
+                }
+                None => Ok(None),
+            }
         })
     }
 }

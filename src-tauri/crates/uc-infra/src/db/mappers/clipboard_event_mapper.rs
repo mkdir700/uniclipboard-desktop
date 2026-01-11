@@ -10,8 +10,8 @@ impl InsertMapper<ClipboardEvent, NewClipboardEventRow> for ClipboardEventRowMap
         Ok(NewClipboardEventRow {
             event_id: domain.event_id.clone().into(),
             captured_at_ms: domain.captured_at_ms,
-            source_device: domain.source_device.clone(),
-            snapshot_hash: domain.snapshot_hash.clone(),
+            source_device: domain.source_device.as_str().to_string(),
+            snapshot_hash: domain.snapshot_hash.to_string(),
         })
     }
 }

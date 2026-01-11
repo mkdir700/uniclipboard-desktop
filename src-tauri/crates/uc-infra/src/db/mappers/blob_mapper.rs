@@ -46,10 +46,7 @@ impl RowMapper<BlobRow, Blob> for BlobRowMapper {
             }
         };
         Ok(Blob::new(
-            row.blob_id
-                .as_ref()
-                .map(|id| BlobId::from(id.clone()))
-                .unwrap_or_else(|| BlobId::new()),
+            BlobId::from(row.blob_id.clone()),
             locator,
             row.size_bytes,
             ContentHash::from(row.content_hash.clone()),
