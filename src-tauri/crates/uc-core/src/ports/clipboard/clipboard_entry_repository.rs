@@ -1,20 +1,13 @@
 use anyhow::Result;
 
-use crate::{
-    ids::{EntryId, EventId},
-    BlobId, EntrySelection,
-};
+use crate::{clipboard::ClipboardEntry, ids::EntryId, ClipboardSelectionDecision};
 
-pub trait ClipboardEntryRepositoryPort: Send + Sync {
-    fn get_selection(&self, entry_id: &EntryId) -> Result<EntrySelection>;
-
-    fn get_event_id_by_entry_id(&self, entry_id: &EntryId) -> Result<EventId>;
-
-    /// 把 PendingBlob -> MaterializedBlob
-    fn update_selection_to_blob(
+#[async_trait::async_trait]
+pub trait ClipboardEntryRepositoryPort {
+    async fn save_entry_and_selection(
         &self,
-        entry_id: &EntryId,
-        blob_id: &BlobId,
-        mime: Option<String>,
+        entry: &ClipboardEntry,
+        selection: &ClipboardSelectionDecision,
     ) -> Result<()>;
+    async fn get_entry(&self, entry_id: &EntryId) -> Result<Option<ClipboardEntry>>;
 }

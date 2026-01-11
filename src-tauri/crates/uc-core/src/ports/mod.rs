@@ -22,7 +22,6 @@ mod blob_materializer;
 pub mod blob_repository;
 mod blob_store;
 pub mod clipboard;
-mod clipboard_entry;
 mod clipboard_event;
 mod clock;
 pub mod device_repository;
@@ -32,23 +31,18 @@ pub mod network;
 pub mod security;
 pub mod settings;
 pub mod ui_port;
+pub mod device_identity;
 
 pub use blob_materializer::BlobMaterializerPort;
 pub use blob_repository::BlobRepositoryPort;
 pub use blob_store::BlobStorePort;
-pub use clipboard_entry::*;
 pub use clipboard_event::*;
 pub use clock::*;
 pub use hash::*;
 
 pub use app_runtime::AppRuntimePort;
 pub use autostart::AutostartPort;
-pub use clipboard::ClipboardRepresentationMaterializerPort;
-pub use clipboard::SelectRepresentationPolicyPort;
-pub use clipboard::SystemClipboardPort;
-pub use clipboard::{
-    ClipboardEntryRepositoryPort, ClipboardEventRepositoryPort, PlatformClipboardPort,
-};
+pub use clipboard::*;
 pub use device_repository::DeviceRepositoryPort;
 pub use errors::DeviceRepositoryError;
 pub use network::NetworkPort;
@@ -58,3 +52,4 @@ pub use security::key_material::KeyMaterialPort;
 pub use security::keyring::KeyringPort;
 pub use settings::{SettingsMigrationPort, SettingsPort};
 pub use ui_port::UiPort;
+pub use device_identity::DeviceIdentityPort;

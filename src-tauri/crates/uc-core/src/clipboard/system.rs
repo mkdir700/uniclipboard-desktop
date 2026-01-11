@@ -1,7 +1,13 @@
 use crate::{
     ids::{FormatId, RepresentationId},
-    MimeType,
+    ContentHash, MimeType,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SnapshotHash(pub ContentHash);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RepresentationHash(pub ContentHash);
 
 /// 从系统剪切板中获取到原始数据的快照
 #[derive(Debug, Clone)]
@@ -18,9 +24,29 @@ pub struct ObservedClipboardRepresentation {
     pub bytes: Vec<u8>,
 }
 
+impl std::ops::Deref for RepresentationHash {
+    type Target = ContentHash;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for SnapshotHash {
+    type Target = ContentHash;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl ObservedClipboardRepresentation {
     pub fn size_bytes(&self) -> i64 {
         self.bytes.len() as i64
+    }
+
+    pub fn content_hash(&self) -> RepresentationHash {
+        RepresentationHash(ContentHash::from(self.bytes.as_slice()))
     }
 }
 
@@ -38,5 +64,32 @@ impl SystemClipboardSnapshot {
     /// representation 数量
     pub fn representation_count(&self) -> usize {
         self.representations.len()
+    }
+
+    pub fn snapshot_hash(&self) -> SnapshotHash {
+        let mut rep_hashes: Vec<[u8; 32]> = self
+            .representations
+            .iter()
+            .map(|r| {
+                let content_hash = r.content_hash();
+                let hash_bytes = content_hash.as_ref();
+                hash_bytes
+                    .try_into()
+                    .expect("ContentHash should be 32 bytes")
+            })
+            .collect();
+
+        // 顺序无关
+        rep_hashes.sort_unstable();
+
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"snapshot-hash-v1|");
+
+        for h in &rep_hashes {
+            hasher.update(h);
+        }
+
+        let hash = hasher.finalize();
+        SnapshotHash(ContentHash::from(&hash.as_bytes()[..]))
     }
 }

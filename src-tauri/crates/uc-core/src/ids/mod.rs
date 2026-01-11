@@ -12,3 +12,6 @@ pub use clipboard::*;
 pub use peer_id::PeerId;
 pub use rep_id::RepresentationId;
 pub use session_id::SessionId;
+
+// re-export
+pub use crate::device::value_objects::DeviceId;

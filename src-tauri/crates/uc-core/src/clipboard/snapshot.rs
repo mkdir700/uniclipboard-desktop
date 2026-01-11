@@ -44,4 +44,12 @@ impl PersistedClipboardRepresentation {
             blob_id,
         }
     }
+
+    pub fn is_inline(&self) -> bool {
+        self.inline_data.is_some()
+    }
+
+    pub fn is_blob(&self) -> bool {
+        self.blob_id.is_some()
+    }
 }

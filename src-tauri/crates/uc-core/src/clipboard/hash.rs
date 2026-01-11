@@ -50,3 +50,21 @@ impl From<&str> for ContentHash {
         s.to_string().into()
     }
 }
+
+// from bytes
+impl From<&[u8]> for ContentHash {
+    fn from(bytes: &[u8]) -> Self {
+        let alg = HashAlgorithm::Blake3V1;
+        let bytes = bytes
+            .try_into()
+            .expect("invalid byte length for content hash");
+        Self { alg, bytes }
+    }
+}
+
+// as bytes
+impl AsRef<[u8]> for ContentHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.bytes
+    }
+}

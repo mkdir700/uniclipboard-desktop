@@ -1,6 +1,5 @@
-    Blocking waiting for file lock on package cache
-   1.113232084s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint: fingerprint error for uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("uc_app", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app/src/lib.rs", Edition2021) }
-   1.113259209s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-app-3e0a110c0e1ab92c/lib-uc_app`
+   0.380987416s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint: fingerprint error for uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("uc_app", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app/src/lib.rs", Edition2021) }
+   0.381006791s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-app-531f950efcbed768/lib-uc_app`
 
 Caused by:
     No such file or directory (os error 2)
@@ -24,8 +23,8 @@ Stack backtrace:
   15: std::rt::lang_start::<()>::{closure#0}
   16: std::rt::lang_start_internal
   17: _main
-   1.192265500s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint: fingerprint error for uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("uc_app", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app/src/lib.rs", Edition2021) }
-   1.192294250s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-app-57d766d7d9cfbebf/test-lib-uc_app`
+   0.388613083s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint: fingerprint error for uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("uc_app", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app/src/lib.rs", Edition2021) }
+   0.388645541s  INFO prepare_target{force=false package_id=uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app) target="uc_app"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-app-384cbca4ddb9357e/test-lib-uc_app`
 
 Caused by:
     No such file or directory (os error 2)
@@ -49,14 +48,8 @@ Stack backtrace:
   15: std::rt::lang_start::<()>::{closure#0}
   16: std::rt::lang_start_internal
   17: _main
-   1.236576875s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint: stale: missing "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra/src/fs/blob_store.rs"
-   1.237852334s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint: fingerprint dirty for uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("uc_infra", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra/src/lib.rs", Edition2021) }
-   1.237881167s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(MissingFile("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra/src/fs/blob_store.rs")))
-   1.281376000s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint: stale: missing "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra/src/fs/blob_store.rs"
-   1.282609625s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint: fingerprint dirty for uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("uc_infra", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra/src/lib.rs", Edition2021) }
-   1.282635750s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(MissingFile("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra/src/fs/blob_store.rs")))
-   1.438153334s  INFO prepare_target{force=false package_id=uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform) target="uc_platform"}: cargo::core::compiler::fingerprint: fingerprint error for uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("uc_platform", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform/src/lib.rs", Edition2021) }
-   1.438178250s  INFO prepare_target{force=false package_id=uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform) target="uc_platform"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-platform-bdef997394c84e41/lib-uc_platform`
+   0.397386541s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint: fingerprint error for uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("uc_infra", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra/src/lib.rs", Edition2021) }
+   0.397401125s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-infra-b7c50f761864c8ca/lib-uc_infra`
 
 Caused by:
     No such file or directory (os error 2)
@@ -80,8 +73,8 @@ Stack backtrace:
   15: std::rt::lang_start::<()>::{closure#0}
   16: std::rt::lang_start_internal
   17: _main
-   1.595337875s  INFO prepare_target{force=false package_id=uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform) target="uc_platform"}: cargo::core::compiler::fingerprint: fingerprint error for uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("uc_platform", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform/src/lib.rs", Edition2021) }
-   1.595355959s  INFO prepare_target{force=false package_id=uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform) target="uc_platform"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-platform-0764f847e9bd58bd/test-lib-uc_platform`
+   0.403014166s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint: fingerprint error for uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("uc_infra", ["lib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra/src/lib.rs", Edition2021) }
+   0.403034583s  INFO prepare_target{force=false package_id=uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra) target="uc_infra"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-infra-68343c9a3ca8f945/test-lib-uc_infra`
 
 Caused by:
     No such file or directory (os error 2)
@@ -105,8 +98,8 @@ Stack backtrace:
   15: std::rt::lang_start::<()>::{closure#0}
   16: std::rt::lang_start_internal
   17: _main
-   1.598865750s  INFO prepare_target{force=false package_id=uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform) target="clipboard_probe"}: cargo::core::compiler::fingerprint: fingerprint error for uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform)/Check { test: false }/TargetInner { kind: "example", name: "clipboard_probe", tested: false, benched: false, ..: with_path("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform/examples/clipboard_probe/main.rs", Edition2021) }
-   1.598888542s  INFO prepare_target{force=false package_id=uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform) target="clipboard_probe"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uc-platform-82d839224ba121cd/example-clipboard_probe`
+   0.458039833s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: false }/TargetInner { ..: lib_target("uniclipboard_lib", ["staticlib", "cdylib", "rlib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/lib.rs", Edition2021) }
+   0.458057125s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-24147edc4b7b1aec/lib-uniclipboard_lib`
 
 Caused by:
     No such file or directory (os error 2)
@@ -130,8 +123,8 @@ Stack backtrace:
   15: std::rt::lang_start::<()>::{closure#0}
   16: std::rt::lang_start_internal
   17: _main
-   1.638819542s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: false }/TargetInner { ..: lib_target("uniclipboard_lib", ["staticlib", "cdylib", "rlib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/lib.rs", Edition2021) }
-   1.638839959s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-1837afcf95262f09/lib-uniclipboard_lib`
+   0.474842291s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: true }/TargetInner { ..: lib_target("uniclipboard_lib", ["staticlib", "cdylib", "rlib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/lib.rs", Edition2021) }
+   0.474865000s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-80dadeb17c874049/test-lib-uniclipboard_lib`
 
 Caused by:
     No such file or directory (os error 2)
@@ -155,8 +148,8 @@ Stack backtrace:
   15: std::rt::lang_start::<()>::{closure#0}
   16: std::rt::lang_start_internal
   17: _main
-   1.688248500s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: true }/TargetInner { ..: lib_target("uniclipboard_lib", ["staticlib", "cdylib", "rlib"], "/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/lib.rs", Edition2021) }
-   1.688269417s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard_lib"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-3f5033c51ec56d41/test-lib-uniclipboard_lib`
+   0.480669916s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: false }/TargetInner { name: "uniclipboard", doc: true, ..: with_path("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/main.rs", Edition2021) }
+   0.480683291s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-167a22a14601d116/bin-uniclipboard`
 
 Caused by:
     No such file or directory (os error 2)
@@ -180,8 +173,8 @@ Stack backtrace:
   15: std::rt::lang_start::<()>::{closure#0}
   16: std::rt::lang_start_internal
   17: _main
-   1.700478209s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: false }/TargetInner { name: "uniclipboard", doc: true, ..: with_path("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/main.rs", Edition2021) }
-   1.700494750s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-8706890e189fecfa/bin-uniclipboard`
+   0.482558500s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: true }/TargetInner { name: "uniclipboard", doc: true, ..: with_path("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/main.rs", Edition2021) }
+   0.482565416s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-28e3aa22ea88298a/test-bin-uniclipboard`
 
 Caused by:
     No such file or directory (os error 2)
@@ -205,38 +198,7 @@ Stack backtrace:
   15: std::rt::lang_start::<()>::{closure#0}
   16: std::rt::lang_start_internal
   17: _main
-   1.706391209s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint: fingerprint error for uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri)/Check { test: true }/TargetInner { name: "uniclipboard", doc: true, ..: with_path("/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/src/main.rs", Edition2021) }
-   1.706418125s  INFO prepare_target{force=false package_id=uniclipboard v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri) target="uniclipboard"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/target/debug/.fingerprint/uniclipboard-58beda5708b1d95c/test-bin-uniclipboard`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: std::backtrace::Backtrace::create
-   1: std::backtrace::Backtrace::capture
-   2: cargo_util::paths::read_bytes
-   3: cargo_util::paths::read
-   4: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   5: cargo::core::compiler::fingerprint::prepare_target
-   6: cargo::core::compiler::compile
-   7: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   8: cargo::ops::cargo_compile::compile_ws
-   9: cargo::ops::cargo_compile::compile_with_exec
-  10: cargo::ops::cargo_compile::compile
-  11: cargo::commands::check::exec
-  12: <cargo::cli::Exec>::exec
-  13: cargo::main
-  14: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  15: std::rt::lang_start::<()>::{closure#0}
-  16: std::rt::lang_start_internal
-  17: _main
-    Checking uc-platform v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-platform)
-    Checking uc-infra v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-infra)
     Checking uc-app v0.1.0 (/Users/mark/MyProjects/uniclipboard-desktop/src-tauri/crates/uc-app)
-error: could not compile `uc-app` (lib) due to 7 previous errors; 6 warnings emitted
+error: could not compile `uc-app` (lib test) due to 2 previous errors; 2 warnings emitted
 warning: build failed, waiting for other jobs to finish...
-error: could not compile `uc-app` (lib test) due to 7 previous errors; 6 warnings emitted
-error: could not compile `uc-infra` (lib test) due to 1 previous error; 3 warnings emitted
-error: could not compile `uc-infra` (lib) due to 1 previous error; 3 warnings emitted
-error: could not compile `uc-platform` (lib) due to 20 previous errors; 15 warnings emitted
-error: could not compile `uc-platform` (lib test) due to 20 previous errors; 15 warnings emitted
+error: could not compile `uc-app` (lib) due to 2 previous errors; 2 warnings emitted

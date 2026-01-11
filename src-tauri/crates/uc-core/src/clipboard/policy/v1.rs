@@ -1,8 +1,9 @@
-use super::model::SelectionTarget;
+use super::model::{SelectionPolicyVersion, SelectionTarget};
 use crate::{
     clipboard::{
         ClipboardSelection, ObservedClipboardRepresentation, PolicyError, SystemClipboardSnapshot,
     },
+    ids::RepresentationId,
     ports::SelectRepresentationPolicyPort,
 };
 use std::cmp::Ordering;
@@ -135,10 +136,6 @@ impl SelectRepresentationPolicyV1 {
 }
 
 impl SelectRepresentationPolicyPort for SelectRepresentationPolicyV1 {
-    fn policy_version(&self) -> &str {
-        "v1"
-    }
-
     fn select(
         &self,
         snapshot: &SystemClipboardSnapshot,
@@ -149,12 +146,27 @@ impl SelectRepresentationPolicyPort for SelectRepresentationPolicyV1 {
         let paste = Self::select_one(snapshot, SelectionTarget::DefaultPaste)
             .ok_or(PolicyError::NoUsableRepresentation)?;
 
-        // v1：primary = paste（先别过早拆分语义）
+        // 收集所有可用的 representations
+        let usable_reps: Vec<&ObservedClipboardRepresentation> = snapshot
+            .representations
+            .iter()
+            .filter(|r| Self::is_usable(r))
+            .collect();
+
+        // 找出除 primary 之外的其他 representation IDs
+        let secondary_rep_ids: Vec<RepresentationId> = usable_reps
+            .iter()
+            .filter(|r| r.id != paste.id)
+            .map(|r| r.id.clone())
+            .collect();
+
+        // v1：primary = paste，secondary 包含其他所有可用的 representations
         Ok(ClipboardSelection {
-            primary_rep_id: paste.id.to_string(),
-            preview_rep_id: preview.id.to_string(),
-            paste_rep_id: paste.id.to_string(),
-            policy_version: self.policy_version().to_string(),
+            primary_rep_id: paste.id.clone(),
+            preview_rep_id: preview.id.clone(),
+            paste_rep_id: paste.id.clone(),
+            secondary_rep_ids,
+            policy_version: SelectionPolicyVersion::V1,
         })
     }
 }
