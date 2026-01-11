@@ -2,21 +2,22 @@ use crate::{
     ids::{FormatId, RepresentationId},
     ContentHash, MimeType,
 };
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SnapshotHash(pub ContentHash);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RepresentationHash(pub ContentHash);
 
 /// 从系统剪切板中获取到原始数据的快照
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemClipboardSnapshot {
     pub ts_ms: i64,
     pub representations: Vec<ObservedClipboardRepresentation>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObservedClipboardRepresentation {
     pub id: RepresentationId, // 建议：uuid
     pub format_id: FormatId,

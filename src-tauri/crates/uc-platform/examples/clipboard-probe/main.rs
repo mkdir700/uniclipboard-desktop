@@ -1,12 +1,53 @@
 use anyhow::{anyhow, Result};
+use clap::{Parser, Subcommand};
 use clipboard_rs::{ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext};
 use std::env;
+use std::fs;
 use std::io::Write;
 use std::sync::mpsc::{self, Sender};
 use std::time::Instant;
 use uc_core::ports::SystemClipboardPort;
 use uc_core::{ObservedClipboardRepresentation, SystemClipboardSnapshot};
 use uc_platform::clipboard::LocalClipboard;
+
+#[derive(Parser)]
+#[command(name = "clipboard-probe")]
+#[command(about = "Clipboard probing and snapshot tool", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Watch clipboard changes (default mode)
+    Watch {
+        /// Stop after N events
+        #[arg(short, long)]
+        max_events: Option<usize>,
+    },
+    /// Capture current clipboard to file
+    Capture {
+        /// Output file path
+        #[arg(short, long)]
+        out: String,
+    },
+    /// Restore clipboard from file
+    Restore {
+        /// Input file path
+        #[arg(short, long)]
+        r#in: String,
+        /// Select representation by index (0-based)
+        #[arg(short, long)]
+        select: Option<usize>,
+    },
+    /// Inspect snapshot file
+    Inspect {
+        /// Input file path
+        #[arg(short, long)]
+        r#in: String,
+    },
+}
 
 struct ProbeEvent {
     observed_ms: i64,
@@ -47,9 +88,28 @@ fn main() -> Result<()> {
     let _ = log_line("main: entry");
     let _ = log_line(&format!("main: args={:?}", env::args().collect::<Vec<_>>()));
 
-    let max_events = parse_max_events()?;
+    let cli = Cli::parse();
 
-    println!("clipboard_probe: starting");
+    match cli.command {
+        Commands::Watch { max_events } => {
+            run_watch(max_events)?;
+        }
+        Commands::Capture { out } => {
+            run_capture(out)?;
+        }
+        Commands::Restore { r#in, select } => {
+            run_restore(r#in, select)?;
+        }
+        Commands::Inspect { r#in } => {
+            run_inspect(r#in)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn run_watch(max_events: Option<usize>) -> Result<()> {
+    println!("clipboard-probe: watch mode");
     println!(
         "- max_events: {}",
         max_events.map_or("none".into(), |v| v.to_string())
@@ -124,47 +184,97 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn run_capture(out: String) -> Result<()> {
+    println!("clipboard-probe: capture mode");
+    println!("- output: {}", out);
+
+    let clipboard = LocalClipboard::new()?;
+    let snapshot = clipboard.read_snapshot()?;
+
+    println!("\ncaptured snapshot:");
+    print_snapshot(&snapshot);
+
+    let json = serde_json::to_string_pretty(&snapshot)?;
+    fs::write(&out, json)?;
+
+    println!("\nsnapshot written to: {}", out);
+
+    Ok(())
+}
+
+fn run_restore(input: String, select: Option<usize>) -> Result<()> {
+    println!("clipboard-probe: restore mode");
+    println!("- input: {}", input);
+
+    let json = fs::read_to_string(&input)?;
+    let mut snapshot: SystemClipboardSnapshot = serde_json::from_str(&json)?;
+
+    println!("\nrestoring snapshot:");
+    print_snapshot(&snapshot);
+
+    if snapshot.representations.is_empty() {
+        println!("error: snapshot has no representations");
+        return Ok(());
+    }
+
+    if snapshot.representations.len() > 1 {
+        println!(
+            "\nwarning: snapshot has {} representations, \
+            current implementation only supports single representation restore",
+            snapshot.representations.len()
+        );
+
+        let index = select.unwrap_or(0);
+        if index >= snapshot.representations.len() {
+            println!("error: selected index {} out of range", index);
+            return Ok(());
+        }
+
+        println!("using representation at index {}", index);
+        for (idx, rep) in snapshot.representations.iter().enumerate() {
+            let marker = if idx == index { "->[SELECTED]" } else { "  " };
+            println!(
+                "{}  rep[{}]: format_id={}, mime={:?}, size={}",
+                marker,
+                idx,
+                rep.format_id,
+                rep.mime,
+                rep.bytes.len()
+            );
+        }
+
+        // Keep only the selected representation
+        snapshot.representations = vec![snapshot.representations.remove(index)];
+    }
+
+    let clipboard = LocalClipboard::new()?;
+    clipboard.write_snapshot(snapshot)?;
+
+    println!("\nsnapshot restored to clipboard");
+
+    Ok(())
+}
+
+fn run_inspect(input: String) -> Result<()> {
+    println!("clipboard-probe: inspect mode");
+    println!("- input: {}", input);
+
+    let json = fs::read_to_string(&input)?;
+    let snapshot: SystemClipboardSnapshot = serde_json::from_str(&json)?;
+
+    println!("\ninspected snapshot:");
+    print_snapshot(&snapshot);
+
+    Ok(())
+}
+
 fn log_line(line: &str) -> Result<()> {
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open("clipboard_probe.log")?;
+        .open("clipboard-probe.log")?;
     writeln!(file, "{} {}", chrono::Utc::now().to_rfc3339(), line)?;
     Ok(())
-}
-
-fn parse_max_events() -> Result<Option<usize>> {
-    let mut max_events: Option<usize> = None;
-    let mut args = env::args().skip(1);
-
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--max-events" => {
-                let value = args
-                    .next()
-                    .ok_or_else(|| anyhow!("--max-events expects a value"))?;
-                let parsed = value
-                    .parse::<usize>()
-                    .map_err(|_| anyhow!("--max-events expects a number, got: {value}"))?;
-                max_events = Some(parsed);
-            }
-            "--help" | "-h" => {
-                print_usage();
-                std::process::exit(0);
-            }
-            _ => {
-                return Err(anyhow!("unknown argument: {arg} (use --help for usage)"));
-            }
-        }
-    }
-
-    Ok(max_events)
-}
-
-fn print_usage() {
-    println!("clipboard_probe usage:");
-    println!("  --max-events <n>   stop after n events");
-    println!("  --help, -h         show this help");
 }
 
 fn print_snapshot(snapshot: &SystemClipboardSnapshot) {

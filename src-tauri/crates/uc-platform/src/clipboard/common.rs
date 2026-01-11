@@ -124,10 +124,8 @@ impl CommonClipboardImpl {
         #[cfg(debug_assertions)]
         {
             if snapshot.representations.len() > 1 {
-                use tauri::ipc::private::tracing;
-
-                tracing::warn!(
-                    "writing {} clipboard representations via clipboard-rs; \
+                eprintln!(
+                    "warning: writing {} clipboard representations via clipboard-rs; \
              multi-representation restore is lossy in current implementation",
                     snapshot.representations.len()
                 );

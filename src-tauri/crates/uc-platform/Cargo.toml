@@ -62,6 +62,18 @@ keyring = { version = "3.6.3", features = [
 ] }
 thiserror = "2.0.17"
 iota_stronghold = "2.1"
+
+# CLI parsing (optional, for clipboard-probe tool)
+clap = { version = "4.5", features = ["derive"], optional = true }
+
+[features]
+probe = ["clap"]
+
+[[bin]]
+name = "clipboard-probe"
+path = "examples/clipboard-probe/main.rs"
+required-features = ["probe"]
+
 [target.'cfg(windows)'.dependencies]
 clipboard-win = { version = "5.4" }
 winapi = { version = "0.3", features = [
