@@ -100,10 +100,40 @@ impl CommonClipboardImpl {
         })
     }
 
+    /// TODO(clipboard/multi-representation):
+    ///
+    /// This implementation writes clipboard content via `clipboard-rs` high-level APIs,
+    /// which implicitly overwrite the clipboard on each call.
+    ///
+    /// As a result, **multiple representations cannot be written as a single clipboard item**.
+    /// Only the last written representation is reliably preserved.
+    ///
+    /// This is acceptable for now, but it prevents high-fidelity restore of clipboard snapshots
+    /// that contain multiple representations (e.g. text + html + rtf + private formats).
+    ///
+    /// Proper support requires a platform-specific implementation that:
+    /// - Constructs a single clipboard item
+    /// - Attaches multiple representations to that item
+    /// - Commits it atomically (e.g. `NSPasteboardItem` on macOS)
+    ///
+    /// Tracked in: https://github.com/UniClipboard/UniClipboard/issues/92
     pub fn write_snapshot(
         ctx: &mut clipboard_rs::ClipboardContext,
         snapshot: SystemClipboardSnapshot,
     ) -> Result<()> {
+        #[cfg(debug_assertions)]
+        {
+            if snapshot.representations.len() > 1 {
+                use tauri::ipc::private::tracing;
+
+                tracing::warn!(
+                    "writing {} clipboard representations via clipboard-rs; \
+             multi-representation restore is lossy in current implementation",
+                    snapshot.representations.len()
+                );
+            }
+        }
+
         ensure!(
             snapshot.representations.len() == 1,
             "platform::write expects exactly ONE representation"
