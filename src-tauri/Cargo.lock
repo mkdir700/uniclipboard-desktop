@@ -9160,6 +9160,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "uc-clipboard-probe"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "clipboard-rs",
+ "serde_json",
+ "uc-core",
+ "uc-platform",
+]
+
+[[package]]
 name = "uc-core"
 version = "0.1.0"
 dependencies = [
@@ -9218,7 +9231,6 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
- "clap",
  "clipboard-rs",
  "clipboard-win",
  "dirs 6.0.0",
