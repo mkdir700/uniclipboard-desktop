@@ -9271,6 +9271,8 @@ dependencies = [
  "toml 0.8.23",
  "uc-app",
  "uc-core",
+ "uc-infra",
+ "uc-platform",
 ]
 
 [[package]]

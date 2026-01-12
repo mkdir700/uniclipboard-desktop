@@ -8,6 +8,8 @@ description = "Tauri adapter layer for UniClipboard"
 # Workspace crates
 uc-core = { path = "../uc-core" }
 uc-app = { path = "../uc-app" }
+uc-infra = { path = "../uc-infra" }
+uc-platform = { path = "../uc-platform" }
 
 # Tauri
 tauri = { workspace = true }
