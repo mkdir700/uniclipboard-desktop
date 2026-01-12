@@ -4,9 +4,11 @@
 
 pub mod bootstrap;
 pub mod builder;
+pub mod deps;
 pub mod models;
 pub mod ports;
 pub mod usecases;
 
 pub use builder::{App, AppBuilder};
+pub use deps::AppDeps;
 pub use models::ClipboardEntryProjection;
