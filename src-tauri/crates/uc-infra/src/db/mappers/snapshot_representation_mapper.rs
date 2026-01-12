@@ -1,7 +1,7 @@
 use crate::db::models::snapshot_representation::{NewSnapshotRepresentationRow, SnapshotRepresentationRow};
 use crate::db::ports::{InsertMapper, RowMapper};
 use anyhow::Result;
-use uc_core::{clipboard::PersistedClipboardRepresentation, ids::EventId};
+use uc_core::{clipboard::PersistedClipboardRepresentation, ids::{EventId, FormatId, RepresentationId}, BlobId, MimeType};
 
 pub struct RepresentationRowMapper;
 
@@ -32,8 +32,6 @@ impl RowMapper<SnapshotRepresentationRow, uc_core::clipboard::PersistedClipboard
         &self,
         row: &SnapshotRepresentationRow,
     ) -> Result<uc_core::clipboard::PersistedClipboardRepresentation> {
-        use uc_core::{ids::RepresentationId, ids::FormatId, BlobId, MimeType};
-
         Ok(uc_core::clipboard::PersistedClipboardRepresentation::new(
             RepresentationId::from(row.id.clone()),
             FormatId::from(row.format_id.clone()),
