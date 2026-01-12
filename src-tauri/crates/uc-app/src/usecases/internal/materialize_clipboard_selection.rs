@@ -67,7 +67,12 @@ where
         let rep = self
             .representation_repository
             .get_representation(&entry.event_id, &selected_representation_id)
-            .await?;
+            .await?
+            .ok_or(anyhow::anyhow!(
+                "Representation {} not found for event {}",
+                selected_representation_id,
+                entry.event_id
+            ))?;
 
         // 3️⃣ 基于事实推导状态（不是存储状态）
         if rep.is_inline() {
@@ -85,7 +90,7 @@ where
         }
 
         // 4️⃣ 走到这里，唯一含义：
-        //     “现在没有 blob，但可以 materialize”
+        //     "现在没有 blob，但可以 materialize"
         let raw_bytes = self.load_representation_bytes(&rep).await?;
         let content_hash = self.hasher.hash_bytes(&raw_bytes)?;
 

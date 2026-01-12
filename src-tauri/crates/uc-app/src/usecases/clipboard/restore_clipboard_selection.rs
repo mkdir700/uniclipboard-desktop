@@ -88,7 +88,12 @@ where
             let rep = self
                 .representation_repo
                 .get_representation(&entry.event_id, &rep_id)
-                .await?;
+                .await?
+                .ok_or(anyhow::anyhow!(
+                    "Representation {} not found for event {}",
+                    rep_id,
+                    entry.event_id
+                ))?;
 
             // 加载字节数据
             let bytes = if let Some(inline_data) = rep.inline_data {
