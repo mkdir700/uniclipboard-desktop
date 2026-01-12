@@ -2,6 +2,7 @@ use std::time::SystemTime;
 use uc_core::SystemClipboardSnapshot;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PlatformStatus {
     pub state: PlatformState,
     pub last_clipboard_at: Option<SystemTime>,
@@ -9,6 +10,7 @@ pub struct PlatformStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum PlatformState {
     Idle,
     Running,

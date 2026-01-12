@@ -17,13 +17,17 @@ pub struct PlatformRuntime<E>
 where
     E: PlatformCommandExecutorPort,
 {
+    #[allow(dead_code)]
     local_clipboard: Arc<dyn SystemClipboardPort>,
+    #[allow(dead_code)]
     event_tx: PlatformEventSender,
     event_rx: PlatformEventReceiver,
     command_rx: PlatformCommandReceiver,
     executor: Arc<E>,
     shutting_down: bool,
+    #[allow(dead_code)]
     watcher_join: Option<JoinHandle<()>>,
+    #[allow(dead_code)]
     watcher_handle: Option<WatcherShutdown>,
 }
 
@@ -64,6 +68,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     fn start_clipboard_watcher(&mut self) -> Result<()> {
         let mut watcher_ctx = ClipboardWatcherContext::new()
             .map_err(|e| anyhow::anyhow!("Failed to create watcher context: {}", e))?;

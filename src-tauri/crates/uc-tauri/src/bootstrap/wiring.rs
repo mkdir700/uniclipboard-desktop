@@ -135,6 +135,7 @@ fn create_db_pool(db_path: &PathBuf) -> WiringResult<DbPool> {
 /// 此结构体保存所有基础设施实现（数据库仓库、加密、设置等），将被注入到应用程序中。
 struct InfraLayer {
     // Clipboard repositories / 剪贴板仓库
+    #[allow(dead_code)]
     clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     clipboard_event_repo: Arc<dyn ClipboardEventRepositoryPort>,
     representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
@@ -234,7 +235,7 @@ fn create_infra_layer(
     let selection_row_mapper = ClipboardSelectionRowMapper;
     let device_row_mapper = DeviceRowMapper;
     let blob_row_mapper = BlobRowMapper;
-    let representation_row_mapper = RepresentationRowMapper;
+    let _representation_row_mapper = RepresentationRowMapper;
 
     // Create clipboard repositories
     // 创建剪贴板仓库

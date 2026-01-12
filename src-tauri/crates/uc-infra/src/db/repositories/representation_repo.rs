@@ -103,10 +103,16 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::models::snapshot_representation::NewSnapshotRepresentationRow;
-    use crate::db::schema::clipboard_snapshot_representation;
-    use diesel::prelude::*;
-    use uc_core::{clipboard::PersistedClipboardRepresentation, ids::{RepresentationId, EventId, FormatId}, MimeType};
+
+    // Note: This requires a test database setup.
+    // For now, we provide the test structure that can be run with proper test DB.
+    // Actual execution requires test container or in-memory SQLite setup.
+
+    // Re-add these imports when tests are enabled:
+    // use crate::db::models::snapshot_representation::NewSnapshotRepresentationRow;
+    // use crate::db::schema::clipboard_snapshot_representation;
+    // use diesel::prelude::*;
+    // use uc_core::{clipboard::PersistedClipboardRepresentation, ids::{RepresentationId, EventId, FormatId}, MimeType};
 
     // Note: This requires a test database setup.
     // For now, we provide the test structure that can be run with proper test DB.

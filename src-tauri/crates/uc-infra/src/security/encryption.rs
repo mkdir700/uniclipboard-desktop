@@ -106,7 +106,7 @@ impl EncryptionPort for EncryptionRepository {
         aead: EncryptionAlgo,
     ) -> Result<EncryptedBlob, EncryptionError> {
         let mut nonce = vec![0u8; 24];
-        rand::thread_rng().fill_bytes(&mut nonce);
+        rand::rng().fill_bytes(&mut nonce);
 
         let ciphertext = match aead {
             EncryptionAlgo::XChaCha20Poly1305 => {

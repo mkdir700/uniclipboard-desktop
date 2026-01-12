@@ -66,6 +66,7 @@ mod tests {
     fn test_app_deps_is_just_a_struct() {
         // This test verifies AppDeps is a plain struct,
         // not a Builder with methods
+        #[allow(dead_code)]
         fn assert_plain_struct<T: Sized>(_: &T) {}
 
         // We can't create a full AppDeps without all the trait implementations,

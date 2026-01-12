@@ -7,7 +7,6 @@ use crate::db::{
     schema::{clipboard_event, clipboard_snapshot_representation},
 };
 use anyhow::Result;
-use async_trait::async_trait;
 use diesel::prelude::*;
 use uc_core::{
     clipboard::{ClipboardEvent, PersistedClipboardRepresentation},

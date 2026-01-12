@@ -57,12 +57,12 @@ pub fn run_app(_seed: AppRuntimeSeed) -> anyhow::Result<()> {
 /// ```
 #[deprecated(note = "Use wire_dependencies() + create_app() instead (Phase 3)")]
 pub fn build_runtime(_seed: AppRuntimeSeed, app_handle: &tauri::AppHandle) -> anyhow::Result<Runtime> {
-    let autostart = Arc::new(TauriAutostart::new(app_handle.clone()));
-    let ui_port = Arc::new(TauriUiPort::new(app_handle.clone(), "settings"));
+    let _autostart = Arc::new(TauriAutostart::new(app_handle.clone()));
+    let _ui_port = Arc::new(TauriUiPort::new(app_handle.clone(), "settings"));
 
     // Use direct App construction with AppDeps
     // TODO: This will be replaced in Phase 3
-    let deps = AppDeps {
+    let _deps = AppDeps {
         clipboard: todo!("Inject clipboard port"),
         clipboard_event_repo: todo!("Inject clipboard event repo"),
         representation_repo: todo!("Inject representation repo"),
@@ -78,13 +78,13 @@ pub fn build_runtime(_seed: AppRuntimeSeed, app_handle: &tauri::AppHandle) -> an
         blob_repository: todo!("Inject blob repository"),
         blob_materializer: todo!("Inject blob materializer"),
         settings: todo!("Inject settings port"),
-        ui_port,
-        autostart,
+        ui_port: _ui_port,
+        autostart: _autostart,
         clock: todo!("Inject clock"),
         hash: todo!("Inject hash"),
     };
 
-    let app = Arc::new(App::new(deps));
+    let app = Arc::new(App::new(_deps));
 
     Ok(Runtime::new(app))
 }
