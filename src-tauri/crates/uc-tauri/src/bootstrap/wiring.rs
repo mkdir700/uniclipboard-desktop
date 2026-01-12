@@ -1,27 +1,66 @@
 //! # Dependency Injection / 依赖注入模块
 //!
-//! This module is responsible for "wiring" all dependencies together.
-//! 此模块负责将所有依赖"连接"在一起。
+//! ## Responsibilities / 职责
 //!
-//! ## Purpose / 目的
+//! - ✅ Create infra implementations (db, fs, keyring) / 创建 infra 层具体实现
+//! - ✅ Create platform implementations (clipboard, network) / 创建 platform 层具体实现
+//! - ✅ Inject all dependencies into App / 将所有依赖注入到 App
 //!
-//! In Phase 2, this module provides a skeleton function signature.
-//! 在第2阶段，此模块提供骨架函数签名。
+//! ## Prohibited / 禁止事项
 //!
-//! In Phase 3, real implementations from `uc-infra` and `uc-platform` will be wired together.
-//! 在第3阶段，来自 `uc-infra` 和 `uc-platform` 的真实实现将被连接在一起。
+//! ❌ **No business logic / 禁止包含任何业务逻辑**
+//! - Do not decide "what to do if encryption uninitialized"
+//! - 不判断"如果加密未初始化就怎样"
+//! - Do not handle "what to do if device not registered"
+//! - 不处理"如果设备未注册就怎样"
 //!
-//! ## Current Status / 当前状态
+//! ❌ **No configuration validation / 禁止做配置验证**
+//! - Config already loaded in config.rs
+//! - 配置已在 config.rs 加载
+//! - Validation should be in use case or upper layer
+//! - 验证应在 use case 或上层
 //!
-//! **Phase 2**: Skeleton only - returns an error indicating Phase 3 implementation is needed.
-//! **第2阶段**：仅骨架 - 返回错误，表明需要第3阶段的实现。
+//! ❌ **No direct concrete implementation usage / 禁止直接使用具体实现**
+//! - Must inject through Port traits
+//! - 必须通过 Port trait 注入
+//! - Do not call implementation methods directly after App construction
+//! - 不在 App 构造后直接调用实现方法
 //!
-//! **Phase 3** (future): Will create real implementations and wire them together.
-//! **第3阶段**（未来）：将创建真实实现并将它们连接在一起。
+//! ## Architecture Principle / 架构原则
+//!
+//! > **This is the only place allowed to depend on uc-infra + uc-platform + uc-app simultaneously.**
+//! > **这是唯一允许同时依赖 uc-infra、uc-platform 和 uc-app 的地方。**
+//! > But this privilege is only for "assembly", not for "decision making".
+//! > 但这种特权仅用于"组装"，不用于"决策"。
 
-use anyhow::Result;
 use uc_app::AppDeps;
 use uc_core::config::AppConfig;
+
+/// Result type for wiring operations
+pub type WiringResult<T> = Result<T, WiringError>;
+
+/// Errors during dependency injection
+/// 依赖注入错误（基础设施初始化失败）
+#[derive(Debug, thiserror::Error)]
+pub enum WiringError {
+    #[error("Database initialization failed: {0}")]
+    DatabaseInit(String),
+
+    #[error("Keyring initialization failed: {0}")]
+    KeyringInit(String),
+
+    #[error("Clipboard initialization failed: {0}")]
+    ClipboardInit(String),
+
+    #[error("Network initialization failed: {0}")]
+    NetworkInit(String),
+
+    #[error("Blob storage initialization failed: {0}")]
+    BlobStorageInit(String),
+
+    #[error("Settings repository initialization failed: {0}")]
+    SettingsInit(String),
+}
 
 /// Wire all dependencies together.
 /// 将所有依赖连接在一起。
@@ -37,15 +76,12 @@ use uc_core::config::AppConfig;
 ///
 /// # Returns / 返回
 ///
-/// * `Result<AppDeps>` - The wired dependencies on success / 成功时返回已连接的依赖
+/// * `WiringResult<AppDeps>` - The wired dependencies on success / 成功时返回已连接的依赖
 ///
 /// # Errors / 错误
 ///
-/// In Phase 2, this always returns an error indicating implementation is pending.
-/// 在第2阶段，此函数始终返回错误，表明实现待完成。
-///
-/// In Phase 3, it will return errors if dependency construction fails.
-/// 在第3阶段，如果依赖构造失败，它将返回错误。
+/// Returns `WiringError` if dependency construction fails.
+/// 如果依赖构造失败，返回 `WiringError`。
 ///
 /// # Phase 3 Implementation Plan / 第3阶段实现计划
 ///
@@ -60,13 +96,19 @@ use uc_core::config::AppConfig;
 ///    将所有内容包装在 `Arc<dyn Trait>` 中以实现共享所有权
 /// 4. Construct `AppDeps` with all dependencies
 ///    使用所有依赖构造 `AppDeps`
-pub fn wire_dependencies(_config: &AppConfig) -> Result<AppDeps> {
-    // Phase 2: Skeleton implementation - just return an error
-    // 第2阶段：骨架实现 - 仅返回错误
+pub fn wire_dependencies(_config: &AppConfig) -> WiringResult<AppDeps> {
+    // Phase 3: TODO - Implement real dependency wiring
+    // 第3阶段：待办 - 实现真实的依赖注入
 
-    Err(anyhow::anyhow!(
-        "Dependency wiring is not yet implemented - Phase 3 will add real implementations from uc-infra and uc-platform\n\
-         依赖注入尚未实现 - 第3阶段将从 uc-infra 和 uc-platform 添加真实实现"
+    // This will be implemented in subsequent tasks:
+    // 这将在后续任务中实现：
+    // 1. Create database repositories / 创建数据库仓库
+    // 2. Create platform adapters / 创建平台适配器
+    // 3. Wrap in Arc<dyn Trait> / 包装在 Arc<dyn Trait> 中
+    // 4. Construct AppDeps / 构造 AppDeps
+
+    Err(WiringError::DatabaseInit(
+        "Phase 3 implementation in progress".to_string(),
     ))
 }
 
@@ -75,16 +117,69 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_wire_dependencies_returns_phase_3_error() {
+    fn test_wiring_error_display() {
+        let err = WiringError::DatabaseInit("connection failed".to_string());
+        assert!(err.to_string().contains("Database initialization"));
+        assert!(err.to_string().contains("connection failed"));
+    }
+
+    #[test]
+    fn test_wiring_error_keyring() {
+        let err = WiringError::KeyringInit("keyring unavailable".to_string());
+        assert!(err.to_string().contains("Keyring initialization"));
+    }
+
+    #[test]
+    fn test_wiring_error_clipboard() {
+        let err = WiringError::ClipboardInit("platform error".to_string());
+        assert!(err.to_string().contains("Clipboard initialization"));
+    }
+
+    #[test]
+    fn test_wiring_error_network() {
+        let err = WiringError::NetworkInit("bind failed".to_string());
+        assert!(err.to_string().contains("Network initialization"));
+    }
+
+    #[test]
+    fn test_wiring_error_blob_storage() {
+        let err = WiringError::BlobStorageInit("path invalid".to_string());
+        assert!(err.to_string().contains("Blob storage initialization"));
+    }
+
+    #[test]
+    fn test_wiring_error_settings() {
+        let err = WiringError::SettingsInit("load failed".to_string());
+        assert!(err.to_string().contains("Settings repository initialization"));
+    }
+
+    #[test]
+    fn test_wiring_result_success() {
+        let result: WiringResult<()> = Ok(());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_wiring_result_error() {
+        let result: WiringResult<()> = Err(WiringError::DatabaseInit("test".to_string()));
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(WiringError::DatabaseInit(_))
+        ));
+    }
+
+    #[test]
+    fn test_wire_dependencies_returns_not_implemented() {
         let config = AppConfig::empty();
         let result = wire_dependencies(&config);
 
         match result {
-            Ok(_) => panic!("Expected error but got Ok"),
-            Err(e) => {
-                let error_msg = e.to_string();
-                assert!(error_msg.contains("Phase 3"));
+            Ok(_) => panic!("Expected error but got Ok - Phase 3 not yet implemented"),
+            Err(WiringError::DatabaseInit(msg)) => {
+                assert!(msg.contains("Phase 3"));
             }
+            Err(e) => panic!("Expected DatabaseInit error, got: {}", e),
         }
     }
 }
