@@ -33,12 +33,28 @@ pub fn run_app(_seed: AppRuntimeSeed) -> anyhow::Result<()> {
 /// Build the completed runtime from the seed.
 ///
 /// This should be called from the Tauri setup closure.
+///
+/// # DEPRECATED / 已弃用
+///
+/// This function uses the legacy AppBuilder pattern and will be removed
+/// in Phase 3 (Task 6). Use the new dependency wiring approach instead:
+///
+/// ## English
+/// - Phase 2: `wire_dependencies(seed, app_handle)` → creates `AppDeps`
+/// - Phase 3: `create_app(deps)` → constructs `App`
+///
+/// ## 中文
+/// - 阶段 2：`wire_dependencies(seed, app_handle)` → 创建 `AppDeps`
+/// - 阶段 3：`create_app(deps)` → 构造 `App`
+#[deprecated(note = "Use wire_dependencies() + create_app() instead")]
 pub fn build_runtime(seed: AppRuntimeSeed, app_handle: &tauri::AppHandle) -> anyhow::Result<Runtime> {
     let autostart = Arc::new(TauriAutostart::new(app_handle.clone()));
     let ui_port = Arc::new(TauriUiPort::new(app_handle.clone(), "settings"));
 
+    // Note: This uses the legacy AppBuilder pattern
+    // This will be replaced in Phase 3 (Task 6)
     let app = Arc::new(
-        seed.app_builder
+        uc_app::AppBuilder::new()
             .with_autostart(autostart)
             .with_ui_port(ui_port)
             .build()?,
