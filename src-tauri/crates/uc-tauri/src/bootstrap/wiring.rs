@@ -54,10 +54,11 @@ use uc_infra::fs::key_slot_store::JsonKeySlotStore;
 use uc_infra::security::{Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository};
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::SystemClock;
+use uc_infra::device::LocalDeviceIdentity;
 use uc_platform::adapters::{
     PlaceholderAutostartPort, PlaceholderBlobMaterializerPort, PlaceholderBlobStorePort,
-    PlaceholderClipboardRepresentationMaterializerPort, PlaceholderDeviceIdentityPort,
-    PlaceholderEncryptionSessionPort, PlaceholderNetworkPort, PlaceholderUiPort,
+    PlaceholderClipboardRepresentationMaterializerPort, PlaceholderEncryptionSessionPort,
+    PlaceholderNetworkPort, PlaceholderUiPort,
 };
 use uc_platform::clipboard::LocalClipboard;
 use uc_platform::keyring::SystemKeyring;
@@ -322,33 +323,43 @@ fn create_infra_layer(
 /// This function creates all platform-specific implementations including:
 /// 此函数创建所有平台特定实现，包括：
 /// - System clipboard (platform-specific: macOS/Windows/Linux) / 系统剪贴板（平台特定：macOS/Windows/Linux）
+/// - Device identity (filesystem-backed UUID) / 设备身份（基于文件系统的 UUID）
 /// - Placeholder implementations for unimplemented ports / 未实现端口的占位符实现
 ///
 /// # Arguments / 参数
 ///
 /// * `keyring` - Keyring created in infra layer / 在 infra 层中创建的密钥环
+/// * `config_dir` - Configuration directory for device identity storage / 用于存储设备身份的配置目录
 ///
 /// # Note / 注意
 ///
 /// - Keyring is passed in as parameter (created in infra layer for key material service)
 /// - 密钥环作为参数传入（在 infra 层中创建以供密钥材料服务使用）
+/// - Device identity uses LocalDeviceIdentity with UUID v4 persistence
+/// - 设备身份使用 LocalDeviceIdentity 持久化 UUID v4
 /// - Most implementations are placeholders and will be replaced in future tasks
 /// - 大多数实现是占位符，将在未来任务中替换
-/// - Only clipboard has a real implementation currently
-/// - 目前只有剪贴板有真实实现
-fn create_platform_layer(keyring: Arc<dyn KeyringPort>) -> WiringResult<PlatformLayer> {
+fn create_platform_layer(
+    keyring: Arc<dyn KeyringPort>,
+    config_dir: &PathBuf,
+) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
     let clipboard = LocalClipboard::new()
         .map_err(|e| WiringError::ClipboardInit(format!("Failed to create clipboard: {}", e)))?;
     let clipboard: Arc<dyn SystemClipboardPort> = Arc::new(clipboard);
 
+    // Create device identity (filesystem-backed UUID)
+    // 创建设备身份（基于文件系统的 UUID）
+    let device_identity = LocalDeviceIdentity::load_or_create(config_dir.clone())
+        .map_err(|e| WiringError::SettingsInit(format!("Failed to create device identity: {}", e)))?;
+    let device_identity: Arc<dyn DeviceIdentityPort> = Arc::new(device_identity);
+
     // Create placeholder implementations for unimplemented ports
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
     let network: Arc<dyn NetworkPort> = Arc::new(PlaceholderNetworkPort);
-    let device_identity: Arc<dyn DeviceIdentityPort> = Arc::new(PlaceholderDeviceIdentityPort);
     let representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort> =
         Arc::new(PlaceholderClipboardRepresentationMaterializerPort);
     let blob_materializer: Arc<dyn BlobMaterializerPort> =
@@ -429,7 +440,7 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
 
     // Step 3: Create platform layer implementations
     // 步骤 3：创建平台层实现
-    let platform = create_platform_layer(keyring)?;
+    let platform = create_platform_layer(keyring, &vault_path)?;
 
     // Step 4: Construct AppDeps with all dependencies
     // 步骤 4：使用所有依赖构造 AppDeps
@@ -636,7 +647,9 @@ mod tests {
         // Test that platform layer creates the correct types
         // 测试平台层创建正确的类型
         let keyring: Arc<dyn KeyringPort> = Arc::new(SystemKeyring {});
-        let result = create_platform_layer(keyring);
+        let temp_dir = std::env::temp_dir().join(format!("uc-wiring-test-{}", std::process::id()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let result = create_platform_layer(keyring, &temp_dir);
 
         match result {
             Ok(layer) => {

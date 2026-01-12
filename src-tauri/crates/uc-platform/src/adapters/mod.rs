@@ -13,16 +13,19 @@
 //! - `PlaceholderUiPort` - UI operations (will be replaced by Tauri-based implementation)
 //! - `PlaceholderAutostartPort` - Autostart management (will be replaced by platform-specific implementation)
 //! - `PlaceholderNetworkPort` - P2P networking (will be replaced by libp2p implementation)
-//! - `PlaceholderDeviceIdentityPort` - Device identity (will be replaced by hardware-based implementation)
 //! - `PlaceholderClipboardRepresentationMaterializerPort` - Clipboard materialization
 //! - `PlaceholderBlobMaterializerPort` - Blob materialization
 //! - `PlaceholderBlobStorePort` - Blob storage
 //! - `PlaceholderEncryptionSessionPort` - Encryption session management
+//!
+//! # Note / 注意
+//!
+//! `DeviceIdentityPort` is implemented by `uc_infra::device::LocalDeviceIdentity` and is no longer a placeholder.
+//! `DeviceIdentityPort` 由 `uc_infra::device::LocalDeviceIdentity` 实现，不再是一个占位符。
 
 pub mod autostart;
 pub mod blob;
 pub mod clipboard;
-pub mod device;
 pub mod encryption;
 pub mod network;
 pub mod ui;
@@ -30,7 +33,6 @@ pub mod ui;
 pub use autostart::PlaceholderAutostartPort;
 pub use blob::{PlaceholderBlobMaterializerPort, PlaceholderBlobStorePort};
 pub use clipboard::PlaceholderClipboardRepresentationMaterializerPort;
-pub use device::PlaceholderDeviceIdentityPort;
 pub use encryption::PlaceholderEncryptionSessionPort;
 pub use network::PlaceholderNetworkPort;
 pub use ui::PlaceholderUiPort;
