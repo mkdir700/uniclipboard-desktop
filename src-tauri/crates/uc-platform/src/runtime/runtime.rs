@@ -9,7 +9,6 @@ use anyhow::Result;
 use clipboard_rs::{
     ClipboardWatcher as RSClipboardWatcher, ClipboardWatcherContext, WatcherShutdown,
 };
-use log::error;
 use tokio::task::JoinHandle;
 use uc_core::ports::SystemClipboardPort;
 
@@ -88,32 +87,72 @@ where
         Ok(())
     }
 
-    async fn handle_event(&self, _event: PlatformEvent) {
-        // match event {
-        //     PlatformEvent::ClipboardChanged { content } => {
-        //         // 这里先 log / stub
-        //         // 下一步：交给 SyncClipboard use case
-        //     }
-        //     _ => {}
-        // }
-        todo!()
+    async fn handle_event(&self, event: PlatformEvent) {
+        match event {
+            PlatformEvent::ClipboardChanged { snapshot } => {
+                log::debug!(
+                    "Clipboard changed: {} representations, {} bytes",
+                    snapshot.representation_count(),
+                    snapshot.total_size_bytes()
+                );
+                // TODO: In future tasks, this will trigger the SyncClipboard use case
+                // For now, just log the event
+            }
+            PlatformEvent::ClipboardSynced { peer_count } => {
+                log::debug!("Clipboard synced to {} peers", peer_count);
+            }
+            PlatformEvent::Started => {
+                log::info!("Platform runtime started");
+            }
+            PlatformEvent::Stopped => {
+                log::info!("Platform runtime stopped");
+            }
+            PlatformEvent::Error { message } => {
+                log::error!("Platform error: {}", message);
+            }
+        }
     }
 
     async fn handle_command(&mut self, command: PlatformCommand) {
         match command {
             PlatformCommand::Shutdown => {
                 self.shutting_down = true;
+                log::info!("Platform runtime shutting down");
             }
             PlatformCommand::ReadClipboard => {
-                todo!()
+                match self.local_clipboard.read_snapshot() {
+                    Ok(snapshot) => {
+                        log::debug!(
+                            "Read clipboard: {} representations, {} bytes",
+                            snapshot.representation_count(),
+                            snapshot.total_size_bytes()
+                        );
+                        // TODO: Send response back through a response channel
+                        // For now, just log
+                    }
+                    Err(e) => {
+                        log::error!("Failed to read clipboard: {:?}", e);
+                    }
+                }
             }
             PlatformCommand::WriteClipboard { content: _ } => {
-                todo!()
+                // Convert ClipboardContent to SystemClipboardSnapshot
+                // For now, we'll need to handle this conversion
+                log::debug!("WriteClipboard command received (conversion needed)");
+                // TODO: Implement proper conversion from ClipboardContent to SystemClipboardSnapshot
+                // This requires mapping clipboard-rs types to our snapshot format
             }
-            other => {
-                if let Err(err) = self.executor.execute(other).await {
-                    // v1 策略：只记录错误，不崩 runtime
-                    error!("Failed to execute platform command: {:?}", err);
+            PlatformCommand::StartClipboardWatcher => {
+                log::debug!("StartClipboardWatcher command received");
+                if let Err(e) = self.start_clipboard_watcher() {
+                    log::error!("Failed to start clipboard watcher: {:?}", e);
+                }
+            }
+            PlatformCommand::StopClipboardWatcher => {
+                log::debug!("StopClipboardWatcher command received");
+                if let Some(handle) = self.watcher_handle.take() {
+                    handle.stop();
+                    log::info!("Clipboard watcher stopped");
                 }
             }
         }
