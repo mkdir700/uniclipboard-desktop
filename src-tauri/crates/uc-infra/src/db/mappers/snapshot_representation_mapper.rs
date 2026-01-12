@@ -1,5 +1,5 @@
-use crate::db::models::snapshot_representation::NewSnapshotRepresentationRow;
-use crate::db::ports::InsertMapper;
+use crate::db::models::snapshot_representation::{NewSnapshotRepresentationRow, SnapshotRepresentationRow};
+use crate::db::ports::{InsertMapper, RowMapper};
 use anyhow::Result;
 use uc_core::{clipboard::PersistedClipboardRepresentation, ids::EventId};
 
@@ -22,5 +22,25 @@ impl InsertMapper<(PersistedClipboardRepresentation, EventId), NewSnapshotRepres
             inline_data: rep.inline_data.clone(),
             blob_id: rep.blob_id.as_ref().map(|id| id.to_string()),
         })
+    }
+}
+
+impl RowMapper<SnapshotRepresentationRow, uc_core::clipboard::PersistedClipboardRepresentation>
+    for RepresentationRowMapper
+{
+    fn to_domain(
+        &self,
+        row: &SnapshotRepresentationRow,
+    ) -> Result<uc_core::clipboard::PersistedClipboardRepresentation> {
+        use uc_core::{ids::RepresentationId, ids::FormatId, BlobId, MimeType};
+
+        Ok(uc_core::clipboard::PersistedClipboardRepresentation::new(
+            RepresentationId::from(row.id.clone()),
+            FormatId::from(row.format_id.clone()),
+            row.mime_type.as_ref().map(|s| MimeType(s.clone())),
+            row.size_bytes,
+            row.inline_data.clone(),
+            row.blob_id.as_ref().map(|s| BlobId::from(s.clone())),
+        ))
     }
 }
