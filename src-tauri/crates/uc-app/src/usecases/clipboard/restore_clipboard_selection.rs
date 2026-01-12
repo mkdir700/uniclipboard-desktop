@@ -2,9 +2,10 @@ use anyhow::Result;
 use std::sync::Arc;
 
 use uc_core::{
+    clipboard::{ObservedClipboardRepresentation, SystemClipboardSnapshot},
     ids::EntryId,
     ports::{
-        ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
+        BlobStorePort, ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
         ClipboardSelectionRepositoryPort, SystemClipboardPort,
     },
 };
@@ -12,25 +13,28 @@ use uc_core::{
 /// Reconstructs a system clipboard state from a historical clipboard entry,
 /// restoring the primary selected representation and, when possible,
 /// additional compatible representations captured in the same event.
-pub struct RestoreClipboardSelectionUseCase<C, L, S, R>
+pub struct RestoreClipboardSelectionUseCase<C, L, S, R, B>
 where
     C: ClipboardEntryRepositoryPort,
     L: SystemClipboardPort,
     S: ClipboardSelectionRepositoryPort,
     R: ClipboardRepresentationRepositoryPort,
+    B: BlobStorePort,
 {
     clipboard_repo: Arc<C>,
     local_clipboard: Arc<L>,
     selection_repo: Arc<S>,
     representation_repo: Arc<R>,
+    blob_store: Arc<B>,
 }
 
-impl<C, L, S, R> RestoreClipboardSelectionUseCase<C, L, S, R>
+impl<C, L, S, R, B> RestoreClipboardSelectionUseCase<C, L, S, R, B>
 where
     C: ClipboardEntryRepositoryPort,
     L: SystemClipboardPort,
     S: ClipboardSelectionRepositoryPort,
     R: ClipboardRepresentationRepositoryPort,
+    B: BlobStorePort,
 {
     /// Creates a new use case instance that copies clipboard entries from history to the system clipboard.
     ///
@@ -48,44 +52,69 @@ where
         local_clipboard: Arc<L>,
         selection_repo: Arc<S>,
         representation_repo: Arc<R>,
+        blob_store: Arc<B>,
     ) -> Self {
         Self {
-            clipboard_repo: clipboard_repo,
-            local_clipboard: local_clipboard,
-            selection_repo: selection_repo,
-            representation_repo: representation_repo,
+            clipboard_repo,
+            local_clipboard,
+            selection_repo,
+            representation_repo,
+            blob_store,
         }
     }
 
     pub async fn execute(&self, entry_id: &EntryId) -> Result<()> {
+        // 1. 读取 Entry
         let entry = self
             .clipboard_repo
             .get_entry(entry_id)
             .await?
             .ok_or(anyhow::anyhow!("Entry not found"))?;
 
-        let selection_decision = self
+        // 2. 获取 Selection 决策
+        let selection = self
             .selection_repo
             .get_selection(entry_id)
             .await?
             .ok_or(anyhow::anyhow!("Selection not found"))?;
 
-        let representation_id = selection_decision.selection.paste_rep_id;
-        let representation = self
-            .representation_repo
-            .get_representation(&entry.event_id, &representation_id)
-            .await?;
+        // 3. 收集要恢复的所有 representation IDs
+        let mut rep_ids = vec![selection.selection.paste_rep_id];
+        rep_ids.extend(selection.selection.secondary_rep_ids);
 
-        if representation.is_inline() {
-            // 从 inline data 转为 snapshot
-            todo!()
-        } else if representation.is_blob() {
-            todo!()
-        } else {
-            unreachable!()
+        // 4. 加载所有 representations 的数据
+        let mut representations = Vec::new();
+        for rep_id in rep_ids {
+            let rep = self
+                .representation_repo
+                .get_representation(&entry.event_id, &rep_id)
+                .await?;
+
+            // 加载字节数据
+            let bytes = if let Some(inline_data) = rep.inline_data {
+                inline_data
+            } else if let Some(blob_id) = rep.blob_id {
+                self.blob_store.get(&blob_id).await?
+            } else {
+                return Err(anyhow::anyhow!("Representation has no data: {}", rep_id));
+            };
+
+            representations.push(ObservedClipboardRepresentation {
+                id: rep.id,
+                format_id: rep.format_id,
+                mime: rep.mime_type,
+                bytes,
+            });
         }
 
-        let blob_id = representation.blob_id;
+        // 5. 构造 Snapshot
+        let snapshot = SystemClipboardSnapshot {
+            ts_ms: chrono::Utc::now().timestamp_millis(),
+            representations,
+        };
+
+        // 6. 写入系统剪贴板
+        self.local_clipboard.write_snapshot(snapshot)?;
 
         Ok(())
     }

@@ -10,4 +10,7 @@ pub trait BlobStorePort: Send + Sync {
     async fn put(&self, blob_id: &BlobId, data: &[u8]) -> Result<PathBuf> {
         todo!()
     }
+
+    // 从 blob 存储读取 bytes
+    async fn get(&self, blob_id: &BlobId) -> Result<Vec<u8>>;
 }
