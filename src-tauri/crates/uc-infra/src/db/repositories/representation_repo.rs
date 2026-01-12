@@ -3,7 +3,7 @@ use crate::db::mappers::snapshot_representation_mapper::RepresentationRowMapper;
 use crate::db::ports::{DbExecutor, RowMapper};
 use crate::db::schema::clipboard_snapshot_representation;
 use anyhow::Result;
-use diesel::{OptionalExtension, QueryDsl, RunQueryDsl};
+use diesel::{OptionalExtension, QueryDsl, RunQueryDsl, ExpressionMethods, prelude::*};
 use uc_core::clipboard::PersistedClipboardRepresentation;
 use uc_core::ids::{EventId, RepresentationId};
 use uc_core::ports::clipboard::ClipboardRepresentationRepositoryPort;
