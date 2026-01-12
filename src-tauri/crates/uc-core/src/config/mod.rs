@@ -64,14 +64,14 @@ impl AppConfig {
                     .get("security")
                     .and_then(|s| s.get("vault_key_path"))
                     .and_then(|v| v.as_str())
-                    .unwrap_or("")
+                    .unwrap_or(""),
             ),
             vault_snapshot_path: PathBuf::from(
                 toml_value
                     .get("security")
                     .and_then(|s| s.get("vault_snapshot_path"))
                     .and_then(|v| v.as_str())
-                    .unwrap_or("")
+                    .unwrap_or(""),
             ),
             webserver_port: toml_value
                 .get("network")
@@ -83,7 +83,7 @@ impl AppConfig {
                     .get("storage")
                     .and_then(|s| s.get("database_path"))
                     .and_then(|v| v.as_str())
-                    .unwrap_or("")
+                    .unwrap_or(""),
             ),
             silent_start: toml_value
                 .get("general")

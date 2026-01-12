@@ -34,4 +34,3 @@ mockall::mock! {
         fn delete_kek(&self, scope: &KeyScope) -> Result<(), EncryptionError>;
     }
 }
-

@@ -60,7 +60,7 @@ macro_rules! impl_id {
                     self.0
                 }
             }
-            
+
             impl std::ops::Deref for $name {
                 type Target = String;
 

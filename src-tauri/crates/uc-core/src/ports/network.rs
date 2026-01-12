@@ -3,9 +3,9 @@
 //! This port defines the interface for network operations including
 //! clipboard messaging, peer discovery, device pairing, and event subscriptions.
 
-use async_trait::async_trait;
+use crate::network::{ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent};
 use anyhow::Result;
-use crate::network::{ClipboardMessage, DiscoveredPeer, ConnectedPeer, NetworkEvent};
+use async_trait::async_trait;
 
 /// Network port - abstracts P2P network capabilities
 ///

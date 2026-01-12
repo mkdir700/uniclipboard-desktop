@@ -1,6 +1,6 @@
+use super::protocol::{ClipboardMessage, PairingRequest, PairingResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use super::protocol::{ClipboardMessage, PairingRequest, PairingResponse};
 
 /// Network status for P2P connection
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

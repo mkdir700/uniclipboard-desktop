@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::security::model::{
-    EncryptionAlgo, EncryptedBlob, EncryptionError, KdfParams, Kek, MasterKey, Passphrase,
+    EncryptedBlob, EncryptionAlgo, EncryptionError, KdfParams, Kek, MasterKey, Passphrase,
 };
 
 #[async_trait]
