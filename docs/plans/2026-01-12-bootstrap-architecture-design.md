@@ -320,16 +320,45 @@ git commit -m "feat(uc-app): add AppDeps and App::new() constructor"
 git commit -m "feat(uc-tauri): add bootstrap module skeleton"
 ```
 
-### Phase 3: Gradual Dependency Injection Migration / 逐步迁移依赖注入
+### Phase 3: Gradual Dependency Injection Migration / 逐步迁移依赖注入 ✅ COMPLETED
 
-1. Implement infra layer creation in `wiring.rs` / 在 wiring.rs 实现 infra 层创建
-2. Implement platform layer creation in `wiring.rs` / 在 wiring.rs 实现 platform 层创建
-3. Add `App::from_wiring()` transition method / 添加过渡方法
-4. Modify main.rs to use new bootstrap flow (keep old code as fallback) / 使用新流程（保留旧代码 fallback）
+**Completed on / 完成于**: 2026-01-12
 
-```bash
-git commit -m "refactor: migrate dependency injection to bootstrap"
-```
+**Changes made / 完成的变更**:
+
+1. ✅ Implemented infra layer creation in wiring.rs / 在 wiring.rs 实现 infra 层创建
+2. ✅ Implemented platform layer creation in wiring.rs / 在 wiring.rs 实现 platform 层创建
+3. ✅ Created wire_dependencies() function / 创建 wire_dependencies() 函数
+4. ✅ Updated main.rs to use bootstrap flow / 更新 main.rs 使用 bootstrap 流程
+5. ✅ Removed legacy dependency injection code / 移除旧的依赖注入代码
+6. ✅ Added integration tests / 添加集成测试
+
+**Commits / 提交记录**:
+
+- `feat(uc-app): extend AppDeps with all required ports`
+- `feat(uc-tauri): add WiringError and WiringResult types`
+- `feat(uc-tauri): add database pool creation function`
+- `feat(uc-tauri): add infra layer repository creation`
+- `feat(uc-tauri): add platform layer creation`
+- `feat(uc-tauri): implement wire_dependencies function`
+- `feat(uc-platform): add placeholder implementations for runtime ports`
+- `refactor: use bootstrap flow for dependency injection`
+- `refactor: remove legacy dependency injection code`
+- `test(uc-tauri): add bootstrap integration tests`
+
+**Implementation summary / 实施总结**:
+
+The bootstrap module now fully handles dependency injection for the application. The wiring.rs module creates all infrastructure (database repositories, encryption) and platform (clipboard, network) implementations, then assembles them into an AppDeps struct for injection into the App.
+
+Bootstrap 模块现已完全处理应用程序的依赖注入。wiring.rs 模块创建所有基础设施（数据库仓库、加密）和平台（剪贴板、网络）实现，然后将它们组装成 AppDeps 结构体注入到 App 中。
+
+**Key files modified / 修改的关键文件**:
+
+- `src-tauri/crates/uc-tauri/src/bootstrap/wiring.rs` - Core dependency injection logic / 核心依赖注入逻辑
+- `src-tauri/crates/uc-app/src/lib.rs` - Extended AppDeps with all ports / 扩展 AppDeps 包含所有端口
+- `src-tauri/crates/uc-platform/src/ports/runtime.rs` - Added placeholder port implementations / 添加占位符端口实现
+- `src-tauri/src/main.rs` - Updated to use bootstrap flow / 更新使用 bootstrap 流程
+- `src-tauri/crates/uc-tauri/src/bootstrap/tests.rs` - Added integration tests / 添加集成测试
 
 ### Phase 4: Cleanup / 清理
 
@@ -337,6 +366,7 @@ git commit -m "refactor: migrate dependency injection to bootstrap"
 2. Remove initialization code from `main.rs` / 移除 main.rs 中的初始化代码
 3. Remove vault state check (move to use case) / 移除 vault 状态检查（移至 use case）
 4. Update all call sites / 更新所有调用点
+5. 移除旧的代码，不需要向后兼容
 
 ```bash
 git commit -m "refactor: remove legacy AppBuilder and cleanup"
