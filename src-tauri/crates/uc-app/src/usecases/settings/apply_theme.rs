@@ -1,23 +1,20 @@
 use anyhow::Result;
 use std::sync::Arc;
 use uc_core::{
-    ports::{AutostartPort, SettingsPort},
+    ports::SettingsPort,
     settings::model::Theme,
 };
 
-pub struct ApplyThemeSetting<S, A>
+pub struct ApplyThemeSetting<S>
 where
     S: SettingsPort,
-    A: AutostartPort,
 {
     settings: Arc<S>,
-    autostart: Arc<A>,
 }
 
-impl<S, A> ApplyThemeSetting<S, A>
+impl<S> ApplyThemeSetting<S>
 where
     S: SettingsPort,
-    A: AutostartPort,
 {
     pub async fn execute(&self, theme: Theme) -> Result<()> {
         let mut settings = self.settings.load().await?;
