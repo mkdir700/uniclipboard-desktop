@@ -23,6 +23,7 @@ uc-core = { path = "crates/uc-core" }
 uc-app = { path = "crates/uc-app" }
 uc-platform = { path = "crates/uc-platform" }
 uc-infra = { path = "crates/uc-infra" }
+uc-tauri = { path = "crates/uc-tauri" }
 
 # ===== Tauri 相关依赖 =====
 tauri = { version = "2", features = [] } # Tauri 框架核心库
