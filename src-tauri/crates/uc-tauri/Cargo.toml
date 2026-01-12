@@ -1,0 +1,29 @@
+[package]
+name = "uc-tauri"
+version = "0.1.0"
+edition = "2021"
+description = "Tauri adapter layer for UniClipboard"
+
+[dependencies]
+# Workspace crates
+uc-core = { path = "../uc-core" }
+uc-app = { path = "../uc-app" }
+
+# Tauri
+tauri = { workspace = true }
+tauri-plugin-autostart = { workspace = true }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Logging
+log = "0.4"
