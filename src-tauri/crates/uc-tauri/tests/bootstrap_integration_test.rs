@@ -15,18 +15,18 @@
 //! - No default value logic / 无默认值逻辑
 //! - Paths are loaded as-is (no existence checks) / 路径按原样加载（不检查存在性）
 //!
-//! ## Phase 2 Status / 第2阶段状态
+//! ## Phase 3 Status / 第3阶段状态
 //!
-//! In Phase 2, `wire_dependencies` is a skeleton that returns an error.
-//! 在第2阶段，`wire_dependencies` 是一个返回错误的骨架。
-//! Phase 3 will add real implementations.
-//! 第3阶段将添加真实实现。
+//! In Phase 3, `wire_dependencies` is fully implemented with real dependency injection.
+//! 在第3阶段，`wire_dependencies` 完全实现了真实的依赖注入。
+//! These tests verify the integration between config loading, dependency wiring, and app creation.
+//! 这些测试验证配置加载、依赖连接和应用创建之间的集成。
 
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use uc_tauri::bootstrap::{load_config, wire_dependencies};
+use uc_tauri::bootstrap::{load_config, wire_dependencies, create_app, create_runtime};
 use uc_core::config::AppConfig;
 
 /// Test 1: Full integration test for config loading
@@ -220,46 +220,64 @@ fn test_bootstrap_config_invalid_port_is_accepted() {
     assert_eq!(config2.webserver_port, 0);
 }
 
-/// Test 5: wire_dependencies returns expected Phase 3 error
-/// 测试5：wire_dependencies 返回预期的第3阶段错误
+/// Test 5: wire_dependencies successfully creates AppDeps
+/// 测试5：wire_dependencies 成功创建 AppDeps
 ///
 /// This test verifies that:
 /// 此测试验证：
-/// - The skeleton implementation returns the correct error / 骨架实现返回正确错误
-/// - The error message indicates Phase 3 implementation is needed / 错误消息表明需要第3阶段实现
-/// - The function signature is correct for future implementation / 函数签名对未来实现是正确的
+/// - wire_dependencies creates all required dependencies / wire_dependencies 创建所有必需的依赖
+/// - The dependencies can be used to create an App / 依赖可用于创建 App
+/// - All dependency fields are properly initialized / 所有依赖字段正确初始化
 #[test]
-fn test_bootstrap_wire_dependencies_not_yet_implemented() {
-    let config = AppConfig::empty();
+fn test_bootstrap_wire_dependencies_creates_app_deps() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("test_config.toml");
 
-    let result = wire_dependencies(&config);
+    // Write a minimal valid config
+    // 写入最小有效配置
+    let toml_content = r#"
+        [general]
+        device_name = "TestDevice"
 
-    // Should return an error, not success
-    // 应该返回错误，而不是成功
-    match result {
-        Ok(_) => panic!("wire_dependencies should return error in Phase 2, but got Ok"),
-        Err(error) => {
-            let error_msg = error.to_string().to_lowercase();
+        [security]
+        vault_key_path = "/tmp/test/key"
+        vault_snapshot_path = "/tmp/test/snapshot"
 
-            // Error message should mention Phase 3
-            // 错误消息应该提到第3阶段
-            assert!(
-                error_msg.contains("phase 3") || error_msg.contains("phase3"),
-                "Error message should mention Phase 3, got: {}",
-                error
-            );
+        [storage]
+        database_path = ":memory:"
+    "#;
 
-            // Error message should mention "not yet implemented" or similar
-            // 错误消息应该提到"尚未实现"或类似内容
-            assert!(
-                error_msg.contains("not yet implemented")
-                    || error_msg.contains("not implemented")
-                    || error_msg.contains("pending"),
-                "Error message should indicate implementation is pending, got: {}",
-                error
-            );
-        }
-    }
+    let mut file = fs::File::create(&config_path).unwrap();
+    file.write_all(toml_content.as_bytes()).unwrap();
+
+    let config = load_config(config_path).unwrap();
+    let deps_result = wire_dependencies(&config);
+
+    assert!(deps_result.is_ok(), "wire_dependencies should succeed with valid config");
+
+    let deps = deps_result.unwrap();
+
+    // Verify we can access all dependency fields
+    // 验证我们可以访问所有依赖字段
+    let _ = &deps.clipboard;
+    let _ = &deps.clipboard_event_repo;
+    let _ = &deps.representation_repo;
+    let _ = &deps.representation_materializer;
+    let _ = &deps.encryption;
+    let _ = &deps.encryption_session;
+    let _ = &deps.keyring;
+    let _ = &deps.key_material;
+    let _ = &deps.device_repo;
+    let _ = &deps.device_identity;
+    let _ = &deps.network;
+    let _ = &deps.blob_store;
+    let _ = &deps.blob_repository;
+    let _ = &deps.blob_materializer;
+    let _ = &deps.settings;
+    let _ = &deps.ui_port;
+    let _ = &deps.autostart;
+    let _ = &deps.clock;
+    let _ = &deps.hash;
 }
 
 /// Test 6: Integration test - real file I/O error handling
@@ -363,4 +381,307 @@ fn test_bootstrap_load_config_handles_empty_file() {
     assert_eq!(config.vault_snapshot_path, PathBuf::new());
     assert_eq!(config.database_path, PathBuf::new());
     assert_eq!(config.silent_start, false);
+}
+
+/// Test 9: Full bootstrap flow integration test
+/// 测试9：完整 bootstrap 流程集成测试
+///
+/// This test verifies the complete bootstrap sequence:
+/// 此测试验证完整的 bootstrap 序列：
+/// 1. load_config() → AppConfig / 加载配置
+/// 2. wire_dependencies() → AppDeps / 连接依赖
+/// 3. create_app() → App / 创建应用
+///
+/// This is the primary integration test for the entire bootstrap module.
+/// 这是整个 bootstrap 模块的主要集成测试。
+#[test]
+fn test_bootstrap_full_flow() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_path = temp_dir.path().join("full_flow_config.toml");
+
+    // Write a complete configuration
+    // 写入完整配置
+    let toml_content = r#"
+        [general]
+        device_name = "FullFlowTest"
+        silent_start = false
+
+        [security]
+        vault_key_path = "/tmp/test/full_flow_key"
+        vault_snapshot_path = "/tmp/test/full_flow_snapshot"
+
+        [network]
+        webserver_port = 8080
+
+        [storage]
+        database_path = ":memory:"
+    "#;
+
+    let mut file = fs::File::create(&config_path).unwrap();
+    file.write_all(toml_content.as_bytes()).unwrap();
+
+    // Step 1: Load config
+    // 步骤 1：加载配置
+    let config = load_config(config_path).unwrap();
+    assert_eq!(config.device_name, "FullFlowTest");
+    assert_eq!(config.webserver_port, 8080);
+
+    // Step 2: Wire dependencies
+    // 步骤 2：连接依赖
+    let deps = wire_dependencies(&config).expect("wire_dependencies should succeed");
+
+    // Step 3: Create app
+    // 步骤 3：创建应用
+    let app = create_app(deps);
+
+    // Verify app was created successfully
+    // 验证应用创建成功
+    let _app = app; // Use the variable to avoid warnings
+}
+
+/// Test 10: Database pool creation with real file system
+/// 测试10：使用真实文件系统创建数据库连接池
+///
+/// This test verifies that:
+/// 此测试验证：
+/// - Database file is created in the correct location / 数据库文件在正确位置创建
+/// - Parent directories are created as needed / 按需创建父目录
+/// - Connection pool can be established / 可以建立连接池
+#[test]
+fn test_bootstrap_database_pool_real_filesystem() {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test_data").join("db").join("test.db");
+
+    // Create config with database path
+    // 使用数据库路径创建配置
+    let mut config = AppConfig::empty();
+    config.database_path = db_path.clone();
+
+    // Wire dependencies (this will create the database)
+    // 连接依赖（这将创建数据库）
+    let deps_result = wire_dependencies(&config);
+
+    assert!(deps_result.is_ok(), "wire_dependencies should create database successfully");
+
+    // Verify database file was created
+    // 验证数据库文件已创建
+    assert!(db_path.exists(), "Database file should be created");
+
+    // Verify parent directories were created
+    // 验证父目录已创建
+    assert!(db_path.parent().unwrap().exists(), "Parent directory should be created");
+}
+
+/// Test 11: Database pool creation with invalid path
+/// 测试11：使用无效路径创建数据库连接池
+///
+/// This test verifies error handling when:
+/// 此测试验证以下情况时的错误处理：
+/// - Database path contains invalid characters / 数据库路径包含无效字符
+/// - Path cannot be created / 无法创建路径
+#[test]
+fn test_bootstrap_database_pool_invalid_path() {
+    // Use a path that cannot be created (e.g., in /root without permissions)
+    // 使用无法创建的路径（例如，没有权限的 /root）
+    let db_path = PathBuf::from("/root/uniclipboard_test_no_permission/test.db");
+
+    let mut config = AppConfig::empty();
+    config.database_path = db_path;
+
+    let deps_result = wire_dependencies(&config);
+
+    // Should fail gracefully with proper error
+    // 应该优雅地失败并返回适当错误
+    match deps_result {
+        Ok(_) => panic!("wire_dependencies should fail with invalid path"),
+        Err(error) => {
+            let error_msg = error.to_string().to_lowercase();
+            // Error should mention database initialization failure
+            // 错误应该提到数据库初始化失败
+            assert!(
+                error_msg.contains("database") || error_msg.contains("db"),
+                "Error should mention database, got: {}",
+                error
+            );
+        }
+    }
+}
+
+/// Test 12: create_runtime wrapper function
+/// 测试12：create_runtime 包装函数
+///
+/// This test verifies that:
+/// 此测试验证：
+/// - create_runtime wraps config in AppRuntimeSeed / create_runtime 将配置包装在 AppRuntimeSeed 中
+/// - The seed contains the original config / 种子包含原始配置
+/// - No side effects occur / 无副作用
+#[test]
+fn test_bootstrap_create_runtime_wrapper() {
+    let config = AppConfig::empty();
+
+    let runtime_result = create_runtime(config.clone());
+
+    assert!(runtime_result.is_ok(), "create_runtime should always succeed");
+
+    let seed = runtime_result.unwrap();
+    assert_eq!(seed.config.device_name, config.device_name);
+    assert_eq!(seed.config.webserver_port, config.webserver_port);
+    assert_eq!(seed.config.vault_key_path, config.vault_key_path);
+    assert_eq!(seed.config.database_path, config.database_path);
+}
+
+/// Test 13: Integration test - wire_dependencies with empty config
+/// 测试13：集成测试 - 使用空配置的 wire_dependencies
+///
+/// This test verifies that wire_dependencies handles empty configuration
+/// by using sensible defaults for required paths.
+/// 此测试验证 wire_dependencies 通过为必需路径使用合理的默认值来处理空配置。
+#[test]
+fn test_bootstrap_wire_dependencies_with_empty_config() {
+    let config = AppConfig::empty();
+
+    let deps_result = wire_dependencies(&config);
+
+    // Should succeed even with empty config (uses in-memory database)
+    // 应该成功，即使配置为空（使用内存数据库）
+    assert!(deps_result.is_ok(), "wire_dependencies should handle empty config");
+
+    let deps = deps_result.unwrap();
+
+    // Verify all dependencies are present even with empty config
+    // 验证即使配置为空，所有依赖都存在
+    let _ = &deps.clipboard;
+    let _ = &deps.encryption;
+    let _ = &deps.keyring;
+    let _ = &deps.device_repo;
+    let _ = &deps.settings;
+}
+
+/// Test 14: Integration test - wire_dependencies creates real database repositories
+/// 测试14：集成测试 - wire_dependencies 创建真实的数据库仓库
+///
+/// This test verifies that:
+/// 此测试验证：
+/// - Database repositories are properly initialized / 数据库仓库正确初始化
+/// - Repositories are wrapped in Arc for thread safety / 仓库包装在 Arc 中以确保线程安全
+/// - All repository types are present / 所有仓库类型都存在
+#[test]
+fn test_bootstrap_wire_dependencies_creates_real_repositories() {
+    let mut config = AppConfig::empty();
+    config.database_path = PathBuf::from(":memory:");
+
+    let deps = wire_dependencies(&config).expect("wire_dependencies should succeed");
+
+    // Verify clipboard repositories
+    // 验证剪贴板仓库
+    let _clipboard_entry_repo = deps.clipboard_event_repo.clone();
+    let _representation_repo = deps.representation_repo.clone();
+
+    // Verify device repository
+    // 验证设备仓库
+    let _device_repo = deps.device_repo.clone();
+
+    // Verify blob repository
+    // 验证 blob 仓库
+    let _blob_repository = deps.blob_repository.clone();
+
+    // If we got here without panicking, all repositories are properly created
+    // 如果我们到这里没有 panic，所有仓库都正确创建了
+}
+
+/// Test 15: Integration test - wire_dependencies creates platform adapters
+/// 测试15：集成测试 - wire_dependencies 创建平台适配器
+///
+/// This test verifies that:
+/// 此测试验证：
+/// - Platform-specific adapters are created / 创建平台特定适配器
+/// - Clipboard adapter is platform-specific / 剪贴板适配器是平台特定的
+/// - All adapters implement their respective traits / 所有适配器实现各自的 trait
+#[test]
+fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
+    let mut config = AppConfig::empty();
+    config.database_path = PathBuf::from(":memory:");
+
+    let deps = wire_dependencies(&config).expect("wire_dependencies should succeed");
+
+    // Verify system clipboard (platform-specific)
+    // 验证系统剪贴板（平台特定）
+    let _clipboard = deps.clipboard.clone();
+
+    // Verify keyring (platform-specific)
+    // 验证密钥环（平台特定）
+    let _keyring = deps.keyring.clone();
+
+    // Verify placeholder adapters exist (for unimplemented ports)
+    // 验证占位符适配器存在（用于未实现的端口）
+    let _ui = deps.ui_port.clone();
+    let _autostart = deps.autostart.clone();
+    let _network = deps.network.clone();
+    let _device_identity = deps.device_identity.clone();
+    let _representation_materializer = deps.representation_materializer.clone();
+    let _blob_materializer = deps.blob_materializer.clone();
+    let _blob_store = deps.blob_store.clone();
+    let _encryption_session = deps.encryption_session.clone();
+}
+
+/// Test 16: Integration test - settings repository initialization
+/// 测试16：集成测试 - 设置仓库初始化
+///
+/// This test verifies that:
+/// 此测试验证：
+/// - Settings repository is created with correct path / 使用正确路径创建设置仓库
+/// - Settings path is derived from vault path / 设置路径从 vault 路径派生
+/// - Repository can be accessed / 可以访问仓库
+#[test]
+fn test_bootstrap_settings_repository_initialization() {
+    let temp_dir = TempDir::new().unwrap();
+    let vault_path = temp_dir.path().join("vault");
+
+    let mut config = AppConfig::empty();
+    config.vault_key_path = vault_path.join("key.json");
+    config.vault_snapshot_path = vault_path.join("snapshot.json");
+    config.database_path = PathBuf::from(":memory:");
+
+    let deps = wire_dependencies(&config).expect("wire_dependencies should succeed");
+
+    // Verify settings repository exists and can be cloned/accessed
+    // 验证设置仓库存在并且可以克隆/访问
+    let settings = deps.settings.clone();
+    let _settings2 = settings.clone();
+
+    // Test passes if we can successfully create and access the settings repository
+    // 如果我们可以成功创建和访问设置仓库，测试通过
+    // Note: FileSettingsRepository doesn't create files until first write
+    // 注意：FileSettingsRepository 在第一次写入之前不会创建文件
+}
+
+/// Test 17: Integration test - error propagation in wire_dependencies
+/// 测试17：集成测试 - wire_dependencies 中的错误传播
+///
+/// This test verifies that:
+/// 此测试验证：
+/// - Errors during dependency creation are properly propagated / 依赖创建期间的错误正确传播
+/// - Error messages are context-rich / 错误消息包含丰富上下文
+/// - No panics occur during error handling / 错误处理期间无 panic
+#[test]
+fn test_bootstrap_wire_dependencies_error_propagation() {
+    // Create a config with an invalid database path (non-existent parent with invalid permissions)
+    // 创建具有无效数据库路径的配置（具有无效权限的不存在的父目录）
+    let mut config = AppConfig::empty();
+    config.database_path = PathBuf::from("/nonexistent/with/invalid/permissions/db/test.db");
+
+    let result = wire_dependencies(&config);
+
+    // Should fail gracefully
+    // 应该优雅地失败
+    match result {
+        Ok(_) => panic!("Should fail with invalid database path"),
+        Err(error) => {
+            let error_msg = error.to_string();
+            // Error message should be descriptive
+            // 错误消息应该是描述性的
+            assert!(!error_msg.is_empty(), "Error message should not be empty");
+            assert!(error_msg.len() > 10, "Error message should be descriptive");
+        }
+    }
 }

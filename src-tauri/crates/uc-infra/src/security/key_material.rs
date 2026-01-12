@@ -11,6 +11,21 @@ pub struct DefaultKeyMaterialService<KR, KS> {
     keyslot_store: KS,
 }
 
+impl<KR, KS> DefaultKeyMaterialService<KR, KS>
+where
+    KR: KeyringPort,
+    KS: KeySlotStore,
+{
+    /// Create a new key material service
+    /// 创建新的密钥材料服务
+    pub fn new(keyring: KR, keyslot_store: KS) -> Self {
+        Self {
+            keyring,
+            keyslot_store,
+        }
+    }
+}
+
 #[async_trait]
 impl<KR, KS> KeyMaterialPort for DefaultKeyMaterialService<KR, KS>
 where

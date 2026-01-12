@@ -4,5 +4,7 @@ mod encryption_state;
 mod key_material;
 mod hashing;
 
+pub use encryption::EncryptionRepository;
 pub use encryption_session::InMemoryEncryptionSession;
+pub use key_material::DefaultKeyMaterialService;
 pub use hashing::Blake3Hasher;

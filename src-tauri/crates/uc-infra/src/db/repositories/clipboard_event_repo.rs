@@ -7,11 +7,12 @@ use crate::db::{
     schema::{clipboard_event, clipboard_snapshot_representation},
 };
 use anyhow::Result;
+use async_trait::async_trait;
 use diesel::prelude::*;
 use uc_core::{
     clipboard::{ClipboardEvent, PersistedClipboardRepresentation},
     ids::EventId,
-    ports::ClipboardEventWriterPort,
+    ports::{ClipboardEventRepositoryPort, ClipboardEventWriterPort},
 };
 
 pub struct DieselClipboardEventRepository<E, ME, MS> {
@@ -76,3 +77,30 @@ where
         })
     }
 }
+
+/// Placeholder implementation for ClipboardEventRepositoryPort
+/// ClipboardEventRepositoryPort 的占位符实现
+///
+/// This is a temporary placeholder until the full implementation is ready.
+/// 这是一个临时占位符，直到完整实现准备好。
+///
+/// TODO: Implement actual clipboard event repository with database queries
+/// 待办：实现实际的剪贴板事件仓库和数据库查询
+#[derive(Debug, Clone)]
+pub struct PlaceholderClipboardEventRepository;
+
+#[async_trait::async_trait]
+impl ClipboardEventRepositoryPort for PlaceholderClipboardEventRepository {
+    async fn get_representation(
+        &self,
+        _id: &EventId,
+        _representation_id: &str,
+    ) -> Result<uc_core::ObservedClipboardRepresentation> {
+        // TODO: Implement actual database query to fetch clipboard representation
+        // 待办：实现实际的数据库查询以获取剪贴板表示
+        Err(anyhow::anyhow!(
+            "ClipboardEventRepositoryPort::get_representation not implemented yet"
+        ))
+    }
+}
+

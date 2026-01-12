@@ -113,6 +113,7 @@ fn delete_kek_with_backend<B: KeyringBackend>(
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct SystemKeyring {}
 
 impl KeyringPort for SystemKeyring {
