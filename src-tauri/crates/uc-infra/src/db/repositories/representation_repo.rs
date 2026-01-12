@@ -1,3 +1,22 @@
+//! Clipboard Representation Repository
+//!
+//! Implements [`ClipboardRepresentationRepositoryPort`] for querying and updating
+//! clipboard snapshot representations stored in SQLite.
+//!
+//! # Usage
+//!
+//! ```rust
+//! use uc_infra::db::repositories::DieselClipboardRepresentationRepository;
+//!
+//! let repo = DieselClipboardRepresentationRepository::new(executor);
+//!
+//! // Query a representation
+//! let rep = repo.get_representation(&event_id, &rep_id).await?;
+//!
+//! // Update blob_id after materialization
+//! repo.update_blob_id(&rep_id, &blob_id).await?;
+//! ```
+
 use crate::db::models::snapshot_representation::SnapshotRepresentationRow;
 use crate::db::mappers::snapshot_representation_mapper::RepresentationRowMapper;
 use crate::db::ports::{DbExecutor, RowMapper};
