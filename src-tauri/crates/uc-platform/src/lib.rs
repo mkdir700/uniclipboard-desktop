@@ -11,4 +11,3 @@ pub mod ipc;
 pub mod keyring;
 pub mod ports;
 pub mod runtime;
-pub mod tauri;

@@ -7,8 +7,6 @@ description = "Platform-specific implementations for UniClipboard (clipboard, se
 [dependencies]
 # Workspace crates
 uc-core = { path = "../uc-core" }
-tauri = { workspace = true }
-tauri-plugin-autostart = { workspace = true }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
