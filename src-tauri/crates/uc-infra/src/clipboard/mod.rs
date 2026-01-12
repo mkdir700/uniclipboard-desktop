@@ -1,5 +1,5 @@
 mod materializer;
-mod projection;
+// mod projection;
 
 pub use materializer::ClipboardRepresentationMaterializer;
-pub use projection::ClipboardProjectionReader;
+// pub use projection::ClipboardProjectionReader;
