@@ -9256,6 +9256,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "uc-tauri"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin-autostart",
+ "thiserror 2.0.17",
+ "tokio",
+ "uc-app",
+ "uc-core",
+]
+
+[[package]]
 name = "ucd-trie"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
