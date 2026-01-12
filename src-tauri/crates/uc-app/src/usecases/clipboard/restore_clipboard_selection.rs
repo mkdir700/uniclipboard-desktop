@@ -42,10 +42,15 @@ where
     ///
     /// ```no_run
     /// use std::sync::Arc;
-    /// // `repo` and `local` should implement the required ports: `ClipboardRepositoryPort` and `LocalClipboardPort`.
-    /// let repo = Arc::new(/* impl of ClipboardRepositoryPort */);
-    /// let local = Arc::new(/* impl of LocalClipboardPort */);
-    /// let use_case = RestoreClipboardSelectionUseCase::new(repo, local);
+    /// use uc_app::usecases::clipboard::restore_clipboard_selection::RestoreClipboardSelectionUseCase;
+    /// // All parameters must implement their respective ports
+    /// let use_case = RestoreClipboardSelectionUseCase::new(
+    ///     clipboard_repo,
+    ///     local_clipboard,
+    ///     selection_repo,
+    ///     representation_repo,
+    ///     blob_store,
+    /// );
     /// ```
     pub fn new(
         clipboard_repo: Arc<C>,
