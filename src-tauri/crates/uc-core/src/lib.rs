@@ -7,6 +7,7 @@
 // Public module exports
 pub mod blob;
 pub mod clipboard;
+pub mod config;
 pub mod device;
 pub mod ids;
 pub mod network;
@@ -17,6 +18,7 @@ pub mod settings;
 // Re-export commonly used types at the crate root
 pub use blob::Blob;
 pub use clipboard::*;
+pub use config::AppConfig;
 pub use device::{Device, DeviceId, DeviceName, DeviceStatus, Platform};
 pub use ids::BlobId;
 pub use ids::{PeerId, SessionId};
