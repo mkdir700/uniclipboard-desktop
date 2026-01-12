@@ -9194,6 +9194,7 @@ dependencies = [
  "config",
  "diesel",
  "diesel_migrations",
+ "dirs 6.0.0",
  "hex",
  "libsqlite3-sys",
  "log",
