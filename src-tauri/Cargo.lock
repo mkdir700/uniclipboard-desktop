@@ -9265,8 +9265,10 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin-autostart",
+ "tempfile",
  "thiserror 2.0.17",
  "tokio",
+ "toml 0.8.23",
  "uc-app",
  "uc-core",
 ]
