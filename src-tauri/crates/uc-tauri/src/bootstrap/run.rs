@@ -1,7 +1,7 @@
 use super::runtime::AppRuntimeSeed;
 use crate::adapters::{TauriAutostart, TauriUiPort};
 use std::sync::Arc;
-use uc_app::App;
+use uc_app::{App, AppDeps};
 
 /// The completed application runtime.
 ///
@@ -60,14 +60,31 @@ pub fn build_runtime(_seed: AppRuntimeSeed, app_handle: &tauri::AppHandle) -> an
     let autostart = Arc::new(TauriAutostart::new(app_handle.clone()));
     let ui_port = Arc::new(TauriUiPort::new(app_handle.clone(), "settings"));
 
-    // Use legacy AppBuilder pattern for backward compatibility
-    // This will be replaced in Phase 3
-    let app = Arc::new(
-        uc_app::AppBuilder::new()
-            .with_autostart(autostart)
-            .with_ui_port(ui_port)
-            .build()?,
-    );
+    // Use direct App construction with AppDeps
+    // TODO: This will be replaced in Phase 3
+    let deps = AppDeps {
+        clipboard: todo!("Inject clipboard port"),
+        clipboard_event_repo: todo!("Inject clipboard event repo"),
+        representation_repo: todo!("Inject representation repo"),
+        representation_materializer: todo!("Inject representation materializer"),
+        encryption: todo!("Inject encryption port"),
+        encryption_session: todo!("Inject encryption session"),
+        keyring: todo!("Inject keyring port"),
+        key_material: todo!("Inject key material port"),
+        device_repo: todo!("Inject device repo"),
+        device_identity: todo!("Inject device identity"),
+        network: todo!("Inject network port"),
+        blob_store: todo!("Inject blob store"),
+        blob_repository: todo!("Inject blob repository"),
+        blob_materializer: todo!("Inject blob materializer"),
+        settings: todo!("Inject settings port"),
+        ui_port,
+        autostart,
+        clock: todo!("Inject clock"),
+        hash: todo!("Inject hash"),
+    };
+
+    let app = Arc::new(App::new(deps));
 
     Ok(Runtime::new(app))
 }

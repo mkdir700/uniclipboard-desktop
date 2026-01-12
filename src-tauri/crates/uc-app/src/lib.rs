@@ -2,13 +2,39 @@
 //!
 //! This crate contains business logic use cases and runtime orchestration.
 
+use std::sync::Arc;
+use uc_core::ports::{AutostartPort, UiPort};
+
 pub mod bootstrap;
-pub mod builder;
 pub mod deps;
 pub mod models;
 pub mod ports;
 pub mod usecases;
 
-pub use builder::{App, AppBuilder};
 pub use deps::AppDeps;
 pub use models::ClipboardEntryProjection;
+
+/// The application runtime.
+pub struct App {
+    /// Dependency grouping for direct construction
+    pub deps: Option<AppDeps>,
+
+    /// Public fields for backward compatibility
+    pub autostart: Arc<dyn AutostartPort>,
+    pub ui_port: Arc<dyn UiPort>,
+}
+
+impl App {
+    /// Create new App instance from dependencies
+    ///
+    /// All dependencies must be provided - no defaults, no optionals.
+    pub fn new(deps: AppDeps) -> Self {
+        let (autostart, ui_port) = (deps.autostart.clone(), deps.ui_port.clone());
+
+        Self {
+            deps: Some(deps),
+            autostart,
+            ui_port,
+        }
+    }
+}
