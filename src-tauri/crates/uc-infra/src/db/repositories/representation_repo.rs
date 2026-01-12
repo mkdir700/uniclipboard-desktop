@@ -80,3 +80,65 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::models::snapshot_representation::NewSnapshotRepresentationRow;
+    use crate::db::schema::clipboard_snapshot_representation;
+    use diesel::prelude::*;
+    use uc_core::{clipboard::PersistedClipboardRepresentation, ids::{RepresentationId, EventId, FormatId}, MimeType};
+
+    // Note: This requires a test database setup.
+    // For now, we provide the test structure that can be run with proper test DB.
+    // Actual execution requires test container or in-memory SQLite setup.
+
+    #[tokio::test]
+    async fn test_get_representation_found() {
+        // TODO: Set up test database connection
+        // This test requires DbExecutor implementation for testing
+
+        // let executor = TestDbExecutor::new();
+        // let repo = DieselClipboardRepresentationRepository::new(executor);
+
+        // // Insert test data
+        // executor.run(|conn| {
+        //     diesel::insert_into(clipboard_snapshot_representation::table)
+        //         .values(&NewSnapshotRepresentationRow {
+        //             id: "test-rep-1".to_string(),
+        //             event_id: "test-event-1".to_string(),
+        //             format_id: "public.text".to_string(),
+        //             mime_type: Some("text/plain".to_string()),
+        //             size_bytes: 10,
+        //             inline_data: Some(vec![1, 2, 3]),
+        //             blob_id: None,
+        //         })
+        //         .execute(conn)
+        //         .unwrap();
+        // });
+
+        // let result = repo
+        //     .get_representation(
+        //         &EventId::from("test-event-1".to_string()),
+        //         &RepresentationId::from("test-rep-1".to_string()),
+        //     )
+        //     .await
+        //     .unwrap();
+
+        // assert!(result.is_some());
+        // let rep = result.unwrap();
+        // assert_eq!(rep.format_id.to_string(), "public.text");
+    }
+
+    #[tokio::test]
+    async fn test_get_representation_not_found() {
+        // TODO: Set up test database
+        // Test that Ok(None) is returned for non-existent representation
+    }
+
+    #[tokio::test]
+    async fn test_update_blob_id() {
+        // TODO: Set up test database
+        // Test that blob_id is correctly updated
+    }
+}
