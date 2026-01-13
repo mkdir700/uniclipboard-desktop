@@ -574,7 +574,8 @@ fn test_bootstrap_wire_dependencies_creates_real_repositories() {
 
     // Verify clipboard repositories
     // 验证剪贴板仓库
-    let _clipboard_entry_repo = deps.clipboard_event_repo.clone();
+    let _clipboard_entry_repo = deps.clipboard_entry_repo.clone();
+    let _clipboard_event_repo = deps.clipboard_event_repo.clone();
     let _representation_repo = deps.representation_repo.clone();
 
     // Verify device repository

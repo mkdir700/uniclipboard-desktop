@@ -24,6 +24,7 @@ use uc_core::ports::*;
 pub struct AppDeps {
     // Clipboard dependencies / 剪贴板依赖
     pub clipboard: Arc<dyn SystemClipboardPort>,
+    pub clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     pub clipboard_event_repo: Arc<dyn ClipboardEventRepositoryPort>,
     pub representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
     pub representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,

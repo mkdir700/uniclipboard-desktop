@@ -64,6 +64,7 @@ pub fn build_runtime(_seed: AppRuntimeSeed, app_handle: &tauri::AppHandle) -> an
     // TODO: This will be replaced in Phase 3
     let _deps = AppDeps {
         clipboard: todo!("Inject clipboard port"),
+        clipboard_entry_repo: todo!("Inject clipboard entry repo"),
         clipboard_event_repo: todo!("Inject clipboard event repo"),
         representation_repo: todo!("Inject representation repo"),
         representation_materializer: todo!("Inject representation materializer"),

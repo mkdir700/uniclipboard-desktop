@@ -463,6 +463,7 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     let deps = AppDeps {
         // Clipboard dependencies / 剪贴板依赖
         clipboard: platform.clipboard,
+        clipboard_entry_repo: infra.clipboard_entry_repo,
         clipboard_event_repo: infra.clipboard_event_repo,
         representation_repo: infra.representation_repo,
         representation_materializer: platform.representation_materializer,
