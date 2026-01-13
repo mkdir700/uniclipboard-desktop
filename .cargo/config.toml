@@ -1,29 +1,3 @@
-# 增大缓存大小 (incremental 已移至 profile.dev)
-[build]
-incremental = true
-
-# macOS优化
-[target.aarch64-apple-darwin]
-rustflags = ["-C", "target-cpu=native"]
-
-# 启用pipelining以加速链接
-[profile.dev]
-codegen-units = 16
-
-# 依赖优化
-[profile.dev.package."*"]
-
-# 对第三方包使用发布优化但保留调试信息
-opt-level = 1
-debug = false
-
-# 对特定的慢速编译包进行优化
-[profile.dev.package.objc2]
-opt-level = 3
-codegen-units = 1
-
-[profile.dev.package.image]
-opt-level = 2
-
-[profile.dev.package.clipboard-rs]
-opt-level = 2
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
+ar = "x86_64-w64-mingw32-ar"

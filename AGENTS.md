@@ -1,21 +1,66 @@
-<!-- OPENSPEC:START -->
+Fix root causes, not symptoms
+No patchy or workaround-driven solutions.
 
-# OpenSpec Instructions
+Respect Hexagonal Architecture
+uc-app → uc-core ← uc-infra / uc-platform
+The core must not depend on external implementations.
 
-These instructions are for AI assistants working in this project.
+All external capabilities go through Ports
+DB, FS, Clipboard, Network, Crypto — no exceptions.
 
-Always open `@/openspec/AGENTS.md` when the request:
+No unwrap() or expect() in production code
+Explicit error handling only. Tests are the only exception.
 
-- Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
-- Sounds ambiguous and you need the authoritative spec before coding
+No silent failures in async or event-driven code
+Errors must be logged and observable by upper layers.
 
-Use `@/openspec/AGENTS.md` to learn:
+Tauri state must be managed before startup
+Any type accessed via tauri::State<T> must be registered with .manage().
 
-- How to create and apply change proposals
-- Spec format and conventions
-- Project structure and guidelines
+No fixed-pixel layouts in the frontend
+Use Tailwind utilities or rem units.
 
-Keep this managed block so 'openspec update' can refresh the instructions.
+Do not fix “feelings”, fix structure
+Repeated workarounds indicate architectural flaws.
 
-<!-- OPENSPEC:END -->
+Short-term compromises must be reversible
+Never break boundaries; always leave explicit TODOs.
+
+## Rustdoc Bilingual Documentation Guide
+
+### Recommended Approach: Structured Bilingual Side-by-Side
+
+**Applicable Scenarios**
+
+- Projects for long-term maintenance
+- Need complete cargo doc output
+- API / core / public interface documentation
+
+**Example Usage**
+
+```rust
+/// Load or create a local device identity.
+///
+/// 加载或创建本地设备标识。
+///
+/// # Behavior / 行为
+/// - If an ID exists on disk, it will be loaded.
+/// - Otherwise, a new ID will be generated and persisted.
+///
+/// - 如果磁盘上已有 ID，则直接加载。
+/// - 否则生成新的 ID 并持久化保存。
+pub fn load_or_create() -> Result<Self> {
+    // ...
+}
+```
+
+**Advantages**
+
+- Fully supported by Rustdoc
+- English first (external), Chinese supplement (internal)
+- Minimal cost to remove either language in the future
+
+**Best Practices**
+
+- English first, Chinese second (follows open source and IDE ecosystem conventions)
+- Use subheadings to differentiate (# Behavior / 行为)

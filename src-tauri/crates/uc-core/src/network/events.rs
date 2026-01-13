@@ -1,0 +1,134 @@
+use super::protocol::{ClipboardMessage, PairingRequest, PairingResponse};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+/// Network status for P2P connection
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum NetworkStatus {
+    Disconnected,
+    Connecting,
+    Connected,
+    Error(String),
+}
+
+/// A peer discovered via mDNS
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveredPeer {
+    pub peer_id: String,
+    pub device_name: Option<String>,
+    /// 6-digit device ID (from Identify agent_version)
+    pub device_id: Option<String>,
+    pub addresses: Vec<String>,
+    pub discovered_at: DateTime<Utc>,
+    pub is_paired: bool,
+}
+
+/// A peer we have an active connection with
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectedPeer {
+    pub peer_id: String,
+    pub device_name: String,
+    pub connected_at: DateTime<Utc>,
+}
+
+/// Core network events (domain layer)
+/// Infrastructure-specific events should extend this
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NetworkEvent {
+    // Discovery events
+    PeerDiscovered(DiscoveredPeer),
+    PeerLost(String), // peer_id
+    /// A peer's device name was updated (via DeviceAnnounce message or Identify)
+    PeerNameUpdated {
+        peer_id: String,
+        device_name: String,
+    },
+
+    // Connection events
+    PeerConnected(ConnectedPeer),
+    PeerDisconnected(String), // peer_id
+
+    // Readiness events (protocol-agnostic)
+    /// A peer is now ready to receive broadcast messages
+    PeerReady {
+        peer_id: String,
+    },
+    /// A peer is no longer ready to receive broadcast messages
+    PeerNotReady {
+        peer_id: String,
+    },
+
+    // Pairing events
+    PairingRequestReceived {
+        session_id: String,
+        peer_id: String,
+        request: PairingRequest,
+    },
+    PairingPinReady {
+        session_id: String,
+        pin: String,
+        peer_device_name: String, // Responder's device name (for initiator to display)
+        peer_device_id: String,   // Responder's 6-digit device ID
+    },
+    PairingResponseReceived {
+        session_id: String,
+        peer_id: String,
+        response: PairingResponse,
+    },
+    PairingComplete {
+        session_id: String,
+        peer_id: String,
+        /// Peer's 6-digit device ID (stable identifier from database)
+        peer_device_id: String,
+        /// Peer device name (the other device's name, not this device's name)
+        peer_device_name: String,
+    },
+    PairingFailed {
+        session_id: String,
+        error: String,
+    },
+
+    // Clipboard events
+    ClipboardReceived(ClipboardMessage),
+    ClipboardSent {
+        id: String,
+        peer_count: usize,
+    },
+
+    // Status events
+    StatusChanged(NetworkStatus),
+    #[allow(dead_code)]
+    Error(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_network_status_serialization() {
+        let status = NetworkStatus::Connected;
+        let json = serde_json::to_string(&status).unwrap();
+        let deserialized: NetworkStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(status, deserialized);
+    }
+
+    #[test]
+    fn test_discovered_peer_serialization() {
+        let peer = DiscoveredPeer {
+            peer_id: "12D3KooW...".to_string(),
+            device_name: Some("Test Device".to_string()),
+            device_id: Some("ABC123".to_string()),
+            addresses: vec!["/ip4/192.168.1.100/tcp/8000".to_string()],
+            discovered_at: Utc::now(),
+            is_paired: false,
+        };
+
+        let json = serde_json::to_string(&peer).unwrap();
+        let deserialized: DiscoveredPeer = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.peer_id, peer.peer_id);
+        assert_eq!(deserialized.device_name, peer.device_name);
+        assert!(!deserialized.is_paired);
+    }
+}

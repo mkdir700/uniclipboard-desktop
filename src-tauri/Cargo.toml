@@ -18,78 +18,81 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# ===== Workspace crates =====
+uc-core = { path = "crates/uc-core" }
+uc-app = { path = "crates/uc-app" }
+uc-platform = { path = "crates/uc-platform" }
+uc-infra = { path = "crates/uc-infra" }
+uc-tauri = { path = "crates/uc-tauri" }
+
 # ===== Tauri 相关依赖 =====
-tauri = { version = "2", features = [] }  # Tauri 框架核心库
-tauri-plugin-opener = "2"  # 用于打开文件或URL的Tauri插件
-tauri-plugin-devtools = "2.0.0"  # Tauri开发工具插件
-tauri-plugin-decorum = "1"  # Windows窗口管理插件，提供原生Windows窗口行为
+tauri = { version = "2", features = [] } # Tauri 框架核心库
+tauri-plugin-opener = "2"                # 用于打开文件或URL的Tauri插件
+tauri-plugin-devtools = "2.0.0"          # Tauri开发工具插件
+tauri-plugin-decorum = "1"               # Windows窗口管理插件，提供原生Windows窗口行为
 
 # ===== 序列化/数据处理 =====
-serde = { version = "1", features = ["derive"] }  # 序列化和反序列化框架
-serde_json = "1"  # JSON数据处理
-toml = "0.8.19"  # TOML配置文件解析
-bincode = "1.3"  # 二进制序列化，用于 BlobStream 帧格式
-hex = "0.4"  # 十六进制编码/解码
+serde = { version = "1", features = ["derive"] } # 序列化和反序列化框架
+serde_json = "1"                                 # JSON数据处理
+toml = "0.8.19"                                  # TOML配置文件解析
+bincode = "1.3"                                  # 二进制序列化，用于 BlobStream 帧格式
+hex = "0.4"                                      # 十六进制编码/解码
 
 # ===== 异步/网络相关 =====
-tokio = { version = "1.28", features = ["full"] }  # 异步运行时
-tokio-util = { version = "0.7", features = ["codec"] }  # Tokio实用工具
-tokio-tungstenite = "0.19"  # WebSocket客户端和服务器实现
-futures-util = "0.3"  # Future相关工具
-futures = "0.3.30"  # 异步编程工具
-async-trait = "0.1.82"  # 异步特性支持
-warp = "0.3.7"  # Web服务器框架
-local-ip-address = "0.6.4"  # 获取本地IP地址
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }  # HTTP客户端，用于内容下载
+tokio = { version = "1.28", features = ["full"] } # 异步运行时
+tokio-util = { version = "0.7", features = ["codec"] } # Tokio实用工具
+futures-util = "0.3" # Future相关工具
+futures = "0.3.30" # 异步编程工具
+async-trait = "0.1.82" # 异步特性支持
+local-ip-address = "0.6.4" # 获取本地IP地址
+reqwest = { version = "0.12", default-features = false, features = [
+  "rustls-tls",
+  "json",
+] } # HTTP客户端，用于内容下载
 # ===== libp2p P2P 网络 =====
-libp2p = { version = "0.56", features = ["tokio", "tcp", "noise", "yamux", "mdns", "gossipsub", "request-response", "identify", "macros", "quic", "ping"] }  # P2P网络库
-libp2p-stream = { version = "0.4.0-alpha" }  # 流式协议支持（alpha 版本）
-x25519-dalek = { version = "2", features = ["static_secrets", "getrandom"] }  # ECDH密钥交换
-blake3 = "1.5"  # 快速哈希函数，用于分片流协议
+libp2p = { version = "0.56", features = [
+  "tokio",
+  "tcp",
+  "noise",
+  "yamux",
+  "mdns",
+  "gossipsub",
+  "request-response",
+  "identify",
+  "macros",
+  "quic",
+  "ping",
+] } # P2P网络库
+libp2p-stream = { version = "0.4.0-alpha" } # 流式协议支持（alpha 版本）
+x25519-dalek = { version = "2", features = [
+  "static_secrets",
+  "getrandom",
+] } # ECDH密钥交换
+blake3 = "1.5" # 快速哈希函数，用于分片流协议
 
 # ===== 加密/安全 =====
-sha2 = "0.10.8"  # SHA-2哈希函数
-base64 = "0.22.1"  # Base64编码/解码
+sha2 = "0.10.8"     # SHA-2哈希函数
+base64 = "0.22.1"   # Base64编码/解码
 aes-gcm = "0.10.3"  # AES-GCM加密算法
-subtle = "2.5"  # Constant-time comparisons
+subtle = "2.5"      # Constant-time comparisons
 twox-hash = "1.6.3"
 
 # ===== 文件/系统操作 =====
-bytes = "1.7.1"  # 字节处理工具
-dirs = "6.0.0"  # 跨平台目录路径
-gethostname = "1.1.0"  # 获取主机名
-
-# ===== 数据库 =====
-diesel = { version = "2.2.0", features = [
-  "sqlite",
-  "returning_clauses_for_sqlite_3_35",
-  "r2d2",
-] }  # ORM数据库框架
-# build libsqlite3 as part of the build process
-# uncomment this line if you run into setup issues
-libsqlite3-sys = { version = "0.30", features = ["bundled"] }  # SQLite系统库绑定
-# libsqlite3-sys = { version = "0.30" }
-diesel_migrations = { version = "2.2.0", features = ["sqlite"] }  # Diesel迁移工具
-
-# ===== 图像处理 =====
-image = "0.25.2"  # 图像处理库
-png = "0.17.14"  # PNG图像处理
-
-# ===== 剪贴板 =====
-clipboard-rs = "0.2.1"  # 剪贴板操作库
+bytes = "1.7.1"       # 字节处理工具
+dirs = "6.0.0"        # 跨平台目录路径
+gethostname = "1.1.0" # 获取主机名
 
 # ===== 日志/错误处理 =====
-anyhow = "1.0.98"  # 错误处理
-log = "0.4.27"  # 日志库
-tauri-plugin-log = "2"  # Tauri 日志插件（替代 env_logger）
+anyhow = "1.0.98"      # 错误处理
+log = "0.4.27"         # 日志库
+tauri-plugin-log = "2" # Tauri 日志插件（替代 env_logger）
 
 # ===== 工具/辅助功能 =====
-regex = "1.9.5"  # 正则表达式
-rand = "0.9.1"  # 随机数生成
-chrono = { version = "0.4.38", features = ["serde"] }  # 日期和时间处理
-once_cell = "1.19.0"  # 延迟初始化
-lazy_static = "1.4.0"  # 延迟静态变量
-dotenvy = "0.15"  # 环境变量管理
+regex = "1.9.5"                                       # 正则表达式
+rand = "0.9.1"                                        # 随机数生成
+chrono = { version = "0.4.38", features = ["serde"] } # 日期和时间处理
+once_cell = "1.19.0"                                  # 延迟初始化
+dotenvy = "0.15"                                      # 环境变量管理
 tauri-plugin-stronghold = "2"
 argon2 = "0.5.3"
 iota_stronghold = "2.1.0"
@@ -142,3 +145,19 @@ serial_test = "3.1.1"
 enigo = "0.2.1"
 arboard = "3.4.1"
 ctor = "0.2.8"
+
+[workspace]
+members = [
+  "crates/uc-core",
+  "crates/uc-app",
+  "crates/uc-platform",
+  "crates/uc-infra",
+  "crates/uc-clipboard-probe",
+  "crates/uc-tauri",
+]
+resolver = "2"
+
+# Dependencies for workspace crates, mainly for tauri plugins
+[workspace.dependencies]
+tauri = "2"
+tauri-plugin-autostart = "2"

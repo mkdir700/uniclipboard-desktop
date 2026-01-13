@@ -1,0 +1,62 @@
+[package]
+name = "uc-infra"
+version = "0.1.0"
+edition = "2021"
+description = "Infrastructure utilities and shared components for UniClipboard"
+
+[dependencies]
+# ===== Workspace crates =====
+uc-core = { path = "../uc-core" }
+uc-app = { path = "../uc-app" }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Async traits
+async-trait = "0.1"
+
+# ===== 数据库 =====
+diesel = { version = "2.3.5", features = [
+    "sqlite",
+    "returning_clauses_for_sqlite_3_35",
+    "r2d2",
+] } # ORM数据库框架
+# build libsqlite3 as part of the build process
+# uncomment this line if you run into setup issues
+libsqlite3-sys = { version = "0.35", features = ["bundled"] }    # SQLite系统库绑定
+diesel_migrations = { version = "2.2.0", features = ["sqlite"] } # Diesel迁移工具
+
+# File system paths
+dirs = "6.0"
+
+# Async runtime (for mpsc channels in ports)
+tokio = { version = "1", features = [
+    "sync",
+    "fs",
+    "rt-multi-thread",
+    "macros",
+] }
+
+log = "0.4.29"
+argon2 = "0.5.3"
+chacha20poly1305 = "0.10.1"
+rand = "0.9.2"
+blake3 = "1.8.2"
+hex = "0.4.3"
+config = "0.15.19"
+
+[dependencies.uuid]
+version = "1.10.0"
+features = ["v4"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
+tempfile = "3"

@@ -1,0 +1,43 @@
+[package]
+name = "uc-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core domain models and business logic for UniClipboard"
+
+[dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+anyhow = "1.0"
+
+# Async traits
+async-trait = "0.1"
+
+# Hashing (for Payload)
+twox-hash = "1.6"
+
+# Base64 encoding
+base64 = "0.22"
+
+# Bytes handling
+bytes = "1.7"
+
+# Async runtime (for mpsc channels in ports)
+tokio = { version = "1", features = ["sync"] }
+thiserror = "2.0.17"
+serde_with = "3.16.1"
+rand = "0.9.2"
+blake3 = "1.8.2"
+hex = "0.4.3"
+
+uuid = { version = "1", features = ["v4", "fast-rng"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+mockall = "0.14.0"

@@ -1,0 +1,29 @@
+//! # Platform Adapters / 平台适配器
+//!
+//! This module contains platform-specific implementations for ports.
+//! 此模块包含端口的各种平台特定实现。
+//!
+//! # Modules / 模块
+//!
+//! - `blob_store` - Filesystem-based blob storage (implemented)
+//! - `blob` - Placeholder blob materializer (to be replaced)
+//! - `autostart` - Placeholder autostart management
+//! - `clipboard` - Placeholder clipboard materialization
+//! - `encryption` - Placeholder encryption session management
+//! - `network` - Placeholder P2P networking
+//! - `ui` - Placeholder UI operations
+
+pub mod autostart;
+pub mod blob;
+pub mod blob_store;
+pub mod clipboard;
+pub mod encryption;
+pub mod network;
+pub mod ui;
+
+pub use autostart::PlaceholderAutostartPort;
+pub use blob::PlaceholderBlobMaterializerPort;
+pub use blob_store::{FilesystemBlobStore, PlaceholderBlobStorePort};
+pub use encryption::{InMemoryEncryptionSessionPort, PlaceholderEncryptionSessionPort};
+pub use network::PlaceholderNetworkPort;
+pub use ui::PlaceholderUiPort;
