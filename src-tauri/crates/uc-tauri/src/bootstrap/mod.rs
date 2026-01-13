@@ -9,3 +9,4 @@ pub mod run;
 // Re-export commonly used bootstrap functions
 pub use config::load_config;
 pub use wiring::wire_dependencies;
+pub use runtime::{create_app, create_runtime};
