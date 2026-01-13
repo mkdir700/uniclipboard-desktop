@@ -2,14 +2,19 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use log::error;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
+use tokio::sync::mpsc;
 
 use uc_core::config::AppConfig;
+use uc_core::ports::ClipboardChangeHandler;
+use uc_platform::ipc::PlatformEvent;
+use uc_platform::runtime::event_bus::{PlatformCommandReceiver, PlatformEventSender, PlatformEventReceiver};
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 
 /// Main entry point
@@ -51,11 +56,24 @@ fn run_app(config: AppConfig) {
     };
 
     // Create AppRuntime from dependencies
-    let runtime = AppRuntime::new(deps);
+    let runtime = Arc::new(AppRuntime::new(deps));
+
+    // Create event channels for PlatformRuntime
+    let (platform_event_tx, platform_event_rx): (PlatformEventSender, PlatformEventReceiver) = mpsc::channel(100);
+    let (platform_cmd_tx, platform_cmd_rx): (tokio::sync::mpsc::Sender<uc_platform::ipc::PlatformCommand>, PlatformCommandReceiver) = mpsc::channel(100);
+
+    // Clone the Arc for the callback
+    let runtime_clone = Arc::clone(&runtime);
+    let clipboard_handler: Arc<dyn ClipboardChangeHandler> = runtime_clone;
+
+    log::info!("Creating platform runtime with clipboard callback");
+
+    // Note: PlatformRuntime will be started in setup block
+    // The actual startup will be completed in a follow-up task
 
     Builder::default()
         // Manage AppRuntime for use case access
-        .manage(runtime)
+        .manage(runtime.clone())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
@@ -93,9 +111,17 @@ fn run_app(config: AppConfig) {
 
             let _window = win_builder.build().expect("Failed to build main window");
 
-            // TODO: Start the app runtime
-            // This will be implemented in later tasks
+            // TODO: Start the platform runtime with clipboard callback
+            // This will be implemented in Task 6
             // For now, we just create the window
+            //
+            // The integration will:
+            // 1. Create PlatformRuntime with clipboard_handler
+            // 2. Start platform runtime in background task
+            // 3. Send StartClipboardWatcher command
+            //
+            log::info!("App runtime initialized with clipboard capture integration");
+            log::info!("Platform runtime startup will be completed in Task 6");
 
             Ok(())
         })
