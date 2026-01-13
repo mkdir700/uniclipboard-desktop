@@ -149,6 +149,34 @@ impl<'a> UseCases<'a> {
         uc_app::usecases::ListClipboardEntries::from_arc(self.runtime.deps.clipboard_entry_repo.clone())
     }
 
+    /// Security use cases / 安全用例
+    ///
+    /// Get the InitializeEncryption use case for setting up encryption.
+    ///
+    /// 获取 InitializeEncryption 用例以设置加密。
+    ///
+    /// ## Example / 示例
+    ///
+    /// ```rust,no_run
+    /// # use uc_tauri::bootstrap::AppRuntime;
+    /// # use tauri::State;
+    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<(), String> {
+    /// let uc = runtime.usecases().initialize_encryption();
+    /// uc.execute(uc_core::security::model::Passphrase("my_pass".to_string()))
+    ///     .await
+    ///     .map_err(|e| e.to_string())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn initialize_encryption(&self) -> uc_app::usecases::InitializeEncryption {
+        uc_app::usecases::InitializeEncryption::from_ports(
+            self.runtime.deps.encryption.clone(),
+            self.runtime.deps.key_material.clone(),
+            self.runtime.deps.key_scope.clone(),
+            self.runtime.deps.encryption_state.clone(),
+        )
+    }
+
     // NOTE: Other use case methods will be added as the use case design evolves
     // to support trait object instantiation. Currently, use cases with generic
     // type parameters cannot be instantiated through this accessor.
