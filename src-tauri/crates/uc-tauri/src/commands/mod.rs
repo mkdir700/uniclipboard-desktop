@@ -1,5 +1,4 @@
 pub mod clipboard;
-pub mod dto;
 pub mod encryption;
 pub mod error;
 pub mod settings;
