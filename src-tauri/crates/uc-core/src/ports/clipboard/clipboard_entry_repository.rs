@@ -10,4 +10,8 @@ pub trait ClipboardEntryRepositoryPort: Send + Sync {
         selection: &ClipboardSelectionDecision,
     ) -> Result<()>;
     async fn get_entry(&self, entry_id: &EntryId) -> Result<Option<ClipboardEntry>>;
+
+    /// List clipboard entries with pagination
+    /// 列出剪贴板条目（分页）
+    async fn list_entries(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>>;
 }

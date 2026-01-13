@@ -1,17 +1,19 @@
 //! Factory functions for creating use cases with AppDeps
 //! 使用 AppDeps 创建用例的工厂函数
 
-/// Factory module status
+/// Use Case Factory
 ///
-/// NOTE: This is a placeholder factory module. Most factory functions
-/// currently return None because their dependencies are not yet in AppDeps.
+/// NOTE: Due to Rust's trait object limitations (Arc<dyn Trait> doesn't implement Trait),
+/// we cannot use generic factory functions that return use cases with concrete type parameters.
 ///
-/// 注意：这是一个占位符工厂模块。大多数工厂函数目前返回 None，
-/// 因为它们的依赖尚未添加到 AppDeps。
+/// Instead, commands should directly use dependencies from AppDeps.
+/// This keeps the design simple and avoids complex type erasure patterns.
 ///
-/// As ports are added to AppDeps, factory functions will be implemented
-/// to return Some(use_case) when all dependencies are available.
-/// 当端口添加到 AppDeps 后，工厂函数将被实现为在所有依赖可用时返回 Some(use_case)。
+/// 注意：由于 Rust trait 对象的限制（Arc<dyn Trait> 不实现 Trait），
+/// 我们无法使用返回具体类型参数用例的泛型工厂函数。
+///
+/// 相反，命令应该直接使用 AppDeps 中的依赖。
+/// 这保持了设计简单，避免了复杂的类型擦除模式。
 
 /// Module placeholder for future factory implementations
 /// 未来工厂实现的模块占位符
@@ -20,10 +22,8 @@ mod tests {
     #[test]
     fn test_factory_module_exists() {
         // This test documents that the factory module exists
-        // and will be populated with factory functions as dependencies
-        // are added to AppDeps
-        // 此测试记录工厂模块存在，并将在依赖添加到 AppDeps 时
-        // 用工厂函数填充
-        assert!(true, "Factory module structure exists");
+        // and commands should use AppDeps directly
+        // 此测试记录工厂模块存在，命令应直接使用 AppDeps
+        assert!(true, "Factory module structure exists - use AppDeps directly in commands");
     }
 }

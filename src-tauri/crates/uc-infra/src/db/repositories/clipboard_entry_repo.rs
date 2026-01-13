@@ -6,6 +6,9 @@ use crate::db::ports::{InsertMapper, RowMapper};
 use crate::db::schema::{clipboard_entry, clipboard_selection};
 use anyhow::Result;
 use diesel::query_dsl::methods::FilterDsl;
+use diesel::query_dsl::methods::LimitDsl;
+use diesel::query_dsl::methods::OffsetDsl;
+use diesel::query_dsl::methods::OrderDsl;
 use diesel::Connection;
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
@@ -78,6 +81,21 @@ where
                 }
                 None => Ok(None),
             }
+        })
+    }
+
+    async fn list_entries(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
+        self.executor.run(|conn| {
+            let entry_rows = clipboard_entry::table
+                .order(clipboard_entry::created_at_ms.desc())
+                .limit(limit as i64)
+                .offset(offset as i64)
+                .load::<ClipboardEntryRow>(conn)?;
+
+            entry_rows
+                .into_iter()
+                .map(|row| self.row_entry_mapper.to_domain(&row))
+                .collect()
         })
     }
 }
