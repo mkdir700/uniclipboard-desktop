@@ -34,6 +34,8 @@ pub struct AppDeps {
     // Security dependencies / 安全依赖
     pub encryption: Arc<dyn EncryptionPort>,
     pub encryption_session: Arc<dyn EncryptionSessionPort>,
+    pub encryption_state: Arc<dyn uc_core::ports::security::encryption_state::EncryptionStatePort>,
+    pub key_scope: Arc<dyn uc_core::ports::security::key_scope::KeyScopePort>,
     pub keyring: Arc<dyn KeyringPort>,
     pub key_material: Arc<dyn KeyMaterialPort>,
 

@@ -52,7 +52,7 @@ use uc_infra::db::repositories::{
     DieselDeviceRepository, InMemoryClipboardSelectionRepository,
 };
 use uc_infra::fs::key_slot_store::JsonKeySlotStore;
-use uc_infra::security::{Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository};
+use uc_infra::security::{Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository};
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::SystemClock;
 use uc_infra::device::LocalDeviceIdentity;
@@ -155,6 +155,7 @@ struct InfraLayer {
     // Security services / 安全服务
     key_material: Arc<dyn KeyMaterialPort>,
     encryption: Arc<dyn EncryptionPort>,
+    encryption_state: Arc<dyn uc_core::ports::security::encryption_state::EncryptionStatePort>,
 
     // Settings / 设置
     settings_repo: Arc<dyn SettingsPort>,
@@ -200,6 +201,9 @@ struct PlatformLayer {
 
     // Encryption session / 加密会话（占位符）
     encryption_session: Arc<dyn EncryptionSessionPort>,
+
+    // Key scope / 密钥范围
+    key_scope: Arc<dyn uc_core::ports::security::key_scope::KeyScopePort>,
 }
 
 /// Create infrastructure layer implementations
@@ -300,6 +304,11 @@ fn create_infra_layer(
     // 创建加密服务
     let encryption: Arc<dyn EncryptionPort> = Arc::new(EncryptionRepository);
 
+    // Create encryption state repository
+    // 创建加密状态仓库
+    let encryption_state: Arc<dyn uc_core::ports::security::encryption_state::EncryptionStatePort> =
+        Arc::new(FileEncryptionStateRepository::new(vault_path.clone()));
+
     // Create settings repository
     // 创建设置仓库
     let settings_repo: Arc<dyn SettingsPort> = Arc::new(FileSettingsRepository::new(settings_path));
@@ -323,6 +332,7 @@ fn create_infra_layer(
         blob_repository,
         key_material,
         encryption,
+        encryption_state,
         settings_repo,
         clock,
         hash,
@@ -392,6 +402,11 @@ fn create_platform_layer(
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
 
+    // Create key scope
+    // 创建密钥范围
+    let key_scope: Arc<dyn uc_core::ports::security::key_scope::KeyScopePort> =
+        Arc::new(uc_platform::key_scope::DefaultKeyScope::new());
+
     Ok(PlatformLayer {
         clipboard,
         keyring,
@@ -403,6 +418,7 @@ fn create_platform_layer(
         blob_materializer,
         blob_store,
         encryption_session,
+        key_scope,
     })
 }
 
@@ -481,6 +497,8 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
         // Security dependencies / 安全依赖
         encryption: infra.encryption,
         encryption_session: platform.encryption_session,
+        encryption_state: infra.encryption_state,
+        key_scope: platform.key_scope,
         keyring: platform.keyring,
         key_material: infra.key_material,
 
