@@ -516,3 +516,242 @@ Ok(AppDeps {
 - [Bootstrap System](bootstrap.md) - How dependency injection works
 - [Error Handling](../guides/error-handling.md) - Error handling strategy
 - [Overview](../overview.md) - Project overview and crate structure
+
+## Architecture Decision: Use `dyn Port` in uc-app Use Cases
+
+### Decision / 决定
+
+**Use cases in `uc-app` MUST use `dyn Port` trait objects instead of generic type parameters.**
+
+```rust
+// ✅ CORRECT - Use trait objects
+pub struct InitializeEncryption {
+    encryption: Arc<dyn EncryptionPort>,
+    key_material: Arc<dyn KeyMaterialPort>,
+    // ...
+}
+
+// ❌ FORBIDDEN - Use generics
+pub struct InitializeEncryption<E, K, ...>
+where
+    E: EncryptionPort,
+    K: KeyMaterialPort,
+{
+    encryption: Arc<E>,
+    key_material: Arc<K>,
+    // ...
+}
+```
+
+### Rationale / 理由
+
+#### 1. Type Stability / 类型稳定性
+
+**Problem with generics**: Each unique combination of generic parameters creates a distinct type.
+
+```rust
+// ❌ WRONG - Each concrete adapter creates a different type
+type InitCase1 = InitializeEncryption<RustCryptoAdapter, SystemKeyring, ...>;
+type InitCase2 = InitializeEncryption<MockCrypto, InMemoryKeyring, ...>;
+
+// These are DIFFERENT types at compile time!
+// Cannot store in a single UseCases struct without more generics
+```
+
+**Solution with `dyn Port`**: Trait objects provide type erasure, creating a single stable type.
+
+```rust
+// ✅ CORRECT - Single type regardless of concrete implementation
+type InitializeEncryptionUseCase = InitializeEncryption<
+    Arc<dyn EncryptionPort>,
+    Arc<dyn KeyMaterialPort>,
+    Arc<dyn KeyScopePort>,
+    Arc<dyn EncryptionStatePort>,
+>;
+
+// This is ONE type that works with any concrete port implementation
+```
+
+#### 2. Simplified Bootstrap / 简化的引导
+
+**With generics**: Bootstrap code must expose all type parameters, making it fragile to implementation changes.
+
+```rust
+// ❌ WRONG - Bootstrap knows about concrete types
+impl UseCases<'_> {
+    pub fn initialize_encryption(&self) -> InitializeEncryption<
+        RustCryptoAdapter,  // Concrete type leaks here!
+        SystemKeyring,
+        DefaultKeyScope,
+        SqliteEncryptionState,
+    > {
+        InitializeEncryption::new(
+            self.runtime.deps.encryption.clone(),
+            // ...
+        )
+    }
+}
+```
+
+**With `dyn Port`**: Bootstrap only depends on trait interfaces.
+
+```rust
+// ✅ CORRECT - Bootstrap depends on abstractions only
+impl UseCases<'_> {
+    pub fn initialize_encryption(&self) -> InitializeEncryptionUseCase {
+        InitializeEncryptionUseCase::new(
+            self.runtime.deps.encryption.clone(),  // Arc<dyn EncryptionPort>
+            self.runtime.deps.key_material.clone(),
+            self.runtime.deps.key_scope.clone(),
+            self.runtime.deps.encryption_state.clone(),
+        )
+    }
+}
+```
+
+#### 3. Testing Benefits / 测试优势
+
+**With generics**: Tests must either:
+
+- Use the same concrete types as production (not true unit tests)
+- Create complex generic type wrappers
+
+**With `dyn Port`**: Tests can easily inject mock implementations.
+
+```rust
+// ✅ Easy testing with trait objects
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockEncryptionPort;
+    impl EncryptionPort for MockEncryptionPort {
+        fn derive_kek(&self, _: &Passphrase, _: &Salt, _: &KdfParams) -> Result<Key, EncryptionError> {
+            Ok(Key::new([0u8; 32]))
+        }
+    }
+
+    #[test]
+    fn test_initialize_encryption() {
+        let encryption = Arc::new(MockEncryptionPort) as Arc<dyn EncryptionPort>;
+        let use_case = InitializeEncryptionUseCase::new(encryption, /* other mocks */);
+        // Test business logic without real crypto
+    }
+}
+```
+
+#### 4. Dependency Direction / 依赖方向
+
+The `dyn Port` pattern enforces the **Dependency Inversion Principle**:
+
+```text
+✅ CORRECT dependency flow:
+uc-app use cases → uc-core Port traits ← uc-infra implementations
+
+❌ WRONG with generics:
+uc-app use cases → uc-core Port traits
+uc-app also knows about → uc-infra concrete types (via generics!)
+```
+
+With `dyn Port`, `uc-app` truly depends only on abstractions defined in `uc-core`.
+
+### Trade-offs / 权衡
+
+#### Disadvantages / 劣势
+
+1. **Runtime overhead**: Dynamic dispatch has a small performance cost (virtual function call)
+   - **Impact**: Negligible for I/O-bound operations (database, network, crypto)
+   - **Acceptable**: Our use cases are not performance-critical loops
+
+2. **No compile-time specialization**: Cannot optimize for specific port implementations
+   - **Impact**: Minimal - ports are thin wrappers around external operations
+   - **Benefit**: Simpler code, easier refactoring
+
+#### Advantages / 优势
+
+1. **Type stability**: Single type regardless of implementation
+2. **Simplified bootstrap**: No generic type explosion
+3. **Easy testing**: Direct mock injection without type wrappers
+4. **Better separation**: `uc-app` truly depends only on abstractions
+5. **Refactoring safety**: Can swap implementations without changing use case types
+
+### Implementation Pattern / 实现模式
+
+#### Use Case Definition
+
+```rust
+// uc-app/src/usecases/initialize_encryption.rs
+use uc_core::ports::{EncryptionPort, KeyMaterialPort, KeyScopePort, EncryptionStatePort};
+use std::sync::Arc;
+
+pub struct InitializeEncryption {
+    encryption: Arc<dyn EncryptionPort>,
+    key_material: Arc<dyn KeyMaterialPort>,
+    key_scope: Arc<dyn KeyScopePort>,
+    encryption_state_repo: Arc<dyn EncryptionStatePort>,
+}
+
+impl InitializeEncryption {
+    pub fn new(
+        encryption: Arc<dyn EncryptionPort>,
+        key_material: Arc<dyn KeyMaterialPort>,
+        key_scope: Arc<dyn KeyScopePort>,
+        encryption_state_repo: Arc<dyn EncryptionStatePort>,
+    ) -> Self {
+        Self {
+            encryption,
+            key_material,
+            key_scope,
+            encryption_state_repo,
+        }
+    }
+
+    pub async fn execute(&self, passphrase: Passphrase) -> Result<(), UseCaseError> {
+        // Business logic using trait objects
+        let kek = self.encryption
+            .derive_kek(&passphrase, &salt, &kdf)
+            .await?;
+        // ...
+    }
+}
+```
+
+#### Type Alias (Optional but Recommended)
+
+```rust
+// uc-app/src/usecases/mod.rs
+pub type InitializeEncryptionUseCase = InitializeEncryption<
+    Arc<dyn EncryptionPort>,
+    Arc<dyn KeyMaterialPort>,
+    Arc<dyn KeyScopePort>,
+    Arc<dyn EncryptionStatePort>,
+>;
+```
+
+#### UseCases Accessor
+
+```rust
+// uc-tauri/src/bootstrap/runtime.rs
+impl UseCases<'_> {
+    pub fn initialize_encryption(&self) -> InitializeEncryptionUseCase {
+        InitializeEncryptionUseCase::new(
+            self.runtime.deps.encryption.clone(),
+            self.runtime.deps.key_material.clone(),
+            self.runtime.deps.key_scope.clone(),
+            self.runtime.deps.encryption_state.clone(),
+        )
+    }
+}
+```
+
+### When to Use This Pattern
+
+**Apply to**: All use cases in `uc-app` that depend on ports
+
+**Exceptions**: None - this is the mandatory pattern for our architecture
+
+### References / 参考
+
+- [Dynamic Dispatch in Rust](https://doc.rust-lang.org/book/ch17-02-trait-objects.html)
+- [Trait Objects vs. Generics](https://doc.rust-lang.org/book/ch17-02-trait-objects.html#trait-objects-perform-dynamic-dispatch)
+- [Dependency Inversion Principle](https://en.wikipedia.org/wiki/Dependency_inversion_principle)
