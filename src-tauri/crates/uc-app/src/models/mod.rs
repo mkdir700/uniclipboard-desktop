@@ -1,6 +1,3 @@
-mod clipboard_entry_projection;
-
-pub use clipboard_entry_projection::*;
 // TODO: 暂时不知道如何分类，先写这里。
 
 use uc_core::{BlobId, ContentHash, MimeType};
