@@ -96,13 +96,17 @@ fn run_app(config: AppConfig) {
 
             Ok(())
         })
-        // TODO: Register command handlers in Task 3
-        // For now, use a placeholder invoke_handler
-        .invoke_handler(|_event| {
-            // Placeholder: reject all unhandled commands
-            // Note: This is a sync closure, commands will be handled differently
-            false // Return false to indicate event was not handled
-        })
+        // Register Tauri command handlers
+        // Commands are defined in uc-tauri crate and need to be referenced by full path
+        .invoke_handler(tauri::generate_handler![
+            // Clipboard commands
+            uc_tauri::commands::clipboard::get_clipboard_entries,
+            uc_tauri::commands::clipboard::delete_clipboard_entry,
+            uc_tauri::commands::clipboard::capture_clipboard,
+            // Encryption commands
+            uc_tauri::commands::encryption::initialize_encryption,
+            uc_tauri::commands::encryption::is_encryption_initialized,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
