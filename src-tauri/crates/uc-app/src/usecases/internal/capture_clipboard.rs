@@ -9,7 +9,7 @@ use uc_core::ports::{
     ClipboardRepresentationMaterializerPort, DeviceIdentityPort, PlatformClipboardPort,
     SelectRepresentationPolicyPort,
 };
-use uc_core::{ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision};
+use uc_core::{ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, SystemClipboardSnapshot};
 
 /// Capture clipboard content and create persistent entries.
 ///
@@ -120,6 +120,85 @@ where
     pub async fn execute(&self) -> Result<EventId> {
         let snapshot = self.platform_clipboard_port.read_snapshot()?;
 
+        let event_id = EventId::new();
+        let captured_at_ms = snapshot.ts_ms;
+        let source_device = self.device_identity.current_device_id();
+        let snapshot_hash = snapshot.snapshot_hash();
+
+        // 1. 生成 event + snapshot representations
+        let new_event = ClipboardEvent::new(
+            event_id.clone(),
+            captured_at_ms,
+            source_device,
+            snapshot_hash,
+        );
+
+        // 3. event_repo.insert_event
+        let materialized_futures: Vec<_> = snapshot
+            .representations
+            .iter()
+            .map(|rep| self.representation_materializer.materialize(rep))
+            .collect();
+        let materialized_reps = try_join_all(materialized_futures).await?;
+        self.event_writer
+            .insert_event(&new_event, &materialized_reps)
+            .await?;
+
+        // 4. policy.select(snapshot)
+        let entry_id = EntryId::new();
+        let selection = self.representation_policy.select(&snapshot)?;
+        let new_selection = ClipboardSelectionDecision::new(entry_id.clone(), selection);
+
+        // 5. entry_repo.insert_entry
+        let created_at_ms = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("System time before UNIX EPOCH")
+            .as_millis() as i64;
+        let total_size = snapshot.total_size_bytes();
+
+        let new_entry = ClipboardEntry::new(
+            entry_id.clone(),
+            event_id.clone(),
+            created_at_ms,
+            None, // TODO: 暂时为 None
+            total_size,
+        );
+        let _ = self
+            .entry_repo
+            .save_entry_and_selection(&new_entry, &new_selection);
+
+        Ok(event_id)
+    }
+
+    /// Execute the clipboard capture workflow with a pre-captured snapshot.
+    ///
+    /// 执行剪贴板捕获工作流，使用预先捕获的快照。
+    ///
+    /// # Behavior / 行为
+    /// - Uses the provided snapshot instead of reading from platform clipboard
+    /// - Creates event and materializes all representations
+    /// - Applies selection policy to determine optimal representation
+    /// - Persists both event evidence and user-facing entry
+    ///
+    /// - 使用提供的快照而不是从平台剪贴板读取
+    /// - 创建事件并物化所有表示形式
+    /// - 应用选择策略确定最佳表示形式
+    /// - 持久化事件证据和用户可见条目
+    ///
+    /// # Parameters / 参数
+    /// - `snapshot`: Pre-captured clipboard snapshot from platform layer
+    ///               来自平台层的预捕获剪贴板快照
+    ///
+    /// # Returns / 返回值
+    /// - `EventId` of the created capture event
+    /// - 创建的捕获事件的 `EventId`
+    ///
+    /// # When to Use / 使用时机
+    /// - Called from clipboard change callback (snapshot already read)
+    /// - 从剪贴板变化回调调用时（快照已读取）
+    /// - Avoids redundant system clipboard reads
+    /// - 避免重复读取系统剪贴板
+    pub async fn execute_with_snapshot(&self, snapshot: SystemClipboardSnapshot) -> Result<EventId> {
         let event_id = EventId::new();
         let captured_at_ms = snapshot.ts_ms;
         let source_device = self.device_identity.current_device_id();
