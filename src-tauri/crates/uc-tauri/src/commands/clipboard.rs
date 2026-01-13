@@ -11,8 +11,9 @@ pub async fn get_clipboard_entries(
     _deps: State<'_, AppDeps>,
     _limit: Option<usize>,
 ) -> Result<Vec<crate::models::ClipboardEntryProjection>, String> {
-    // TODO: Implement after CreateCaptureClipboardUseCase is ready
-    Err("Not yet implemented".to_string())
+    // For now, return empty list
+    // TODO: Implement after use cases are wired
+    Ok(vec![])
 }
 
 /// Delete a clipboard entry
