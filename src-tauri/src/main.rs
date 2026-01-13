@@ -13,9 +13,43 @@ use tokio::sync::mpsc;
 
 use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
-use uc_platform::ipc::PlatformEvent;
+use uc_platform::ipc::PlatformCommand;
+use uc_platform::ports::PlatformCommandExecutorPort;
 use uc_platform::runtime::event_bus::{PlatformCommandReceiver, PlatformEventSender, PlatformEventReceiver};
+use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
+
+/// Simple executor for platform commands
+///
+/// This is a placeholder implementation that logs commands.
+/// In a full implementation, this would execute the actual platform commands.
+struct SimplePlatformCommandExecutor;
+
+#[async_trait::async_trait]
+impl PlatformCommandExecutorPort for SimplePlatformCommandExecutor {
+    async fn execute(&self, command: PlatformCommand) -> anyhow::Result<()> {
+        // For now, just acknowledge the command
+        // TODO: Implement actual command execution in future tasks
+        match command {
+            PlatformCommand::StartClipboardWatcher => {
+                log::info!("StartClipboardWatcher command received");
+            }
+            PlatformCommand::StopClipboardWatcher => {
+                log::info!("StopClipboardWatcher command received");
+            }
+            PlatformCommand::ReadClipboard => {
+                log::info!("ReadClipboard command received (not implemented)");
+            }
+            PlatformCommand::WriteClipboard { .. } => {
+                log::info!("WriteClipboard command received (not implemented)");
+            }
+            PlatformCommand::Shutdown => {
+                log::info!("Shutdown command received (not implemented)");
+            }
+        }
+        Ok(())
+    }
+}
 
 /// Main entry point
 fn main() {
@@ -111,17 +145,39 @@ fn run_app(config: AppConfig) {
 
             let _window = win_builder.build().expect("Failed to build main window");
 
-            // TODO: Start the platform runtime with clipboard callback
-            // This will be implemented in Task 6
-            // For now, we just create the window
-            //
-            // The integration will:
-            // 1. Create PlatformRuntime with clipboard_handler
-            // 2. Start platform runtime in background task
-            // 3. Send StartClipboardWatcher command
-            //
+            // Start the platform runtime in background
+            let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
+            let platform_event_tx_clone = platform_event_tx.clone();
+            tokio::spawn(async move {
+                log::info!("Platform runtime task started");
+
+                // Send StartClipboardWatcher command to enable monitoring
+                let _ = platform_cmd_tx_for_spawn.send(PlatformCommand::StartClipboardWatcher).await;
+
+                // Create PlatformRuntime with the callback
+                let executor = Arc::new(SimplePlatformCommandExecutor);
+                let platform_runtime = match PlatformRuntime::new(
+                    platform_event_tx_clone,
+                    platform_event_rx,
+                    platform_cmd_rx,
+                    executor,
+                    Some(clipboard_handler),
+                ) {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        log::error!("Failed to create platform runtime: {}", e);
+                        return;
+                    }
+                };
+
+                // Start the platform runtime event loop
+                platform_runtime.start().await;
+
+                log::info!("Platform runtime task ended");
+            });
+
             log::info!("App runtime initialized with clipboard capture integration");
-            log::info!("Platform runtime startup will be completed in Task 6");
+            log::info!("Platform runtime started with clipboard callback");
 
             Ok(())
         })
