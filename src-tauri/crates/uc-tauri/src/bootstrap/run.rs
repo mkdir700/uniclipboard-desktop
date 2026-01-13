@@ -69,6 +69,7 @@ pub fn build_runtime(_seed: AppRuntimeSeed, app_handle: &tauri::AppHandle) -> an
         representation_repo: todo!("Inject representation repo"),
         representation_materializer: todo!("Inject representation materializer"),
         selection_repo: todo!("Inject selection repo"),
+        representation_policy: todo!("Inject representation policy"),
         encryption: todo!("Inject encryption port"),
         encryption_session: todo!("Inject encryption session"),
         keyring: todo!("Inject keyring port"),

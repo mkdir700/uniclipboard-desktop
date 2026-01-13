@@ -65,6 +65,7 @@ use uc_infra::clipboard::ClipboardRepresentationMaterializer;
 use uc_infra::config::ClipboardStorageConfig;
 use uc_platform::clipboard::LocalClipboard;
 use uc_platform::keyring::SystemKeyring;
+use uc_core::clipboard::SelectRepresentationPolicyV1;
 
 /// Result type for wiring operations
 pub type WiringResult<T> = Result<T, WiringError>;
@@ -475,6 +476,7 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
         representation_repo: infra.representation_repo,
         representation_materializer: platform.representation_materializer,
         selection_repo: infra.selection_repo,
+        representation_policy: Arc::new(SelectRepresentationPolicyV1::new()),
 
         // Security dependencies / 安全依赖
         encryption: infra.encryption,

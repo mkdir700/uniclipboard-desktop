@@ -29,6 +29,7 @@ pub struct AppDeps {
     pub representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
     pub representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,
     pub selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
+    pub representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
 
     // Security dependencies / 安全依赖
     pub encryption: Arc<dyn EncryptionPort>,
