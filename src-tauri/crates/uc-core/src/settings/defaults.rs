@@ -17,6 +17,9 @@ impl Default for GeneralSettings {
     /// # Examples
     ///
     /// ```
+    /// use uc_core::settings::defaults::GeneralSettings;
+    /// use uc_core::settings::model::Theme;
+    ///
     /// let settings = GeneralSettings::default();
     /// assert_eq!(settings.auto_start, false);
     /// assert_eq!(settings.silent_start, false);
