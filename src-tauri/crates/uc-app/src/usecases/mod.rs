@@ -25,10 +25,3 @@ pub mod settings;
 pub use list_clipboard_entries::ListClipboardEntries;
 pub use initialize_encryption::InitializeEncryption;
 
-// Type alias for UseCases accessor
-pub type InitializeEncryptionUseCase = InitializeEncryption<
-    std::sync::Arc<dyn uc_core::ports::EncryptionPort>,
-    std::sync::Arc<dyn uc_core::ports::KeyMaterialPort>,
-    std::sync::Arc<dyn uc_core::ports::security::key_scope::KeyScopePort>,
-    std::sync::Arc<dyn uc_core::ports::security::encryption_state::EncryptionStatePort>,
->;
