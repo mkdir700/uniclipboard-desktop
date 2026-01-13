@@ -18,5 +18,8 @@ pub mod change_passphrase;
 pub mod clipboard;
 pub mod initialize_encryption;
 pub mod internal;
+pub mod list_clipboard_entries;
 pub mod list_clipboard_entry_previews;
 pub mod settings;
+
+pub use list_clipboard_entries::ListClipboardEntries;
