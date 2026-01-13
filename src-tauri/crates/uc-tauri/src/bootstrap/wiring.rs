@@ -61,7 +61,7 @@ use uc_platform::adapters::{
     InMemoryEncryptionSessionPort,
     PlaceholderNetworkPort, PlaceholderUiPort,
 };
-use uc_infra::clipboard::ClipboardRepresentationMaterializerV2;
+use uc_infra::clipboard::ClipboardRepresentationMaterializer;
 use uc_infra::config::ClipboardStorageConfig;
 use uc_platform::clipboard::LocalClipboard;
 use uc_platform::keyring::SystemKeyring;
@@ -372,7 +372,7 @@ fn create_platform_layer(
     // Create clipboard representation materializer (real implementation)
     // 创建剪贴板表示物化器（真实实现）
     let representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort> =
-        Arc::new(ClipboardRepresentationMaterializerV2::new(storage_config));
+        Arc::new(ClipboardRepresentationMaterializer::new(storage_config));
 
     // Create placeholder implementations for unimplemented ports
     // 为未实现的端口创建占位符实现

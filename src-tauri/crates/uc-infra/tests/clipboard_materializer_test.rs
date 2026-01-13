@@ -5,7 +5,7 @@ use uc_core::clipboard::{ObservedClipboardRepresentation};
 use uc_core::ids::{RepresentationId, FormatId};
 use uc_core::MimeType;
 use uc_core::ports::ClipboardRepresentationMaterializerPort;
-use uc_infra::clipboard::ClipboardRepresentationMaterializerV2 as ClipboardRepresentationMaterializer;
+use uc_infra::clipboard::ClipboardRepresentationMaterializer;
 use uc_infra::config::ClipboardStorageConfig;
 use std::sync::Arc;
 
