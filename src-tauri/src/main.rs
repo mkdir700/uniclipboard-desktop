@@ -152,7 +152,10 @@ fn run_app(config: AppConfig) {
                 log::info!("Platform runtime task started");
 
                 // Send StartClipboardWatcher command to enable monitoring
-                let _ = platform_cmd_tx_for_spawn.send(PlatformCommand::StartClipboardWatcher).await;
+                match platform_cmd_tx_for_spawn.send(PlatformCommand::StartClipboardWatcher).await {
+                    Ok(_) => log::info!("StartClipboardWatcher command sent"),
+                    Err(e) => log::error!("Failed to send StartClipboardWatcher command: {}", e),
+                }
 
                 // Create PlatformRuntime with the callback
                 let executor = Arc::new(SimplePlatformCommandExecutor);

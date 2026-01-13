@@ -135,7 +135,7 @@ impl CaptureClipboardUseCase {
         // 5. entry_repo.insert_entry
         let created_at_ms = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("System time before UNIX EPOCH")
+            .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
             .as_millis() as i64;
         let total_size = snapshot.total_size_bytes();
 
@@ -146,9 +146,9 @@ impl CaptureClipboardUseCase {
             None, // TODO: 暂时为 None
             total_size,
         );
-        let _ = self
-            .entry_repo
-            .save_entry_and_selection(&new_entry, &new_selection);
+        self.entry_repo
+            .save_entry_and_selection(&new_entry, &new_selection)
+            .await?;
 
         Ok(event_id)
     }
@@ -214,7 +214,7 @@ impl CaptureClipboardUseCase {
         // 5. entry_repo.insert_entry
         let created_at_ms = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("System time before UNIX EPOCH")
+            .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
             .as_millis() as i64;
         let total_size = snapshot.total_size_bytes();
 
@@ -225,9 +225,9 @@ impl CaptureClipboardUseCase {
             None, // TODO: 暂时为 None
             total_size,
         );
-        let _ = self
-            .entry_repo
-            .save_entry_and_selection(&new_entry, &new_selection);
+        self.entry_repo
+            .save_entry_and_selection(&new_entry, &new_selection)
+            .await?;
 
         Ok(event_id)
     }

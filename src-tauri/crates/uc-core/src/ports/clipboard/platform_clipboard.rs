@@ -38,6 +38,6 @@ where
     T: SystemClipboardPort,
 {
     fn read_snapshot(&self) -> Result<SystemClipboardSnapshot> {
-        self.read_snapshot()
+        SystemClipboardPort::read_snapshot(self)
     }
 }
