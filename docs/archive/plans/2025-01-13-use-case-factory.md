@@ -5,6 +5,7 @@
 **Goal:** Create a UseCases accessor on AppRuntime that manages instantiation of all use cases, ensuring commands don't implement business logic directly while maintaining clean hexagonal architecture boundaries.
 
 **Architecture:**
+
 - **uc-app/usecases**: Pure use cases with `new()`/`from_arc()` constructors, no dependency on AppDeps
 - **uc-tauri/bootstrap**: UseCases accessor that wires `Arc<dyn Port>` from AppDeps into use case instances
 - **Commands**: Call `runtime.usecases().xxx()`, handle only parameter parsing and error mapping
@@ -16,11 +17,13 @@
 ## Background & Context
 
 **Current Problem:**
+
 1. `initialize_encryption` command directly implements 8-step business logic instead of using the `InitializeEncryption` use case
 2. Commands hold `Arc<dyn Port>` via AppDeps, but use cases use generic types `UseCase<P1, P2, ...>`
 3. Previous solution of adding `from_deps(&AppDeps)` to use cases breaks architectural boundaries
 
 **Why UseCases on AppRuntime (not in uc-app)?**
+
 - ✅ Use cases stay pure - only depend on ports via constructors
 - ✅ AppDeps stays in composition root (uc-tauri), doesn't leak into uc-app
 - ✅ Wiring logic is centralized but separated from use case definitions
@@ -28,6 +31,7 @@
 - ✅ Testing use cases doesn't require constructing huge AppDeps
 
 **Architecture Boundary Rule:**
+
 > If you see `from_deps(&AppDeps)` or `UseCaseFactory` directly referencing AppDeps in `uc-app/usecases/*`, wiring has leaked into the use case layer.
 
 ---
@@ -35,6 +39,7 @@
 ## Task 1: Create UseCases Module in uc-tauri
 
 **Files:**
+
 - Create: `src-tauri/crates/uc-tauri/src/bootstrap/usecases.rs`
 
 **Step 1: Create the UseCases struct**
@@ -125,6 +130,7 @@ git commit -m "feat(uc-tauri): add UseCases accessor struct"
 ## Task 2: Add usecases() Method to AppRuntime
 
 **Files:**
+
 - Modify: `src-tauri/crates/uc-tauri/src/bootstrap/runtime.rs`
 - Modify: `src-tauri/crates/uc-tauri/src/bootstrap/usecases.rs`
 
@@ -183,6 +189,7 @@ git commit -m "feat(uc-tauri): add usecases() method to AppRuntime"
 ## Task 3: Ensure Use Cases Have Proper Constructors
 
 **Files:**
+
 - Verify: `src-tauri/crates/uc-app/src/usecases/initialize_encryption.rs`
 - Verify: `src-tauri/crates/uc-app/src/usecases/settings/apply_autostart.rs`
 - Verify: `src-tauri/crates/uc-app/src/usecases/settings/apply_theme.rs`
@@ -273,6 +280,7 @@ git commit -m "chore(uc-app): ensure use cases have new() constructors"
 ## Task 4: Add Missing Use Cases to UseCases Accessor
 
 **Files:**
+
 - Modify: `src-tauri/crates/uc-tauri/src/bootstrap/usecases.rs`
 
 **Step 1: Add restore_clipboard_selection()**
@@ -350,6 +358,7 @@ git commit -m "feat(uc-tauri): add missing use cases to UseCases accessor"
 ## Task 5: Refactor initialize_encryption Command
 
 **Files:**
+
 - Modify: `src-tauri/crates/uc-tauri/src/commands/encryption.rs`
 
 **Step 1: Replace direct implementation with use case**
@@ -421,6 +430,7 @@ git commit -m "refactor(uc-tauri): use InitializeEncryption use case in command"
 ## Task 6: Update clipboard Commands
 
 **Files:**
+
 - Modify: `src-tauri/crates/uc-tauri/src/commands/clipboard.rs`
 
 **Step 1: Update get_clipboard_entries**
@@ -509,6 +519,7 @@ git commit -m "refactor(uc-tauri): update clipboard commands to use UseCases"
 ## Task 7: Update Tauri Builder to Register AppRuntime
 
 **Files:**
+
 - Modify: `src-tauri/crates/uc-tauri/src/bootstrap/run.rs` (or main lib.rs)
 
 **Step 1: Ensure AppRuntime is registered with Tauri**
@@ -567,11 +578,12 @@ git commit -m "refactor(uc-tauri): register AppRuntime with Tauri"
 ## Task 8: Add Documentation
 
 **Files:**
+
 - Modify: `src-tauri/crates/uc-tauri/src/bootstrap/usecases.rs`
 
 **Step 1: Add module documentation**
 
-```rust
+````rust
 //! # Use Cases Accessor
 //!
 //! This module provides the `UseCases` accessor which is attached to `AppRuntime`
@@ -602,7 +614,7 @@ git commit -m "refactor(uc-tauri): register AppRuntime with Tauri"
 //! 1. Ensure use case has a `new()` constructor taking its required ports
 //! 2. Add a method to `UseCases` that calls `new()` with deps
 //! 3. Commands can now call `runtime.usecases().your_use_case()`
-```
+````
 
 **Step 2: Add ARCHITECTURE.md note**
 
@@ -614,10 +626,11 @@ Create `docs/architecture/usecase-accessor-pattern.md`:
 ## Pattern Overview
 
 Instead of having use cases depend on `AppDeps` or having commands wire dependencies directly, we use an accessor pattern:
+```
 
-```
 Commands → AppRuntime.usecases() → UseCases → new(ports) → UseCase
-```
+
+````
 
 ## Benefits
 
@@ -641,7 +654,7 @@ impl<P1: Port1, P2: Port2> MyUseCase<P1, P2> {
         Self { port1, port2 }
     }
 }
-```
+````
 
 2. **Add accessor method** in `uc-tauri/bootstrap/usecases.rs`:
 
@@ -672,7 +685,8 @@ async fn my_command(runtime: State<'_, AppRuntime>) -> Result<(), String> {
 ❌ **Don't** add `from_deps(&AppDeps)` to use cases in uc-app
 ❌ **Don't** make use cases depend on AppDeps directly
 ❌ **Don't** wire ports in commands
-```
+
+````
 
 **Step 3: Commit**
 
@@ -680,13 +694,14 @@ async fn my_command(runtime: State<'_, AppRuntime>) -> Result<(), String> {
 git add src-tauri/crates/uc-tauri/src/bootstrap/usecases.rs
 git add docs/architecture/usecase-accessor-pattern.md
 git commit -m "docs: add Use Cases accessor documentation"
-```
+````
 
 ---
 
 ## Task 9: Add Tests
 
 **Files:**
+
 - Create: `src-tauri/crates/uc-tauri/tests/usecases_accessor_test.rs`
 
 **Step 1: Write integration test**
@@ -801,11 +816,13 @@ Architecture improvements:
 ## Architecture Verification
 
 **Check these don't exist:**
-- ❌ `from_deps(&AppDeps)` in uc-app/usecases/*
-- ❌ `UseCaseFactory` directly in uc-app/usecases/*
+
+- ❌ `from_deps(&AppDeps)` in uc-app/usecases/\*
+- ❌ `UseCaseFactory` directly in uc-app/usecases/\*
 - ❌ Use cases importing AppDeps
 
 **Check these do exist:**
+
 - ✅ `UseCases` in uc-tauri/bootstrap/usecases.rs
 - ✅ `runtime.usecases()` method on AppRuntime
 - ✅ Commands using `State<'_, AppRuntime>`
@@ -813,6 +830,7 @@ Architecture improvements:
 ## Rollback Plan
 
 If issues arise:
+
 1. Commands can still call use case constructors directly
 2. UseCases accessor is an additional convenience, not a hard dependency
 3. Revert to previous commit if integration issues block progress

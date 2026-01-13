@@ -1,0 +1,460 @@
+# Architecture Principles
+
+UniClipboard follows **Hexagonal Architecture** (also known as **Ports and Adapters**). This document explains the core principles and how they apply to our codebase.
+
+## What is Hexagonal Architecture?
+
+Hexagonal Architecture is a pattern that separates **business logic** from **external concerns** (database, network, UI, OS APIs).
+
+### The Core Idea
+
+> **The application should be independent of all external details.**
+>
+> Business logic should not know about:
+>
+> - Which database we use (SQLite, PostgreSQL, in-memory)
+> - How we store files (local disk, S3, memory)
+> - How we communicate (WebSocket, HTTP, libp2p)
+> - What OS we run on (macOS, Windows, Linux)
+
+Instead, the application defines **interfaces (Ports)** for what it needs, and external details implement those interfaces as **Adapters**.
+
+## The Three Layers
+
+### Layer 1: Core Domain (uc-core)
+
+**Purpose**: Define the business model and interfaces (Ports)
+
+**Contains**:
+
+- Domain entities (Clipboard, Device, Encryption, Network)
+- Port definitions (traits that define what the application needs)
+- Pure business rules (no external dependencies)
+
+**Key Rule**: **Zero dependencies on infrastructure or platform code**
+
+```rust
+// uc-core/src/ports/clipboard.rs
+/// Port: What the application needs from clipboard storage
+pub trait ClipboardRepositoryPort: Send + Sync {
+    fn save(&self, content: ClipboardContent) -> Result<(), RepoError>;
+    fn find_by_id(&self, id: ClipboardId) -> Result<Option<ClipboardContent>, RepoError>;
+}
+
+// uc-core/src/clipboard/mod.rs
+/// Domain model: Pure business entity
+#[derive(Debug, Clone)]
+pub struct ClipboardContent {
+    pub id: ClipboardId,
+    pub content_type: ContentType,
+    pub representations: Vec<Representation>,
+    // No database types, no framework types, just business concepts
+}
+```
+
+### Layer 2: Application Layer (uc-app)
+
+**Purpose**: Orchestrate business logic using only Ports
+
+**Contains**:
+
+- Use cases (application business workflows)
+- Application state management
+- Event handling
+
+**Key Rule**: **Depend only on uc-core (Ports), not on implementations**
+
+```rust
+// uc-app/src/use_cases/sync_clipboard.rs
+use uc_core::ports::{ClipboardRepositoryPort, NetworkPort};
+
+pub struct SyncClipboardUseCase {
+    // Depend on ABSTRACTIONS, not implementations
+    clipboard_repo: Arc<dyn ClipboardRepositoryPort>,
+    network: Arc<dyn NetworkPort>,
+}
+
+impl SyncClipboardUseCase {
+    pub fn execute(&self, content: ClipboardContent) -> Result<(), UseCaseError> {
+        // Business logic: Save locally, then broadcast
+        self.clipboard_repo.save(content.clone())?;
+        self.network.broadcast(content)?;
+        Ok(())
+    }
+}
+```
+
+### Layer 3: Adapters (uc-infra + uc-platform)
+
+**Purpose**: Implement Ports to connect to external systems
+
+**Infrastructure Adapters (uc-infra)**:
+
+- Database repositories (SQLite implementation of ClipboardRepositoryPort)
+- File system storage (BlobStoragePort implementation)
+- Encryption (EncryptionPort with AES-GCM)
+
+**Platform Adapters (uc-platform)**:
+
+- OS clipboard access (macOS pasteboard, Windows clipboard)
+- Network layer (libp2p implementation)
+- System notifications
+
+**Key Rule**: **Implement Port traits, don't contain business logic**
+
+```rust
+// uc-infra/src/db/repositories/clipboard.rs
+use uc_core::ports::ClipboardRepositoryPort;
+
+/// Adapter: SQLite implementation of clipboard storage
+pub struct SqliteClipboardRepository {
+    pool: SqlitePool,
+}
+
+impl ClipboardRepositoryPort for SqliteClipboardRepository {
+    fn save(&self, content: ClipboardContent) -> Result<(), RepoError> {
+        // Map domain entity to database model
+        let entity = ClipboardEntity::from_domain(content);
+        // Execute SQL query
+        // Return result
+    }
+}
+```
+
+## Dependency Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    uc-tauri (Bootstrap)                     │
+│  The ONLY place that can depend on all layers simultaneously │
+└─────────────────────────────────────────────────────────────┘
+                            ↓ creates
+┌─────────────────────────────────────────────────────────────┐
+│                      uc-app                                 │
+│  Depends on: uc-core (Ports)                                 │
+│  Must NOT depend on: uc-infra, uc-platform                  │
+└─────────────────────────────────────────────────────────────┘
+                            ↓ defines
+┌─────────────────────────────────────────────────────────────┐
+│                      uc-core                                │
+│  Defines: Ports (interfaces)                                 │
+│  Depends on: Nothing external                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↑ implements
+        ┌───────────────────┴───────────────────┐
+        │                                       │
+┌──────────────────┐                  ┌──────────────────┐
+│   uc-infra       │                  │  uc-platform     │
+│  Implements:     │                  │  Implements:     │
+│  - Repo Ports    │                  │  - OS Ports      │
+│  - Crypto Ports  │                  │  - Network Ports │
+└──────────────────┘                  └──────────────────┘
+```
+
+**Iron Rule**: `uc-app` → `uc-core` ← `uc-infra` / `uc-platform`
+
+- Application layer depends on Core (interfaces)
+- Infrastructure and Platform implement Core interfaces
+- No circular dependencies
+
+## Key Principles
+
+### 1. Dependency Inversion
+
+**Traditional Layered Architecture** (WRONG):
+
+```
+UI → Service → Repository → Database
+      ↓         ↓
+   Business logic depends on database implementation
+```
+
+**Hexagonal Architecture** (CORRECT):
+
+```
+UI → Use Case → Port ← Repository → Database
+      ↓                      ↑
+   Business logic       Implementation
+   depends on           depends on
+   abstraction          business interface
+```
+
+**In Code**:
+
+```rust
+// ❌ WRONG: Use case depends on concrete implementation
+pub struct SyncClipboardUseCase {
+    repo: SqliteClipboardRepository,  // Concrete!
+}
+
+// ✅ CORRECT: Use case depends on abstraction
+pub struct SyncClipboardUseCase {
+    repo: Arc<dyn ClipboardRepositoryPort>,  // Interface!
+}
+```
+
+### 2. External Isolation
+
+All external dependencies are hidden behind Ports:
+
+| External Concern | Port Interface            | Adapter Implementation               |
+| ---------------- | ------------------------- | ------------------------------------ |
+| SQLite Database  | `ClipboardRepositoryPort` | `SqliteClipboardRepository`          |
+| File System      | `BlobStoragePort`         | `FileSystemBlobStorage`              |
+| OS Clipboard     | `ClipboardPort`           | `MacOSClipboard`, `WindowsClipboard` |
+| Network (libp2p) | `NetworkPort`             | `Libp2pNetworkAdapter`               |
+| Encryption       | `EncryptionPort`          | `AesGcmEncryption`                   |
+| Keyring          | `KeyringPort`             | `SystemKeyringAdapter`               |
+
+**Benefit**: Swap any implementation without changing use cases.
+
+### 3. Testability Without Mocks
+
+Because `uc-app` depends only on traits, we can test with test doubles:
+
+```rust
+// Test use case without real database
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uc_core::ports::ClipboardRepositoryPort;
+
+    struct InMemoryClipboardRepo {
+        items: Vec<ClipboardContent>,
+    }
+
+    impl ClipboardRepositoryPort for InMemoryClipboardRepo {
+        fn save(&self, content: ClipboardContent) -> Result<(), RepoError> {
+            // Store in memory
+        }
+    }
+
+    #[test]
+    fn test_sync_clipboard() {
+        let repo = Arc::new(InMemoryClipboardRepo::new());
+        let network = Arc::new(FakeNetwork::new());
+        let use_case = SyncClipboardUseCase::new(repo, network);
+
+        // Test business logic without real DB or network
+    }
+}
+```
+
+### 4. Clear Module Boundaries
+
+Each crate has a specific responsibility:
+
+| Crate         | Responsibility           | May Depend On    | Must NOT Depend On           |
+| ------------- | ------------------------ | ---------------- | ---------------------------- |
+| `uc-core`     | Domain models + Ports    | Nothing external | ❌ Database, OS, Frameworks  |
+| `uc-app`      | Use cases, orchestration | `uc-core` only   | ❌ `uc-infra`, `uc-platform` |
+| `uc-infra`    | Infrastructure adapters  | `uc-core`        | ❌ `uc-app`, business logic  |
+| `uc-platform` | Platform adapters        | `uc-core`        | ❌ `uc-app`, business logic  |
+| `uc-tauri`    | Bootstrap, wiring        | All crates       | ❌ Business decisions        |
+
+See [Module Boundaries](module-boundaries.md) for detailed rules.
+
+## How Bootstrap Works
+
+**Bootstrap** is the "wiring operator" that assembles everything:
+
+```rust
+// uc-tauri/src/bootstrap/wiring.rs
+pub fn wire_dependencies() -> Result<AppDeps, WiringError> {
+    // Create infrastructure implementations
+    let db_pool = create_db_pool()?;
+    let clipboard_repo = Arc::new(SqliteClipboardRepository::new(db_pool));
+
+    // Create platform implementations
+    let clipboard_adapter = Arc::new(MacOSClipboard::new()?);
+    let network = Arc::new(Libp2pNetwork::new()?);
+
+    // Inject into application
+    Ok(AppDeps {
+        clipboard_repo,
+        clipboard_adapter,
+        network,
+        // ... all other dependencies
+    })
+}
+```
+
+**Key Point**: Only `uc-tauri::bootstrap` knows about concrete implementations. `uc-app` only sees trait objects.
+
+See [Bootstrap System](bootstrap.md) for complete details.
+
+## Common Mistakes to Avoid
+
+### ❌ Mistake 1: Use Case Depends on Implementation
+
+```rust
+// ❌ WRONG
+use uc_infra::db::SqliteClipboardRepository;
+
+pub struct MyUseCase {
+    repo: SqliteClipboardRepository,  // Concrete dependency!
+}
+```
+
+**Fix**: Depend on the Port trait:
+
+```rust
+// ✅ CORRECT
+use uc_core::ports::ClipboardRepositoryPort;
+
+pub struct MyUseCase {
+    repo: Arc<dyn ClipboardRepositoryPort>,  // Abstract dependency
+}
+```
+
+### ❌ Mistake 2: Port Defines Implementation Details
+
+```rust
+// ❌ WRONG: Port exposes SQL types
+pub trait ClipboardRepositoryPort {
+    fn save(&self, content: ClipboardContent) -> Result<(), SqliteError>;
+}
+```
+
+**Fix**: Port uses domain error types:
+
+```rust
+// ✅ CORRECT: Port uses domain error
+pub trait ClipboardRepositoryPort {
+    fn save(&self, content: ClipboardContent) -> Result<(), RepoError>;
+}
+```
+
+### ❌ Mistake 3: Business Logic in Adapter
+
+```rust
+// ❌ WRONG: Adapter contains business rule
+impl ClipboardRepositoryPort for SqliteClipboardRepository {
+    fn save(&self, content: ClipboardContent) -> Result<(), RepoError> {
+        if content.is_empty() {
+            return Err(RepoError::Invalid("Empty content not allowed".into()));
+        }
+        // Business rule belongs in use case, not adapter!
+    }
+}
+```
+
+**Fix**: Move validation to use case:
+
+```rust
+// ✅ CORRECT: Adapter just stores
+impl ClipboardRepositoryPort for SqliteClipboardRepository {
+    fn save(&self, content: ClipboardContent) -> Result<(), RepoError> {
+        // Just persist to DB
+    }
+}
+
+// Validation in use case
+impl SyncClipboardUseCase {
+    pub fn execute(&self, content: ClipboardContent) -> Result<(), UseCaseError> {
+        if content.is_empty() {
+            return Err(UseCaseError::InvalidContent);
+        }
+        self.repo.save(content)?;
+    }
+}
+```
+
+### ❌ Mistake 4: Circular Dependencies
+
+```
+❌ WRONG: uc-app → uc-infra → uc-app
+```
+
+**Fix**: All dependencies point toward `uc-core`:
+
+```
+✅ CORRECT:
+uc-app → uc-core ← uc-infra
+         ↑
+         (Ports defined here)
+```
+
+## How to Apply This Architecture
+
+### Adding a New Feature
+
+1. **Define Port in uc-core** (if needed)
+2. **Implement Use Case in uc-app** (using only Ports)
+3. **Implement Adapter in uc-infra/uc-platform** (implementing Port)
+4. **Wire in Bootstrap** (inject adapter into use case)
+5. **Expose via Tauri Command** (if needed by UI)
+
+### Example: Adding "Export to File" Feature
+
+**Step 1: Define Port** (uc-core/src/ports/export.rs)
+
+```rust
+pub trait ExportPort {
+    fn export_to_json(&self, items: Vec<ClipboardContent>) -> Result<PathBuf, ExportError>;
+}
+```
+
+**Step 2: Implement Use Case** (uc-app/src/use_cases/export_history.rs)
+
+```rust
+pub struct ExportHistoryUseCase {
+    clipboard: Arc<dyn ClipboardRepositoryPort>,
+    exporter: Arc<dyn ExportPort>,
+}
+
+impl ExportHistoryUseCase {
+    pub fn execute(&self) -> Result<PathBuf, UseCaseError> {
+        let items = self.clipboard.find_all()?;
+        self.exporter.export_to_json(items)
+            .map_err(|e| UseCaseError::ExportFailed(e.to_string()))
+    }
+}
+```
+
+**Step 3: Implement Adapter** (uc-infra/src/export/json_exporter.rs)
+
+```rust
+pub struct JsonFileExporter;
+
+impl ExportPort for JsonFileExporter {
+    fn export_to_json(&self, items: Vec<ClipboardContent>) -> Result<PathBuf, ExportError> {
+        // Write JSON to file
+    }
+}
+```
+
+**Step 4: Wire in Bootstrap** (uc-tauri/src/bootstrap/wiring.rs)
+
+```rust
+let exporter = Arc::new(JsonFileExporter::new());
+
+Ok(AppDeps {
+    // ... existing dependencies
+    exporter,
+})
+```
+
+## Benefits in Practice
+
+### We Can:
+
+- ✅ Test use cases without real database/network
+- ✅ Swap SQLite → PostgreSQL without changing use cases
+- ✅ Replace libp2p with different P2P library
+- ✅ Run business logic in CLI, GUI, or server
+- ✅ Mock external dependencies for fast tests
+
+### We Cannot:
+
+- ❌ Accidentally couple business logic to database
+- ❌ Silently introduce framework dependencies in domain
+- ❌ Create spaghetti dependencies between crates
+- ❌ Make untestable code (Rust compiler prevents it)
+
+## Further Reading
+
+- [Module Boundaries](module-boundaries.md) - Detailed rules for each crate
+- [Bootstrap System](bootstrap.md) - How dependency injection works
+- [Error Handling](../guides/error-handling.md) - Error handling strategy
+- [Overview](../overview.md) - Project overview and crate structure
