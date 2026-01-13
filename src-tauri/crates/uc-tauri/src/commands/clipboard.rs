@@ -41,34 +41,102 @@ pub async fn get_clipboard_entries(
 
 /// Delete a clipboard entry
 /// 删除剪贴板条目
+///
+/// **TODO**: Implement DeleteClipboardEntry use case
+/// **TODO**: This command currently returns placeholder error
+/// **Tracking**: Requires use case implementation before activation
+///
+/// ## Required Changes / 所需更改
+///
+/// 1. Create `DeleteClipboardEntry` use case in `uc-app/src/usecases/`
+/// 2. Add `delete_clipboard_entry()` method to `UseCases` accessor
+/// 3. Update this command to use `runtime.usecases().delete_clipboard_entry()`
+///
+/// ## Use Case Requirements / 用例需求
+///
+/// - Input: `entry_id: String` (frontend parameter)
+/// - Domain model: `ClipboardEntryId` (from uc-core)
+/// - Port: `ClipboardEntryRepositoryPort` (already exists)
+/// - Error handling: Use `map_err` utility
+///
+/// ## Issue Tracking / 问题跟踪
+///
+/// - [ ] Create use case: `uc-app/src/usecases/delete_clipboard_entry.rs`
+/// - [ ] Add to UseCases accessor: `uc-tauri/src/bootstrap/runtime.rs`
+/// - [ ] Update command implementation
 #[tauri::command]
 pub async fn delete_clipboard_entry(
     _runtime: State<'_, AppRuntime>,
     _entry_id: String,
 ) -> Result<(), String> {
-    // TODO: Implement after deletion use case is ready
-    Err("Not yet implemented".to_string())
+    // TODO: Implement DeleteClipboardEntry use case
+    // This requires:
+    // 1. Create use case in uc-app/src/usecases/
+    // 2. Add to UseCases accessor in uc-tauri/src/bootstrap/runtime.rs
+    // 3. Wire repository dependency
+    // 4. Update this command to use runtime.usecases().delete_clipboard_entry()
+    Err("Not yet implemented - requires DeleteClipboardEntry use case".to_string())
 }
 
 /// Capture current clipboard content
 /// 捕获当前剪贴板内容
 ///
-/// NOTE: This is a simplified version that directly uses AppDeps.
-/// The full implementation with proper use case patterns will be added later.
+/// **TODO**: Implement CaptureClipboard use case
+/// **TODO**: This command currently returns placeholder error
+/// **Tracking**: Complex use case requiring multiple ports
 ///
-/// 注意：这是简化版本，直接使用 AppDeps。
-/// 完整的用例模式实现将在稍后添加。
+/// ## Required Changes / 所需更改
+///
+/// 1. Create `CaptureClipboard` use case in `uc-app/src/usecases/`
+/// 2. Add `capture_clipboard()` method to `UseCases` accessor
+/// 3. Update this command to use `runtime.usecases().capture_clipboard()`
+///
+/// ## Use Case Requirements / 用例需求
+///
+/// This is a complex use case that orchestrates multiple ports:
+///
+/// 1. **ClipboardSnapshotPort** - Read current clipboard content
+/// 2. **MaterializationPort** - Convert raw data to representations
+/// 3. **ClipboardEventWriterPort** - Create and persist clipboard event
+/// 4. **ClipboardEntryRepositoryPort** - Store entry in database
+///
+/// ## Architecture Flow / 架构流程
+///
+/// ```text
+/// Frontend → Command → CaptureClipboard Use Case → Multiple Ports
+///                                      ↓
+///                    1. Snapshot (ClipboardSnapshotPort)
+///                    2. Materialize (MaterializationPort)
+///                    3. Create Event (ClipboardEventWriterPort)
+///                    4. Persist (ClipboardEntryRepositoryPort)
+/// ```
+///
+/// ## Issue Tracking / 问题跟踪
+///
+/// - [ ] Create use case: `uc-app/src/usecases/capture_clipboard.rs`
+/// - [ ] Add ClipboardSnapshotPort to uc-core/ports/
+/// - [ ] Add MaterializationPort to uc-core/ports/
+/// - [ ] Add ClipboardEventWriterPort to uc-core/ports/
+/// - [ ] Implement ports in uc-platform/ (clipboard adapters)
+/// - [ ] Add to UseCases accessor: `uc-tauri/src/bootstrap/runtime.rs`
+/// - [ ] Update command implementation
 #[tauri::command]
 pub async fn capture_clipboard(
     _runtime: State<'_, AppRuntime>,
 ) -> Result<String, String> {
-    // TODO: Implement full capture flow
-    // This requires:
-    // 1. Reading clipboard snapshot
-    // 2. Materializing representations
-    // 3. Creating event and entry
-    // 4. Persisting to database
+    // TODO: Implement CaptureClipboard use case
+    // This is a complex use case requiring:
     //
-    // For now, return a placeholder
-    Err("Capture clipboard not yet implemented - requires ClipboardEventWriterPort in AppDeps".to_string())
+    // 1. Create use case in uc-app/src/usecases/
+    // 2. Define required ports in uc-core/ports/:
+    //    - ClipboardSnapshotPort (read clipboard)
+    //    - MaterializationPort (convert to representations)
+    //    - ClipboardEventWriterPort (create event)
+    // 3. Implement ports in uc-platform/adapters/
+    // 4. Add to UseCases accessor in uc-tauri/src/bootstrap/runtime.rs
+    // 5. Wire all dependencies
+    // 6. Update this command to use runtime.usecases().capture_clipboard()
+    //
+    // Tracking: Complex multi-port orchestration
+    Err("Not yet implemented - requires CaptureClipboard use case with multiple ports".to_string())
 }

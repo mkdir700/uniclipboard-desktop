@@ -32,6 +32,22 @@ pub async fn initialize_encryption(
 
 /// Check if encryption is initialized
 /// 检查加密是否已初始化
+///
+/// **TODO**: Implement IsEncryptionInitialized use case
+/// **TODO**: This command currently accesses Port directly (architecture violation)
+/// **Tracking**: Needs refactoring to use UseCases accessor pattern
+///
+/// ## Required Changes / 所需更改
+///
+/// 1. Create `IsEncryptionInitialized` use case in `uc-app/src/usecases/`
+/// 2. Add `is_encryption_initialized()` method to `UseCases` accessor
+/// 3. Update this command to use `runtime.usecases().is_encryption_initialized()`
+///
+/// ## Issue Tracking / 问题跟踪
+///
+/// - [ ] Create use case: `uc-app/src/usecases/is_encryption_initialized.rs`
+/// - [ ] Add to UseCases accessor: `uc-tauri/src/bootstrap/runtime.rs`
+/// - [ ] Update command implementation
 #[tauri::command]
 pub async fn is_encryption_initialized(
     runtime: State<'_, AppRuntime>,

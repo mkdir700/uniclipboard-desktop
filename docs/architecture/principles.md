@@ -254,6 +254,63 @@ Each crate has a specific responsibility:
 
 See [Module Boundaries](module-boundaries.md) for detailed rules.
 
+## Commands Layer (Driving Adapter)
+
+The **Commands Layer** (`uc-tauri/src/commands/`) is a **Driving Adapter** that translates external requests into use case executions.
+
+### Architecture Position
+
+```
+Frontend (React)
+    ↓ Tauri IPC
+Commands Layer (Driving Adapter)
+    ↓ runtime.usecases().xxx()
+UseCases Layer (Application)
+    ↓ execute()
+Ports (Interface Layer)
+    ↓
+Adapters (Infrastructure/Platform)
+```
+
+### Mandatory Rules
+
+1. **Always use UseCases accessor** - Commands MUST call `runtime.usecases().xxx()` to get use case instances
+2. **Never access Ports directly** - Commands MUST NOT call `runtime.deps.xxx` ports
+3. **Use map_err for errors** - All error conversion must use the `map_err` utility
+4. **Convert parameters** - Frontend types → domain models before passing to use cases
+5. **Convert results** - Domain models → DTOs before returning to frontend
+
+### Example
+
+```rust
+// ✅ CORRECT - Through UseCases accessor
+#[tauri::command]
+pub async fn initialize_encryption(
+    runtime: State<'_, AppRuntime>,
+    passphrase: String,
+) -> Result<(), String> {
+    let uc = runtime.usecases().initialize_encryption();
+    uc.execute(Passphrase(passphrase))
+        .await
+        .map_err(map_err)?;
+    Ok(())
+}
+
+// ❌ FORBIDDEN - Direct Port access
+#[tauri::command]
+pub async fn initialize_encryption(
+    runtime: State<'_, AppRuntime>,
+    passphrase: String,
+) -> Result<(), String> {
+    // Directly calling ports - VIOLATES ARCHITECTURE
+    runtime.deps.encryption.derive_kek(...).await?;
+    runtime.deps.key_material.store_keyslot(...).await?;
+    Ok(())
+}
+```
+
+**Key Point**: Commands Layer is a thin adapter layer. All business logic MUST be in Use Cases. See [Commands Layer Specification](commands-layer-specification.md) for complete details.
+
 ## How Bootstrap Works
 
 **Bootstrap** is the "wiring operator" that assembles everything:
@@ -454,6 +511,7 @@ Ok(AppDeps {
 
 ## Further Reading
 
+- [Commands Layer Specification](commands-layer-specification.md) - Commands layer architecture rules
 - [Module Boundaries](module-boundaries.md) - Detailed rules for each crate
 - [Bootstrap System](bootstrap.md) - How dependency injection works
 - [Error Handling](../guides/error-handling.md) - Error handling strategy

@@ -304,6 +304,50 @@ fn run_app(setting: Setting) {
 
 **Rationale**: Tauri's state system requires explicit registration to ensure thread safety and proper lifetime management. Commands can only access state that was registered before the app started.
 
+### Commands Layer Architecture
+
+**CRITICAL**: The Commands Layer (`uc-tauri/src/commands/`) MUST follow hexagonal architecture rules. All business logic MUST be in Use Cases layer.
+
+**Mandatory Rules**:
+
+1. **Always use UseCases accessor** - Commands MUST call `runtime.usecases().xxx()` to get use case instances
+2. **Never access Ports directly** - Commands MUST NOT call `runtime.deps.xxx` ports
+3. **Use map_err for errors** - All error conversion must use the `map_err` utility
+4. **Convert parameters** - Frontend types → domain models before passing to use cases
+5. **Convert results** - Domain models → DTOs before returning to frontend
+
+```rust
+// ✅ CORRECT - Through UseCases accessor
+use uc_core::security::model::Passphrase;
+use crate::commands::map_err;
+
+#[tauri::command]
+pub async fn initialize_encryption(
+    runtime: State<'_, AppRuntime>,
+    passphrase: String,
+) -> Result<(), String> {
+    let uc = runtime.usecases().initialize_encryption();
+    uc.execute(Passphrase(passphrase))
+        .await
+        .map_err(map_err)?;
+    Ok(())
+}
+
+// ❌ FORBIDDEN - Direct Port access
+#[tauri::command]
+pub async fn initialize_encryption(
+    runtime: State<'_, AppRuntime>,
+    passphrase: String,
+) -> Result<(), String> {
+    // Directly calling ports - VIOLATES ARCHITECTURE
+    runtime.deps.encryption.derive_kek(...).await?;
+    runtime.deps.key_material.store_keyslot(...).await?;
+    Ok(())
+}
+```
+
+**Key Rule**: Commands Layer is a thin adapter layer. It MUST NOT contain business logic. All business logic belongs in Use Cases. See [Commands Layer Specification](../architecture/commands-layer-specification.md) for complete details.
+
 ## General Development Principles
 
 ### Avoid Over-Engineering
@@ -330,6 +374,7 @@ fn run_app(setting: Setting) {
 - ☐ Fixed pixel values replaced with Tailwind utilities
 - ☐ Components tested in both light and dark themes
 - ☐ Tauri state registered with `.manage()`
+- ☐ Commands use UseCases accessor (not direct Port access)
 - ☐ Problem analyzed at root cause level, not symptom level
 - ☐ No over-engineering or premature abstractions
 
@@ -339,6 +384,7 @@ fn run_app(setting: Setting) {
 - ☐ Are event failures logged and emitted?
 - ☐ Are cross-platform concerns addressed?
 - ☐ Is state properly registered with Tauri?
+- ☐ Do commands follow hexagonal architecture (UseCases accessor)?
 - ☐ Does this fix the root cause, not symptoms?
 - ☐ Is this the minimum solution, or over-engineered?
 
