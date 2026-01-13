@@ -431,24 +431,57 @@ runtime.usecases().initialize_encryption()
 
 ## Current Status
 
-| Command                     | File                                                                                      | Status          | Use Case Exists | Needs Refactor |
-| --------------------------- | ----------------------------------------------------------------------------------------- | --------------- | --------------- | -------------- |
-| `get_clipboard_entries`     | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)   | ✅              | ✅              | No             |
-| `delete_clipboard_entry`    | [clipboard.rs:45-51](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L45-L51)   | TODO            | ❌              | **TODO**       |
-| `capture_clipboard`         | [clipboard.rs:62-74](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L62-L74)   | TODO            | ⚠️              | **TODO**       |
-| `initialize_encryption`     | [encryption.rs:19-83](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L19-L83) | ❌ Direct ports | ✅              | **Yes**        |
-| `is_encryption_initialized` | [encryption.rs:88-98](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L88-L98) | ❌ Direct ports | ❌              | **TODO**       |
-| `get_settings`              | [settings.rs:11-16](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L11-L16)     | TODO            | ❌              | **TODO**       |
-| `update_settings`           | [settings.rs:21-27](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L21-L27)     | TODO            | ❌              | **TODO**       |
+| Command                     | File                                                                                      | Status             | Use Case Exists | Needs Refactor |
+| --------------------------- | ----------------------------------------------------------------------------------------- | ------------------ | --------------- | -------------- |
+| `get_clipboard_entries`     | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)   | ✅ Refactored      | ✅              | No             |
+| `delete_clipboard_entry`    | [clipboard.rs:42-79](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L42-L79)   | 📝 Documented TODO | ❌              | **TODO**       |
+| `capture_clipboard`         | [clipboard.rs:81-142](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L81-L142) | 📝 Documented TODO | ❌              | **TODO**       |
+| `initialize_encryption`     | [encryption.rs:22-31](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L22-L31) | ✅ Refactored      | ✅              | No             |
+| `is_encryption_initialized` | [encryption.rs:52-62](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L52-L62) | 📝 Documented TODO | ❌              | **TODO**       |
+| `get_settings`              | [settings.rs:37-49](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L37-L49)     | 📝 Documented TODO | ❌              | **TODO**       |
+| `update_settings`           | [settings.rs:81-94](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L81-L94)     | 📝 Documented TODO | ❌              | **TODO**       |
+
+### Legend / 图例
+
+- ✅ **Refactored** - Fully compliant with Commands Layer Specification
+- 📝 **Documented TODO** - Has comprehensive TODO comments with implementation requirements
+- ❌ **Direct ports** - Architecture violation (needs refactoring)
+
+## Progress Summary / 进度总结
+
+### Completed / 已完成
+
+- ✅ `initialize_encryption` - Refactored to use UseCases accessor pattern
+- ✅ `get_clipboard_entries` - Uses ListClipboardEntries use case
+- ✅ All pending commands have comprehensive TODO documentation
+
+### In Progress / 进行中
+
+- 📝 `is_encryption_initialized` - TODO documented, awaiting IsEncryptionInitialized use case
+- 📝 `delete_clipboard_entry` - TODO documented, awaiting DeleteClipboardEntry use case
+- 📝 `capture_clipboard` - TODO documented, awaiting CaptureClipboard use case (complex multi-port)
+- 📝 `get_settings` - TODO documented, awaiting GetSettings use case
+- 📝 `update_settings` - TODO documented, awaiting UpdateSettings use case
 
 ## TODO: Missing Use Cases
 
 The following commands require use case implementation (separate task):
 
 - ⏳ `IsEncryptionInitialized` - Query encryption state
+  - Port: EncryptionStatePort (already exists)
+  - Complexity: Low (simple query)
+
 - ⏳ `DeleteClipboardEntry` - Delete clipboard entry
+  - Port: ClipboardEntryRepositoryPort (already exists)
+  - Complexity: Low (simple delete)
+
 - ⏳ `CaptureClipboard` - Complete capture flow
+  - Ports: ClipboardSnapshotPort, MaterializationPort, ClipboardEventWriterPort, ClipboardEntryRepositoryPort
+  - Complexity: High (multi-port orchestration)
+
 - ⏳ `GetSettings` / `UpdateSettings` - Settings management
+  - Port: SettingsPort (needs definition)
+  - Complexity: Medium (requires port definition)
 
 ## Further Reading
 
