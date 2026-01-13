@@ -10,6 +10,7 @@ use clipboard_rs::{
     ClipboardWatcher as RSClipboardWatcher, ClipboardWatcherContext, WatcherShutdown,
 };
 use tokio::task::JoinHandle;
+use uc_core::ports::ClipboardChangeHandler;
 use uc_core::ports::SystemClipboardPort;
 
 pub struct PlatformRuntime<E>
@@ -29,6 +30,8 @@ where
     watcher_join: Option<JoinHandle<()>>,
     #[allow(dead_code)]
     watcher_handle: Option<WatcherShutdown>,
+    /// Callback handler for clipboard change events
+    clipboard_handler: Option<Arc<dyn ClipboardChangeHandler>>,
 }
 
 impl<E> PlatformRuntime<E>
@@ -40,6 +43,7 @@ where
         event_rx: PlatformEventReceiver,
         command_rx: PlatformCommandReceiver,
         executor: Arc<E>,
+        clipboard_handler: Option<Arc<dyn ClipboardChangeHandler>>,
     ) -> Result<PlatformRuntime<E>, anyhow::Error> {
         let local_clipboard = Arc::new(LocalClipboard::new()?);
 
@@ -52,7 +56,16 @@ where
             shutting_down: false,
             watcher_join: None,
             watcher_handle: None,
+            clipboard_handler,
         })
+    }
+
+    /// Set the clipboard change handler callback.
+    ///
+    /// This can be called after construction if the handler is not available
+    /// at initialization time.
+    pub fn set_clipboard_handler(&mut self, handler: Arc<dyn ClipboardChangeHandler>) {
+        self.clipboard_handler = Some(handler);
     }
 
     pub async fn start(mut self) {
@@ -96,8 +109,15 @@ where
                     snapshot.representation_count(),
                     snapshot.total_size_bytes()
                 );
-                // TODO: In future tasks, this will trigger the SyncClipboard use case
-                // For now, just log the event
+
+                // Call the registered callback handler
+                if let Some(handler) = &self.clipboard_handler {
+                    if let Err(e) = handler.on_clipboard_changed(snapshot).await {
+                        log::error!("Failed to handle clipboard change: {:?}", e);
+                    }
+                } else {
+                    log::warn!("Clipboard changed but no handler registered");
+                }
             }
             PlatformEvent::ClipboardSynced { peer_count } => {
                 log::debug!("Clipboard synced to {} peers", peer_count);
