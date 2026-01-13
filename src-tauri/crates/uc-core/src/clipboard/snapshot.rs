@@ -1,6 +1,7 @@
 use crate::ids::{FormatId, RepresentationId};
 use crate::{BlobId, MimeType};
 
+#[derive(Debug, Clone)]
 pub struct PersistedClipboardRepresentation {
     pub id: RepresentationId,
 

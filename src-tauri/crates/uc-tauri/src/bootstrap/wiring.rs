@@ -42,13 +42,14 @@ use uc_core::ports::*;
 use uc_infra::db::executor::DieselSqliteExecutor;
 use uc_infra::db::mappers::{
     blob_mapper::BlobRowMapper, clipboard_entry_mapper::ClipboardEntryRowMapper,
-    clipboard_selection_mapper::ClipboardSelectionRowMapper, device_mapper::DeviceRowMapper,
+    clipboard_selection_mapper::ClipboardSelectionRowMapper, clipboard_event_mapper::ClipboardEventRowMapper,
+    device_mapper::DeviceRowMapper,
     snapshot_representation_mapper::RepresentationRowMapper,
 };
 use uc_infra::db::pool::{init_db_pool, DbPool};
 use uc_infra::db::repositories::{
-    DieselBlobRepository, DieselClipboardEntryRepository, DieselClipboardRepresentationRepository,
-    DieselDeviceRepository, PlaceholderClipboardEventRepository,
+    DieselBlobRepository, DieselClipboardEntryRepository, DieselClipboardEventRepository, DieselClipboardRepresentationRepository,
+    DieselDeviceRepository,
 };
 use uc_infra::fs::key_slot_store::JsonKeySlotStore;
 use uc_infra::security::{Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository};
@@ -56,10 +57,12 @@ use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::SystemClock;
 use uc_infra::device::LocalDeviceIdentity;
 use uc_platform::adapters::{
-    PlaceholderAutostartPort, PlaceholderBlobMaterializerPort, PlaceholderBlobStorePort,
-    PlaceholderClipboardRepresentationMaterializerPort, PlaceholderEncryptionSessionPort,
+    FilesystemBlobStore, PlaceholderAutostartPort, PlaceholderBlobMaterializerPort,
+    PlaceholderEncryptionSessionPort,
     PlaceholderNetworkPort, PlaceholderUiPort,
 };
+use uc_infra::clipboard::ClipboardRepresentationMaterializerV2;
+use uc_infra::config::ClipboardStorageConfig;
 use uc_platform::clipboard::LocalClipboard;
 use uc_platform::keyring::SystemKeyring;
 
@@ -248,12 +251,15 @@ fn create_infra_layer(
     );
     let clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort> = Arc::new(entry_repo);
 
-    // NOTE: ClipboardEventRepositoryPort implementation doesn't exist yet.
-    // This is a placeholder that will need to be implemented.
-    // TODO: Implement ClipboardEventRepositoryPort in uc-infra
-    // 临时占位符：当 ClipboardEventRepositoryPort 实现后将被替换
-    let clipboard_event_repo: Arc<dyn ClipboardEventRepositoryPort> =
-        Arc::new(PlaceholderClipboardEventRepository);
+    // Create clipboard event repository
+    // 创建剪贴板事件仓库
+    let event_row_mapper = ClipboardEventRowMapper;
+    let clipboard_event_repo_impl = DieselClipboardEventRepository::new(
+        Arc::clone(&db_executor),
+        event_row_mapper,
+        RepresentationRowMapper,
+    );
+    let clipboard_event_repo: Arc<dyn ClipboardEventRepositoryPort> = Arc::new(clipboard_event_repo_impl);
 
     let rep_repo = DieselClipboardRepresentationRepository::new(Arc::clone(&db_executor));
     let representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort> = Arc::new(rep_repo);
@@ -355,16 +361,26 @@ fn create_platform_layer(
         .map_err(|e| WiringError::SettingsInit(format!("Failed to create device identity: {}", e)))?;
     let device_identity: Arc<dyn DeviceIdentityPort> = Arc::new(device_identity);
 
+    // Create blob store (filesystem-based)
+    // 创建 blob 存储（基于文件系统）
+    let blob_store_dir = config_dir.join("blobs");
+    let blob_store: Arc<dyn BlobStorePort> = Arc::new(FilesystemBlobStore::new(blob_store_dir));
+
+    // Create clipboard storage config
+    let storage_config = Arc::new(ClipboardStorageConfig::defaults());
+
+    // Create clipboard representation materializer (real implementation)
+    // 创建剪贴板表示物化器（真实实现）
+    let representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort> =
+        Arc::new(ClipboardRepresentationMaterializerV2::new(storage_config));
+
     // Create placeholder implementations for unimplemented ports
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
     let network: Arc<dyn NetworkPort> = Arc::new(PlaceholderNetworkPort);
-    let representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort> =
-        Arc::new(PlaceholderClipboardRepresentationMaterializerPort);
     let blob_materializer: Arc<dyn BlobMaterializerPort> =
         Arc::new(PlaceholderBlobMaterializerPort);
-    let blob_store: Arc<dyn BlobStorePort> = Arc::new(PlaceholderBlobStorePort);
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(PlaceholderEncryptionSessionPort::new());
 

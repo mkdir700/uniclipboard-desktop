@@ -1,38 +1,29 @@
-//! # Placeholder Adapters / 占位符适配器
+//! # Platform Adapters / 平台适配器
 //!
-//! This module contains placeholder implementations for ports that are not yet implemented.
-//! 此模块包含尚未实现的端口的占位符实现。
+//! This module contains platform-specific implementations for ports.
+//! 此模块包含端口的各种平台特定实现。
 //!
-//! These placeholders allow the application to compile and run basic functionality
-//! while the full implementations are being developed.
+//! # Modules / 模块
 //!
-//! 这些占位符允许应用程序在开发完整实现时编译并运行基本功能。
-//!
-//! # Placeholders / 占位符
-//!
-//! - `PlaceholderUiPort` - UI operations (will be replaced by Tauri-based implementation)
-//! - `PlaceholderAutostartPort` - Autostart management (will be replaced by platform-specific implementation)
-//! - `PlaceholderNetworkPort` - P2P networking (will be replaced by libp2p implementation)
-//! - `PlaceholderClipboardRepresentationMaterializerPort` - Clipboard materialization
-//! - `PlaceholderBlobMaterializerPort` - Blob materialization
-//! - `PlaceholderBlobStorePort` - Blob storage
-//! - `PlaceholderEncryptionSessionPort` - Encryption session management
-//!
-//! # Note / 注意
-//!
-//! `DeviceIdentityPort` is implemented by `uc_infra::device::LocalDeviceIdentity` and is no longer a placeholder.
-//! `DeviceIdentityPort` 由 `uc_infra::device::LocalDeviceIdentity` 实现，不再是一个占位符。
+//! - `blob_store` - Filesystem-based blob storage (implemented)
+//! - `blob` - Placeholder blob materializer (to be replaced)
+//! - `autostart` - Placeholder autostart management
+//! - `clipboard` - Placeholder clipboard materialization
+//! - `encryption` - Placeholder encryption session management
+//! - `network` - Placeholder P2P networking
+//! - `ui` - Placeholder UI operations
 
 pub mod autostart;
 pub mod blob;
+pub mod blob_store;
 pub mod clipboard;
 pub mod encryption;
 pub mod network;
 pub mod ui;
 
 pub use autostart::PlaceholderAutostartPort;
-pub use blob::{PlaceholderBlobMaterializerPort, PlaceholderBlobStorePort};
-pub use clipboard::PlaceholderClipboardRepresentationMaterializerPort;
+pub use blob::PlaceholderBlobMaterializerPort;
+pub use blob_store::{FilesystemBlobStore, PlaceholderBlobStorePort};
 pub use encryption::PlaceholderEncryptionSessionPort;
 pub use network::PlaceholderNetworkPort;
 pub use ui::PlaceholderUiPort;

@@ -29,7 +29,9 @@ impl EncryptionStateMarkerPort for EncryptionStateRepository {
     }
 
     async fn create(&self) -> Result<(), EncryptionStateError> {
-        fs::write(&self.path, "{}").await;
+        fs::write(&self.path, "{}")
+            .await
+            .map_err(|e| EncryptionStateError::PersistError(e.to_string()))?;
         Ok(())
     }
 }

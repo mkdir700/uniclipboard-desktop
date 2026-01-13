@@ -60,6 +60,8 @@ diesel::table! {
     t_device (id) {
         id -> Text,
         name -> Text,
+        platform -> Text,
+        is_local -> Bool,
         created_at -> BigInt,
     }
 }

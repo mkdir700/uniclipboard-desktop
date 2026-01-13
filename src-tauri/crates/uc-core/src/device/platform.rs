@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Platform {
     Windows,
     MacOS,
@@ -31,6 +31,14 @@ impl FromStr for Platform {
 
 impl Display for Platform {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Platform::Windows => write!(f, "windows"),
+            Platform::MacOS => write!(f, "macos"),
+            Platform::Linux => write!(f, "linux"),
+            Platform::Android => write!(f, "android"),
+            Platform::IOS => write!(f, "ios"),
+            Platform::Browser => write!(f, "browser"),
+            Platform::Unknown => write!(f, "unknown"),
+        }
     }
 }

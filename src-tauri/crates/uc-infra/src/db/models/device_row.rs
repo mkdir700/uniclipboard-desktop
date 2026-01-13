@@ -6,6 +6,8 @@ use diesel::prelude::*;
 pub struct DeviceRow {
     pub id: String,
     pub name: String,
+    pub platform: String,
+    pub is_local: bool,
     pub created_at: i64,
 }
 
@@ -14,5 +16,7 @@ pub struct DeviceRow {
 pub struct NewDeviceRow {
     pub id: String,
     pub name: String,
+    pub platform: String,
+    pub is_local: bool,
     pub created_at: i64,
 }

@@ -31,6 +31,7 @@ impl FileSettingsRepository {
     /// # Examples
     ///
     /// ```
+    /// # use uc_infra::settings::repository::FileSettingsRepository;
     /// let _repo = FileSettingsRepository::new("config/settings.json");
     /// ```
     pub fn new(path: impl Into<PathBuf>) -> Self {
@@ -42,16 +43,6 @@ impl FileSettingsRepository {
     /// # Returns
     ///
     /// `Some(&Path)` with the parent directory, or `None` if the path has no parent.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let repo = FileSettingsRepository::new("/tmp/config/settings.json");
-    /// assert_eq!(
-    ///     repo.dir().and_then(|p| p.file_name()).and_then(|n| n.to_str()),
-    ///     Some("config")
-    /// );
-    /// ```
     fn dir(&self) -> Option<&Path> {
         self.path.parent()
     }
@@ -64,20 +55,6 @@ impl FileSettingsRepository {
     /// # Returns
     ///
     /// `Ok(())` on success; an error with context `create settings dir failed: {dir}` if directory creation fails.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::path::PathBuf;
-    /// # use uc_infra::settings::file_repo::FileSettingsRepository;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let path = std::env::temp_dir().join("my_app").join("settings.json");
-    ///     let repo = FileSettingsRepository::new(path);
-    ///     repo.ensure_parent_dir().await.unwrap();
-    /// }
-    /// ```
     async fn ensure_parent_dir(&self) -> Result<()> {
         if let Some(dir) = self.dir() {
             fs::create_dir_all(dir)
@@ -97,20 +74,6 @@ impl FileSettingsRepository {
     ///
     /// `Ok(())` if the write-and-rename completed successfully, `Err` with context if
     /// directory creation, writing the temporary file, or renaming the file failed.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::path::Path;
-    /// # use tokio::runtime::Runtime;
-    /// # // assume FileSettingsRepository is in scope
-    /// let rt = Runtime::new().unwrap();
-    /// rt.block_on(async {
-    ///     let repo = FileSettingsRepository::new("test-settings.json");
-    ///     repo.atomic_write(r#"{"key":"value"}"#).await.unwrap();
-    ///     assert!(Path::new("test-settings.json").exists());
-    /// });
-    /// ```
     async fn atomic_write(&self, content: &str) -> Result<()> {
         self.ensure_parent_dir().await?;
 
@@ -155,11 +118,14 @@ impl SettingsPort for FileSettingsRepository {
     ///
     /// # Examples
     ///
-    /// ```
-    /// # async fn example() {
+    /// ```no_run
+    /// # use uc_infra::settings::repository::FileSettingsRepository;
+    /// # use uc_core::ports::SettingsPort;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let repo = FileSettingsRepository::new(std::path::PathBuf::from("/tmp/nonexistent_settings.json"));
-    /// let settings = repo.load().await.unwrap();
+    /// let settings = repo.load().await?;
     /// // `settings` is either the migrated contents of the file or `Settings::default()` if the file was missing.
+    /// # Ok(())
     /// # }
     /// ```
     async fn load(&self) -> Result<Settings> {
@@ -199,13 +165,16 @@ impl SettingsPort for FileSettingsRepository {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use uc_infra::settings::{FileSettingsRepository, Settings};
+    /// ```no_run
+    /// # use uc_infra::settings::repository::FileSettingsRepository;
+    /// # use uc_core::settings::model::Settings;
+    /// # use uc_core::ports::SettingsPort;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let repo = FileSettingsRepository::new(std::path::PathBuf::from("/tmp/settings.json"));
     /// let settings = Settings::default();
-    /// tokio::runtime::Runtime::new().unwrap().block_on(async {
-    ///     repo.save(&settings).await.unwrap();
-    /// });
+    /// repo.save(&settings).await?;
+    /// # Ok(())
+    /// # }
     /// ```
     async fn save(&self, settings: &Settings) -> Result<()> {
         let content =
@@ -223,10 +192,14 @@ impl SettingsPort for CachedSettingsRepository {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
+    /// # use uc_infra::settings::repository::FileSettingsRepository;
+    /// # use uc_core::ports::SettingsPort;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let repo = FileSettingsRepository::new(std::path::PathBuf::from("/tmp/nonexistent_settings.json"));
-    /// let settings = repo.load().await.unwrap();
+    /// let settings = repo.load().await?;
     /// // `settings` is either the migrated contents of the file or `Settings::default()` if the file was missing.
+    /// # Ok(())
     /// # }
     /// ```
     async fn load(&self) -> Result<Settings> {
@@ -251,13 +224,16 @@ impl SettingsPort for CachedSettingsRepository {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use uc_infra::settings::{FileSettingsRepository, Settings};
+    /// ```no_run
+    /// # use uc_infra::settings::repository::FileSettingsRepository;
+    /// # use uc_core::settings::model::Settings;
+    /// # use uc_core::ports::SettingsPort;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let repo = FileSettingsRepository::new(std::path::PathBuf::from("/tmp/settings.json"));
     /// let settings = Settings::default();
-    /// tokio::runtime::Runtime::new().unwrap().block_on(async {
-    ///     repo.save(&settings).await.unwrap();
-    /// });
+    /// repo.save(&settings).await?;
+    /// # Ok(())
+    /// # }
     /// ```
     async fn save(&self, settings: &Settings) -> Result<()> {
         self.inner.save(&settings).await

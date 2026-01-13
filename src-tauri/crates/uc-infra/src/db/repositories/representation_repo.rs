@@ -5,15 +5,21 @@
 //!
 //! # Usage
 //!
-//! ```rust
-//! use uc_infra::db::repositories::DieselClipboardRepresentationRepository;
+//! Create a repository with a database executor:
 //!
+//! ```ignore
 //! let repo = DieselClipboardRepresentationRepository::new(executor);
+//! ```
 //!
-//! // Query a representation
+//! Query a representation by event and representation ID:
+//!
+//! ```ignore
 //! let rep = repo.get_representation(&event_id, &rep_id).await?;
+//! ```
 //!
-//! // Update blob_id after materialization
+//! Update blob_id after materialization:
+//!
+//! ```ignore
 //! repo.update_blob_id(&rep_id, &blob_id).await?;
 //! ```
 

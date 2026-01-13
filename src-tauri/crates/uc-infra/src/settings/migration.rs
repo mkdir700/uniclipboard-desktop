@@ -30,7 +30,7 @@ impl SettingsMigrator {
     /// # Examples
     ///
     /// ```
-    /// use uc_core::settings::migration::SettingsMigrator;
+    /// # use uc_infra::settings::migration::SettingsMigrator;
     /// let migrator = SettingsMigrator::new();
     /// ```
     pub fn new() -> Self {
@@ -54,9 +54,11 @@ impl SettingsMigrator {
     /// # Examples
     ///
     /// ```no_run
+    /// # use uc_infra::settings::migration::SettingsMigrator;
+    /// # use uc_core::settings::model::Settings;
+    /// # use uc_infra::settings::migration::MigrationError;
     /// let migrator = SettingsMigrator::new();
-    /// // `settings` should be obtained from storage or created by the caller.
-    /// let settings = /* obtain Settings */;
+    /// let settings = Settings::default();
     /// let migrated = migrator.migrate_to_latest(settings)?;
     /// # Ok::<(), MigrationError>(())
     /// ```

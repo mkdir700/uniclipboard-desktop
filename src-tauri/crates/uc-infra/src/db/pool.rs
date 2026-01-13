@@ -26,6 +26,7 @@ pub type DbPool = Pool<ConnectionManager<SqliteConnection>>;
 /// # Examples
 ///
 /// ```no_run
+/// # use uc_infra::db::pool::init_db_pool;
 /// let pool = init_db_pool(":memory:").expect("failed to initialize DB pool");
 /// // use `pool` to acquire connections: let conn = pool.get().unwrap();
 /// ```
@@ -49,14 +50,6 @@ pub fn init_db_pool(database_url: &str) -> Result<DbPool> {
 /// # Errors
 ///
 /// Returns an error if acquiring a connection from the pool fails or if applying migrations fails.
-///
-/// # Examples
-///
-/// ```
-/// # use uc_infra::db::{init_db_pool, run_migrations};
-/// let pool = init_db_pool("file::memory:?mode=memory&cache=shared").unwrap();
-/// run_migrations(&pool).unwrap();
-/// ```
 fn run_migrations(pool: &DbPool) -> Result<()> {
     let mut conn = pool.get()?;
 
