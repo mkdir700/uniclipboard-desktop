@@ -12,6 +12,7 @@ pub struct TauriAutostart {
 }
 
 impl TauriAutostart {
+    #[allow(dead_code)]
     pub(crate) fn new(app_handle: AppHandle) -> Self {
         Self { app_handle }
     }
