@@ -68,6 +68,7 @@ pub fn build_runtime(_seed: AppRuntimeSeed, app_handle: &tauri::AppHandle) -> an
         clipboard_event_repo: todo!("Inject clipboard event repo"),
         representation_repo: todo!("Inject representation repo"),
         representation_materializer: todo!("Inject representation materializer"),
+        selection_repo: todo!("Inject selection repo"),
         encryption: todo!("Inject encryption port"),
         encryption_session: todo!("Inject encryption session"),
         keyring: todo!("Inject keyring port"),

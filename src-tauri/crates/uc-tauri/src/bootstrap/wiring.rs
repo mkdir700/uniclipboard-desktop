@@ -49,7 +49,7 @@ use uc_infra::db::mappers::{
 use uc_infra::db::pool::{init_db_pool, DbPool};
 use uc_infra::db::repositories::{
     DieselBlobRepository, DieselClipboardEntryRepository, DieselClipboardEventRepository, DieselClipboardRepresentationRepository,
-    DieselDeviceRepository,
+    DieselDeviceRepository, InMemoryClipboardSelectionRepository,
 };
 use uc_infra::fs::key_slot_store::JsonKeySlotStore;
 use uc_infra::security::{Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository};
@@ -143,6 +143,7 @@ struct InfraLayer {
     clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     clipboard_event_repo: Arc<dyn ClipboardEventRepositoryPort>,
     representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
+    selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
 
     // Device repository / 设备仓库
     device_repo: Arc<dyn DeviceRepositoryPort>,
@@ -307,10 +308,16 @@ fn create_infra_layer(
     let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
     let hash: Arc<dyn ContentHashPort> = Arc::new(Blake3Hasher);
 
+    // Create clipboard selection repository (placeholder)
+    // 创建剪贴板选择仓库（占位符）
+    let selection_repo_impl = InMemoryClipboardSelectionRepository::new();
+    let selection_repo: Arc<dyn ClipboardSelectionRepositoryPort> = Arc::new(selection_repo_impl);
+
     let infra = InfraLayer {
         clipboard_entry_repo,
         clipboard_event_repo,
         representation_repo,
+        selection_repo,
         device_repo,
         blob_repository,
         key_material,
@@ -467,6 +474,7 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
         clipboard_event_repo: infra.clipboard_event_repo,
         representation_repo: infra.representation_repo,
         representation_materializer: platform.representation_materializer,
+        selection_repo: infra.selection_repo,
 
         // Security dependencies / 安全依赖
         encryption: infra.encryption,
