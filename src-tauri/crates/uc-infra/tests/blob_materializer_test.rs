@@ -4,7 +4,7 @@
 use uc_core::Blob;
 use uc_core::BlobId;
 use uc_core::ContentHash;
-use uc_core::ports::{BlobMaterializerPort, BlobStorePort, BlobRepositoryPort, ClockPort};
+use uc_core::ports::{BlobMaterializerPort, BlobStorePort, BlobRepositoryPort};
 use uc_infra::blob::BlobMaterializer;
 use uc_infra::SystemClock;
 use std::sync::Arc;

@@ -108,8 +108,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Note: This requires a test database setup.
     // For now, we provide the test structure that can be run with proper test DB.
     // Actual execution requires test container or in-memory SQLite setup.

@@ -22,6 +22,7 @@ where
     event_tx: PlatformEventSender,
     event_rx: PlatformEventReceiver,
     command_rx: PlatformCommandReceiver,
+    #[allow(dead_code)]
     executor: Arc<E>,
     shutting_down: bool,
     #[allow(dead_code)]

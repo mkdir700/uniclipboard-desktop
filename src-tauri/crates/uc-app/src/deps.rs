@@ -63,8 +63,6 @@ pub struct AppDeps {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_app_deps_is_just_a_struct() {
         // This test verifies AppDeps is a plain struct,

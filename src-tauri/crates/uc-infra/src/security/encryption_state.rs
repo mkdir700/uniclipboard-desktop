@@ -8,12 +8,15 @@ use uc_core::{
     security::state::{EncryptionState, EncryptionStateError},
 };
 
+#[allow(dead_code)]
 const ENCRYPTION_STATE_FILE: &str = ".initialized_encryption";
 
+#[allow(dead_code)]
 pub struct EncryptionStateRepository {
     path: PathBuf,
 }
 
+#[allow(dead_code)]
 impl EncryptionStateRepository {
     pub fn new(config_dir: PathBuf) -> Self {
         Self {
