@@ -174,6 +174,33 @@ Settings stored in TOML, managed by global `SETTING` RwLock ([config/setting.rs]
 - Security (encryption password)
 - Storage limits
 
+## Clipboard Capture Integration
+
+### Automatic Capture Flow
+
+The application automatically captures clipboard content when it changes:
+
+1. **ClipboardWatcher** (Platform Layer) monitors system clipboard
+2. Sends `PlatformEvent::ClipboardChanged { snapshot }` when change detected
+3. **PlatformRuntime** receives event and calls `ClipboardChangeHandler` callback
+4. **AppRuntime** implements the callback, invokes `CaptureClipboardUseCase`
+5. **UseCase** persists event, representations, and creates `ClipboardEntry`
+
+### Important: Callback Architecture
+
+The integration uses a **callback pattern** maintaining proper layer separation:
+
+- Platform Layer → depends on `ClipboardChangeHandler` trait (in uc-core/ports)
+- App Layer → implements `ClipboardChangeHandler` trait
+- Platform pushes changes upward via trait call
+- No dependency from Platform to App (follows DIP)
+
+### When Modifying
+
+- **Platform Layer:** Never call App layer directly, use callback trait
+- **App Layer:** Implement callback to handle events, can call multiple usecases
+- **UseCase:** `execute_with_snapshot()` for automatic capture, `execute()` for manual
+
 ## Tauri Commands
 
 All frontend-backend communication through Tauri commands defined in [api/](src-tauri/src/api/). Key commands:
