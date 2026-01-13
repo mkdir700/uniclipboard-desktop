@@ -9,6 +9,7 @@ pub mod bootstrap;
 pub mod deps;
 pub mod models;
 pub mod ports;
+pub mod usecase_factory;
 pub mod usecases;
 
 pub use deps::AppDeps;
