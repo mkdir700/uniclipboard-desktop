@@ -24,6 +24,6 @@ pub mod ui;
 pub use autostart::PlaceholderAutostartPort;
 pub use blob::PlaceholderBlobMaterializerPort;
 pub use blob_store::{FilesystemBlobStore, PlaceholderBlobStorePort};
-pub use encryption::PlaceholderEncryptionSessionPort;
+pub use encryption::{InMemoryEncryptionSessionPort, PlaceholderEncryptionSessionPort};
 pub use network::PlaceholderNetworkPort;
 pub use ui::PlaceholderUiPort;

@@ -58,7 +58,7 @@ use uc_infra::SystemClock;
 use uc_infra::device::LocalDeviceIdentity;
 use uc_platform::adapters::{
     FilesystemBlobStore, PlaceholderAutostartPort, PlaceholderBlobMaterializerPort,
-    PlaceholderEncryptionSessionPort,
+    InMemoryEncryptionSessionPort,
     PlaceholderNetworkPort, PlaceholderUiPort,
 };
 use uc_infra::clipboard::ClipboardRepresentationMaterializerV2;
@@ -382,7 +382,7 @@ fn create_platform_layer(
     let blob_materializer: Arc<dyn BlobMaterializerPort> =
         Arc::new(PlaceholderBlobMaterializerPort);
     let encryption_session: Arc<dyn EncryptionSessionPort> =
-        Arc::new(PlaceholderEncryptionSessionPort::new());
+        Arc::new(InMemoryEncryptionSessionPort::new());
 
     Ok(PlatformLayer {
         clipboard,
