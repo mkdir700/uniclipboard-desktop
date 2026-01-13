@@ -10,7 +10,7 @@ use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
 
 use uc_core::config::AppConfig;
-use uc_tauri::bootstrap::{create_app, load_config, wire_dependencies};
+use uc_tauri::bootstrap::{load_config, wire_dependencies};
 
 /// Main entry point
 fn main() {
@@ -50,12 +50,9 @@ fn run_app(config: AppConfig) {
         }
     };
 
-    // Create the App instance
-    // NOTE: The app is currently unused because we haven't integrated
-    // the runtime startup yet. This will be done in later tasks.
-    let _app = create_app(deps);
-
     Builder::default()
+        // Manage AppDeps as Tauri state for command handlers
+        .manage(deps)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
@@ -98,6 +95,13 @@ fn run_app(config: AppConfig) {
             // For now, we just create the window
 
             Ok(())
+        })
+        // TODO: Register command handlers in Task 3
+        // For now, use a placeholder invoke_handler
+        .invoke_handler(|_event| {
+            // Placeholder: reject all unhandled commands
+            // Note: This is a sync closure, commands will be handled differently
+            false // Return false to indicate event was not handled
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

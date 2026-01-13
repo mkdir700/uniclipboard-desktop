@@ -1,8 +1,13 @@
+pub mod clipboard;
 pub mod dto;
+pub mod encryption;
 pub mod error;
+pub mod settings;
 
-// Command registration will be handled directly in main.rs
-// This module is reserved for future command implementations
+// Re-export commonly used types
+pub use clipboard::*;
+pub use encryption::*;
+pub use settings::*;
 
 pub use error::map_err;
 

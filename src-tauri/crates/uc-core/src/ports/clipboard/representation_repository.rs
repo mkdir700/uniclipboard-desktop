@@ -5,7 +5,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait ClipboardRepresentationRepositoryPort {
+pub trait ClipboardRepresentationRepositoryPort: Send + Sync {
     async fn get_representation(
         &self,
         event_id: &EventId,
