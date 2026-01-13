@@ -2,33 +2,36 @@ use crate::models::MaterializedPayload;
 use anyhow::{Ok, Result};
 use uc_core::ids::EntryId;
 use uc_core::ports::{
-    BlobMaterializerPort, ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
-    ClipboardSelectionRepositoryPort, ContentHashPort,
+    BlobMaterializerPort, BlobStorePort, ClipboardEntryRepositoryPort,
+    ClipboardRepresentationRepositoryPort, ClipboardSelectionRepositoryPort, ContentHashPort,
 };
 use uc_core::PersistedClipboardRepresentation;
 
-pub struct MaterializeClipboardSelectionUseCase<E, R, B, H, S>
+pub struct MaterializeClipboardSelectionUseCase<E, R, B, H, S, BS>
 where
     E: ClipboardEntryRepositoryPort,
     R: ClipboardRepresentationRepositoryPort,
     B: BlobMaterializerPort,
     H: ContentHashPort,
     S: ClipboardSelectionRepositoryPort,
+    BS: BlobStorePort,
 {
     entry_repository: E,
     representation_repository: R,
     blob_materializer: B,
     hasher: H,
     selection_repository: S,
+    blob_store: BS,
 }
 
-impl<E, R, B, H, S> MaterializeClipboardSelectionUseCase<E, R, B, H, S>
+impl<E, R, B, H, S, BS> MaterializeClipboardSelectionUseCase<E, R, B, H, S, BS>
 where
     E: ClipboardEntryRepositoryPort,
     R: ClipboardRepresentationRepositoryPort,
     B: BlobMaterializerPort,
     H: ContentHashPort,
     S: ClipboardSelectionRepositoryPort,
+    BS: BlobStorePort,
 {
     pub fn new(
         entry_repository: E,
@@ -36,6 +39,7 @@ where
         blob_materializer: B,
         hasher: H,
         selection_repository: S,
+        blob_store: BS,
     ) -> Self {
         Self {
             entry_repository,
@@ -43,6 +47,7 @@ where
             blob_materializer,
             hasher,
             selection_repository,
+            blob_store,
         }
     }
 
@@ -112,8 +117,23 @@ where
 
     async fn load_representation_bytes(
         &self,
-        _rep: &PersistedClipboardRepresentation,
+        rep: &PersistedClipboardRepresentation,
     ) -> Result<Vec<u8>> {
-        unimplemented!()
+        // 1. Check inline data first
+        if let Some(inline_data) = &rep.inline_data {
+            return Ok(inline_data.clone());
+        }
+
+        // 2. Load from blob store
+        if let Some(blob_id) = &rep.blob_id {
+            let data = self.blob_store.get(blob_id).await?;
+            return Ok(data);
+        }
+
+        // 3. No data available
+        Err(anyhow::anyhow!(
+            "Representation {} has no data (inline or blob)",
+            rep.id
+        ))
     }
 }
