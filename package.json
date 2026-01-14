@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:coverage": "cd src-tauri && cargo llvm-cov --html --workspace --features=integration_tests"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
