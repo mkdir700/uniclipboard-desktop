@@ -19,6 +19,14 @@ use uc_platform::runtime::event_bus::{PlatformCommandReceiver, PlatformEventSend
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 
+// Plugins
+mod plugins;
+use plugins::mac_rounded_corners;
+
+// Onboarding module (simplified implementation during migration)
+mod onboarding;
+use onboarding::check_onboarding_status;
+
 /// Simple executor for platform commands
 ///
 /// This is a placeholder implementation that logs commands.
@@ -154,7 +162,7 @@ fn run_app(config: AppConfig) {
             // Start the platform runtime in background
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 log::info!("Platform runtime task started");
 
                 // Send StartClipboardWatcher command to enable monitoring
@@ -203,6 +211,12 @@ fn run_app(config: AppConfig) {
             // Settings commands
             uc_tauri::commands::settings::get_settings,
             uc_tauri::commands::settings::update_settings,
+            // macOS Rounded Corners plugin commands
+            mac_rounded_corners::enable_rounded_corners,
+            mac_rounded_corners::enable_modern_window_style,
+            mac_rounded_corners::reposition_traffic_lights,
+            // Onboarding commands (simplified implementation during migration)
+            check_onboarding_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

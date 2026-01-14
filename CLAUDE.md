@@ -239,6 +239,20 @@ pub async fn example_command(
 
 **Status**: See [docs/architecture/commands-status.md](docs/architecture/commands-status.md) for detailed migration status.
 
+### Commands Layer Status
+
+**Current Migration Status:** 5/7 commands using UseCases accessor (71%)
+
+When adding new commands:
+
+1. Define command function in `src-tauri/crates/uc-tauri/src/commands/`
+2. Create/refer to use case in `uc-app/src/usecases/`
+3. Add accessor method to `UseCases` in `src-tauri/crates/uc-tauri/src/bootstrap/runtime.rs`
+4. Register in `invoke_handler![]` in `src-tauri/src/main.rs`
+5. Use `runtime.usecases().xxx()` - NEVER `runtime.deps.xxx`
+
+See `docs/architecture/commands-status.md` for detailed status.
+
 ## Development Notes
 
 - **Package manager**: Bun (not npm/yarn) - faster install/dev times
