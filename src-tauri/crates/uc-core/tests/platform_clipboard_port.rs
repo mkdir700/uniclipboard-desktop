@@ -35,8 +35,9 @@ impl SystemClipboardPort for CountingClipboardPort {
         // Increment counter each time this method is called
         let count = self.call_count.fetch_add(1, Ordering::SeqCst);
 
-        // If counter > 1, we're being called recursively (BUG!)
-        if count > 1 {
+        // If counter >= 1, we're being called recursively (BUG!)
+        // fetch_add returns the OLD value, so first call returns 0, second returns 1
+        if count >= 1 {
             panic!("read_snapshot called recursively! This indicates PlatformClipboardPort blanket impl is calling self.read_snapshot() instead of SystemClipboardPort::read_snapshot(self)");
         }
 
