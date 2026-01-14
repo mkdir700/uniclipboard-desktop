@@ -24,10 +24,12 @@ pub mod is_encryption_initialized;
 pub mod list_clipboard_entries;
 pub mod list_clipboard_entry_previews;
 pub mod settings;
+pub mod update_settings;
 
 pub use delete_clipboard_entry::DeleteClipboardEntry;
 pub use get_settings::GetSettings;
 pub use initialize_encryption::InitializeEncryption;
 pub use is_encryption_initialized::IsEncryptionInitialized;
 pub use list_clipboard_entries::ListClipboardEntries;
+pub use update_settings::UpdateSettings;
 
