@@ -25,6 +25,24 @@ impl InsertMapper<(PersistedClipboardRepresentation, EventId), NewSnapshotRepres
     }
 }
 
+// Blanket implementation for references: if we can map from owned values,
+// we can also map from references by dereferencing
+impl<'a> InsertMapper<(&'a PersistedClipboardRepresentation, &'a EventId), NewSnapshotRepresentationRow>
+    for RepresentationRowMapper
+where
+    Self: InsertMapper<(PersistedClipboardRepresentation, EventId), NewSnapshotRepresentationRow>,
+{
+    fn to_row(
+        &self,
+        domain: &(&'a PersistedClipboardRepresentation, &'a EventId),
+    ) -> Result<NewSnapshotRepresentationRow> {
+        let (rep, event_id) = domain;
+        // Convert references to owned values for the owned implementation
+        let owned_domain = ((**rep).clone(), (**event_id).clone());
+        <Self as InsertMapper<(PersistedClipboardRepresentation, EventId), NewSnapshotRepresentationRow>>::to_row(self, &owned_domain)
+    }
+}
+
 impl RowMapper<SnapshotRepresentationRow, uc_core::clipboard::PersistedClipboardRepresentation>
     for RepresentationRowMapper
 {

@@ -31,6 +31,8 @@
 
 use uc_app::{App, AppDeps};
 use uc_core::config::AppConfig;
+use uc_core::ports::ClipboardChangeHandler;
+use uc_core::SystemClipboardSnapshot;
 
 /// Application runtime with dependencies.
 ///
@@ -272,4 +274,35 @@ pub fn create_runtime(config: AppConfig) -> anyhow::Result<AppRuntimeSeed> {
 /// ```
 pub fn create_app(deps: AppDeps) -> App {
     App::new(deps)
+}
+
+/// Implement ClipboardChangeHandler for AppRuntime.
+///
+/// This allows AppRuntime to be used as a callback for clipboard change events
+/// from the platform layer.
+#[async_trait::async_trait]
+impl ClipboardChangeHandler for AppRuntime {
+    async fn on_clipboard_changed(&self, snapshot: SystemClipboardSnapshot) -> anyhow::Result<()> {
+        // Create CaptureClipboardUseCase with dependencies
+        let usecase = uc_app::usecases::internal::capture_clipboard::CaptureClipboardUseCase::new(
+            self.deps.clipboard.clone(),
+            self.deps.clipboard_entry_repo.clone(),
+            self.deps.clipboard_event_repo.clone(),
+            self.deps.representation_policy.clone(),
+            self.deps.representation_materializer.clone(),
+            self.deps.device_identity.clone(),
+        );
+
+        // Execute capture with the provided snapshot
+        match usecase.execute_with_snapshot(snapshot).await {
+            Ok(event_id) => {
+                log::debug!("Successfully captured clipboard, event_id: {}", event_id);
+                Ok(())
+            }
+            Err(e) => {
+                log::error!("Failed to capture clipboard: {:?}", e);
+                Err(e)
+            }
+        }
+    }
 }

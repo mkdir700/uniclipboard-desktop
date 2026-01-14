@@ -23,9 +23,9 @@ use uc_core::ports::*;
 /// 所有依赖都是必需的 - 无默认值，无可选字段。
 pub struct AppDeps {
     // Clipboard dependencies / 剪贴板依赖
-    pub clipboard: Arc<dyn SystemClipboardPort>,
+    pub clipboard: Arc<dyn PlatformClipboardPort>,
     pub clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
-    pub clipboard_event_repo: Arc<dyn ClipboardEventRepositoryPort>,
+    pub clipboard_event_repo: Arc<dyn ClipboardEventWriterPort>,
     pub representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
     pub representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,
     pub selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,

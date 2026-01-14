@@ -26,6 +26,7 @@ async fn test_handle_clipboard_changed_event() {
         event_rx,
         cmd_rx,
         Arc::new(MockExecutor),
+        None,
     ).unwrap();
 
     // Create a test snapshot
@@ -59,6 +60,7 @@ async fn test_runtime_creation() {
         event_rx,
         cmd_rx,
         Arc::new(MockExecutor),
+        None,
     );
 
     assert!(runtime.is_ok(), "Runtime should be created successfully");
@@ -74,6 +76,7 @@ async fn test_handle_started_event() {
         event_rx,
         cmd_rx,
         Arc::new(MockExecutor),
+        None,
     ).unwrap();
 
     // Send Started event
@@ -90,6 +93,7 @@ async fn test_handle_error_event() {
         event_rx,
         cmd_rx,
         Arc::new(MockExecutor),
+        None,
     ).unwrap();
 
     // Send Error event

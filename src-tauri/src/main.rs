@@ -2,15 +2,54 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use log::error;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
+use tokio::sync::mpsc;
 
 use uc_core::config::AppConfig;
+use uc_core::ports::ClipboardChangeHandler;
+use uc_platform::ipc::PlatformCommand;
+use uc_platform::ports::PlatformCommandExecutorPort;
+use uc_platform::runtime::event_bus::{PlatformCommandReceiver, PlatformEventSender, PlatformEventReceiver};
+use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
+
+/// Simple executor for platform commands
+///
+/// This is a placeholder implementation that logs commands.
+/// In a full implementation, this would execute the actual platform commands.
+struct SimplePlatformCommandExecutor;
+
+#[async_trait::async_trait]
+impl PlatformCommandExecutorPort for SimplePlatformCommandExecutor {
+    async fn execute(&self, command: PlatformCommand) -> anyhow::Result<()> {
+        // For now, just acknowledge the command
+        // TODO: Implement actual command execution in future tasks
+        match command {
+            PlatformCommand::StartClipboardWatcher => {
+                log::info!("StartClipboardWatcher command received");
+            }
+            PlatformCommand::StopClipboardWatcher => {
+                log::info!("StopClipboardWatcher command received");
+            }
+            PlatformCommand::ReadClipboard => {
+                log::info!("ReadClipboard command received (not implemented)");
+            }
+            PlatformCommand::WriteClipboard { .. } => {
+                log::info!("WriteClipboard command received (not implemented)");
+            }
+            PlatformCommand::Shutdown => {
+                log::info!("Shutdown command received (not implemented)");
+            }
+        }
+        Ok(())
+    }
+}
 
 /// Main entry point
 fn main() {
@@ -51,11 +90,24 @@ fn run_app(config: AppConfig) {
     };
 
     // Create AppRuntime from dependencies
-    let runtime = AppRuntime::new(deps);
+    let runtime = Arc::new(AppRuntime::new(deps));
+
+    // Create event channels for PlatformRuntime
+    let (platform_event_tx, platform_event_rx): (PlatformEventSender, PlatformEventReceiver) = mpsc::channel(100);
+    let (platform_cmd_tx, platform_cmd_rx): (tokio::sync::mpsc::Sender<uc_platform::ipc::PlatformCommand>, PlatformCommandReceiver) = mpsc::channel(100);
+
+    // Clone the Arc for the callback
+    let runtime_clone = Arc::clone(&runtime);
+    let clipboard_handler: Arc<dyn ClipboardChangeHandler> = runtime_clone;
+
+    log::info!("Creating platform runtime with clipboard callback");
+
+    // Note: PlatformRuntime will be started in setup block
+    // The actual startup will be completed in a follow-up task
 
     Builder::default()
         // Manage AppRuntime for use case access
-        .manage(runtime)
+        .manage(runtime.clone())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
@@ -91,11 +143,50 @@ fn run_app(config: AppConfig) {
                 win_builder
             };
 
-            let _window = win_builder.build().expect("Failed to build main window");
+            let _window = match win_builder.build() {
+                Ok(window) => window,
+                Err(e) => {
+                    log::error!("Failed to build main window: {}", e);
+                    return Err(Box::new(e));
+                }
+            };
 
-            // TODO: Start the app runtime
-            // This will be implemented in later tasks
-            // For now, we just create the window
+            // Start the platform runtime in background
+            let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
+            let platform_event_tx_clone = platform_event_tx.clone();
+            tokio::spawn(async move {
+                log::info!("Platform runtime task started");
+
+                // Send StartClipboardWatcher command to enable monitoring
+                match platform_cmd_tx_for_spawn.send(PlatformCommand::StartClipboardWatcher).await {
+                    Ok(_) => log::info!("StartClipboardWatcher command sent"),
+                    Err(e) => log::error!("Failed to send StartClipboardWatcher command: {}", e),
+                }
+
+                // Create PlatformRuntime with the callback
+                let executor = Arc::new(SimplePlatformCommandExecutor);
+                let platform_runtime = match PlatformRuntime::new(
+                    platform_event_tx_clone,
+                    platform_event_rx,
+                    platform_cmd_rx,
+                    executor,
+                    Some(clipboard_handler),
+                ) {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        log::error!("Failed to create platform runtime: {}", e);
+                        return;
+                    }
+                };
+
+                // Start the platform runtime event loop
+                platform_runtime.start().await;
+
+                log::info!("Platform runtime task ended");
+            });
+
+            log::info!("App runtime initialized with clipboard capture integration");
+            log::info!("Platform runtime started with clipboard callback");
 
             Ok(())
         })

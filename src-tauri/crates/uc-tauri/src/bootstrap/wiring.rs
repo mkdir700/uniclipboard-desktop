@@ -142,7 +142,7 @@ struct InfraLayer {
     // Clipboard repositories / 剪贴板仓库
     #[allow(dead_code)]
     clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
-    clipboard_event_repo: Arc<dyn ClipboardEventRepositoryPort>,
+    clipboard_event_repo: Arc<dyn ClipboardEventWriterPort>,
     representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
     selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
 
@@ -173,7 +173,7 @@ struct InfraLayer {
 /// 此结构体保存所有平台特定实现（剪贴板、密钥环等），将被注入到应用程序中。
 struct PlatformLayer {
     // System clipboard / 系统剪贴板
-    clipboard: Arc<dyn SystemClipboardPort>,
+    clipboard: Arc<dyn PlatformClipboardPort>,
 
     // Keyring for secure storage / 密钥环用于安全存储
     keyring: Arc<dyn KeyringPort>,
@@ -265,7 +265,7 @@ fn create_infra_layer(
         event_row_mapper,
         RepresentationRowMapper,
     );
-    let clipboard_event_repo: Arc<dyn ClipboardEventRepositoryPort> = Arc::new(clipboard_event_repo_impl);
+    let clipboard_event_repo: Arc<dyn ClipboardEventWriterPort> = Arc::new(clipboard_event_repo_impl);
 
     let rep_repo = DieselClipboardRepresentationRepository::new(Arc::clone(&db_executor));
     let representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort> = Arc::new(rep_repo);
@@ -371,7 +371,7 @@ fn create_platform_layer(
     // 创建系统剪贴板实现（平台特定）
     let clipboard = LocalClipboard::new()
         .map_err(|e| WiringError::ClipboardInit(format!("Failed to create clipboard: {}", e)))?;
-    let clipboard: Arc<dyn SystemClipboardPort> = Arc::new(clipboard);
+    let clipboard: Arc<dyn PlatformClipboardPort> = Arc::new(clipboard);
 
     // Create device identity (filesystem-backed UUID)
     // 创建设备身份（基于文件系统的 UUID）
@@ -700,7 +700,7 @@ mod tests {
             Ok(layer) => {
                 // Verify all fields have correct types
                 // 验证所有字段都有正确的类型
-                let _clipboard: &Arc<dyn SystemClipboardPort> = &layer.clipboard;
+                let _clipboard: &Arc<dyn PlatformClipboardPort> = &layer.clipboard;
                 let _keyring: &Arc<dyn KeyringPort> = &layer.keyring;
                 let _ui: &Arc<dyn UiPort> = &layer.ui;
                 let _autostart: &Arc<dyn AutostartPort> = &layer.autostart;
@@ -739,7 +739,7 @@ mod tests {
         // 验证 PlatformLayer 有预期的字段
         // This is a compile-time check
         // 这是编译时检查
-        let _ = || -> std::sync::Arc<dyn SystemClipboardPort> {
+        let _ = || -> std::sync::Arc<dyn PlatformClipboardPort> {
             // This closure should only compile if PlatformLayer has a `clipboard` field
             // 此闭包只有在 PlatformLayer 有 `clipboard` 字段时才能编译
             unimplemented!()
