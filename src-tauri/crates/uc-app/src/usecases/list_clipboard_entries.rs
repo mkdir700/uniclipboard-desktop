@@ -20,25 +20,36 @@ impl ListClipboardEntries {
         }
     }
 
-    /// Execute the query
-    /// 执行查询
+    /// Lists clipboard entries starting at `offset` and returning up to `limit` entries.
     ///
-    /// # Arguments
-    /// * `limit` - Maximum number of entries to return (1 to max_limit)
-    /// * `offset` - Number of entries to skip
+    /// Validates `limit` against the business maximum and returns repository errors with context.
+    ///
+    /// # Parameters
+    ///
+    /// * `limit` — Maximum number of entries to return; must be at least 1 and at most the use-case's configured max.
+    /// * `offset` — Number of entries to skip from the start of the result set.
     ///
     /// # Returns
-    /// Vector of clipboard entries
+    ///
+    /// A `Vec<ClipboardEntry>` containing up to `limit` entries beginning at `offset`.
     ///
     /// # Errors
-    /// Returns error if:
-    /// - Limit is 0 or exceeds max_limit
-    /// - Repository query fails
-    pub async fn execute(
-        &self,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<ClipboardEntry>> {
+    ///
+    /// Returns an error if `limit` is 0, `limit` exceeds the configured maximum, or the repository query fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::sync::Arc;
+    /// # async fn doc_example() -> anyhow::Result<()> {
+    /// // `entry_repo` should implement `ClipboardEntryRepositoryPort`.
+    /// let entry_repo = /* Arc<dyn ClipboardEntryRepositoryPort> */;
+    /// let usecase = ListClipboardEntries::from_arc(Arc::new(entry_repo));
+    /// let entries = usecase.execute(10, 0).await?;
+    /// assert!(entries.len() <= 10);
+    /// # Ok(()) }
+    /// ```
+    pub async fn execute(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
         // Validate limit
         if limit == 0 {
             return Err(anyhow::anyhow!(
@@ -84,15 +95,40 @@ mod tests {
             unimplemented!()
         }
 
+        /// Retrieves a clipboard entry by its ID.
+        ///
+        /// # Parameters
+        ///
+        /// - `entry_id`: The identifier of the clipboard entry to fetch.
+        ///
+        /// # Returns
+        ///
+        /// `Ok(Some(entry))` if an entry with the given ID exists, `Ok(None)` if no such entry is found, or `Err` if the repository operation fails.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// // Assume `repo` is an initialized MockClipboardEntryRepository and `id` is a valid EntryId.
+        /// let res = futures::executor::block_on(repo.get_entry(&id));
+        /// assert!(res.is_ok());
+        /// ```
         async fn get_entry(&self, _entry_id: &EntryId) -> Result<Option<ClipboardEntry>> {
             unimplemented!()
         }
 
-        async fn list_entries(
-            &self,
-            limit: usize,
-            offset: usize,
-        ) -> Result<Vec<ClipboardEntry>> {
+        /// Returns a contiguous slice of stored clipboard entries starting at `offset` and limited to `limit` items, or an error if the mock is configured to fail.
+        ///
+        /// When `should_fail` is true, this method returns an error. Otherwise it returns the entries vector sliced by `offset` and `limit`.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// // Create a mock repository with no failure and no entries.
+        /// let repo = MockClipboardEntryRepository { entries: vec![], should_fail: false };
+        /// let entries = futures::executor::block_on(repo.list_entries(10, 0)).unwrap();
+        /// assert!(entries.is_empty());
+        /// ```
+        async fn list_entries(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
             if self.should_fail {
                 return Err(anyhow::anyhow!("Mock repository error"));
             }
@@ -104,8 +140,49 @@ mod tests {
                 .cloned()
                 .collect())
         }
+
+        /// Removes a clipboard entry with the given ID from the repository.
+        ///
+        /// # Parameters
+        ///
+        /// - `entry_id`: Identifier of the clipboard entry to remove.
+        ///
+        /// # Returns
+        ///
+        /// `Ok(())` if the entry was deleted, `Err` if deletion failed.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use std::sync::Arc;
+        /// # async fn example() {
+        /// let repo = Arc::new(MockClipboardEntryRepository { entries: vec![], should_fail: false });
+        /// let id = EntryId::new("some-id");
+        /// let res = repo.delete_entry(&id).await;
+        /// assert!(res.is_ok());
+        /// # }
+        /// ```
+        async fn delete_entry(&self, _entry_id: &EntryId) -> Result<()> {
+            unimplemented!()
+        }
     }
 
+    /// Constructs a deterministic `ClipboardEntry` intended for tests.
+    ///
+    /// The entry uses `id_str` to derive both the `EntryId` and `EventId`, sets the provided
+    /// `timestamp`, assigns a label of `Some(format!("Entry {}", id_str))`, and computes the
+    /// size as `100 * id_str.len()` (as `i64`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let e = create_test_entry("abc", 1_600_000_000);
+    /// assert_eq!(e.id(), &EntryId::from_str("abc"));
+    /// assert_eq!(e.event_id(), &EventId::from_str("abc"));
+    /// assert_eq!(e.timestamp(), 1_600_000_000);
+    /// assert_eq!(e.label(), &Some("Entry abc".to_string()));
+    /// assert_eq!(e.size(), 100 * 3);
+    /// ```
     fn create_test_entry(id_str: &str, timestamp: i64) -> ClipboardEntry {
         ClipboardEntry::new(
             EntryId::from_str(id_str),
@@ -190,10 +267,7 @@ mod tests {
         let result = use_case.execute(0, 0).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid limit"));
+        assert!(result.unwrap_err().to_string().contains("Invalid limit"));
     }
 
     #[tokio::test]
@@ -208,10 +282,7 @@ mod tests {
         let result = use_case.execute(2000, 0).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Must be at most"));
+        assert!(result.unwrap_err().to_string().contains("Must be at most"));
     }
 
     #[tokio::test]
@@ -226,9 +297,6 @@ mod tests {
         let result = use_case.execute(10, 0).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to query"));
+        assert!(result.unwrap_err().to_string().contains("Failed to query"));
     }
 }

@@ -14,4 +14,14 @@ pub trait ClipboardEntryRepositoryPort: Send + Sync {
     /// List clipboard entries with pagination
     /// 列出剪贴板条目（分页）
     async fn list_entries(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>>;
+
+    /// Delete a clipboard entry.
+    /// 删除剪贴板条目。
+    ///
+    /// # Arguments
+    /// * `entry_id` - The entry ID to delete
+    ///
+    /// # Errors
+    /// Returns error if database operation fails
+    async fn delete_entry(&self, entry_id: &EntryId) -> Result<()>;
 }

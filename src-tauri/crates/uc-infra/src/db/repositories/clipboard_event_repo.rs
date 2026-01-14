@@ -40,6 +40,24 @@ where
         NewSnapshotRepresentationRow,
     >,
 {
+    /// Inserts a clipboard event and all its snapshot representations in a single database transaction.
+    ///
+    /// Converts the provided event and each persisted representation to their corresponding database rows and persists them; if any conversion or insert fails, the whole transaction is rolled back.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use uc_infra::db::repositories::DieselClipboardEventRepository;
+    /// # use uc_core::{ClipboardEvent, PersistedClipboardRepresentation};
+    /// # async fn example(repo: &DieselClipboardEventRepository<_, _, _>, event: &ClipboardEvent, reps: &Vec<PersistedClipboardRepresentation>) -> anyhow::Result<()> {
+    /// repo.insert_event(event, reps).await?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// # }
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err` if mapping or database operations fail.
     async fn insert_event(
         &self,
         event: &ClipboardEvent,
@@ -70,6 +88,41 @@ where
                         ))
                         .execute(conn)?;
                 }
+
+                Ok(())
+            })
+        })
+    }
+
+    /// Deletes the clipboard event and all associated snapshot representations for the given event ID.
+    ///
+    /// The deletions are performed inside a single database transaction: snapshot representations referencing
+    /// the event are removed first, then the event row itself is deleted.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the deletion succeeds, `Err` if a database error prevents the operation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn run_example(repo: &impl std::ops::Deref<Target = crate::DieselClipboardEventRepository<impl Send + Sync, _, _>>, event_id: &crate::EventId) {
+    /// repo.delete_event_and_representations(event_id).await.unwrap();
+    /// # }
+    /// ```
+    async fn delete_event_and_representations(&self, event_id: &EventId) -> Result<()> {
+        let event_id_str = event_id.to_string();
+        self.executor.run(|conn| {
+            conn.transaction(|conn| {
+                // Delete representations first (they reference the event)
+                diesel::delete(clipboard_snapshot_representation::table)
+                    .filter(clipboard_snapshot_representation::event_id.eq(&event_id_str))
+                    .execute(conn)?;
+
+                // Then delete the event
+                diesel::delete(clipboard_event::table)
+                    .filter(clipboard_event::event_id.eq(&event_id_str))
+                    .execute(conn)?;
 
                 Ok(())
             })
@@ -415,4 +468,3 @@ mod tests {
         assert_eq!(observed.bytes.len(), 0);
     }
 }
-

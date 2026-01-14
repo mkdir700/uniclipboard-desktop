@@ -39,43 +39,38 @@ pub async fn get_clipboard_entries(
     Ok(projections)
 }
 
-/// Delete a clipboard entry
-/// 删除剪贴板条目
+/// Deletes a clipboard entry identified by `entry_id`.
 ///
-/// **TODO**: Implement DeleteClipboardEntry use case
-/// **TODO**: This command currently returns placeholder error
-/// **Tracking**: Requires use case implementation before activation
+/// This command converts the provided `entry_id` to the domain `EntryId` type and invokes the runtime's
+/// delete clipboard-entry use case; on success it returns without value, otherwise it returns a stringified error.
 ///
-/// ## Required Changes / 所需更改
+/// # Examples
 ///
-/// 1. Create `DeleteClipboardEntry` use case in `uc-app/src/usecases/`
-/// 2. Add `delete_clipboard_entry()` method to `UseCases` accessor
-/// 3. Update this command to use `runtime.usecases().delete_clipboard_entry()`
-///
-/// ## Use Case Requirements / 用例需求
-///
-/// - Input: `entry_id: String` (frontend parameter)
-/// - Domain model: `ClipboardEntryId` (from uc-core)
-/// - Port: `ClipboardEntryRepositoryPort` (already exists)
-/// - Error handling: Use `map_err` utility
-///
-/// ## Issue Tracking / 问题跟踪
-///
-/// - [ ] Create use case: `uc-app/src/usecases/delete_clipboard_entry.rs`
-/// - [ ] Add to UseCases accessor: `uc-tauri/src/bootstrap/runtime.rs`
-/// - [ ] Update command implementation
+/// ```no_run
+/// # async fn example(runtime: tauri::State<'_, uc_tauri::AppRuntime>) {
+/// // Tauri provides `State<AppRuntime>` when invoking commands from the frontend.
+/// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(runtime, "entry-id-123".to_string()).await;
+/// match result {
+///     Ok(()) => println!("Deleted"),
+///     Err(e) => eprintln!("Delete failed: {}", e),
+/// }
+/// # }
+/// ```
 #[tauri::command]
 pub async fn delete_clipboard_entry(
-    _runtime: State<'_, AppRuntime>,
-    _entry_id: String,
+    runtime: State<'_, AppRuntime>,
+    entry_id: String,
 ) -> Result<(), String> {
-    // TODO: Implement DeleteClipboardEntry use case
-    // This requires:
-    // 1. Create use case in uc-app/src/usecases/
-    // 2. Add to UseCases accessor in uc-tauri/src/bootstrap/runtime.rs
-    // 3. Wire repository dependency
-    // 4. Update this command to use runtime.usecases().delete_clipboard_entry()
-    Err("Not yet implemented - requires DeleteClipboardEntry use case".to_string())
+    // Parse entry_id
+    let entry_id = uc_core::ids::EntryId::from(entry_id);
+
+    // Execute use case
+    let use_case = runtime.usecases().delete_clipboard_entry();
+    use_case.execute(&entry_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 /// Capture current clipboard content
