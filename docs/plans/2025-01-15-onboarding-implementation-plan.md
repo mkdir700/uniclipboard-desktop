@@ -9,7 +9,7 @@ Implement onboarding flow following Hexagonal Architecture (Ports and Adapters) 
 
 ## Architecture Diagram
 
-```
+```text
                 ┌─────────────────────────────────────┐
                 │         Frontend (React)            │
                 │   OnboardingPage.tsx (已实现)        │
@@ -62,7 +62,7 @@ Implement onboarding flow following Hexagonal Architecture (Ports and Adapters) 
 
 ```rust
 /// Onboarding flow state
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OnboardingState {
     /// Whether onboarding has been completed
     pub has_completed: bool,
@@ -487,15 +487,13 @@ pub mod onboarding;
 **Modify: `src-tauri/src/main.rs`**
 
 ```rust
-use uc_tauri::commands::onboarding;
-
-// In invoke_handler:
-.invoke_handler(|app| {
+// In invoke_handler, use tauri::generate_handler! macro:
+.invoke_handler(tauri::generate_handler![
     // ... existing commands
-    onboarding::get_onboarding_state(app),
-    onboarding::complete_onboarding(app),
-    onboarding::initialize_onboarding(app),
-})
+    uc_tauri::commands::onboarding::get_onboarding_state,
+    uc_tauri::commands::onboarding::complete_onboarding,
+    uc_tauri::commands::onboarding::initialize_onboarding,
+])
 ```
 
 **Modify: `src-tauri/src/main.rs` (initialize repository)**
