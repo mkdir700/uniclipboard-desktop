@@ -1,0 +1,34 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Generate coverage report
+        run: |
+          cd src-tauri
+          cargo llvm-cov --lcov --output-path lcov.info --workspace --features=integration_tests
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./src-tauri/lcov.info
+          flags: rust-backend
+          name: rust-coverage
+          fail_ci_if_error: false
