@@ -198,9 +198,8 @@ The integration uses a **callback pattern** maintaining proper layer separation:
 ### When Modifying
 
 - **Platform Layer:** Never call App layer directly, use callback trait
-- **App Layer:** Implement callback to handle events, can call multiple usecases
+- **App Layer:** Implement callback to handle events, can call multiple use cases
 - **UseCase:** `execute_with_snapshot()` for automatic capture, `execute()` for manual
-
 ## Tauri Commands
 
 All frontend-backend communication through Tauri commands defined in [api/](src-tauri/src/api/). Key commands:
