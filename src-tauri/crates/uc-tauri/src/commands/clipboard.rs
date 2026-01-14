@@ -3,7 +3,6 @@
 
 use tauri::State;
 use crate::bootstrap::AppRuntime;
-use uc_app::usecases::ListClipboardEntries;
 use crate::models::ClipboardEntryProjection;
 
 /// Get clipboard history entries
@@ -13,14 +12,12 @@ pub async fn get_clipboard_entries(
     runtime: State<'_, AppRuntime>,
     limit: Option<usize>,
 ) -> Result<Vec<ClipboardEntryProjection>, String> {
-    let deps = &runtime.deps;
-    // Create use case with repository from AppDeps (using from_arc for trait objects)
-    let use_case = ListClipboardEntries::from_arc(deps.clipboard_entry_repo.clone());
+    // Use UseCases accessor pattern (consistent with other commands)
+    let uc = runtime.usecases().list_clipboard_entries();
     let limit = limit.unwrap_or(50);
 
     // Query entries through use case
-    let entries = use_case
-        .execute(limit, 0)
+    let entries = uc.execute(limit, 0)
         .await
         .map_err(|e| e.to_string())?;
 
