@@ -19,11 +19,11 @@ use uc_platform::runtime::event_bus::{PlatformCommandReceiver, PlatformEventSend
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 
-// Plugins
+// Platform-specific command modules
 mod plugins;
 
 #[cfg(target_os = "macos")]
-use plugins::mac_rounded_corners;
+use plugins::{enable_modern_window_style, enable_rounded_corners, reposition_traffic_lights};
 
 // Onboarding module (simplified implementation during migration)
 mod onboarding;
@@ -104,11 +104,11 @@ macro_rules! generate_invoke_handler {
             check_onboarding_status,
             // macOS-specific commands (conditionally compiled)
             #[cfg(target_os = "macos")]
-            mac_rounded_corners::enable_rounded_corners,
+            enable_rounded_corners,
             #[cfg(target_os = "macos")]
-            mac_rounded_corners::enable_modern_window_style,
+            enable_modern_window_style,
             #[cfg(target_os = "macos")]
-            mac_rounded_corners::reposition_traffic_lights,
+            reposition_traffic_lights,
         ]
     };
 }
