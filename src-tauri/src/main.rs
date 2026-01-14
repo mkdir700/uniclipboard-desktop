@@ -200,6 +200,9 @@ fn run_app(config: AppConfig) {
             // Encryption commands
             uc_tauri::commands::encryption::initialize_encryption,
             uc_tauri::commands::encryption::is_encryption_initialized,
+            // Settings commands
+            uc_tauri::commands::settings::get_settings,
+            uc_tauri::commands::settings::update_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
