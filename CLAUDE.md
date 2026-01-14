@@ -42,6 +42,17 @@ Building is handled via GitHub Actions. Trigger manually from GitHub Actions tab
 - **platform**: macos-aarch64, macos-x86_64, ubuntu-22.04, windows-latest, or all
 - **version**: Version number (e.g., 1.0.0)
 
+### Test Coverage
+
+Generate local coverage report using cargo-llvm-cov:
+
+```bash
+bun run test:coverage
+open src-tauri/target/llvm-cov/html/index.html
+```
+
+Coverage is automatically uploaded to Codecov on each push/PR for tracking incremental changes.
+
 ## Architecture
 
 ### Backend (Rust with Tauri 2)
@@ -200,6 +211,7 @@ The integration uses a **callback pattern** maintaining proper layer separation:
 - **Platform Layer:** Never call App layer directly, use callback trait
 - **App Layer:** Implement callback to handle events, can call multiple use cases
 - **UseCase:** `execute_with_snapshot()` for automatic capture, `execute()` for manual
+
 ## Tauri Commands
 
 All frontend-backend communication through Tauri commands defined in [api/](src-tauri/src/api/). Key commands:

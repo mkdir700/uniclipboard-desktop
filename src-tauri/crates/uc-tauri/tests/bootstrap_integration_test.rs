@@ -26,8 +26,8 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use uc_tauri::bootstrap::{load_config, wire_dependencies, create_app, create_runtime};
 use uc_core::config::AppConfig;
+use uc_tauri::bootstrap::{create_app, create_runtime, load_config, wire_dependencies};
 
 /// Test 1: Full integration test for config loading
 /// 测试1：配置加载的完整集成测试
@@ -73,7 +73,10 @@ fn test_bootstrap_load_config_integration() {
     assert_eq!(config.webserver_port, 8080);
     assert_eq!(config.silent_start, true);
     assert_eq!(config.vault_key_path, PathBuf::from("/tmp/test/key"));
-    assert_eq!(config.vault_snapshot_path, PathBuf::from("/tmp/test/snapshot"));
+    assert_eq!(
+        config.vault_snapshot_path,
+        PathBuf::from("/tmp/test/snapshot")
+    );
     assert_eq!(config.database_path, PathBuf::from("/tmp/test/database.db"));
 
     // TempDir is automatically cleaned up when dropped
@@ -161,9 +164,18 @@ fn test_bootstrap_config_path_info_only_no_state_check() {
 
     // Paths are loaded as-is, no existence checks
     // 路径按原样加载，无存在性检查
-    assert_eq!(config.vault_key_path, PathBuf::from("/nonexistent/path/to/secret/key.dat"));
-    assert_eq!(config.vault_snapshot_path, PathBuf::from("/another/nonexistent/path/snapshot.bin"));
-    assert_eq!(config.database_path, PathBuf::from("/tmp/this/does/not/exist/database.db"));
+    assert_eq!(
+        config.vault_key_path,
+        PathBuf::from("/nonexistent/path/to/secret/key.dat")
+    );
+    assert_eq!(
+        config.vault_snapshot_path,
+        PathBuf::from("/another/nonexistent/path/snapshot.bin")
+    );
+    assert_eq!(
+        config.database_path,
+        PathBuf::from("/tmp/this/does/not/exist/database.db")
+    );
 
     // Verify the files DON'T actually exist (prove no state check happened)
     // 验证文件实际上不存在（证明没有执行状态检查）
@@ -253,7 +265,10 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
     let config = load_config(config_path).unwrap();
     let deps_result = wire_dependencies(&config);
 
-    assert!(deps_result.is_ok(), "wire_dependencies should succeed with valid config");
+    assert!(
+        deps_result.is_ok(),
+        "wire_dependencies should succeed with valid config"
+    );
 
     let deps = deps_result.unwrap();
 
@@ -401,21 +416,25 @@ fn test_bootstrap_full_flow() {
 
     // Write a complete configuration
     // 写入完整配置
-    let toml_content = r#"
+    let toml_content = format!(
+        r#"
         [general]
         device_name = "FullFlowTest"
         silent_start = false
 
         [security]
-        vault_key_path = "/tmp/test/full_flow_key"
-        vault_snapshot_path = "/tmp/test/full_flow_snapshot"
+        vault_key_path = "{}/full_flow_key"
+        vault_snapshot_path = "{}/full_flow_snapshot"
 
         [network]
         webserver_port = 8080
 
         [storage]
         database_path = ":memory:"
-    "#;
+    "#,
+        temp_dir.path().display(),
+        temp_dir.path().display()
+    );
 
     let mut file = fs::File::create(&config_path).unwrap();
     file.write_all(toml_content.as_bytes()).unwrap();
@@ -461,7 +480,10 @@ fn test_bootstrap_database_pool_real_filesystem() {
     // 连接依赖（这将创建数据库）
     let deps_result = wire_dependencies(&config);
 
-    assert!(deps_result.is_ok(), "wire_dependencies should create database successfully");
+    assert!(
+        deps_result.is_ok(),
+        "wire_dependencies should create database successfully"
+    );
 
     // Verify database file was created
     // 验证数据库文件已创建
@@ -469,7 +491,10 @@ fn test_bootstrap_database_pool_real_filesystem() {
 
     // Verify parent directories were created
     // 验证父目录已创建
-    assert!(db_path.parent().unwrap().exists(), "Parent directory should be created");
+    assert!(
+        db_path.parent().unwrap().exists(),
+        "Parent directory should be created"
+    );
 }
 
 /// Test 11: Database pool creation with invalid path
@@ -521,7 +546,10 @@ fn test_bootstrap_create_runtime_wrapper() {
 
     let runtime_result = create_runtime(config.clone());
 
-    assert!(runtime_result.is_ok(), "create_runtime should always succeed");
+    assert!(
+        runtime_result.is_ok(),
+        "create_runtime should always succeed"
+    );
 
     let seed = runtime_result.unwrap();
     assert_eq!(seed.config.device_name, config.device_name);
@@ -544,7 +572,10 @@ fn test_bootstrap_wire_dependencies_with_empty_config() {
 
     // Should succeed even with empty config (uses in-memory database)
     // 应该成功，即使配置为空（使用内存数据库）
-    assert!(deps_result.is_ok(), "wire_dependencies should handle empty config");
+    assert!(
+        deps_result.is_ok(),
+        "wire_dependencies should handle empty config"
+    );
 
     let deps = deps_result.unwrap();
 
