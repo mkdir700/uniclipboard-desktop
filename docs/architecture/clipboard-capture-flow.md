@@ -79,7 +79,7 @@ This document describes the automatic clipboard capture flow, which integrates p
 
 1. **ClipboardWatcher** - Logs errors, continues monitoring
 2. **PlatformRuntime** - Catches callback errors, logs but doesn't panic
-3. **AppRuntime** - Returns error from usecase, logged by PlatformRuntime
+3. **AppRuntime** - Returns error from use case, logged by PlatformRuntime
 4. **CaptureClipboardUseCase** - Returns Result, errors propagated up
 
 ## Testing
