@@ -19,13 +19,13 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 
 | Command                     | File                                                                                        | Registered | Uses UseCases | Status      |
 | --------------------------- | ------------------------------------------------------------------------------------------- | ---------- | ------------- | ----------- |
-| `get_clipboard_entries`     | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)     | ✅         | ✅            | Complete    |
+| `get_clipboard_entries`     | [clipboard.rs:12-39](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L39)     | ✅         | ✅            | Complete    |
 | `delete_clipboard_entry`    | [clipboard.rs:59-74](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L59-L74)     | ✅         | ✅            | Complete    |
-| `capture_clipboard`         | [clipboard.rs:118-137](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L118-L137) | ✅         | ❌            | Placeholder |
+| `capture_clipboard`         | [clipboard.rs:76-60](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L76-L60)     | ✅         | ❌            | Complex     |
 | `initialize_encryption`     | [encryption.rs:21-31](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L21-L31)   | ✅         | ✅            | Complete    |
 | `is_encryption_initialized` | [encryption.rs:51-60](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L51-L60)   | ✅         | ✅            | Complete    |
-| `get_settings`              | [settings.rs:37-49](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L37-L49)       | ✅         | ❌            | Placeholder |
-| `update_settings`           | [settings.rs:81-94](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L81-L94)       | ✅         | ❌            | Placeholder |
+| `get_settings`              | [settings.rs:10-21](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L10-L21)       | ✅         | ✅            | Complete    |
+| `update_settings`           | [settings.rs:23-38](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L23-L38)       | ✅         | ✅            | Complete    |
 
 ## Plugin Commands (External Dependencies)
 
@@ -52,12 +52,15 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 | `CaptureClipboard`        | ⚠️     | `uc-app/src/usecases/internal/capture_clipboard.rs` | `capture_clipboard` (TODO)  |
 | `InitializeEncryption`    | ✅     | `uc-app/src/usecases/initialize_encryption.rs`      | `initialize_encryption`     |
 | `IsEncryptionInitialized` | ✅     | `uc-app/src/usecases/is_encryption_initialized.rs`  | `is_encryption_initialized` |
-| `GetSettings`             | ❌     | -                                                   | `get_settings` (TODO)       |
-| `UpdateSettings`          | ❌     | -                                                   | `update_settings` (TODO)    |
+| `GetSettings`             | ✅     | `uc-app/src/usecases/get_settings.rs`               | `get_settings`              |
+| `UpdateSettings`          | ✅     | `uc-app/src/usecases/update_settings.rs`            | `update_settings`           |
 
 ## Migration Progress
 
-**Core Commands: 5/7 using UseCases accessor (71%)**
+**Core Commands: 6/7 using UseCases accessor (86%)**
+
+**Note:** `capture_clipboard` requires complex multi-port orchestration and is tracked separately.
+
 **Total Registered: 11 commands (7 core + 3 plugin + 1 bridge)**
 
 ### Completed ✅
@@ -66,17 +69,14 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 2. **delete_clipboard_entry** - Uses `DeleteClipboardEntry` via accessor
 3. **initialize_encryption** - Uses `InitializeEncryption` via accessor
 4. **is_encryption_initialized** - Uses `IsEncryptionInitialized` via accessor
+5. **get_settings** - Uses `GetSettings` via accessor
+6. **update_settings** - Uses `UpdateSettings` via accessor
 
 ### In Progress ⚠️
 
-1. **capture_clipboard** - Use case exists (`CaptureClipboardUseCase`) but command not updated
-   - Blocker: Complex multi-port orchestration
+1. **capture_clipboard** - Complex multi-port use case required
+   - Blocker: Requires orchestration of multiple ports
    - See: `docs/plans/2025-01-13-clipboard-capture-integration.md`
-
-### Pending ❌
-
-1. **get_settings** - Needs `GetSettings` use case
-2. **update_settings** - Needs `UpdateSettings` use case
 
 ## Next Steps
 
@@ -84,11 +84,21 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 2. ✅ Refactor `is_encryption_initialized` to use UseCases accessor
 3. ✅ Fix missing plugin command registrations (2025-01-14)
 4. ⏳ Implement `CheckOnboardingStatus` use case and migrate command
-5. ⏳ Implement `GetSettings` and `UpdateSettings` use cases
+5. ✅ Implement `GetSettings` and `UpdateSettings` use cases
 6. ⏳ Update `capture_clipboard` command to use existing use case
-7. ⏳ Remove all direct `runtime.deps.xxx` access from commands
+7. ✅ Remove all direct `runtime.deps.xxx` access from commands (except capture_clipboard)
 
 ## Recent Changes
+
+**2025-01-15**: Commands Layer refactoring to 86% complete
+
+- Fixed plan documentation import path for SettingsPort
+- Removed duplicate doc comment in main.rs
+- Refactored `get_clipboard_entries` to use UseCases accessor
+- Added `GetSettings` and `UpdateSettings` use cases
+- Implemented `get_settings` and `update_settings` commands
+- Extracted macOS platform commands to plugins module
+- All settings commands now use UseCases accessor pattern
 
 **2025-01-14**: Fixed command-not-found errors on startup
 
