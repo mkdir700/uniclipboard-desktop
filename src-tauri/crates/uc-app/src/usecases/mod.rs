@@ -16,12 +16,14 @@
 
 pub mod change_passphrase;
 pub mod clipboard;
+pub mod delete_clipboard_entry;
 pub mod initialize_encryption;
 pub mod internal;
 pub mod list_clipboard_entries;
 pub mod list_clipboard_entry_previews;
 pub mod settings;
 
+pub use delete_clipboard_entry::DeleteClipboardEntry;
 pub use list_clipboard_entries::ListClipboardEntries;
 pub use initialize_encryption::InitializeEncryption;
 
