@@ -46,6 +46,9 @@ pub struct AppDeps {
     // Network dependencies / 网络依赖
     pub network: Arc<dyn NetworkPort>,
 
+    // Onboarding dependencies / 入门引导依赖
+    pub onboarding_state: Arc<dyn OnboardingStatePort>,
+
     // Storage dependencies / 存储依赖
     pub blob_store: Arc<dyn BlobStorePort>,
     pub blob_repository: Arc<dyn BlobRepositoryPort>,

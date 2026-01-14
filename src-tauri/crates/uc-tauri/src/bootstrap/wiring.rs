@@ -54,7 +54,7 @@ use uc_infra::db::repositories::{
 use uc_infra::fs::key_slot_store::JsonKeySlotStore;
 use uc_infra::security::{Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository};
 use uc_infra::settings::repository::FileSettingsRepository;
-use uc_infra::SystemClock;
+use uc_infra::{FileOnboardingStateRepository, SystemClock};
 use uc_infra::device::LocalDeviceIdentity;
 use uc_platform::adapters::{
     FilesystemBlobStore, PlaceholderAutostartPort, PlaceholderBlobMaterializerPort,
@@ -159,6 +159,9 @@ struct InfraLayer {
 
     // Settings / 设置
     settings_repo: Arc<dyn SettingsPort>,
+
+    // Onboarding / 入门引导
+    onboarding_state: Arc<dyn OnboardingStatePort>,
 
     // System services / 系统服务
     clock: Arc<dyn ClockPort>,
@@ -313,6 +316,11 @@ fn create_infra_layer(
     // 创建设置仓库
     let settings_repo: Arc<dyn SettingsPort> = Arc::new(FileSettingsRepository::new(settings_path));
 
+    // Create onboarding state repository
+    // 创建入门引导状态仓库
+    let onboarding_state: Arc<dyn OnboardingStatePort> =
+        Arc::new(FileOnboardingStateRepository::with_defaults(vault_path.clone()));
+
     // Create system services
     // 创建系统服务
     let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
@@ -334,6 +342,7 @@ fn create_infra_layer(
         encryption,
         encryption_state,
         settings_repo,
+        onboarding_state,
         clock,
         hash,
     };
@@ -508,6 +517,9 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
 
         // Network dependencies / 网络依赖
         network: platform.network,
+
+        // Onboarding dependencies / 入门引导依赖
+        onboarding_state: infra.onboarding_state,
 
         // Storage dependencies / 存储依赖
         blob_store: platform.blob_store,
