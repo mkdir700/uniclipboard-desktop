@@ -4,20 +4,23 @@
 //! 1. SystemTime error is propagated instead of panicking with expect()
 //! 2. save_entry_and_selection is properly awaited
 
-use std::sync::Arc;
+use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering};
-use uc_core::ids::EntryId;
-use uc_core::clipboard::{ClipboardEntry, ClipboardSelectionDecision, SystemClipboardSnapshot, ObservedClipboardRepresentation, MimeType};
+use std::sync::Arc;
+use uc_app::usecases::internal::capture_clipboard::CaptureClipboardUseCase;
+use uc_core::clipboard::PersistedClipboardRepresentation;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
-use uc_core::ids::{RepresentationId, FormatId};
+use uc_core::clipboard::{
+    ClipboardEntry, ClipboardSelectionDecision, MimeType, ObservedClipboardRepresentation,
+    SystemClipboardSnapshot,
+};
+use uc_core::ids::DeviceId;
+use uc_core::ids::EntryId;
+use uc_core::ids::{FormatId, RepresentationId};
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort,
     ClipboardRepresentationMaterializerPort, DeviceIdentityPort, PlatformClipboardPort,
 };
-use uc_core::clipboard::PersistedClipboardRepresentation;
-use uc_core::ids::DeviceId;
-use uc_app::usecases::internal::capture_clipboard::CaptureClipboardUseCase;
-use anyhow::Result;
 
 /// Mock PlatformClipboardPort that returns a fixed snapshot
 struct MockPlatformClipboard {
@@ -56,6 +59,13 @@ impl ClipboardEventWriterPort for MockEventWriter {
         &self,
         _event: &uc_core::clipboard::ClipboardEvent,
         _representations: &Vec<PersistedClipboardRepresentation>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn delete_event_and_representations(
+        &self,
+        _event_id: &uc_core::ids::EventId,
     ) -> Result<()> {
         Ok(())
     }
@@ -125,6 +135,10 @@ impl ClipboardEntryRepositoryPort for MockEntryRepo {
     async fn get_entry(&self, _id: &EntryId) -> Result<Option<ClipboardEntry>> {
         Ok(None)
     }
+
+    async fn delete_entry(&self, _entry_id: &EntryId) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[tokio::test]
@@ -137,14 +151,12 @@ async fn test_capture_clipboard_saves_entry_and_awaits() {
     // Note: bytes length must be >= 32 for ContentHash to work properly
     let snapshot = SystemClipboardSnapshot {
         ts_ms: 12345,
-        representations: vec![
-            ObservedClipboardRepresentation {
-                id: RepresentationId::new(),
-                format_id: FormatId::from("public.utf8-plain-text"),
-                mime: Some(MimeType("text/plain".to_string())),
-                bytes: vec![b'H'; 32], // 32 bytes for ContentHash
-            }
-        ],
+        representations: vec![ObservedClipboardRepresentation {
+            id: RepresentationId::new(),
+            format_id: FormatId::from("public.utf8-plain-text"),
+            mime: Some(MimeType("text/plain".to_string())),
+            bytes: vec![b'H'; 32], // 32 bytes for ContentHash
+        }],
     };
 
     let entry_repo = Arc::new(MockEntryRepo::new());
@@ -165,7 +177,10 @@ async fn test_capture_clipboard_saves_entry_and_awaits() {
     assert!(result.is_ok(), "execute should succeed");
 
     // Verify save was started
-    assert!(entry_repo.was_save_started(), "save_entry_and_selection should be started");
+    assert!(
+        entry_repo.was_save_started(),
+        "save_entry_and_selection should be started"
+    );
 
     // Verify save was COMPLETED (this is the key test!)
     // If save wasn't awaited, was_save_completed would be false
@@ -183,14 +198,12 @@ async fn test_capture_clipboard_with_snapshot_saves_and_awaits() {
     // Note: bytes length must be >= 32 for ContentHash to work properly
     let snapshot = SystemClipboardSnapshot {
         ts_ms: 12345,
-        representations: vec![
-            ObservedClipboardRepresentation {
-                id: RepresentationId::new(),
-                format_id: FormatId::from("public.utf8-plain-text"),
-                mime: Some(MimeType("text/plain".to_string())),
-                bytes: vec![b'H'; 32], // 32 bytes for ContentHash
-            }
-        ],
+        representations: vec![ObservedClipboardRepresentation {
+            id: RepresentationId::new(),
+            format_id: FormatId::from("public.utf8-plain-text"),
+            mime: Some(MimeType("text/plain".to_string())),
+            bytes: vec![b'H'; 32], // 32 bytes for ContentHash
+        }],
     };
 
     let entry_repo = Arc::new(MockEntryRepo::new());
@@ -242,20 +255,22 @@ async fn test_capture_clipboard_propagates_repo_errors() {
         async fn get_entry(&self, _id: &EntryId) -> Result<Option<ClipboardEntry>> {
             Ok(None)
         }
+
+        async fn delete_entry(&self, _entry_id: &EntryId) -> Result<()> {
+            Ok(())
+        }
     }
 
     // Create a snapshot with a valid representation for the policy to select
     // Note: bytes length must be >= 32 for ContentHash to work properly
     let snapshot = SystemClipboardSnapshot {
         ts_ms: 12345,
-        representations: vec![
-            ObservedClipboardRepresentation {
-                id: RepresentationId::new(),
-                format_id: FormatId::from("public.utf8-plain-text"),
-                mime: Some(MimeType("text/plain".to_string())),
-                bytes: vec![b'H'; 32], // 32 bytes for ContentHash
-            }
-        ],
+        representations: vec![ObservedClipboardRepresentation {
+            id: RepresentationId::new(),
+            format_id: FormatId::from("public.utf8-plain-text"),
+            mime: Some(MimeType("text/plain".to_string())),
+            bytes: vec![b'H'; 32], // 32 bytes for ContentHash
+        }],
     };
 
     let use_case = CaptureClipboardUseCase::new(
@@ -306,7 +321,10 @@ async fn test_capture_clipboard_propagates_clipboard_errors() {
     // Execute should fail with clipboard error
     let result = use_case.execute().await;
 
-    assert!(result.is_err(), "execute should fail when clipboard read fails");
+    assert!(
+        result.is_err(),
+        "execute should fail when clipboard read fails"
+    );
     let err_msg = result.unwrap_err().to_string();
     assert!(
         err_msg.contains("Clipboard read error"),
