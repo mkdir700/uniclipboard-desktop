@@ -143,7 +143,13 @@ fn run_app(config: AppConfig) {
                 win_builder
             };
 
-            let _window = win_builder.build().expect("Failed to build main window");
+            let _window = match win_builder.build() {
+                Ok(window) => window,
+                Err(e) => {
+                    log::error!("Failed to build main window: {}", e);
+                    return Err(Box::new(e));
+                }
+            };
 
             // Start the platform runtime in background
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
