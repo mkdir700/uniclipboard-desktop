@@ -49,7 +49,7 @@ use uc_infra::db::mappers::{
 use uc_infra::db::pool::{init_db_pool, DbPool};
 use uc_infra::db::repositories::{
     DieselBlobRepository, DieselClipboardEntryRepository, DieselClipboardEventRepository, DieselClipboardRepresentationRepository,
-    DieselDeviceRepository, InMemoryClipboardSelectionRepository,
+    DieselClipboardSelectionRepository, DieselDeviceRepository,
 };
 use uc_infra::fs::key_slot_store::JsonKeySlotStore;
 use uc_infra::security::{Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository};
@@ -318,9 +318,9 @@ fn create_infra_layer(
     let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
     let hash: Arc<dyn ContentHashPort> = Arc::new(Blake3Hasher);
 
-    // Create clipboard selection repository (placeholder)
-    // 创建剪贴板选择仓库（占位符）
-    let selection_repo_impl = InMemoryClipboardSelectionRepository::new();
+    // Create clipboard selection repository
+    // 创建剪贴板选择仓库
+    let selection_repo_impl = DieselClipboardSelectionRepository::new(Arc::clone(&db_executor));
     let selection_repo: Arc<dyn ClipboardSelectionRepositoryPort> = Arc::new(selection_repo_impl);
 
     let infra = InfraLayer {
