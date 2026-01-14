@@ -2,7 +2,7 @@
 //! 更新应用设置的用例
 
 use anyhow::Result;
-use uc_core::ports::settings::SettingsPort;
+use uc_core::ports::SettingsPort;
 use uc_core::settings::model::Settings;
 
 /// Use case for updating application settings.

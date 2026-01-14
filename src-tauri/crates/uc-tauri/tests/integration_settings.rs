@@ -14,7 +14,7 @@ async fn test_get_settings_returns_defaults() {
     let settings_path = temp_dir.path().join("test_settings.json");
 
     let repo = FileSettingsRepository::new(settings_path);
-    let repo_arc: Arc<dyn uc_core::ports::settings::SettingsPort> = Arc::new(repo);
+    let repo_arc: Arc<dyn uc_core::ports::SettingsPort> = Arc::new(repo);
 
     let uc = GetSettings::new(repo_arc.clone());
     let settings = uc.execute().await.unwrap();
@@ -29,7 +29,7 @@ async fn test_update_settings_persists() {
     let settings_path = temp_dir.path().join("test_settings.json");
 
     let repo = FileSettingsRepository::new(settings_path.clone());
-    let repo_arc: Arc<dyn uc_core::ports::settings::SettingsPort> = Arc::new(repo);
+    let repo_arc: Arc<dyn uc_core::ports::SettingsPort> = Arc::new(repo);
 
     // Update settings
     let mut settings = Settings::default();
@@ -51,7 +51,7 @@ async fn test_update_settings_validates_schema_version() {
     let settings_path = temp_dir.path().join("test_settings.json");
 
     let repo = FileSettingsRepository::new(settings_path);
-    let repo_arc: Arc<dyn uc_core::ports::settings::SettingsPort> = Arc::new(repo);
+    let repo_arc: Arc<dyn uc_core::ports::SettingsPort> = Arc::new(repo);
 
     let mut settings = Settings::default();
     settings.schema_version = 999; // Invalid version

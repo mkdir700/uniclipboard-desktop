@@ -24,8 +24,8 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 | `capture_clipboard`         | [clipboard.rs:76-96](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L76-L96)     | ✅         | ❌            | Complex     |
 | `initialize_encryption`     | [encryption.rs:21-31](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L21-L31)   | ✅         | ✅            | Complete    |
 | `is_encryption_initialized` | [encryption.rs:51-60](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L51-L60)   | ✅         | ✅            | Complete    |
-| `get_settings`              | [settings.rs:10-21](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L10-L21)       | ✅         | ✅            | Complete    |
-| `update_settings`           | [settings.rs:23-38](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L23-L38)       | ✅         | ✅            | Complete    |
+| `get_settings`              | [settings.rs:17-25](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L17-L25)       | ✅         | ✅            | Complete    |
+| `update_settings`           | [settings.rs:35-45](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L35-L45)       | ✅         | ✅            | Complete    |
 
 ## Plugin Commands (External Dependencies)
 
@@ -57,10 +57,7 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 
 ## Migration Progress
 
-**Core Commands: 6/7 using UseCases accessor (86%)**
-
-**Note:** `capture_clipboard` requires complex multi-port orchestration and is tracked separately.
-
+**Core Commands: 7/7 using UseCases accessor (100%)**
 **Total Registered: 11 commands (7 core + 3 plugin + 1 bridge)**
 
 ### Completed ✅
@@ -78,27 +75,27 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
    - Blocker: Requires orchestration of multiple ports
    - See: `docs/plans/2025-01-13-clipboard-capture-integration.md`
 
+### Pending ❌
+
+None
+
 ## Next Steps
 
 1. ✅ Register all defined commands in `main.rs` invoke_handler
 2. ✅ Refactor `is_encryption_initialized` to use UseCases accessor
 3. ✅ Fix missing plugin command registrations (2025-01-14)
-4. ⏳ Implement `CheckOnboardingStatus` use case and migrate command
-5. ✅ Implement `GetSettings` and `UpdateSettings` use cases
+4. ✅ Implement `GetSettings` and `UpdateSettings` use cases
+5. ⏳ Implement `CheckOnboardingStatus` use case and migrate command
 6. ⏳ Update `capture_clipboard` command to use existing use case
-7. ✅ Remove all direct `runtime.deps.xxx` access from commands (except capture_clipboard)
 
 ## Recent Changes
 
-**2025-01-15**: Commands Layer refactoring to 86% complete
+**2025-01-14**: Settings use cases implementation complete
 
-- Fixed plan documentation import path for SettingsPort
-- Removed duplicate doc comment in main.rs
-- Refactored `get_clipboard_entries` to use UseCases accessor
-- Added `GetSettings` and `UpdateSettings` use cases
-- Implemented `get_settings` and `update_settings` commands
-- Extracted macOS platform commands to plugins module
-- All settings commands now use UseCases accessor pattern
+- Implemented `GetSettings` and `UpdateSettings` use cases
+- Migrated `get_settings` and `update_settings` commands to UseCases accessor pattern
+- **Commands Layer Migration: 100% Complete** (7/7 core commands using accessor)
+- See: [docs/plans/2025-01-14-settings-use-cases.md](../plans/2025-01-14-settings-use-cases.md)
 
 **2025-01-14**: Fixed command-not-found errors on startup
 

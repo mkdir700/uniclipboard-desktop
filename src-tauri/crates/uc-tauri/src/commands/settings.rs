@@ -3,10 +3,16 @@
 
 use serde_json::Value;
 use tauri::State;
+use uc_core::settings::model::Settings;
 use crate::bootstrap::AppRuntime;
 
 /// Get application settings
 /// 获取应用设置
+///
+/// Returns the complete application settings as JSON.
+///
+/// ## Returns / 返回值
+/// - JSON representation of current Settings
 #[tauri::command]
 pub async fn get_settings(
     runtime: State<'_, AppRuntime>,
@@ -20,13 +26,16 @@ pub async fn get_settings(
 
 /// Update application settings
 /// 更新应用设置
+///
+/// Updates application settings from JSON.
+///
+/// ## Parameters / 参数
+/// - `settings`: JSON value containing settings to update
 #[tauri::command]
 pub async fn update_settings(
     runtime: State<'_, AppRuntime>,
     settings: Value,
 ) -> Result<(), String> {
-    use uc_core::settings::model::Settings;
-
     // Parse JSON into Settings domain model
     let settings: Settings = serde_json::from_value(settings)
         .map_err(|e| format!("Failed to parse settings: {}", e))?;

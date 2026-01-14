@@ -64,7 +64,7 @@ Create: `src-tauri/crates/uc-app/src/usecases/get_settings.rs`
 //! 获取应用设置的用例
 
 use anyhow::Result;
-use uc_core::ports::settings::SettingsPort;
+use uc_core::ports::SettingsPort;
 use uc_core::settings::model::Settings;
 
 /// Use case for retrieving application settings.
@@ -148,7 +148,7 @@ Create: `src-tauri/crates/uc-app/src/usecases/update_settings.rs`
 //! 更新应用设置的用例
 
 use anyhow::Result;
-use uc_core::ports::settings::SettingsPort;
+use uc_core::ports::SettingsPort;
 use uc_core::settings::model::Settings;
 
 /// Use case for updating application settings.
@@ -493,7 +493,7 @@ async fn test_get_settings_returns_defaults() {
     let settings_path = temp_dir.path().join("test_settings.json");
 
     let repo = FileSettingsRepository::new(settings_path);
-    let repo_arc: Arc<dyn uc_core::ports::settings::SettingsPort> = Arc::new(repo);
+    let repo_arc: Arc<dyn uc_core::ports::SettingsPort> = Arc::new(repo);
 
     let uc = GetSettings::new(repo_arc.clone());
     let settings = uc.execute().await.unwrap();
@@ -508,7 +508,7 @@ async fn test_update_settings_persists() {
     let settings_path = temp_dir.path().join("test_settings.json");
 
     let repo = FileSettingsRepository::new(settings_path.clone());
-    let repo_arc: Arc<dyn uc_core::ports::settings::SettingsPort> = Arc::new(repo);
+    let repo_arc: Arc<dyn uc_core::ports::SettingsPort> = Arc::new(repo);
 
     // Update settings
     let mut settings = Settings::default();
@@ -530,7 +530,7 @@ async fn test_update_settings_validates_schema_version() {
     let settings_path = temp_dir.path().join("test_settings.json");
 
     let repo = FileSettingsRepository::new(settings_path);
-    let repo_arc: Arc<dyn uc_core::ports::settings::SettingsPort> = Arc::new(repo);
+    let repo_arc: Arc<dyn uc_core::ports::SettingsPort> = Arc::new(repo);
 
     let mut settings = Settings::default();
     settings.schema_version = 999; // Invalid version
