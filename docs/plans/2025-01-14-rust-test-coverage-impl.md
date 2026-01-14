@@ -72,13 +72,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v1.15.2
 
       - name: Generate coverage report
         run: |
@@ -86,7 +86,7 @@ jobs:
           cargo llvm-cov --lcov --output-path lcov.info --workspace --features=integration_tests
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5.5.2
         with:
           files: ./src-tauri/lcov.info
           flags: rust-backend
