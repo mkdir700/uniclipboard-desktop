@@ -39,8 +39,23 @@ pub async fn get_clipboard_entries(
     Ok(projections)
 }
 
-/// Delete a clipboard entry
-/// 删除剪贴板条目
+/// Deletes a clipboard entry identified by `entry_id`.
+///
+/// This command converts the provided `entry_id` to the domain `EntryId` type and invokes the runtime's
+/// delete clipboard-entry use case; on success it returns without value, otherwise it returns a stringified error.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn example(runtime: tauri::State<'_, uc_tauri::AppRuntime>) {
+/// // Tauri provides `State<AppRuntime>` when invoking commands from the frontend.
+/// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(runtime, "entry-id-123".to_string()).await;
+/// match result {
+///     Ok(()) => println!("Deleted"),
+///     Err(e) => eprintln!("Delete failed: {}", e),
+/// }
+/// # }
+/// ```
 #[tauri::command]
 pub async fn delete_clipboard_entry(
     runtime: State<'_, AppRuntime>,

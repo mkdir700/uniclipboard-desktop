@@ -55,6 +55,18 @@ struct MockEventWriter;
 
 #[async_trait::async_trait]
 impl ClipboardEventWriterPort for MockEventWriter {
+    /// No-op mock implementation of `insert_event` used in tests.
+    ///
+    /// Always succeeds and performs no side effects.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Typical usage in tests:
+    /// let writer = MockEventWriter;
+    /// // `insert_event` always returns `Ok(())` for the mock.
+    /// writer.insert_event(&event, &representations).await.unwrap();
+    /// ```
     async fn insert_event(
         &self,
         _event: &uc_core::clipboard::ClipboardEvent,
@@ -63,6 +75,21 @@ impl ClipboardEventWriterPort for MockEventWriter {
         Ok(())
     }
 
+    /// A no-op deletion handler that accepts a request to delete an event and its associated representations.
+    ///
+    /// This mock implementation always succeeds and performs no side effects; it exists to satisfy the
+    /// `ClipboardEventWriterPort` interface in tests.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // Given a `MockEventWriter` and an `EventId` in tests:
+    /// // let writer = MockEventWriter::new();
+    /// // let event_id = ...;
+    /// // tokio::runtime::Runtime::new().unwrap().block_on(async {
+    /// //     writer.delete_event_and_representations(&event_id).await.unwrap();
+    /// // });
+    /// ```
     async fn delete_event_and_representations(
         &self,
         _event_id: &uc_core::ids::EventId,
@@ -132,15 +159,76 @@ impl ClipboardEntryRepositoryPort for MockEntryRepo {
         Ok(vec![])
     }
 
+    /// Always reports that no clipboard entry exists for the given id (mock).
+    ///
+    /// This mock implementation simulates a missing entry by returning `Ok(None)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tokio::runtime::Runtime;
+    /// # use crate::tests::MockEntryRepo;
+    /// # use crate::EntryId;
+    /// let repo = MockEntryRepo::new();
+    /// let rt = Runtime::new().unwrap();
+    /// let result = rt.block_on(async { repo.get_entry(&EntryId::from("any")).await }).unwrap();
+    /// assert!(result.is_none());
+    /// ```
     async fn get_entry(&self, _id: &EntryId) -> Result<Option<ClipboardEntry>> {
         Ok(None)
     }
 
+    /// No-op mock implementation that accepts an entry ID and always succeeds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn example(repo: &impl std::ops::Deref<Target = crate::tests::MockEntryRepo>) -> anyhow::Result<()> {
+    /// let repo = repo;
+    /// let entry_id = /* construct an EntryId appropriate for your tests */ ;
+    /// repo.delete_entry(&entry_id).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn delete_entry(&self, _entry_id: &EntryId) -> Result<()> {
         Ok(())
     }
 }
 
+/// Verifies that CaptureClipboardUseCase awaits the repository save so the save operation completes.
+///
+/// This regression test ensures that `save_entry_and_selection` is awaited and not left as an unpolled future,
+/// causing the repository's save to both start and finish before the use case returns.
+///
+/// # Examples
+///
+/// ```
+/// // Construct a snapshot with a 32-byte representation so ContentHash works.
+/// let snapshot = SystemClipboardSnapshot {
+///     ts_ms: 12345,
+///     representations: vec![ObservedClipboardRepresentation {
+///         id: RepresentationId::new(),
+///         format_id: FormatId::from("public.utf8-plain-text"),
+///         mime: Some(MimeType("text/plain".to_string())),
+///         bytes: vec![b'H'; 32],
+///     }],
+/// };
+///
+/// let entry_repo = Arc::new(MockEntryRepo::new());
+/// let use_case = CaptureClipboardUseCase::new(
+///     Arc::new(MockPlatformClipboard::new(snapshot)),
+///     entry_repo.clone(),
+///     Arc::new(MockEventWriter),
+///     Arc::new(SelectRepresentationPolicyV1::new()),
+///     Arc::new(MockMaterializer),
+///     Arc::new(MockDeviceIdentity),
+/// );
+///
+/// let result = use_case.execute().await;
+/// assert!(result.is_ok());
+/// assert!(entry_repo.was_save_started());
+/// assert!(entry_repo.was_save_completed());
+/// ```
 #[tokio::test]
 async fn test_capture_clipboard_saves_entry_and_awaits() {
     // This test verifies that save_entry_and_selection is properly awaited.
@@ -190,6 +278,18 @@ async fn test_capture_clipboard_saves_entry_and_awaits() {
     );
 }
 
+/// Verifies that `CaptureClipboardUseCase::execute_with_snapshot` saves the provided clipboard snapshot
+/// and awaits completion of the repository save operation.
+///
+/// Uses a valid `SystemClipboardSnapshot` with a 32-byte representation so the selection policy can pick it,
+/// then asserts the use case succeeds and that the repository reported both start and completion of the save.
+///
+/// # Examples
+///
+/// ```
+/// // Construct a snapshot with a 32-byte representation, create the use case with mocks,
+/// // call `execute_with_snapshot` and assert it succeeds and that the repository completed the save.
+/// ```
 #[tokio::test]
 async fn test_capture_clipboard_with_snapshot_saves_and_awaits() {
     // Same test but for execute_with_snapshot
@@ -231,6 +331,18 @@ async fn test_capture_clipboard_with_snapshot_saves_and_awaits() {
     );
 }
 
+/// Verifies that CaptureClipboardUseCase surfaces errors returned by the repository.
+///
+/// The test constructs a repository whose `save_entry_and_selection` always fails and
+/// asserts that `CaptureClipboardUseCase::execute` returns an error containing the
+/// repository message.
+///
+/// # Examples
+///
+/// ```
+/// // Creates a failing repository and ensures the use case returns an error
+/// // containing "Repository error".
+/// ```
 #[tokio::test]
 async fn test_capture_clipboard_propagates_repo_errors() {
     // This test verifies that errors from save_entry_and_selection are properly propagated.
@@ -252,10 +364,40 @@ async fn test_capture_clipboard_propagates_repo_errors() {
             Ok(vec![])
         }
 
+        /// Retrieves a clipboard entry by its identifier, returning None when the entry does not exist.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use uc_app::tests::capture_clipboard_regression::MockEntryRepo;
+        /// # use uc_core::ids::EntryId;
+        /// # tokio_test::block_on(async {
+        /// let repo = MockEntryRepo::new();
+        /// let id = EntryId::default();
+        /// let entry = repo.get_entry(&id).await.unwrap();
+        /// assert!(entry.is_none());
+        /// # });
+        /// ```
         async fn get_entry(&self, _id: &EntryId) -> Result<Option<ClipboardEntry>> {
             Ok(None)
         }
 
+        /// No-op deletion that always reports success.
+        ///
+        /// This implementation accepts an entry identifier and completes without performing any action,
+        /// indicating the entry was deleted successfully.
+        ///
+        /// # Returns
+        ///
+        /// `Ok(())` on success.
+        ///
+        /// # Examples
+        ///
+        /// ```rust
+        /// // Assume `repo` implements `delete_entry(&EntryId) -> Result<()>`
+        /// /// let entry_id = /* obtain or construct an EntryId */ ;
+        /// /// repo.delete_entry(&entry_id).await.unwrap();
+        /// ```
         async fn delete_entry(&self, _entry_id: &EntryId) -> Result<()> {
             Ok(())
         }
@@ -304,6 +446,27 @@ impl PlatformClipboardPort for FailingPlatformClipboard {
     }
 }
 
+/// Ensures clipboard read errors are propagated by the capture use case.
+///
+/// Builds a `CaptureClipboardUseCase` using a `FailingPlatformClipboard` and asserts that
+/// `execute()` returns an error containing the text "Clipboard read error".
+///
+/// # Examples
+///
+/// ```rust
+/// let use_case = CaptureClipboardUseCase::new(
+///     Arc::new(FailingPlatformClipboard),
+///     Arc::new(MockEntryRepo::new()),
+///     Arc::new(MockEventWriter),
+///     Arc::new(SelectRepresentationPolicyV1::new()),
+///     Arc::new(MockMaterializer),
+///     Arc::new(MockDeviceIdentity),
+/// );
+///
+/// let result = use_case.execute().await;
+/// assert!(result.is_err());
+/// assert!(result.unwrap_err().to_string().contains("Clipboard read error"));
+/// ```
 #[tokio::test]
 async fn test_capture_clipboard_propagates_clipboard_errors() {
     // This test verifies that errors from clipboard read are properly propagated.

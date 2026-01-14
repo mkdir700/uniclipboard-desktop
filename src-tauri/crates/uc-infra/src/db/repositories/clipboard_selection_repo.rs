@@ -36,6 +36,20 @@ impl Default for InMemoryClipboardSelectionRepository {
 
 #[async_trait]
 impl ClipboardSelectionRepositoryPort for InMemoryClipboardSelectionRepository {
+    /// In-memory placeholder that always indicates no clipboard selection for any entry.
+    ///
+    /// This implementation is used for tests and never stores or retrieves selections.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn run_example() {
+    /// let repo = InMemoryClipboardSelectionRepository::new();
+    /// let entry_id = EntryId::new(); // replace with appropriate constructor
+    /// let selection = repo.get_selection(&entry_id).await;
+    /// assert!(selection.is_none());
+    /// # }
+    /// ```
     async fn get_selection(
         &self,
         _entry_id: &EntryId,
@@ -45,6 +59,20 @@ impl ClipboardSelectionRepositoryPort for InMemoryClipboardSelectionRepository {
         Ok(None)
     }
 
+    /// No-op deletion for the in-memory placeholder repository.
+    ///
+    /// This implementation performs no action and always succeeds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use futures::executor::block_on;
+    ///
+    /// let repo = InMemoryClipboardSelectionRepository::new();
+    /// let entry_id = EntryId::from("test-entry");
+    /// // Succeeds and leaves the in-memory repository unchanged.
+    /// block_on(repo.delete_selection(&entry_id)).unwrap();
+    /// ```
     async fn delete_selection(&self, _entry_id: &EntryId) -> Result<()> {
         // Placeholder implementation - no-op
         // 占位符实现 - 无操作
@@ -79,6 +107,20 @@ impl<E> ClipboardSelectionRepositoryPort for DieselClipboardSelectionRepository<
 where
     E: DbExecutor,
 {
+    /// Fetches the clipboard selection decision for the specified entry id, if one exists.
+    ///
+    /// # Returns
+    /// `Some(ClipboardSelectionDecision)` when a selection is found for the given `EntryId`, `None` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Synchronously drive the async method for doc examples.
+    /// # async fn _example(repo: &impl crate::ports::ClipboardSelectionRepositoryPort, entry_id: crate::domain::EntryId) {
+    /// let result = repo.get_selection(&entry_id).await.unwrap();
+    /// // `result` is `Some(...)` when a selection exists, otherwise `None`.
+    /// # }
+    /// ```
     async fn get_selection(
         &self,
         entry_id: &EntryId,
@@ -112,6 +154,19 @@ where
         }
     }
 
+    /// Deletes the clipboard selection record associated with the given entry ID from the database.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the deletion succeeds, or an error if the underlying database operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # async fn example(repo: &impl crate::clipboard::ClipboardSelectionRepositoryPort, entry_id: crate::domain::EntryId) {
+    /// repo.delete_selection(&entry_id).await.unwrap();
+    /// # }
+    /// ```
     async fn delete_selection(&self, entry_id: &EntryId) -> Result<()> {
         let entry_id_str = entry_id.to_string();
         self.executor.run(|conn| {
@@ -168,14 +223,20 @@ mod tests {
         }
     }
 
-    /// Helper function to insert complete test data for clipboard selection
+    /// Insert a complete set of rows required to represent a clipboard selection into the test database.
     ///
-    /// Foreign key chain:
-    /// 1. clipboard_event (no dependencies)
-    /// 2. blob (no dependencies)
-    /// 3. clipboard_snapshot_representation (depends on: clipboard_event, blob)
-    /// 4. clipboard_entry (depends on: clipboard_event)
-    /// 5. clipboard_selection (depends on: clipboard_entry, clipboard_snapshot_representation x3)
+    /// The function seeds tables in the correct foreign-key order: `clipboard_event`, `blob`,
+    /// three `clipboard_snapshot_representation` rows (primary, preview, paste), `clipboard_entry`,
+    /// and finally `clipboard_selection` based on the provided `decision`. Use this to satisfy
+    /// foreign key constraints for integration tests.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let executor = TestDbExecutor::new_in_memory();
+    /// let decision = build_test_clipboard_selection_decision(); // construct a test decision
+    /// insert_complete_test_data(&executor, &decision).unwrap();
+    /// ```
     fn insert_complete_test_data(
         executor: &TestDbExecutor,
         decision: &ClipboardSelectionDecision,
