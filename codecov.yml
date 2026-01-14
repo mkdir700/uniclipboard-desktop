@@ -1,0 +1,29 @@
+coverage:
+  status:
+    # Project-wide coverage (informational only)
+    project:
+      default:
+        target: auto
+        threshold: 0%
+        base: auto
+    # Patch coverage (new code changes)
+    patch:
+      default:
+        target: auto
+        threshold: 0%
+        informational: true  # Don't fail PR, just show diff
+
+# Exclude generated code, tests, and migrations
+ignore:
+  - 'src-tauri/migrations/**'
+  - '**/tests/**'
+  - '**/*_test.rs'
+  - '**/integration_test.rs'
+  - '**/generated/**'
+
+# PR comment settings
+comment:
+  require_base: false
+  require_changes: false
+  layout: 'reach,diff,flags,files,footer'
+  behavior: default
