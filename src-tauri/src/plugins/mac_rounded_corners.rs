@@ -33,6 +33,7 @@ impl Default for TrafficLightsConfig {
 
 /// Enables rounded corners for the window (macOS only)
 /// Uses only public APIs - App Store compatible
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub fn enable_rounded_corners<R: Runtime>(
     _app: AppHandle<R>,
@@ -40,49 +41,50 @@ pub fn enable_rounded_corners<R: Runtime>(
     offset_x: Option<f64>,
     offset_y: Option<f64>,
 ) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let config = TrafficLightsConfig {
-            offset_x: offset_x.unwrap_or(0.0),
-            offset_y: offset_y.unwrap_or(0.0),
-        };
+    let config = TrafficLightsConfig {
+        offset_x: offset_x.unwrap_or(0.0),
+        offset_y: offset_y.unwrap_or(0.0),
+    };
 
-        window
-            .with_webview(move |webview| {
-                #[cfg(target_os = "macos")]
-                unsafe {
-                    let ns_window = webview.ns_window() as id;
+    window
+        .with_webview(move |webview| unsafe {
+            let ns_window = webview.ns_window() as id;
 
-                    let mut style_mask = ns_window.styleMask();
+            let mut style_mask = ns_window.styleMask();
 
-                    // Add necessary styles for rounded corners
-                    style_mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask;
-                    style_mask |= NSWindowStyleMask::NSTitledWindowMask;
-                    style_mask |= NSWindowStyleMask::NSClosableWindowMask;
-                    style_mask |= NSWindowStyleMask::NSMiniaturizableWindowMask;
-                    style_mask |= NSWindowStyleMask::NSResizableWindowMask;
+            // Add necessary styles for rounded corners
+            style_mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask;
+            style_mask |= NSWindowStyleMask::NSTitledWindowMask;
+            style_mask |= NSWindowStyleMask::NSClosableWindowMask;
+            style_mask |= NSWindowStyleMask::NSMiniaturizableWindowMask;
+            style_mask |= NSWindowStyleMask::NSResizableWindowMask;
 
-                    ns_window.setStyleMask_(style_mask);
-                    ns_window.setTitlebarAppearsTransparent_(cocoa::base::YES);
+            ns_window.setStyleMask_(style_mask);
+            ns_window.setTitlebarAppearsTransparent_(cocoa::base::YES);
 
-                    let content_view = ns_window.contentView();
-                    content_view.setWantsLayer(cocoa::base::YES);
+            let content_view = ns_window.contentView();
+            content_view.setWantsLayer(cocoa::base::YES);
 
-                    position_traffic_lights(ns_window, config.offset_x, config.offset_y);
-                }
-            })
-            .map_err(|e| e.to_string())?;
+            position_traffic_lights(ns_window, config.offset_x, config.offset_y);
+        })
+        .map_err(|e| e.to_string())?;
 
-        Ok(())
-    }
+    Ok(())
+}
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok(())
-    }
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn enable_rounded_corners<R: Runtime>(
+    _app: AppHandle<R>,
+    _window: WebviewWindow<R>,
+    _offset_x: Option<f64>,
+    _offset_y: Option<f64>,
+) -> Result<(), String> {
+    Ok(())
 }
 
 /// Enables modern window style with rounded corners and shadow
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub fn enable_modern_window_style<R: Runtime>(
     _app: AppHandle<R>,
@@ -91,58 +93,60 @@ pub fn enable_modern_window_style<R: Runtime>(
     offset_x: Option<f64>,
     offset_y: Option<f64>,
 ) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let config = TrafficLightsConfig {
-            offset_x: offset_x.unwrap_or(0.0),
-            offset_y: offset_y.unwrap_or(0.0),
-        };
-        let radius = corner_radius.unwrap_or(12.0);
+    let config = TrafficLightsConfig {
+        offset_x: offset_x.unwrap_or(0.0),
+        offset_y: offset_y.unwrap_or(0.0),
+    };
+    let radius = corner_radius.unwrap_or(12.0);
 
-        window
-            .with_webview(move |webview| {
-                #[cfg(target_os = "macos")]
-                unsafe {
-                    let ns_window = webview.ns_window() as id;
+    window
+        .with_webview(move |webview| unsafe {
+            let ns_window = webview.ns_window() as id;
 
-                    let mut style_mask = ns_window.styleMask();
+            let mut style_mask = ns_window.styleMask();
 
-                    style_mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask;
-                    style_mask |= NSWindowStyleMask::NSTitledWindowMask;
-                    style_mask |= NSWindowStyleMask::NSClosableWindowMask;
-                    style_mask |= NSWindowStyleMask::NSMiniaturizableWindowMask;
-                    style_mask |= NSWindowStyleMask::NSResizableWindowMask;
+            style_mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask;
+            style_mask |= NSWindowStyleMask::NSTitledWindowMask;
+            style_mask |= NSWindowStyleMask::NSClosableWindowMask;
+            style_mask |= NSWindowStyleMask::NSMiniaturizableWindowMask;
+            style_mask |= NSWindowStyleMask::NSResizableWindowMask;
 
-                    ns_window.setStyleMask_(style_mask);
-                    ns_window.setTitlebarAppearsTransparent_(cocoa::base::YES);
-                    ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleHidden);
-                    ns_window.setHasShadow_(cocoa::base::YES);
-                    ns_window.setOpaque_(cocoa::base::NO);
+            ns_window.setStyleMask_(style_mask);
+            ns_window.setTitlebarAppearsTransparent_(cocoa::base::YES);
+            ns_window.setTitleVisibility_(NSWindowTitleVisibility::NSWindowTitleHidden);
+            ns_window.setHasShadow_(cocoa::base::YES);
+            ns_window.setOpaque_(cocoa::base::NO);
 
-                    let content_view = ns_window.contentView();
-                    content_view.setWantsLayer(cocoa::base::YES);
+            let content_view = ns_window.contentView();
+            content_view.setWantsLayer(cocoa::base::YES);
 
-                    let layer: id = msg_send![content_view, layer];
-                    if !layer.is_null() {
-                        let _: () = msg_send![layer, setCornerRadius: radius];
-                        let _: () = msg_send![layer, setMasksToBounds: cocoa::base::YES];
-                    }
+            let layer: id = msg_send![content_view, layer];
+            if !layer.is_null() {
+                let _: () = msg_send![layer, setCornerRadius: radius];
+                let _: () = msg_send![layer, setMasksToBounds: cocoa::base::YES];
+            }
 
-                    position_traffic_lights(ns_window, config.offset_x, config.offset_y);
-                }
-            })
-            .map_err(|e| e.to_string())?;
+            position_traffic_lights(ns_window, config.offset_x, config.offset_y);
+        })
+        .map_err(|e| e.to_string())?;
 
-        Ok(())
-    }
+    Ok(())
+}
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok(())
-    }
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn enable_modern_window_style<R: Runtime>(
+    _app: AppHandle<R>,
+    _window: WebviewWindow<R>,
+    _corner_radius: Option<f64>,
+    _offset_x: Option<f64>,
+    _offset_y: Option<f64>,
+) -> Result<(), String> {
+    Ok(())
 }
 
 /// Repositions Traffic Lights only (useful after fullscreen toggle)
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub fn reposition_traffic_lights<R: Runtime>(
     _app: AppHandle<R>,
@@ -150,30 +154,30 @@ pub fn reposition_traffic_lights<R: Runtime>(
     offset_x: Option<f64>,
     offset_y: Option<f64>,
 ) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let config = TrafficLightsConfig {
-            offset_x: offset_x.unwrap_or(0.0),
-            offset_y: offset_y.unwrap_or(0.0),
-        };
+    let config = TrafficLightsConfig {
+        offset_x: offset_x.unwrap_or(0.0),
+        offset_y: offset_y.unwrap_or(0.0),
+    };
 
-        window
-            .with_webview(move |webview| {
-                #[cfg(target_os = "macos")]
-                unsafe {
-                    let ns_window = webview.ns_window() as id;
-                    position_traffic_lights(ns_window, config.offset_x, config.offset_y);
-                }
-            })
-            .map_err(|e| e.to_string())?;
+    window
+        .with_webview(move |webview| unsafe {
+            let ns_window = webview.ns_window() as id;
+            position_traffic_lights(ns_window, config.offset_x, config.offset_y);
+        })
+        .map_err(|e| e.to_string())?;
 
-        Ok(())
-    }
+    Ok(())
+}
 
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok(())
-    }
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn reposition_traffic_lights<R: Runtime>(
+    _app: AppHandle<R>,
+    _window: WebviewWindow<R>,
+    _offset_x: Option<f64>,
+    _offset_y: Option<f64>,
+) -> Result<(), String> {
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

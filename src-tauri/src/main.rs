@@ -102,12 +102,9 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::settings::update_settings,
             // Onboarding commands
             check_onboarding_status,
-            // macOS-specific commands (conditionally compiled)
-            #[cfg(target_os = "macos")]
+            // macOS-specific commands
             enable_rounded_corners,
-            #[cfg(target_os = "macos")]
             enable_modern_window_style,
-            #[cfg(target_os = "macos")]
             reposition_traffic_lights,
         ]
     };
