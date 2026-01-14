@@ -233,6 +233,24 @@ impl<'a> UseCases<'a> {
         uc_app::usecases::GetSettings::new(self.runtime.deps.settings.clone())
     }
 
+    /// Update application settings
+    ///
+    /// ## Example / 示例
+    ///
+    /// ```rust,no_run
+    /// # use uc_tauri::bootstrap::AppRuntime;
+    /// # use tauri::State;
+    /// # use uc_core::settings::model::Settings;
+    /// # async fn example(runtime: State<'_, AppRuntime>, settings: Settings) -> Result<(), String> {
+    /// let uc = runtime.usecases().update_settings();
+    /// uc.execute(settings).await.map_err(|e| e.to_string())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn update_settings(&self) -> uc_app::usecases::UpdateSettings {
+        uc_app::usecases::UpdateSettings::new(self.runtime.deps.settings.clone())
+    }
+
     // NOTE: Other use case methods will be added as the use case design evolves
     // to support trait object instantiation. Currently, use cases with generic
     // type parameters cannot be instantiated through this accessor.
