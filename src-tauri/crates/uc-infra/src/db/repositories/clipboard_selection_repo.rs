@@ -7,7 +7,7 @@ use crate::db::ports::{DbExecutor, InsertMapper, RowMapper};
 use crate::db::schema::clipboard_selection;
 use anyhow::Result;
 use async_trait::async_trait;
-use diesel::{OptionalExtension, QueryDsl, RunQueryDsl, ExpressionMethods};
+use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl};
 
 use uc_core::clipboard::ClipboardSelectionDecision;
 use uc_core::ids::EntryId;
@@ -79,14 +79,22 @@ where
     ) -> Result<Option<ClipboardSelectionDecision>> {
         let entry_id_str = entry_id.to_string();
 
-        let row: Option<ClipboardSelectionRow> = self.executor.run(|conn| {
-            let result: Result<Option<ClipboardSelectionRow>, diesel::result::Error> =
-                clipboard_selection::table
+        let row: Option<ClipboardSelectionRow> = self
+            .executor
+            .run(|conn| {
+                Ok(clipboard_selection::table
                     .filter(clipboard_selection::entry_id.eq(&entry_id_str))
                     .first::<ClipboardSelectionRow>(conn)
-                    .optional();
-            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
-        })?;
+                    .optional()?)
+            })
+            .map_err(|e| {
+                log::error!(
+                    "Failed to query clipboard_selection for entry_id '{}': {}",
+                    entry_id_str,
+                    e
+                );
+                e
+            })?;
 
         match row {
             Some(r) => {
@@ -128,15 +136,17 @@ mod tests {
     impl TestDbExecutor {
         fn new() -> Self {
             let pool = Arc::new(
-                crate::db::pool::init_db_pool(":memory:")
-                    .expect("Failed to create test DB pool")
+                crate::db::pool::init_db_pool(":memory:").expect("Failed to create test DB pool"),
             );
             Self { pool }
         }
     }
 
     impl DbExecutor for TestDbExecutor {
-        fn run<T>(&self, f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>) -> anyhow::Result<T> {
+        fn run<T>(
+            &self,
+            f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>,
+        ) -> anyhow::Result<T> {
             let mut conn = self.pool.get()?;
             f(&mut conn)
         }
@@ -155,7 +165,10 @@ mod tests {
         decision: &ClipboardSelectionDecision,
     ) -> anyhow::Result<()> {
         use crate::db::mappers::clipboard_selection_mapper::ClipboardSelectionRowMapper;
-        use crate::db::schema::{blob, clipboard_entry, clipboard_event, clipboard_selection, clipboard_snapshot_representation};
+        use crate::db::schema::{
+            blob, clipboard_entry, clipboard_event, clipboard_selection,
+            clipboard_snapshot_representation,
+        };
 
         let mapper = ClipboardSelectionRowMapper;
         let new_row = mapper.to_row(decision)?;
@@ -167,7 +180,9 @@ mod tests {
                     clipboard_event::event_id.eq("test-event-1"),
                     clipboard_event::captured_at_ms.eq(1704067200000i64),
                     clipboard_event::source_device.eq("test-device"),
-                    clipboard_event::snapshot_hash.eq("blake3v1:testhash123456789012345678901234567890123456789012345678901234"),
+                    clipboard_event::snapshot_hash.eq(
+                        "blake3v1:testhash123456789012345678901234567890123456789012345678901234",
+                    ),
                 ))
                 .execute(conn)?;
 
@@ -187,7 +202,8 @@ mod tests {
             // Primary representation
             diesel::insert_into(clipboard_snapshot_representation::table)
                 .values((
-                    clipboard_snapshot_representation::id.eq(decision.selection.primary_rep_id.as_str()),
+                    clipboard_snapshot_representation::id
+                        .eq(decision.selection.primary_rep_id.as_str()),
                     clipboard_snapshot_representation::event_id.eq("test-event-1"),
                     clipboard_snapshot_representation::format_id.eq("public.text"),
                     clipboard_snapshot_representation::mime_type.eq("text/plain"),
@@ -200,7 +216,8 @@ mod tests {
             // Preview representation
             diesel::insert_into(clipboard_snapshot_representation::table)
                 .values((
-                    clipboard_snapshot_representation::id.eq(decision.selection.preview_rep_id.as_str()),
+                    clipboard_snapshot_representation::id
+                        .eq(decision.selection.preview_rep_id.as_str()),
                     clipboard_snapshot_representation::event_id.eq("test-event-1"),
                     clipboard_snapshot_representation::format_id.eq("public.html"),
                     clipboard_snapshot_representation::mime_type.eq("text/html"),
@@ -213,7 +230,8 @@ mod tests {
             // Paste representation
             diesel::insert_into(clipboard_snapshot_representation::table)
                 .values((
-                    clipboard_snapshot_representation::id.eq(decision.selection.paste_rep_id.as_str()),
+                    clipboard_snapshot_representation::id
+                        .eq(decision.selection.paste_rep_id.as_str()),
                     clipboard_snapshot_representation::event_id.eq("test-event-1"),
                     clipboard_snapshot_representation::format_id.eq("public.utf8-plain-text"),
                     clipboard_snapshot_representation::mime_type.eq("text/plain"),
@@ -265,8 +283,7 @@ mod tests {
             },
         );
 
-        insert_complete_test_data(&executor, &decision)
-            .expect("Failed to insert test data");
+        insert_complete_test_data(&executor, &decision).expect("Failed to insert test data");
 
         // Query the data
         let result = repo
@@ -315,8 +332,7 @@ mod tests {
             },
         );
 
-        insert_complete_test_data(&executor, &decision)
-            .expect("Failed to insert test data");
+        insert_complete_test_data(&executor, &decision).expect("Failed to insert test data");
 
         let result = repo
             .get_selection(&decision.entry_id)

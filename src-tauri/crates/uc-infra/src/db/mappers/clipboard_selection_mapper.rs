@@ -34,19 +34,39 @@ impl RowMapper<ClipboardSelectionRow, ClipboardSelectionDecision> for ClipboardS
             ids::{EntryId, RepresentationId},
         };
 
-        // Parse secondary_rep_ids from comma-separated string
-        // Strict mode: empty string is an error
-        let secondary_rep_ids = if row.secondary_rep_ids.is_empty() {
+        // Parse secondary_rep_ids from comma-separated string with strict validation
+        // Reject empty tokens (e.g., "a,,b" or " a , b " with empty trimmed tokens)
+        if row.secondary_rep_ids.is_empty() {
             return Err(anyhow::anyhow!(
                 "secondary_rep_ids cannot be empty for entry {}",
                 row.entry_id
             ));
-        } else {
-            row.secondary_rep_ids
-                .split(',')
-                .map(|s| RepresentationId::from(s.to_string()))
-                .collect::<Vec<_>>()
-        };
+        }
+
+        let secondary_rep_ids: Vec<RepresentationId> = row
+            .secondary_rep_ids
+            .split(',')
+            .enumerate()
+            .map(|(i, s)| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    Err(anyhow::anyhow!(
+                        "Empty token at position {} in secondary_rep_ids for entry {}",
+                        i,
+                        row.entry_id
+                    ))
+                } else {
+                    Ok(RepresentationId::from(trimmed.to_string()))
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        if secondary_rep_ids.is_empty() {
+            return Err(anyhow::anyhow!(
+                "secondary_rep_ids cannot be empty for entry {}",
+                row.entry_id
+            ));
+        }
 
         // Parse policy_version
         let policy_version = row.policy_version.parse().map_err(|_| {
@@ -104,7 +124,10 @@ mod tests {
         assert_eq!(decision.selection.secondary_rep_ids[2].as_str(), "rep-sec3");
         assert_eq!(decision.selection.preview_rep_id.as_str(), "rep-preview");
         assert_eq!(decision.selection.paste_rep_id.as_str(), "rep-paste");
-        assert_eq!(decision.selection.policy_version, SelectionPolicyVersion::V1);
+        assert_eq!(
+            decision.selection.policy_version,
+            SelectionPolicyVersion::V1
+        );
     }
 
     #[test]
@@ -141,9 +164,14 @@ mod tests {
         let mapper = ClipboardSelectionRowMapper;
         let result = mapper.to_domain(&row);
 
-        assert!(result.is_err(), "Empty secondary_rep_ids should return error");
+        assert!(
+            result.is_err(),
+            "Empty secondary_rep_ids should return error"
+        );
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("secondary_rep_ids cannot be empty"));
+        assert!(err
+            .to_string()
+            .contains("secondary_rep_ids cannot be empty"));
     }
 
     #[test]
@@ -160,7 +188,10 @@ mod tests {
         let mapper = ClipboardSelectionRowMapper;
         let result = mapper.to_domain(&row);
 
-        assert!(result.is_err(), "Invalid policy_version should return error");
+        assert!(
+            result.is_err(),
+            "Invalid policy_version should return error"
+        );
         let err = result.unwrap_err();
         assert!(err.to_string().contains("Invalid policy_version"));
     }
@@ -193,5 +224,68 @@ mod tests {
         assert_eq!(row.preview_rep_id, "rep-preview");
         assert_eq!(row.paste_rep_id, "rep-paste");
         assert_eq!(row.policy_version, "v1");
+    }
+
+    #[test]
+    fn test_row_mapper_empty_token_in_middle_fails() {
+        let row = ClipboardSelectionRow {
+            entry_id: "test-entry-empty-token".to_string(),
+            primary_rep_id: "rep-primary".to_string(),
+            secondary_rep_ids: "rep-sec1,,rep-sec2".to_string(), // Empty token in middle
+            preview_rep_id: "rep-preview".to_string(),
+            paste_rep_id: "rep-paste".to_string(),
+            policy_version: "v1".to_string(),
+        };
+
+        let mapper = ClipboardSelectionRowMapper;
+        let result = mapper.to_domain(&row);
+
+        assert!(result.is_err(), "Empty token should return error");
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Empty token at position"));
+    }
+
+    #[test]
+    fn test_row_mapper_whitespace_only_tokens_fail() {
+        let row = ClipboardSelectionRow {
+            entry_id: "test-entry-whitespace".to_string(),
+            primary_rep_id: "rep-primary".to_string(),
+            secondary_rep_ids: "rep-sec1,  ,rep-sec2".to_string(), // Whitespace-only token
+            preview_rep_id: "rep-preview".to_string(),
+            paste_rep_id: "rep-paste".to_string(),
+            policy_version: "v1".to_string(),
+        };
+
+        let mapper = ClipboardSelectionRowMapper;
+        let result = mapper.to_domain(&row);
+
+        assert!(result.is_err(), "Whitespace-only token should return error");
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Empty token at position"));
+    }
+
+    #[test]
+    fn test_row_mapper_trims_whitespace_from_tokens() {
+        let row = ClipboardSelectionRow {
+            entry_id: "test-entry-trim".to_string(),
+            primary_rep_id: "rep-primary".to_string(),
+            secondary_rep_ids: " rep-sec1 , rep-sec2 , rep-sec3 ".to_string(), // Has whitespace
+            preview_rep_id: "rep-preview".to_string(),
+            paste_rep_id: "rep-paste".to_string(),
+            policy_version: "v1".to_string(),
+        };
+
+        let mapper = ClipboardSelectionRowMapper;
+        let result = mapper.to_domain(&row);
+
+        assert!(
+            result.is_ok(),
+            "Should trim whitespace and parse successfully"
+        );
+        let decision = result.unwrap();
+        assert_eq!(decision.selection.secondary_rep_ids.len(), 3);
+        assert_eq!(decision.selection.secondary_rep_ids[0].as_str(), "rep-sec1");
+        assert_eq!(decision.selection.secondary_rep_ids[1].as_str(), "rep-sec2");
+        assert_eq!(decision.selection.secondary_rep_ids[2].as_str(), "rep-sec3");
     }
 }
