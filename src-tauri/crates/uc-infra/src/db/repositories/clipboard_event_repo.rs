@@ -75,6 +75,25 @@ where
             })
         })
     }
+
+    async fn delete_event_and_representations(&self, event_id: &EventId) -> Result<()> {
+        let event_id_str = event_id.to_string();
+        self.executor.run(|conn| {
+            conn.transaction(|conn| {
+                // Delete representations first (they reference the event)
+                diesel::delete(clipboard_snapshot_representation::table)
+                    .filter(clipboard_snapshot_representation::event_id.eq(&event_id_str))
+                    .execute(conn)?;
+
+                // Then delete the event
+                diesel::delete(clipboard_event::table)
+                    .filter(clipboard_event::event_id.eq(&event_id_str))
+                    .execute(conn)?;
+
+                Ok(())
+            })
+        })
+    }
 }
 
 #[async_trait::async_trait]
