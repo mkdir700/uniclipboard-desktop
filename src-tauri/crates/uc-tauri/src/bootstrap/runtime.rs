@@ -130,15 +130,11 @@ impl<'a> UseCases<'a> {
         Self { runtime }
     }
 
-    /// Clipboard use cases / 剪贴板用例
+    /// Accesses the use case for querying clipboard history.
     ///
-    /// Get the ListClipboardEntries use case for querying clipboard history.
+    /// # Examples
     ///
-    /// 获取 ListClipboardEntries 用例以查询剪贴板历史。
-    ///
-    /// ## Example / 示例
-    ///
-    /// ```rust,no_run
+    /// ```
     /// # use uc_tauri::bootstrap::AppRuntime;
     /// # use tauri::State;
     /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<(), String> {
@@ -151,10 +147,9 @@ impl<'a> UseCases<'a> {
         uc_app::usecases::ListClipboardEntries::from_arc(self.runtime.deps.clipboard_entry_repo.clone())
     }
 
-    /// Get the DeleteClipboardEntry use case.
-    /// 获取 DeleteClipboardEntry 用例。
+    /// Create a `DeleteClipboardEntry` use case wired with this runtime's clipboard and selection repositories.
     ///
-    /// ## Example / 示例
+    /// # Examples
     ///
     /// ```rust,no_run
     /// # use uc_tauri::bootstrap::AppRuntime;
