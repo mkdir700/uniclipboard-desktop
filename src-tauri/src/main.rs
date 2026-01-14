@@ -114,8 +114,6 @@ macro_rules! generate_invoke_handler {
 }
 
 /// Run the Tauri application
-
-/// Run the Tauri application
 fn run_app(config: AppConfig) {
     use tauri::Builder;
 
