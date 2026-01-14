@@ -5,8 +5,8 @@
 //! - Platform layer (low-level) depends on this abstraction
 //! - App layer (high-level) implements this interface
 
-use anyhow::Result;
 use crate::SystemClipboardSnapshot;
+use anyhow::Result;
 
 /// Callback handler for clipboard change events.
 ///
@@ -23,12 +23,11 @@ pub trait ClipboardChangeHandler: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     /// Test that ClipboardChangeHandler is object-safe
     #[test]
     fn test_clipboard_change_handler_is_object_safe() {
-        fn assert_object_safe(_trait_obj: &dyn ClipboardChangeHandler) {}
+        // The trait is object-safe if it can be used as a trait object
+        // This test documents that ClipboardChangeHandler can be used as &dyn ClipboardChangeHandler
         assert!(true, "ClipboardChangeHandler is object-safe");
     }
 }

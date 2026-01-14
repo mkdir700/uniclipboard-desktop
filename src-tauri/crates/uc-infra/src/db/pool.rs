@@ -17,11 +17,8 @@ pub type DbPool = Pool<ConnectionManager<SqliteConnection>>;
 ///
 /// # Errors
 ///
-/// Returns an `anyhow::Error` if obtaining a connection from the pool or applying migrations fails.
-///
-/// # Panics
-///
-/// Panics if creating the r2d2 connection pool fails.
+/// Returns an `anyhow::Error` if creating the connection pool, obtaining a connection from
+/// the pool, or applying migrations fails.
 ///
 /// # Examples
 ///
@@ -35,7 +32,7 @@ pub fn init_db_pool(database_url: &str) -> Result<DbPool> {
 
     let pool = Pool::builder()
         .build(manager)
-        .expect("Failed to create database pool");
+        .map_err(|e| anyhow::anyhow!("Failed to create database pool: {}", e))?;
 
     run_migrations(&pool)?;
 
