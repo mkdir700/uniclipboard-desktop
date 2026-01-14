@@ -34,11 +34,7 @@ impl ListClipboardEntries {
     /// Returns error if:
     /// - Limit is 0 or exceeds max_limit
     /// - Repository query fails
-    pub async fn execute(
-        &self,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<ClipboardEntry>> {
+    pub async fn execute(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
         // Validate limit
         if limit == 0 {
             return Err(anyhow::anyhow!(
@@ -88,11 +84,7 @@ mod tests {
             unimplemented!()
         }
 
-        async fn list_entries(
-            &self,
-            limit: usize,
-            offset: usize,
-        ) -> Result<Vec<ClipboardEntry>> {
+        async fn list_entries(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
             if self.should_fail {
                 return Err(anyhow::anyhow!("Mock repository error"));
             }
@@ -103,6 +95,10 @@ mod tests {
                 .take(limit)
                 .cloned()
                 .collect())
+        }
+
+        async fn delete_entry(&self, _entry_id: &EntryId) -> Result<()> {
+            unimplemented!()
         }
     }
 
@@ -190,10 +186,7 @@ mod tests {
         let result = use_case.execute(0, 0).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid limit"));
+        assert!(result.unwrap_err().to_string().contains("Invalid limit"));
     }
 
     #[tokio::test]
@@ -208,10 +201,7 @@ mod tests {
         let result = use_case.execute(2000, 0).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Must be at most"));
+        assert!(result.unwrap_err().to_string().contains("Must be at most"));
     }
 
     #[tokio::test]
@@ -226,9 +216,6 @@ mod tests {
         let result = use_case.execute(10, 0).await;
 
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Failed to query"));
+        assert!(result.unwrap_err().to_string().contains("Failed to query"));
     }
 }
