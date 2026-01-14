@@ -44,7 +44,7 @@ pub async fn get_clipboard_entries(
 /// # Examples
 ///
 /// ```no_run
-/// # async fn example(runtime: tauri::State<'_, uc_tauri::AppRuntime>) {
+/// # async fn example(runtime: tauri::State<'_, uc_tauri::bootstrap::AppRuntime>) {
 /// // Tauri provides `State<AppRuntime>` when invoking commands from the frontend.
 /// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(runtime, "entry-id-123".to_string()).await;
 /// match result {
