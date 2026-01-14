@@ -3,7 +3,7 @@
 
 use crate::db::mappers::clipboard_selection_mapper::ClipboardSelectionRowMapper;
 use crate::db::models::clipboard_selection::ClipboardSelectionRow;
-use crate::db::ports::{DbExecutor, InsertMapper, RowMapper};
+use crate::db::ports::{DbExecutor, RowMapper};
 use crate::db::schema::clipboard_selection;
 use anyhow::Result;
 use async_trait::async_trait;
@@ -43,6 +43,12 @@ impl ClipboardSelectionRepositoryPort for InMemoryClipboardSelectionRepository {
         // Placeholder implementation - always return None
         // 占位符实现 - 始终返回 None
         Ok(None)
+    }
+
+    async fn delete_selection(&self, _entry_id: &EntryId) -> Result<()> {
+        // Placeholder implementation - no-op
+        // 占位符实现 - 无操作
+        Ok(())
     }
 }
 
@@ -105,6 +111,16 @@ where
             None => Ok(None),
         }
     }
+
+    async fn delete_selection(&self, entry_id: &EntryId) -> Result<()> {
+        let entry_id_str = entry_id.to_string();
+        self.executor.run(|conn| {
+            diesel::delete(clipboard_selection::table)
+                .filter(clipboard_selection::entry_id.eq(&entry_id_str))
+                .execute(conn)?;
+            Ok(())
+        })
+    }
 }
 
 #[cfg(test)]
@@ -165,6 +181,7 @@ mod tests {
         decision: &ClipboardSelectionDecision,
     ) -> anyhow::Result<()> {
         use crate::db::mappers::clipboard_selection_mapper::ClipboardSelectionRowMapper;
+        use crate::db::ports::InsertMapper;
         use crate::db::schema::{
             blob, clipboard_entry, clipboard_event, clipboard_selection,
             clipboard_snapshot_representation,
