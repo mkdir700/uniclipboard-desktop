@@ -55,10 +55,10 @@ use uc_core::SystemClipboardSnapshot;
 /// use tauri::State;
 ///
 /// #[tauri::command]
-/// async fn get_entries(runtime: State<'_, AppRuntime>) -> Result<Vec<Entry>, String> {
+/// async fn get_entries(runtime: State<'_, AppRuntime>) -> Result<(), String> {
 ///     let uc = runtime.usecases().list_clipboard_entries();
 ///     let entries = uc.execute(50, 0).await.map_err(|e| e.to_string())?;
-///     Ok(entries)
+///     Ok(())
 /// }
 /// ```
 ///

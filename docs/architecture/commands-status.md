@@ -19,9 +19,9 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 
 | Command                     | File                                                                                        | Registered | Uses UseCases | Status      |
 | --------------------------- | ------------------------------------------------------------------------------------------- | ---------- | ------------- | ----------- |
-| `get_clipboard_entries`     | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)     | ✅         | ✅            | Complete    |
+| `get_clipboard_entries`     | [clipboard.rs:12-39](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L39)     | ✅         | ✅            | Complete    |
 | `delete_clipboard_entry`    | [clipboard.rs:59-74](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L59-L74)     | ✅         | ✅            | Complete    |
-| `capture_clipboard`         | [clipboard.rs:118-137](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L118-L137) | ✅         | ❌            | Placeholder |
+| `capture_clipboard`         | [clipboard.rs:76-96](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L76-L96)     | ✅         | ❌            | Complex     |
 | `initialize_encryption`     | [encryption.rs:21-31](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L21-L31)   | ✅         | ✅            | Complete    |
 | `is_encryption_initialized` | [encryption.rs:51-60](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L51-L60)   | ✅         | ✅            | Complete    |
 | `get_settings`              | [settings.rs:17-25](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L17-L25)       | ✅         | ✅            | Complete    |
@@ -71,8 +71,8 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 
 ### In Progress ⚠️
 
-1. **capture_clipboard** - Use case exists (`CaptureClipboardUseCase`) but command not updated
-   - Blocker: Complex multi-port orchestration
+1. **capture_clipboard** - Complex multi-port use case required
+   - Blocker: Requires orchestration of multiple ports
    - See: `docs/plans/2025-01-13-clipboard-capture-integration.md`
 
 ### Pending ❌

@@ -19,9 +19,11 @@ use uc_platform::runtime::event_bus::{PlatformCommandReceiver, PlatformEventSend
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 
-// Plugins
+// Platform-specific command modules
 mod plugins;
-use plugins::mac_rounded_corners;
+
+#[cfg(target_os = "macos")]
+use plugins::{enable_modern_window_style, enable_rounded_corners, reposition_traffic_lights};
 
 // Onboarding module (simplified implementation during migration)
 mod onboarding;
@@ -82,6 +84,33 @@ fn main() {
 
     // Run the application with the loaded config
     run_app(config);
+}
+
+/// Macro to generate invoke handler with platform-specific commands
+macro_rules! generate_invoke_handler {
+    () => {
+        tauri::generate_handler![
+            // Clipboard commands
+            uc_tauri::commands::clipboard::get_clipboard_entries,
+            uc_tauri::commands::clipboard::delete_clipboard_entry,
+            uc_tauri::commands::clipboard::capture_clipboard,
+            // Encryption commands
+            uc_tauri::commands::encryption::initialize_encryption,
+            uc_tauri::commands::encryption::is_encryption_initialized,
+            // Settings commands
+            uc_tauri::commands::settings::get_settings,
+            uc_tauri::commands::settings::update_settings,
+            // Onboarding commands
+            check_onboarding_status,
+            // macOS-specific commands (conditionally compiled)
+            #[cfg(target_os = "macos")]
+            enable_rounded_corners,
+            #[cfg(target_os = "macos")]
+            enable_modern_window_style,
+            #[cfg(target_os = "macos")]
+            reposition_traffic_lights,
+        ]
+    };
 }
 
 /// Run the Tauri application
@@ -200,24 +229,7 @@ fn run_app(config: AppConfig) {
         })
         // Register Tauri command handlers
         // Commands are defined in uc-tauri crate and need to be referenced by full path
-        .invoke_handler(tauri::generate_handler![
-            // Clipboard commands
-            uc_tauri::commands::clipboard::get_clipboard_entries,
-            uc_tauri::commands::clipboard::delete_clipboard_entry,
-            uc_tauri::commands::clipboard::capture_clipboard,
-            // Encryption commands
-            uc_tauri::commands::encryption::initialize_encryption,
-            uc_tauri::commands::encryption::is_encryption_initialized,
-            // Settings commands
-            uc_tauri::commands::settings::get_settings,
-            uc_tauri::commands::settings::update_settings,
-            // macOS Rounded Corners plugin commands
-            mac_rounded_corners::enable_rounded_corners,
-            mac_rounded_corners::enable_modern_window_style,
-            mac_rounded_corners::reposition_traffic_lights,
-            // Onboarding commands (simplified implementation during migration)
-            check_onboarding_status,
-        ])
+        .invoke_handler(generate_invoke_handler!())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
