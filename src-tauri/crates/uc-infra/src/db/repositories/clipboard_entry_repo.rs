@@ -98,4 +98,14 @@ where
                 .collect()
         })
     }
+
+    async fn delete_entry(&self, entry_id: &EntryId) -> Result<()> {
+        let entry_id_str = entry_id.to_string();
+        self.executor.run(|conn| {
+            diesel::delete(clipboard_entry::table)
+                .filter(clipboard_entry::entry_id.eq(&entry_id_str))
+                .execute(conn)?;
+            Ok(())
+        })
+    }
 }
