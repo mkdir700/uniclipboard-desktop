@@ -197,6 +197,25 @@ impl<'a> UseCases<'a> {
         )
     }
 
+    /// Check if encryption is initialized
+    ///
+    /// ## Example / 示例
+    ///
+    /// ```rust,no_run
+    /// # use uc_tauri::bootstrap::AppRuntime;
+    /// # use tauri::State;
+    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<bool, String> {
+    /// let uc = runtime.usecases().is_encryption_initialized();
+    /// let is_init = uc.execute().await.map_err(|e| e.to_string())?;
+    /// # Ok(is_init)
+    /// # }
+    /// ```
+    pub fn is_encryption_initialized(&self) -> uc_app::usecases::IsEncryptionInitialized {
+        uc_app::usecases::IsEncryptionInitialized::new(
+            self.runtime.deps.encryption_state.clone(),
+        )
+    }
+
     // NOTE: Other use case methods will be added as the use case design evolves
     // to support trait object instantiation. Currently, use cases with generic
     // type parameters cannot be instantiated through this accessor.

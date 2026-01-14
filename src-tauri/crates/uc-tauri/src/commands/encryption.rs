@@ -3,7 +3,6 @@
 
 use tauri::State;
 use crate::bootstrap::AppRuntime;
-use uc_core::security::state::EncryptionState;
 
 
 /// Initialize encryption with passphrase
@@ -33,30 +32,12 @@ pub async fn initialize_encryption(
 /// Check if encryption is initialized
 /// 检查加密是否已初始化
 ///
-/// **TODO**: Implement IsEncryptionInitialized use case
-/// **TODO**: This command currently accesses Port directly (architecture violation)
-/// **Tracking**: Needs refactoring to use UseCases accessor pattern
-///
-/// ## Required Changes / 所需更改
-///
-/// 1. Create `IsEncryptionInitialized` use case in `uc-app/src/usecases/`
-/// 2. Add `is_encryption_initialized()` method to `UseCases` accessor
-/// 3. Update this command to use `runtime.usecases().is_encryption_initialized()`
-///
-/// ## Issue Tracking / 问题跟踪
-///
-/// - [ ] Create use case: `uc-app/src/usecases/is_encryption_initialized.rs`
-/// - [ ] Add to UseCases accessor: `uc-tauri/src/bootstrap/runtime.rs`
-/// - [ ] Update command implementation
+/// This command uses the IsEncryptionInitialized use case.
+/// 此命令使用 IsEncryptionInitialized 用例。
 #[tauri::command]
 pub async fn is_encryption_initialized(
     runtime: State<'_, AppRuntime>,
 ) -> Result<bool, String> {
-    let deps = &runtime.deps;
-    let state = deps.encryption_state
-        .load_state()
-        .await
-        .map_err(|e| format!("Failed to load encryption state: {}", e))?;
-
-    Ok(state == EncryptionState::Initialized)
+    let uc = runtime.usecases().is_encryption_initialized();
+    uc.execute().await.map_err(|e| e.to_string())
 }

@@ -214,13 +214,55 @@ The integration uses a **callback pattern** maintaining proper layer separation:
 
 ## Tauri Commands
 
-All frontend-backend communication through Tauri commands defined in [api/](src-tauri/src/api/). Key commands:
+All frontend-backend communication through Tauri commands defined in [commands/](src-tauri/crates/uc-tauri/src/commands/) (new architecture) and [api/](src-tauri/src/api/) (legacy).
 
-- `save_setting`, `get_setting` - Configuration management
-- `get_clipboard_items`, `delete_clipboard_item` - Clipboard history CRUD
-- `listen_clipboard_new_content` - Event subscription for clipboard changes
-- `check_onboarding_status`, `complete_onboarding` - First-run setup
-- `get_encryption_password`, `set_encryption_password` - Security credentials
+### Current Commands (Hexagonal Architecture)
+
+**Clipboard Commands**:
+
+- `get_clipboard_entries` - List clipboard history entries (uses `ListClipboardEntries` use case)
+- `delete_clipboard_entry` - Delete a clipboard entry (uses `DeleteClipboardEntry` use case)
+- `capture_clipboard` - Manually capture clipboard content (uses `CaptureClipboard` use case)
+
+**Encryption Commands**:
+
+- `initialize_encryption` - Initialize encryption with passphrase (uses `InitializeEncryption` use case)
+- `is_encryption_initialized` - Check encryption initialization status (uses `IsEncryptionInitialized` use case)
+
+**Settings Commands** (⚠️ Legacy - needs migration):
+
+- `get_settings` - Get application settings (direct Port access)
+- `update_settings` - Update application settings (direct Port access)
+
+### Architecture Pattern
+
+Commands MUST follow the UseCases accessor pattern:
+
+```rust
+#[tauri::command]
+pub async fn example_command(
+    runtime: State<'_, AppRuntime>,
+) -> Result<(), String> {
+    let uc = runtime.usecases().example_use_case();
+    uc.execute().await.map_err(|e| e.to_string())
+}
+```
+
+**Status**: See [docs/architecture/commands-status.md](docs/architecture/commands-status.md) for detailed migration status.
+
+### Commands Layer Status
+
+**Current Migration Status:** 5/7 commands using UseCases accessor (71%)
+
+When adding new commands:
+
+1. Define command function in `src-tauri/crates/uc-tauri/src/commands/`
+2. Create/refer to use case in `uc-app/src/usecases/`
+3. Add accessor method to `UseCases` in `src-tauri/crates/uc-tauri/src/bootstrap/runtime.rs`
+4. Register in `invoke_handler![]` in `src-tauri/src/main.rs`
+5. Use `runtime.usecases().xxx()` - NEVER `runtime.deps.xxx`
+
+See `docs/architecture/commands-status.md` for detailed status.
 
 ## Development Notes
 
