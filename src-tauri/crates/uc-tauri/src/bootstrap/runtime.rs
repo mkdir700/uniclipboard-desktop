@@ -151,6 +151,29 @@ impl<'a> UseCases<'a> {
         uc_app::usecases::ListClipboardEntries::from_arc(self.runtime.deps.clipboard_entry_repo.clone())
     }
 
+    /// Get the DeleteClipboardEntry use case.
+    /// 获取 DeleteClipboardEntry 用例。
+    ///
+    /// ## Example / 示例
+    ///
+    /// ```rust,no_run
+    /// # use uc_tauri::bootstrap::AppRuntime;
+    /// # use tauri::State;
+    /// # use uc_core::ids::EntryId;
+    /// # async fn example(runtime: State<'_, AppRuntime>, entry_id: &EntryId) -> Result<(), String> {
+    /// let uc = runtime.usecases().delete_clipboard_entry();
+    /// uc.execute(entry_id).await.map_err(|e| e.to_string())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn delete_clipboard_entry(&self) -> uc_app::usecases::DeleteClipboardEntry {
+        uc_app::usecases::DeleteClipboardEntry::from_ports(
+            self.runtime.deps.clipboard_entry_repo.clone(),
+            self.runtime.deps.selection_repo.clone(),
+            self.runtime.deps.clipboard_event_repo.clone(),
+        )
+    }
+
     /// Security use cases / 安全用例
     ///
     /// Get the InitializeEncryption use case for setting up encryption.
