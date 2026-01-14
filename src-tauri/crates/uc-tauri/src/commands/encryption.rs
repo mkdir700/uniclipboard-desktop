@@ -1,6 +1,7 @@
 //! Encryption-related Tauri commands
 //! 加密相关的 Tauri 命令
 
+use std::sync::Arc;
 use tauri::State;
 use crate::bootstrap::AppRuntime;
 
@@ -19,7 +20,7 @@ use crate::bootstrap::AppRuntime;
 /// - 命令不直接访问端口
 #[tauri::command]
 pub async fn initialize_encryption(
-    runtime: State<'_, AppRuntime>,
+    runtime: State<'_, Arc<AppRuntime>>,
     passphrase: String,
 ) -> Result<(), String> {
     let uc = runtime.usecases().initialize_encryption();
@@ -36,7 +37,7 @@ pub async fn initialize_encryption(
 /// 此命令使用 IsEncryptionInitialized 用例。
 #[tauri::command]
 pub async fn is_encryption_initialized(
-    runtime: State<'_, AppRuntime>,
+    runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<bool, String> {
     let uc = runtime.usecases().is_encryption_initialized();
     uc.execute().await.map_err(|e| e.to_string())

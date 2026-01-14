@@ -15,7 +15,9 @@ use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_platform::ipc::PlatformCommand;
 use uc_platform::ports::PlatformCommandExecutorPort;
-use uc_platform::runtime::event_bus::{PlatformCommandReceiver, PlatformEventSender, PlatformEventReceiver};
+use uc_platform::runtime::event_bus::{
+    PlatformCommandReceiver, PlatformEventReceiver, PlatformEventSender,
+};
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 
@@ -24,10 +26,6 @@ mod plugins;
 
 #[cfg(target_os = "macos")]
 use plugins::{enable_modern_window_style, enable_rounded_corners, reposition_traffic_lights};
-
-// Onboarding module (simplified implementation during migration)
-mod onboarding;
-use onboarding::check_onboarding_status;
 
 /// Simple executor for platform commands
 ///
@@ -101,7 +99,9 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::settings::get_settings,
             uc_tauri::commands::settings::update_settings,
             // Onboarding commands
-            check_onboarding_status,
+            uc_tauri::commands::onboarding::get_onboarding_state,
+            uc_tauri::commands::onboarding::complete_onboarding,
+            uc_tauri::commands::onboarding::initialize_onboarding,
             // macOS-specific commands (conditionally compiled)
             #[cfg(target_os = "macos")]
             enable_rounded_corners,
@@ -127,15 +127,28 @@ fn run_app(config: AppConfig) {
     };
 
     // Create AppRuntime from dependencies
-    let runtime = Arc::new(AppRuntime::new(deps));
+    let runtime = AppRuntime::new(deps);
+
+    // Wrap runtime in Arc for clipboard handler (PlatformRuntime needs Arc<dyn ClipboardChangeHandler>)
+    let runtime_for_handler = Arc::new(runtime);
+
+    // Get a reference to the runtime for Tauri state management
+    // We need to use Arc::try_unwrap() or create a clone without moving
+    // Since AppRuntime doesn't implement Clone, we need a different approach
+    // The solution: manage Arc<AppRuntime> and update commands to use State<'_, Arc<AppRuntime>>
+    // For now, let's use the Arc directly for Tauri state management
+    let runtime_for_tauri = runtime_for_handler.clone();
 
     // Create event channels for PlatformRuntime
-    let (platform_event_tx, platform_event_rx): (PlatformEventSender, PlatformEventReceiver) = mpsc::channel(100);
-    let (platform_cmd_tx, platform_cmd_rx): (tokio::sync::mpsc::Sender<uc_platform::ipc::PlatformCommand>, PlatformCommandReceiver) = mpsc::channel(100);
+    let (platform_event_tx, platform_event_rx): (PlatformEventSender, PlatformEventReceiver) =
+        mpsc::channel(100);
+    let (platform_cmd_tx, platform_cmd_rx): (
+        tokio::sync::mpsc::Sender<uc_platform::ipc::PlatformCommand>,
+        PlatformCommandReceiver,
+    ) = mpsc::channel(100);
 
-    // Clone the Arc for the callback
-    let runtime_clone = Arc::clone(&runtime);
-    let clipboard_handler: Arc<dyn ClipboardChangeHandler> = runtime_clone;
+    // Create clipboard handler from runtime (AppRuntime implements ClipboardChangeHandler)
+    let clipboard_handler: Arc<dyn ClipboardChangeHandler> = runtime_for_handler.clone();
 
     log::info!("Creating platform runtime with clipboard callback");
 
@@ -143,8 +156,9 @@ fn run_app(config: AppConfig) {
     // The actual startup will be completed in a follow-up task
 
     Builder::default()
-        // Manage AppRuntime for use case access
-        .manage(runtime.clone())
+        // Manage Arc<AppRuntime> for use case access
+        // NOTE: Commands need to use State<'_, Arc<AppRuntime>> instead of State<'_, AppRuntime>
+        .manage(runtime_for_tauri)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
@@ -195,7 +209,10 @@ fn run_app(config: AppConfig) {
                 log::info!("Platform runtime task started");
 
                 // Send StartClipboardWatcher command to enable monitoring
-                match platform_cmd_tx_for_spawn.send(PlatformCommand::StartClipboardWatcher).await {
+                match platform_cmd_tx_for_spawn
+                    .send(PlatformCommand::StartClipboardWatcher)
+                    .await
+                {
                     Ok(_) => log::info!("StartClipboardWatcher command sent"),
                     Err(e) => log::error!("Failed to send StartClipboardWatcher command: {}", e),
                 }

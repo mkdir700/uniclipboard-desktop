@@ -1,6 +1,7 @@
 //! Settings-related Tauri commands
 //! 设置相关的 Tauri 命令
 
+use std::sync::Arc;
 use serde_json::Value;
 use tauri::State;
 use uc_core::settings::model::Settings;
@@ -15,7 +16,7 @@ use crate::bootstrap::AppRuntime;
 /// - JSON representation of current Settings
 #[tauri::command]
 pub async fn get_settings(
-    runtime: State<'_, AppRuntime>,
+    runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Value, String> {
     let uc = runtime.usecases().get_settings();
     let settings = uc.execute().await.map_err(|e| e.to_string())?;
@@ -33,7 +34,7 @@ pub async fn get_settings(
 /// - `settings`: JSON value containing settings to update
 #[tauri::command]
 pub async fn update_settings(
-    runtime: State<'_, AppRuntime>,
+    runtime: State<'_, Arc<AppRuntime>>,
     settings: Value,
 ) -> Result<(), String> {
     // Parse JSON into Settings domain model
