@@ -76,8 +76,8 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     let filter_directives = [
         if is_dev { "debug" } else { "info" },
         "libp2p_mdns=warn",    // Filter noisy proxy errors
-        "uc_platform=debug",   // Platform layer: debug for dev
-        "uc_infra=debug",      // Infra layer: debug for dev
+        if is_dev { "uc_platform=debug" } else { "uc_platform=info" },
+        if is_dev { "uc_infra=debug" } else { "uc_infra=info" },
     ];
     let env_filter = tracing_subscriber::EnvFilter::try_new(filter_directives.join(","))
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::from_default_env());

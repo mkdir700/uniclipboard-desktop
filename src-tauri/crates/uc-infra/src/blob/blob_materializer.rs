@@ -1,6 +1,6 @@
 use anyhow::{Ok, Result};
 use async_trait::async_trait;
-use tracing::debug_span;
+use tracing::{debug_span, Instrument};
 use uc_core::blob::BlobStorageLocator;
 use uc_core::ports::ClockPort;
 use uc_core::ports::{BlobMaterializerPort, BlobRepositoryPort, BlobStorePort};
@@ -46,28 +46,30 @@ where
             size_bytes = data.len(),
             content_hash = %content_hash,
         );
-        let _enter = span.enter();
+        async {
+            if let Some(blob) = self.blob_repo.find_by_hash(content_hash).await? {
+                return Ok(blob);
+            }
 
-        if let Some(blob) = self.blob_repo.find_by_hash(content_hash).await? {
-            return Ok(blob);
+            let blob_id = BlobId::new();
+
+            // TODO: Implement encryption for blob data
+            let storage_path = self.blob_store.put(&blob_id, data).await?;
+
+            let created_at_ms = self.clock.now_ms();
+            let blob_storage_locator = BlobStorageLocator::new_local_fs(storage_path);
+            let result = Blob::new(
+                blob_id,
+                blob_storage_locator,
+                data.len() as i64,
+                content_hash.clone(),
+                created_at_ms,
+            );
+
+            self.blob_repo.insert_blob(&result).await?;
+            Ok(result)
         }
-
-        let blob_id = BlobId::new();
-
-        // TODO: Implement encryption for blob data
-        let storage_path = self.blob_store.put(&blob_id, data).await?;
-
-        let created_at_ms = self.clock.now_ms();
-        let blob_storage_locator = BlobStorageLocator::new_local_fs(storage_path);
-        let result = Blob::new(
-            blob_id,
-            blob_storage_locator,
-            data.len() as i64,
-            content_hash.clone(),
-            created_at_ms,
-        );
-
-        self.blob_repo.insert_blob(&result).await?;
-        Ok(result)
+        .instrument(span)
+        .await
     }
 }

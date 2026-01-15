@@ -26,19 +26,19 @@ impl WindowsClipboard {
 impl SystemClipboardPort for WindowsClipboard {
     fn read_snapshot(&self) -> Result<SystemClipboardSnapshot> {
         let span = debug_span!("platform.windows.read_clipboard");
-        let _enter = span.enter();
+        span.in_scope(|| {
+            // FIXME: 禁止使用 unwrap
+            let mut ctx = self.inner.lock().unwrap();
+            let snapshot = CommonClipboardImpl::read_snapshot(&mut ctx)?;
 
-        // FIXME: 禁止使用 unwrap
-        let mut ctx = self.inner.lock().unwrap();
-        let snapshot = CommonClipboardImpl::read_snapshot(&mut ctx)?;
+            debug!(
+                formats = snapshot.representations.len(),
+                total_size_bytes = snapshot.total_size_bytes(),
+                "Captured system clipboard snapshot"
+            );
 
-        debug!(
-            formats = snapshot.representations.len(),
-            total_size_bytes = snapshot.total_size_bytes(),
-            "Captured system clipboard snapshot"
-        );
-
-        Ok(snapshot)
+            Ok(snapshot)
+        })
     }
 
     fn write_snapshot(&self, snapshot: SystemClipboardSnapshot) -> Result<()> {
@@ -46,13 +46,13 @@ impl SystemClipboardPort for WindowsClipboard {
             "platform.windows.write_clipboard",
             representations = snapshot.representations.len(),
         );
-        let _enter = span.enter();
+        span.in_scope(|| {
+            let mut ctx = self.inner.lock().unwrap();
+            CommonClipboardImpl::write_snapshot(&mut ctx, snapshot)?;
 
-        let mut ctx = self.inner.lock().unwrap();
-        CommonClipboardImpl::write_snapshot(&mut ctx, snapshot)?;
-
-        debug!("Wrote clipboard snapshot to system");
-        Ok(())
+            debug!("Wrote clipboard snapshot to system");
+            Ok(())
+        })
     }
 }
 

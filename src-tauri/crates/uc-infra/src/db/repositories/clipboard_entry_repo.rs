@@ -54,22 +54,22 @@ where
             table = "clipboard_entry",
             entry_id = %entry.entry_id,
         );
-        let _enter = span.enter();
+        span.in_scope(|| {
+            self.executor.run(|conn| {
+                let new_entry_row = self.entry_mapper.to_row(entry)?;
+                let new_selection_row = self.selection_mapper.to_row(selection)?;
 
-        self.executor.run(|conn| {
-            let new_entry_row = self.entry_mapper.to_row(entry)?;
-            let new_selection_row = self.selection_mapper.to_row(selection)?;
+                conn.transaction(|conn| {
+                    diesel::insert_into(clipboard_entry::table)
+                        .values(&new_entry_row)
+                        .execute(conn)?;
 
-            conn.transaction(|conn| {
-                diesel::insert_into(clipboard_entry::table)
-                    .values(&new_entry_row)
-                    .execute(conn)?;
+                    diesel::insert_into(clipboard_selection::table)
+                        .values(&new_selection_row)
+                        .execute(conn)?;
 
-                diesel::insert_into(clipboard_selection::table)
-                    .values(&new_selection_row)
-                    .execute(conn)?;
-
-                Ok(())
+                    Ok(())
+                })
             })
         })
     }
@@ -80,22 +80,22 @@ where
             table = "clipboard_entry",
             entry_id = %entry_id,
         );
-        let _enter = span.enter();
+        span.in_scope(|| {
+            let entry_id_str = entry_id.to_string();
+            self.executor.run(|conn| {
+                let entry_row = clipboard_entry::table
+                    .filter(clipboard_entry::entry_id.eq(&entry_id_str))
+                    .first::<ClipboardEntryRow>(conn)
+                    .optional()?;
 
-        let entry_id_str = entry_id.to_string();
-        self.executor.run(|conn| {
-            let entry_row = clipboard_entry::table
-                .filter(clipboard_entry::entry_id.eq(&entry_id_str))
-                .first::<ClipboardEntryRow>(conn)
-                .optional()?;
-
-            match entry_row {
-                Some(row) => {
-                    let entry = self.row_entry_mapper.to_domain(&row)?;
-                    Ok(Some(entry))
+                match entry_row {
+                    Some(row) => {
+                        let entry = self.row_entry_mapper.to_domain(&row)?;
+                        Ok(Some(entry))
+                    }
+                    None => Ok(None),
                 }
-                None => Ok(None),
-            }
+            })
         })
     }
 
@@ -125,19 +125,19 @@ where
             limit = limit,
             offset = offset,
         );
-        let _enter = span.enter();
+        span.in_scope(|| {
+            self.executor.run(|conn| {
+                let entry_rows = clipboard_entry::table
+                    .order(clipboard_entry::created_at_ms.desc())
+                    .limit(limit as i64)
+                    .offset(offset as i64)
+                    .load::<ClipboardEntryRow>(conn)?;
 
-        self.executor.run(|conn| {
-            let entry_rows = clipboard_entry::table
-                .order(clipboard_entry::created_at_ms.desc())
-                .limit(limit as i64)
-                .offset(offset as i64)
-                .load::<ClipboardEntryRow>(conn)?;
-
-            entry_rows
-                .into_iter()
-                .map(|row| self.row_entry_mapper.to_domain(&row))
-                .collect()
+                entry_rows
+                    .into_iter()
+                    .map(|row| self.row_entry_mapper.to_domain(&row))
+                    .collect()
+            })
         })
     }
 
@@ -159,14 +159,14 @@ where
             table = "clipboard_entry",
             entry_id = %entry_id,
         );
-        let _enter = span.enter();
-
-        let entry_id_str = entry_id.to_string();
-        self.executor.run(|conn| {
-            diesel::delete(clipboard_entry::table)
-                .filter(clipboard_entry::entry_id.eq(&entry_id_str))
-                .execute(conn)?;
-            Ok(())
+        span.in_scope(|| {
+            let entry_id_str = entry_id.to_string();
+            self.executor.run(|conn| {
+                diesel::delete(clipboard_entry::table)
+                    .filter(clipboard_entry::entry_id.eq(&entry_id_str))
+                    .execute(conn)?;
+                Ok(())
+            })
         })
     }
 }

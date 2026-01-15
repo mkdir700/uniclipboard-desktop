@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::{info_span, info};
+use tracing::info;
 use uc_core::ids::EntryId;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort,
@@ -67,13 +67,12 @@ impl DeleteClipboardEntry {
     /// // uc.execute(&entry_id).await.unwrap();
     /// # });
     /// ```
+    #[tracing::instrument(
+        name = "usecase.delete_clipboard_entry.execute",
+        skip(self),
+        fields(entry_id = %entry_id)
+    )]
     pub async fn execute(&self, entry_id: &EntryId) -> Result<()> {
-        let span = info_span!(
-            "usecase.delete_clipboard_entry.execute",
-            entry_id = %entry_id,
-        );
-        let _enter = span.enter();
-
         info!(entry_id = %entry_id, "Starting clipboard entry deletion");
 
         // 1. Verify entry exists

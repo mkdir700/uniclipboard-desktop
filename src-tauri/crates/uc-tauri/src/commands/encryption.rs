@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, State};
 use crate::bootstrap::AppRuntime;
-use tracing::info_span;  // NEW
+use tracing::{info_span, Instrument};  // NEW
 
 const LOG_CONTEXT: &str = "[initialize_encryption]";
 
@@ -37,12 +37,12 @@ pub async fn initialize_encryption(
         "command.encryption.initialize",
         device_id = %runtime.deps.device_identity.current_device_id(),
     );
-    let _enter = span.enter();
 
     let uc = runtime.usecases().initialize_encryption();
     log::debug!("{} Use case created, executing...", LOG_CONTEXT);
 
     uc.execute(uc_core::security::model::Passphrase(passphrase))
+        .instrument(span)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to initialize encryption");
@@ -79,14 +79,16 @@ pub async fn is_encryption_initialized(
         "command.encryption.is_initialized",
         device_id = %runtime.deps.device_identity.current_device_id(),
     );
-    let _enter = span.enter();
+    async {
+        let uc = runtime.usecases().is_encryption_initialized();
+        let result = uc.execute().await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to check encryption status");
+            e.to_string()
+        })?;
 
-    let uc = runtime.usecases().is_encryption_initialized();
-    let result = uc.execute().await.map_err(|e| {
-        tracing::error!(error = %e, "Failed to check encryption status");
-        e.to_string()
-    })?;
-
-    tracing::info!(is_initialized = result, "Encryption status checked");
-    Ok(result)
+        tracing::info!(is_initialized = result, "Encryption status checked");
+        Ok(result)
+    }
+    .instrument(span)
+    .await
 }

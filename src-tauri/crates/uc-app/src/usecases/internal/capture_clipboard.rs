@@ -3,7 +3,7 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use futures::future::try_join_all;
-use tracing::{info_span, info, debug};
+use tracing::{info_span, info, debug, Instrument};
 
 use uc_core::ids::{EntryId, EventId};
 use uc_core::ports::{
@@ -106,66 +106,68 @@ impl CaptureClipboardUseCase {
             "usecase.capture_clipboard.execute",
             source = "platform_clipboard",
         );
-        let _enter = span.enter();
+        async {
+            info!("Starting clipboard capture from platform");
 
-        info!("Starting clipboard capture from platform");
+            let snapshot = self.platform_clipboard_port.read_snapshot()?;
 
-        let snapshot = self.platform_clipboard_port.read_snapshot()?;
+            debug!(
+                representations = snapshot.representations.len(),
+                "Captured system snapshot"
+            );
 
-        debug!(
-            representations = snapshot.representations.len(),
-            "Captured system snapshot"
-        );
+            let event_id = EventId::new();
+            let captured_at_ms = snapshot.ts_ms;
+            let source_device = self.device_identity.current_device_id();
+            let snapshot_hash = snapshot.snapshot_hash();
 
-        let event_id = EventId::new();
-        let captured_at_ms = snapshot.ts_ms;
-        let source_device = self.device_identity.current_device_id();
-        let snapshot_hash = snapshot.snapshot_hash();
+            // 1. 生成 event + snapshot representations
+            let new_event = ClipboardEvent::new(
+                event_id.clone(),
+                captured_at_ms,
+                source_device,
+                snapshot_hash,
+            );
 
-        // 1. 生成 event + snapshot representations
-        let new_event = ClipboardEvent::new(
-            event_id.clone(),
-            captured_at_ms,
-            source_device,
-            snapshot_hash,
-        );
+            // 3. event_repo.insert_event
+            let materialized_futures: Vec<_> = snapshot
+                .representations
+                .iter()
+                .map(|rep| self.representation_materializer.materialize(rep))
+                .collect();
+            let materialized_reps = try_join_all(materialized_futures).await?;
+            self.event_writer
+                .insert_event(&new_event, &materialized_reps)
+                .await?;
 
-        // 3. event_repo.insert_event
-        let materialized_futures: Vec<_> = snapshot
-            .representations
-            .iter()
-            .map(|rep| self.representation_materializer.materialize(rep))
-            .collect();
-        let materialized_reps = try_join_all(materialized_futures).await?;
-        self.event_writer
-            .insert_event(&new_event, &materialized_reps)
-            .await?;
+            // 4. policy.select(snapshot)
+            let entry_id = EntryId::new();
+            let selection = self.representation_policy.select(&snapshot)?;
+            let new_selection = ClipboardSelectionDecision::new(entry_id.clone(), selection);
 
-        // 4. policy.select(snapshot)
-        let entry_id = EntryId::new();
-        let selection = self.representation_policy.select(&snapshot)?;
-        let new_selection = ClipboardSelectionDecision::new(entry_id.clone(), selection);
+            // 5. entry_repo.insert_entry
+            let created_at_ms = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
+                .as_millis() as i64;
+            let total_size = snapshot.total_size_bytes();
 
-        // 5. entry_repo.insert_entry
-        let created_at_ms = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
-            .as_millis() as i64;
-        let total_size = snapshot.total_size_bytes();
+            let new_entry = ClipboardEntry::new(
+                entry_id.clone(),
+                event_id.clone(),
+                created_at_ms,
+                None, // TODO: 暂时为 None
+                total_size,
+            );
+            self.entry_repo
+                .save_entry_and_selection(&new_entry, &new_selection)
+                .await?;
 
-        let new_entry = ClipboardEntry::new(
-            entry_id.clone(),
-            event_id.clone(),
-            created_at_ms,
-            None, // TODO: 暂时为 None
-            total_size,
-        );
-        self.entry_repo
-            .save_entry_and_selection(&new_entry, &new_selection)
-            .await?;
-
-        info!(event_id = %event_id, "Clipboard capture completed");
-        Ok(event_id)
+            info!(event_id = %event_id, "Clipboard capture completed");
+            Ok(event_id)
+        }
+        .instrument(span)
+        .await
     }
 
     /// Execute the clipboard capture workflow with a pre-captured snapshot.
@@ -202,58 +204,60 @@ impl CaptureClipboardUseCase {
             source = "callback",
             representations = snapshot.representations.len(),
         );
-        let _enter = span.enter();
+        async move {
+            info!("Starting clipboard capture with provided snapshot");
 
-        info!("Starting clipboard capture with provided snapshot");
+            let event_id = EventId::new();
+            let captured_at_ms = snapshot.ts_ms;
+            let source_device = self.device_identity.current_device_id();
+            let snapshot_hash = snapshot.snapshot_hash();
 
-        let event_id = EventId::new();
-        let captured_at_ms = snapshot.ts_ms;
-        let source_device = self.device_identity.current_device_id();
-        let snapshot_hash = snapshot.snapshot_hash();
+            // 1. 生成 event + snapshot representations
+            let new_event = ClipboardEvent::new(
+                event_id.clone(),
+                captured_at_ms,
+                source_device,
+                snapshot_hash,
+            );
 
-        // 1. 生成 event + snapshot representations
-        let new_event = ClipboardEvent::new(
-            event_id.clone(),
-            captured_at_ms,
-            source_device,
-            snapshot_hash,
-        );
+            // 3. event_repo.insert_event
+            let materialized_futures: Vec<_> = snapshot
+                .representations
+                .iter()
+                .map(|rep| self.representation_materializer.materialize(rep))
+                .collect();
+            let materialized_reps = try_join_all(materialized_futures).await?;
+            self.event_writer
+                .insert_event(&new_event, &materialized_reps)
+                .await?;
 
-        // 3. event_repo.insert_event
-        let materialized_futures: Vec<_> = snapshot
-            .representations
-            .iter()
-            .map(|rep| self.representation_materializer.materialize(rep))
-            .collect();
-        let materialized_reps = try_join_all(materialized_futures).await?;
-        self.event_writer
-            .insert_event(&new_event, &materialized_reps)
-            .await?;
+            // 4. policy.select(snapshot)
+            let entry_id = EntryId::new();
+            let selection = self.representation_policy.select(&snapshot)?;
+            let new_selection = ClipboardSelectionDecision::new(entry_id.clone(), selection);
 
-        // 4. policy.select(snapshot)
-        let entry_id = EntryId::new();
-        let selection = self.representation_policy.select(&snapshot)?;
-        let new_selection = ClipboardSelectionDecision::new(entry_id.clone(), selection);
+            // 5. entry_repo.insert_entry
+            let created_at_ms = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
+                .as_millis() as i64;
+            let total_size = snapshot.total_size_bytes();
 
-        // 5. entry_repo.insert_entry
-        let created_at_ms = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
-            .as_millis() as i64;
-        let total_size = snapshot.total_size_bytes();
+            let new_entry = ClipboardEntry::new(
+                entry_id.clone(),
+                event_id.clone(),
+                created_at_ms,
+                None, // TODO: 暂时为 None
+                total_size,
+            );
+            self.entry_repo
+                .save_entry_and_selection(&new_entry, &new_selection)
+                .await?;
 
-        let new_entry = ClipboardEntry::new(
-            entry_id.clone(),
-            event_id.clone(),
-            created_at_ms,
-            None, // TODO: 暂时为 None
-            total_size,
-        );
-        self.entry_repo
-            .save_entry_and_selection(&new_entry, &new_selection)
-            .await?;
-
-        info!(event_id = %event_id, "Clipboard capture completed");
-        Ok(event_id)
+            info!(event_id = %event_id, "Clipboard capture completed");
+            Ok(event_id)
+        }
+        .instrument(span)
+        .await
     }
 }

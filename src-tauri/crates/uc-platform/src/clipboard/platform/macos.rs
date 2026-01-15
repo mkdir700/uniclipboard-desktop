@@ -26,18 +26,18 @@ impl MacOSClipboard {
 impl SystemClipboardPort for MacOSClipboard {
     fn read_snapshot(&self) -> Result<SystemClipboardSnapshot> {
         let span = debug_span!("platform.macos.read_clipboard");
-        let _enter = span.enter();
+        span.in_scope(|| {
+            let mut ctx = self.inner.lock().unwrap();
+            let snapshot = CommonClipboardImpl::read_snapshot(&mut ctx)?;
 
-        let mut ctx = self.inner.lock().unwrap();
-        let snapshot = CommonClipboardImpl::read_snapshot(&mut ctx)?;
+            debug!(
+                formats = snapshot.representations.len(),
+                total_size_bytes = snapshot.total_size_bytes(),
+                "Captured system clipboard snapshot"
+            );
 
-        debug!(
-            formats = snapshot.representations.len(),
-            total_size_bytes = snapshot.total_size_bytes(),
-            "Captured system clipboard snapshot"
-        );
-
-        Ok(snapshot)
+            Ok(snapshot)
+        })
     }
 
     fn write_snapshot(&self, snapshot: SystemClipboardSnapshot) -> Result<()> {
@@ -45,12 +45,12 @@ impl SystemClipboardPort for MacOSClipboard {
             "platform.macos.write_clipboard",
             representations = snapshot.representations.len(),
         );
-        let _enter = span.enter();
+        span.in_scope(|| {
+            let mut ctx = self.inner.lock().unwrap();
+            CommonClipboardImpl::write_snapshot(&mut ctx, snapshot)?;
 
-        let mut ctx = self.inner.lock().unwrap();
-        CommonClipboardImpl::write_snapshot(&mut ctx, snapshot)?;
-
-        debug!("Wrote clipboard snapshot to system");
-        Ok(())
+            debug!("Wrote clipboard snapshot to system");
+            Ok(())
+        })
     }
 }

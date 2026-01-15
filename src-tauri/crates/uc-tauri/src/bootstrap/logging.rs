@@ -12,7 +12,7 @@
 //!
 //! - **macOS**: `~/Library/Logs/com.uniclipboard/uniclipboard.log`
 //! - **Linux**: `~/.local/share/com.uniclipboard/logs/uniclipboard.log`
-//! - **Windows**: `%LOCALAPPDATA%\com.uniclipboard\logs/uniclipboard.log`
+//! - **Windows**: `%LOCALAPPDATA%\com.uniclipboard\logs\uniclipboard.log`
 
 use log::LevelFilter;
 use tauri_plugin_log::{Target, TargetKind, TimezoneStrategy};

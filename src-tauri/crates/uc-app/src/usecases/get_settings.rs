@@ -2,7 +2,7 @@
 //! 获取应用设置的用例
 
 use anyhow::Result;
-use tracing::{info_span, info};
+use tracing::{info_span, info, Instrument};
 use uc_core::ports::settings::SettingsPort;
 use uc_core::settings::model::Settings;
 
@@ -31,14 +31,11 @@ impl GetSettings {
     /// - `Ok(Settings)` - The current application settings
     /// - `Err(e)` if loading settings fails
     pub async fn execute(&self) -> Result<Settings> {
-        let span = info_span!(
-            "usecase.get_settings.execute",
-        );
-        let _enter = span.enter();
+        let span = info_span!("usecase.get_settings.execute");
 
         info!("Retrieving application settings");
 
-        let result = self.settings.load().await?;
+        let result = self.settings.load().instrument(span).await?;
 
         info!("Settings retrieved successfully");
         Ok(result)

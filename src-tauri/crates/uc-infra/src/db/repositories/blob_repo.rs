@@ -50,14 +50,14 @@ where
             blob_id = %blob_row.blob_id,
             size_bytes = blob_row.size_bytes,
         );
-        let _enter = span.enter();
-
-        let new_blob_row = self.insert_mapper.to_row(blob_row)?;
-        self.executor.run(|conn| {
-            diesel::insert_into(blob::table)
-                .values(&new_blob_row)
-                .execute(conn)?;
-            Ok(())
+        span.in_scope(|| {
+            let new_blob_row = self.insert_mapper.to_row(blob_row)?;
+            self.executor.run(|conn| {
+                diesel::insert_into(blob::table)
+                    .values(&new_blob_row)
+                    .execute(conn)?;
+                Ok(())
+            })
         })
     }
 
@@ -67,22 +67,22 @@ where
             table = "blob",
             content_hash = %content_hash,
         );
-        let _enter = span.enter();
+        span.in_scope(|| {
+            let blob_row: Option<BlobRow> = self.executor.run(|conn| {
+                let result: Result<Option<BlobRow>, diesel::result::Error> = blob::table
+                    .filter(blob::content_hash.eq(content_hash.to_string()))
+                    .first::<BlobRow>(conn)
+                    .optional();
+                result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+            })?;
 
-        let blob_row: Option<BlobRow> = self.executor.run(|conn| {
-            let result: Result<Option<BlobRow>, diesel::result::Error> = blob::table
-                .filter(blob::content_hash.eq(content_hash.to_string()))
-                .first::<BlobRow>(conn)
-                .optional();
-            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
-        })?;
-
-        match blob_row {
-            Some(row) => {
-                let blob = self.row_mapper.to_domain(&row)?;
-                Ok(Some(blob))
+            match blob_row {
+                Some(row) => {
+                    let blob = self.row_mapper.to_domain(&row)?;
+                    Ok(Some(blob))
+                }
+                None => Ok(None),
             }
-            None => Ok(None),
-        }
+        })
     }
 }

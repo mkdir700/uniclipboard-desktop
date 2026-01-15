@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::{info_span, info};
+use tracing::{info_span, info, Instrument};
 use uc_core::clipboard::ClipboardEntry;
 use uc_core::ports::ClipboardEntryRepositoryPort;
 
@@ -57,34 +57,36 @@ impl ListClipboardEntries {
             limit = limit,
             offset = offset,
         );
-        let _enter = span.enter();
+        async {
+            info!("Starting clipboard entries query");
 
-        info!("Starting clipboard entries query");
+            // Validate limit
+            if limit == 0 {
+                return Err(anyhow::anyhow!(
+                    "Invalid limit: {}. Must be at least 1",
+                    limit
+                ));
+            }
 
-        // Validate limit
-        if limit == 0 {
-            return Err(anyhow::anyhow!(
-                "Invalid limit: {}. Must be at least 1",
-                limit
-            ));
+            if limit > self.max_limit {
+                return Err(anyhow::anyhow!(
+                    "Invalid limit: {}. Must be at most {}",
+                    limit,
+                    self.max_limit
+                ));
+            }
+
+            // Query repository
+            let result = self.entry_repo
+                .list_entries(limit, offset)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to query clipboard entries: {}", e))?;
+
+            info!(count = result.len(), "Retrieved clipboard entries");
+            Ok(result)
         }
-
-        if limit > self.max_limit {
-            return Err(anyhow::anyhow!(
-                "Invalid limit: {}. Must be at most {}",
-                limit,
-                self.max_limit
-            ));
-        }
-
-        // Query repository
-        let result = self.entry_repo
-            .list_entries(limit, offset)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to query clipboard entries: {}", e))?;
-
-        info!(count = result.len(), "Retrieved clipboard entries");
-        Ok(result)
+        .instrument(span)
+        .await
     }
 }
 
