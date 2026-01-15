@@ -54,10 +54,25 @@ pub async fn update_settings(
     runtime: State<'_, Arc<AppRuntime>>,
     settings: Value,
 ) -> Result<(), String> {
+    let span = info_span!(
+        "command.settings.update",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    let _enter = span.enter();
+
     // Parse JSON into Settings domain model
-    let settings: Settings = serde_json::from_value(settings)
-        .map_err(|e| format!("Failed to parse settings: {}", e))?;
+    let parsed_settings: Settings = serde_json::from_value(settings.clone())
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to parse settings JSON");
+            format!("Failed to parse settings: {}", e)
+        })?;
 
     let uc = runtime.usecases().update_settings();
-    uc.execute(settings).await.map_err(|e| e.to_string())
+    uc.execute(parsed_settings).await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to update settings");
+        e.to_string()
+    })?;
+
+    tracing::info!("Settings updated successfully");
+    Ok(())
 }
