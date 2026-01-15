@@ -6,6 +6,8 @@ use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, State};
 use crate::bootstrap::AppRuntime;
 
+const LOG_CONTEXT: &str = "[initialize_encryption]";
+
 /// Event payload for onboarding-password-set event
 #[derive(Debug, Clone, serde::Serialize)]
 struct OnboardingPasswordSetEvent {
@@ -30,19 +32,19 @@ pub async fn initialize_encryption(
     app_handle: AppHandle,
     passphrase: String,
 ) -> Result<(), String> {
-    eprintln!("[initialize_encryption] Command called with passphrase length: {}", passphrase.len());
+    log::debug!("{} Command called with passphrase length: {}", LOG_CONTEXT, passphrase.len());
 
     let uc = runtime.usecases().initialize_encryption();
-    eprintln!("[initialize_encryption] Use case created, executing...");
+    log::debug!("{} Use case created, executing...", LOG_CONTEXT);
 
     uc.execute(uc_core::security::model::Passphrase(passphrase))
         .await
         .map_err(|e| {
-            eprintln!("[initialize_encryption] Use case execution failed: {:?}", e);
+            log::error!("{} Use case execution failed: {:?}", LOG_CONTEXT, e);
             e.to_string()
         })?;
 
-    eprintln!("[initialize_encryption] Use case executed successfully, emitting event...");
+    log::debug!("{} Use case executed successfully, emitting event...", LOG_CONTEXT);
 
     // Emit onboarding-password-set event for frontend
     let timestamp = SystemTime::now()
@@ -55,7 +57,7 @@ pub async fn initialize_encryption(
         .emit("onboarding-password-set", event)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
 
-    eprintln!("[initialize_encryption] Event emitted successfully");
+    log::debug!("{} Event emitted successfully", LOG_CONTEXT);
     log::info!("Onboarding: encryption password initialized successfully");
     Ok(())
 }

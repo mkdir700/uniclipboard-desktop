@@ -14,6 +14,8 @@ use uc_core::{
     },
 };
 
+const LOG_CONTEXT: &str = "[InitializeEncryption]";
+
 #[derive(Debug, thiserror::Error)]
 pub enum InitializeEncryptionError {
     #[error("encryption is already initialized")]
@@ -96,64 +98,64 @@ impl InitializeEncryption {
     }
 
     pub async fn execute(&self, passphrase: Passphrase) -> Result<(), InitializeEncryptionError> {
-        eprintln!("[InitializeEncryption] Starting execution");
+        log::debug!("{} Starting execution", LOG_CONTEXT);
 
         let state = self.encryption_state_repo.load_state().await?;
-        eprintln!("[InitializeEncryption] Loaded encryption state: {:?}", state);
+        log::debug!("{} Loaded encryption state: {:?}", LOG_CONTEXT, state);
 
         // 1. assert not initialized
         if state == EncryptionState::Initialized {
             return Err(InitializeEncryptionError::AlreadyInitialized);
         }
 
-        eprintln!("[InitializeEncryption] Getting current scope...");
+        log::debug!("{} Getting current scope...", LOG_CONTEXT);
         let scope = self.key_scope.current_scope().await?;
-        eprintln!("[InitializeEncryption] Got scope: {}", scope.to_identifier());
+        log::debug!("{} Got scope: {}", LOG_CONTEXT, scope.to_identifier());
 
-        eprintln!("[InitializeEncryption] Creating keyslot draft...");
+        log::debug!("{} Creating keyslot draft...", LOG_CONTEXT);
         let keyslot_draft = KeySlot::draft_v1(scope.clone())?;
-        eprintln!("[InitializeEncryption] Keyslot draft created");
+        log::debug!("{} Keyslot draft created", LOG_CONTEXT);
 
         // 2. derive KEK
-        eprintln!("[InitializeEncryption] Deriving KEK...");
+        log::debug!("{} Deriving KEK...", LOG_CONTEXT);
         let kek = self
             .encryption
             .derive_kek(&passphrase, &keyslot_draft.salt, &keyslot_draft.kdf)
             .await?;
-        eprintln!("[InitializeEncryption] KEK derived successfully");
+        log::debug!("{} KEK derived successfully", LOG_CONTEXT);
 
         // 3. generate MasterKey
-        eprintln!("[InitializeEncryption] Generating master key...");
+        log::debug!("{} Generating master key...", LOG_CONTEXT);
         let master_key = MasterKey::generate()?;
-        eprintln!("[InitializeEncryption] Master key generated");
+        log::debug!("{} Master key generated", LOG_CONTEXT);
 
         // 4. wrap MasterKey
-        eprintln!("[InitializeEncryption] Wrapping master key...");
+        log::debug!("{} Wrapping master key...", LOG_CONTEXT);
         let blob = self
             .encryption
             .wrap_master_key(&kek, &master_key, EncryptionAlgo::XChaCha20Poly1305)
             .await?;
-        eprintln!("[InitializeEncryption] Master key wrapped successfully");
+        log::debug!("{} Master key wrapped successfully", LOG_CONTEXT);
 
         let keyslot = keyslot_draft.finalize(WrappedMasterKey { blob });
-        eprintln!("[InitializeEncryption] Keyslot finalized");
+        log::debug!("{} Keyslot finalized", LOG_CONTEXT);
 
         // 5. persist wrapped key, store keyslot
-        eprintln!("[InitializeEncryption] Storing keyslot...");
+        log::debug!("{} Storing keyslot...", LOG_CONTEXT);
         self.key_material.store_keyslot(&keyslot).await?;
-        eprintln!("[InitializeEncryption] Keyslot stored successfully");
+        log::debug!("{} Keyslot stored successfully", LOG_CONTEXT);
 
         // 6. store KEK material into keyring
-        eprintln!("[InitializeEncryption] Storing KEK in keyring...");
+        log::debug!("{} Storing KEK in keyring...", LOG_CONTEXT);
         self.key_material.store_kek(&scope, &kek).await?;
-        eprintln!("[InitializeEncryption] KEK stored successfully");
+        log::debug!("{} KEK stored successfully", LOG_CONTEXT);
 
         // 7. persist initialized state
-        eprintln!("[InitializeEncryption] Persisting initialized state...");
+        log::debug!("{} Persisting initialized state...", LOG_CONTEXT);
         self.encryption_state_repo.persist_initialized().await?;
-        eprintln!("[InitializeEncryption] Encryption state persisted");
+        log::debug!("{} Encryption state persisted", LOG_CONTEXT);
 
-        eprintln!("[InitializeEncryption] All steps completed successfully");
+        log::info!("{} All steps completed successfully", LOG_CONTEXT);
         Ok(())
     }
 }
