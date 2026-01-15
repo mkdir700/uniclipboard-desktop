@@ -3,6 +3,7 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use futures::future::try_join_all;
+use tracing::{info_span, info, debug};
 
 use uc_core::ids::{EntryId, EventId};
 use uc_core::ports::{
@@ -101,7 +102,20 @@ impl CaptureClipboardUseCase {
     /// - `EventId` of the created capture event
     /// - 创建的捕获事件的 `EventId`
     pub async fn execute(&self) -> Result<EventId> {
+        let span = info_span!(
+            "usecase.capture_clipboard.execute",
+            source = "platform_clipboard",
+        );
+        let _enter = span.enter();
+
+        info!("Starting clipboard capture from platform");
+
         let snapshot = self.platform_clipboard_port.read_snapshot()?;
+
+        debug!(
+            representations = snapshot.representations.len(),
+            "Captured system snapshot"
+        );
 
         let event_id = EventId::new();
         let captured_at_ms = snapshot.ts_ms;
@@ -150,6 +164,7 @@ impl CaptureClipboardUseCase {
             .save_entry_and_selection(&new_entry, &new_selection)
             .await?;
 
+        info!(event_id = %event_id, "Clipboard capture completed");
         Ok(event_id)
     }
 
@@ -182,6 +197,15 @@ impl CaptureClipboardUseCase {
     /// - Avoids redundant system clipboard reads
     /// - 避免重复读取系统剪贴板
     pub async fn execute_with_snapshot(&self, snapshot: SystemClipboardSnapshot) -> Result<EventId> {
+        let span = info_span!(
+            "usecase.capture_clipboard.execute",
+            source = "callback",
+            representations = snapshot.representations.len(),
+        );
+        let _enter = span.enter();
+
+        info!("Starting clipboard capture with provided snapshot");
+
         let event_id = EventId::new();
         let captured_at_ms = snapshot.ts_ms;
         let source_device = self.device_identity.current_device_id();
@@ -229,6 +253,7 @@ impl CaptureClipboardUseCase {
             .save_entry_and_selection(&new_entry, &new_selection)
             .await?;
 
+        info!(event_id = %event_id, "Clipboard capture completed");
         Ok(event_id)
     }
 }
