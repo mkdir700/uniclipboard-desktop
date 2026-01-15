@@ -85,14 +85,20 @@ fn main() {
             log::debug!("No config.toml found, using system defaults: {}", e);
 
             // Compute system data directory using dirs crate
-            let data_dir = dirs::data_local_dir()
-                .unwrap_or_else(|| {
-                    // Fallback for systems without dirs support
-                    PathBuf::from(".").join("data")
-                })
-                .join("uniclipboard");
+            // 计算系统数据目录，使用 dirs crate
+            let data_dir = match dirs::data_local_dir() {
+                Some(dir) => dir,
+                None => {
+                    error!("Failed to determine system data directory");
+                    error!("Please ensure your platform's data directory is accessible");
+                    error!("macOS: ~/Library/Application Support/");
+                    error!("Linux: ~/.local/share/");
+                    error!("Windows: %LOCALAPPDATA%");
+                    std::process::exit(1);
+                }
+            };
 
-            AppConfig::with_system_defaults(data_dir)
+            AppConfig::with_system_defaults(data_dir.join("uniclipboard"))
         }
     };
 
