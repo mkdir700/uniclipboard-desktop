@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{info_span, info};
 
 use uc_core::{
     ports::{
@@ -98,7 +99,12 @@ impl InitializeEncryption {
     }
 
     pub async fn execute(&self, passphrase: Passphrase) -> Result<(), InitializeEncryptionError> {
-        log::debug!("{} Starting execution", LOG_CONTEXT);
+        let span = info_span!(
+            "usecase.initialize_encryption.execute",
+        );
+        let _enter = span.enter();
+
+        info!("Starting encryption initialization");
 
         let state = self.encryption_state_repo.load_state().await?;
         log::debug!("{} Loaded encryption state: {:?}", LOG_CONTEXT, state);
@@ -155,7 +161,7 @@ impl InitializeEncryption {
         self.encryption_state_repo.persist_initialized().await?;
         log::debug!("{} Encryption state persisted", LOG_CONTEXT);
 
-        log::info!("{} All steps completed successfully", LOG_CONTEXT);
+        info!("Encryption initialized successfully");
         Ok(())
     }
 }
