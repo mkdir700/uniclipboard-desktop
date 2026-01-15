@@ -1,6 +1,7 @@
 //! Clipboard-related Tauri commands
 //! 剪贴板相关的 Tauri 命令
 
+use std::sync::Arc;
 use tauri::State;
 use crate::bootstrap::AppRuntime;
 use crate::models::ClipboardEntryProjection;
@@ -9,7 +10,7 @@ use crate::models::ClipboardEntryProjection;
 /// 获取剪贴板历史条目
 #[tauri::command]
 pub async fn get_clipboard_entries(
-    runtime: State<'_, AppRuntime>,
+    runtime: State<'_, Arc<AppRuntime>>,
     limit: Option<usize>,
 ) -> Result<Vec<ClipboardEntryProjection>, String> {
     // Use UseCases accessor pattern (consistent with other commands)
@@ -44,8 +45,8 @@ pub async fn get_clipboard_entries(
 /// # Examples
 ///
 /// ```no_run
-/// # async fn example(runtime: tauri::State<'_, uc_tauri::bootstrap::AppRuntime>) {
-/// // Tauri provides `State<AppRuntime>` when invoking commands from the frontend.
+/// # async fn example(runtime: tauri::State<'_, Arc<uc_tauri::bootstrap::AppRuntime>>) {
+/// // Tauri provides `State<Arc<AppRuntime>>` when invoking commands from the frontend.
 /// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(runtime, "entry-id-123".to_string()).await;
 /// match result {
 ///     Ok(()) => println!("Deleted"),
@@ -55,7 +56,7 @@ pub async fn get_clipboard_entries(
 /// ```
 #[tauri::command]
 pub async fn delete_clipboard_entry(
-    runtime: State<'_, AppRuntime>,
+    runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
 ) -> Result<(), String> {
     // Parse entry_id
@@ -114,7 +115,7 @@ pub async fn delete_clipboard_entry(
 /// - [ ] Update command implementation
 #[tauri::command]
 pub async fn capture_clipboard(
-    _runtime: State<'_, AppRuntime>,
+    _runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<String, String> {
     // TODO: Implement CaptureClipboard use case
     // This is a complex use case requiring:

@@ -39,6 +39,13 @@ impl KeySlotStore for JsonKeySlotStore {
     }
 
     async fn store(&self, slot: &KeySlotFile) -> Result<(), EncryptionError> {
+        // Ensure parent directory exists
+        if let Some(parent) = self.path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|_| EncryptionError::IoFailure)?;
+        }
+
         let tmp = self.path.with_extension("json.tmp");
 
         let json =

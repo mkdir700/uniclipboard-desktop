@@ -47,7 +47,9 @@ impl ObservedClipboardRepresentation {
     }
 
     pub fn content_hash(&self) -> RepresentationHash {
-        RepresentationHash(ContentHash::from(self.bytes.as_slice()))
+        // Compute blake3 hash of the content bytes, then create ContentHash from the hash result
+        let hash = blake3::hash(&self.bytes);
+        RepresentationHash(ContentHash::from(hash.as_bytes()))
     }
 }
 
@@ -91,6 +93,6 @@ impl SystemClipboardSnapshot {
         }
 
         let hash = hasher.finalize();
-        SnapshotHash(ContentHash::from(&hash.as_bytes()[..]))
+        SnapshotHash(ContentHash::from(hash.as_bytes()))
     }
 }

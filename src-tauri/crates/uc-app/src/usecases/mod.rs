@@ -23,6 +23,7 @@ pub mod internal;
 pub mod is_encryption_initialized;
 pub mod list_clipboard_entries;
 pub mod list_clipboard_entry_previews;
+pub mod onboarding;
 pub mod settings;
 pub mod update_settings;
 
@@ -32,4 +33,10 @@ pub use initialize_encryption::InitializeEncryption;
 pub use is_encryption_initialized::IsEncryptionInitialized;
 pub use list_clipboard_entries::ListClipboardEntries;
 pub use update_settings::UpdateSettings;
+
+// Re-export onboarding types for Tauri command serialization
+pub use onboarding::OnboardingStateDto;
+pub use onboarding::CompleteOnboarding;
+pub use onboarding::GetOnboardingState;
+pub use onboarding::InitializeOnboarding;
 

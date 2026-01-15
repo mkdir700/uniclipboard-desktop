@@ -30,6 +30,7 @@ thiserror = "2.0"
 
 # Logging
 log = "0.4"
+dirs = "6.0.0"
 
 [dev-dependencies]
 tempfile = "3"
