@@ -1,5 +1,17 @@
 import { invoke } from '@tauri-apps/api/core'
 
+// Backend projection type
+interface ClipboardEntryProjection {
+  id: string
+  preview: string
+  captured_at: number
+  content_type: string
+  is_encrypted: boolean
+  is_favorited: boolean
+  updated_at: number
+  active_time: number
+}
+
 /**
  * 排序选项枚举
  */
@@ -95,24 +107,54 @@ export async function getClipboardStats(): Promise<ClipboardStats> {
 
 /**
  * 获取剪贴板历史记录
- * @param orderBy 排序方式
+ * @param orderBy 排序方式（暂未实现）
  * @param limit 限制返回的条目数
- * @param offset 偏移量，用于分页
+ * @param offset 偏移量，用于分页（暂未实现）
+ * @param filter 过滤选项（暂未实现）
  * @returns Promise，返回剪贴板条目数组
  */
 export async function getClipboardItems(
-  orderBy?: OrderBy,
+  _orderBy?: OrderBy,
   limit?: number,
   offset?: number,
-  filter?: Filter
+  _filter?: Filter
 ): Promise<ClipboardItemResponse[]> {
   try {
-    return await invoke('get_clipboard_items', {
-      orderBy,
-      limit,
-      offset,
-      filter,
+    // Note: orderBy and filter are not yet implemented in the backend command
+    // Map Filter enum to backend format if needed (for future use)
+    // const mappedFilter = filter === Filter.All ? undefined : filter
+
+    // Use new command name: get_clipboard_entries
+    const entries = await invoke<ClipboardEntryProjection[]>('get_clipboard_entries', {
+      limit: limit ?? 50,
+      offset: offset ?? 0,
     })
+
+    // Transform backend projection to frontend response format
+    return entries.map(entry => ({
+      id: entry.id,
+      device_id: '', // Not in projection yet, use empty string
+      is_downloaded: true, // Default to true for local entries
+      is_favorited: entry.is_favorited,
+      created_at: entry.captured_at,
+      updated_at: entry.updated_at,
+      active_time: entry.active_time,
+      item: {
+        text:
+          entry.content_type === 'text'
+            ? {
+                display_text: entry.preview,
+                is_truncated: entry.preview.length > 100,
+                size: entry.preview.length,
+              }
+            : (null as unknown as ClipboardTextItem),
+        image: null as unknown as ClipboardImageItem,
+        file: null as unknown as ClipboardFileItem,
+        link: null as unknown as ClipboardLinkItem,
+        code: null as unknown as ClipboardCodeItem,
+        unknown: null,
+      },
+    }))
   } catch (error) {
     console.error('获取剪贴板历史记录失败:', error)
     throw error
@@ -144,7 +186,7 @@ export async function getClipboardItem(
  */
 export async function deleteClipboardItem(id: string): Promise<boolean> {
   try {
-    return await invoke('delete_clipboard_item', { id })
+    return await invoke('delete_clipboard_entry', { entry_id: id })
   } catch (error) {
     console.error('删除剪贴板条目失败:', error)
     throw error
