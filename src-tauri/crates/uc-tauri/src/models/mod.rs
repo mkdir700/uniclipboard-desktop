@@ -16,8 +16,10 @@ use serde::{Deserialize, Serialize};
 pub struct ClipboardEntryProjection {
     /// Unique identifier for the entry
     pub id: String,
-    /// Preview text for display
+    /// Full text content (not truncated)
     pub preview: String,
+    /// Total size in bytes
+    pub size_bytes: i64,
     /// Timestamp when captured (Unix timestamp)
     pub captured_at: i64,
     /// Content type description
