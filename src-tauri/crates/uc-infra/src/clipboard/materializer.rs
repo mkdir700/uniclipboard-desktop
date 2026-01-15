@@ -75,12 +75,20 @@ impl ClipboardRepresentationMaterializerPort for ClipboardRepresentationMaterial
         let inline_threshold_bytes = self.config.inline_threshold_bytes;
         let size_bytes = observed.bytes.len() as i64;
 
-        // Decision: inline or blob?
-        // 决策：内联还是 blob？
+        // Decision: inline or blob, with preview for large text
+        // 决策：内联还是 blob，大文本生成预览
         let inline_data = if size_bytes <= inline_threshold_bytes {
+            // Small content: store full data inline
             Some(observed.bytes.clone())
         } else {
-            None
+            // Large content: decide based on type
+            if is_text_mime_type(&observed.mime) {
+                // Text type: generate truncated preview
+                Some(truncate_to_preview(&observed.bytes))
+            } else {
+                // Non-text (images, etc.): no inline, blob only
+                None
+            }
         };
 
         Ok(PersistedClipboardRepresentation::new(
