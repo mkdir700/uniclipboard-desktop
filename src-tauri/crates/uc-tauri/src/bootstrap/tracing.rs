@@ -23,7 +23,6 @@
 pub use log;
 
 use tracing_subscriber::{fmt, registry, prelude::*};
-use tracing_log::LogTracer;
 use std::io;
 
 /// Check if running in development environment
@@ -35,18 +34,22 @@ fn is_development() -> bool {
 ///
 /// ## Behavior / 行为
 ///
-/// - **Development**: Debug level, outputs to stdout (Webview via tauri-plugin-log)
-/// - **Production**: Info level, outputs to stdout (tauri-plugin-log handles file)
+/// - **Development**: Debug level, outputs to stdout
+/// - **Production**: Info level, outputs to stdout
 /// - **Environment filter**: Respects RUST_LOG, with sensible defaults
-/// - **Log bridge**: Existing `log::info!()` calls are captured by tracing
+/// - **No log bridge**: Does NOT capture `log::info!()` calls (those go to tauri-plugin-log)
 ///
 /// ## English
 ///
 /// This function:
-/// 1. Initializes the log-tracing bridge (captures `log` macros)
-/// 2. Creates an env-filter for level control
-/// 3. Sets up fmt layer with log-compatible formatting
-/// 4. Registers the global subscriber
+/// 1. Creates an env-filter for level control
+/// 2. Sets up fmt layer with log-compatible formatting
+/// 3. Registers the global subscriber
+///
+/// ## Dual-Track System
+///
+/// - `log::` macros → tauri-plugin-log → Webview/File
+/// - `tracing::` macros → tracing-subscriber → stdout
 ///
 /// ## Call this / 调用位置
 ///
@@ -70,12 +73,7 @@ fn is_development() -> bool {
 pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     let is_dev = is_development();
 
-    // Step 1: Initialize log-tracing bridge
-    // This captures all existing log::info!, log::error! etc. calls
-    // and redirects them into the tracing system
-    LogTracer::init()?;
-
-    // Step 2: Build environment filter
+    // Step 1: Build environment filter
     // - Defaults to debug in dev, info in prod
     // - Filters libp2p_mdns warnings (noisy proxy software errors)
     // - Can be overridden with RUST_LOG environment variable
@@ -88,7 +86,7 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     let env_filter = tracing_subscriber::EnvFilter::try_new(filter_directives.join(","))
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::from_default_env());
 
-    // Step 3: Create fmt layer (formatting)
+    // Step 2: Create fmt layer (formatting)
     // Format matches existing log format for compatibility:
     // "2025-01-15 10:30:45.123 INFO [file.rs:42] [target] message"
     let fmt_layer = fmt::layer()
@@ -98,9 +96,9 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
         .with_line_number(true)
         .with_target(true)
         .with_ansi(cfg!(not(test)))        // Disable colors in tests
-        .with_writer(io::stdout);          // Output to stdout (tauri-plugin-log handles Webview/file)
+        .with_writer(io::stdout);          // Output to stdout
 
-    // Step 4: Register the global subscriber
+    // Step 3: Register the global subscriber
     // This MUST be called once, before any logging occurs
     registry()
         .with(env_filter)
