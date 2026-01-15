@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use dirs;
 use log::error;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
@@ -69,21 +70,35 @@ fn main() {
         std::process::exit(1);
     }
 
-    // NOTE: In a production application, we would:
-    // 1. Load configuration from a proper path
-    // 2. Handle configuration errors gracefully
+    // NOTE: config.toml is optional and intended for development use only
+    // Production environment uses system-default paths automatically
 
-    // For now, use a default config path
     let config_path = PathBuf::from("config.toml");
 
     // Load configuration using the new bootstrap flow
     let config = match load_config(config_path) {
-        Ok(config) => config,
+        Ok(config) => {
+            log::info!("Loaded config from config.toml (development mode)");
+            config
+        }
         Err(e) => {
-            error!("Failed to load config: {}", e);
-            // For now, use an empty config
-            // In production, this should be handled by a use case
-            AppConfig::empty()
+            log::debug!("No config.toml found, using system defaults: {}", e);
+
+            // Compute system data directory using dirs crate
+            // 计算系统数据目录，使用 dirs crate
+            let data_dir = match dirs::data_local_dir() {
+                Some(dir) => dir,
+                None => {
+                    error!("Failed to determine system data directory");
+                    error!("Please ensure your platform's data directory is accessible");
+                    error!("macOS: ~/Library/Application Support/");
+                    error!("Linux: ~/.local/share/");
+                    error!("Windows: %LOCALAPPDATA%");
+                    std::process::exit(1);
+                }
+            };
+
+            AppConfig::with_system_defaults(data_dir.join("uniclipboard"))
         }
     };
 
