@@ -45,7 +45,14 @@ export async function checkOnboardingStatus(): Promise<OnboardingStatus> {
  * 验证密码强度，并确保密码未设置过
  */
 export async function setupEncryptionPassword(password: string): Promise<void> {
-  return await invoke('initialize_encryption', { passphrase: password })
+  console.log('[setupEncryptionPassword] Calling initialize_encryption with password length:', password.length)
+  try {
+    await invoke('initialize_encryption', { passphrase: password })
+    console.log('[setupEncryptionPassword] initialize_encryption succeeded')
+  } catch (error) {
+    console.error('[setupEncryptionPassword] initialize_encryption failed:', error)
+    throw error
+  }
 }
 
 export interface DeviceInfo {

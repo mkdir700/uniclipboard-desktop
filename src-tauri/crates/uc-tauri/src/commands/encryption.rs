@@ -2,9 +2,15 @@
 //! 加密相关的 Tauri 命令
 
 use std::sync::Arc;
-use tauri::State;
+use std::time::SystemTime;
+use tauri::{AppHandle, Emitter, State};
 use crate::bootstrap::AppRuntime;
 
+/// Event payload for onboarding-password-set event
+#[derive(Debug, Clone, serde::Serialize)]
+struct OnboardingPasswordSetEvent {
+    timestamp: u64,
+}
 
 /// Initialize encryption with passphrase
 /// 使用密码短语初始化加密
@@ -21,12 +27,36 @@ use crate::bootstrap::AppRuntime;
 #[tauri::command]
 pub async fn initialize_encryption(
     runtime: State<'_, Arc<AppRuntime>>,
+    app_handle: AppHandle,
     passphrase: String,
 ) -> Result<(), String> {
+    eprintln!("[initialize_encryption] Command called with passphrase length: {}", passphrase.len());
+
     let uc = runtime.usecases().initialize_encryption();
+    eprintln!("[initialize_encryption] Use case created, executing...");
+
     uc.execute(uc_core::security::model::Passphrase(passphrase))
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            eprintln!("[initialize_encryption] Use case execution failed: {:?}", e);
+            e.to_string()
+        })?;
+
+    eprintln!("[initialize_encryption] Use case executed successfully, emitting event...");
+
+    // Emit onboarding-password-set event for frontend
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_err(|e| format!("Failed to get timestamp: {}", e))?
+        .as_millis() as u64;
+
+    let event = OnboardingPasswordSetEvent { timestamp };
+    app_handle
+        .emit("onboarding-password-set", event)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+
+    eprintln!("[initialize_encryption] Event emitted successfully");
+    log::info!("Onboarding: encryption password initialized successfully");
     Ok(())
 }
 

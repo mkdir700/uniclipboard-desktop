@@ -96,42 +96,64 @@ impl InitializeEncryption {
     }
 
     pub async fn execute(&self, passphrase: Passphrase) -> Result<(), InitializeEncryptionError> {
+        eprintln!("[InitializeEncryption] Starting execution");
+
         let state = self.encryption_state_repo.load_state().await?;
+        eprintln!("[InitializeEncryption] Loaded encryption state: {:?}", state);
 
         // 1. assert not initialized
         if state == EncryptionState::Initialized {
             return Err(InitializeEncryptionError::AlreadyInitialized);
         }
 
+        eprintln!("[InitializeEncryption] Getting current scope...");
         let scope = self.key_scope.current_scope().await?;
+        eprintln!("[InitializeEncryption] Got scope: {}", scope.to_identifier());
+
+        eprintln!("[InitializeEncryption] Creating keyslot draft...");
         let keyslot_draft = KeySlot::draft_v1(scope.clone())?;
+        eprintln!("[InitializeEncryption] Keyslot draft created");
 
         // 2. derive KEK
+        eprintln!("[InitializeEncryption] Deriving KEK...");
         let kek = self
             .encryption
             .derive_kek(&passphrase, &keyslot_draft.salt, &keyslot_draft.kdf)
             .await?;
+        eprintln!("[InitializeEncryption] KEK derived successfully");
 
         // 3. generate MasterKey
+        eprintln!("[InitializeEncryption] Generating master key...");
         let master_key = MasterKey::generate()?;
+        eprintln!("[InitializeEncryption] Master key generated");
 
         // 4. wrap MasterKey
+        eprintln!("[InitializeEncryption] Wrapping master key...");
         let blob = self
             .encryption
             .wrap_master_key(&kek, &master_key, EncryptionAlgo::XChaCha20Poly1305)
             .await?;
+        eprintln!("[InitializeEncryption] Master key wrapped successfully");
 
         let keyslot = keyslot_draft.finalize(WrappedMasterKey { blob });
+        eprintln!("[InitializeEncryption] Keyslot finalized");
 
         // 5. persist wrapped key, store keyslot
+        eprintln!("[InitializeEncryption] Storing keyslot...");
         self.key_material.store_keyslot(&keyslot).await?;
+        eprintln!("[InitializeEncryption] Keyslot stored successfully");
 
         // 6. store KEK material into keyring
+        eprintln!("[InitializeEncryption] Storing KEK in keyring...");
         self.key_material.store_kek(&scope, &kek).await?;
+        eprintln!("[InitializeEncryption] KEK stored successfully");
 
         // 7. persist initialized state
+        eprintln!("[InitializeEncryption] Persisting initialized state...");
         self.encryption_state_repo.persist_initialized().await?;
+        eprintln!("[InitializeEncryption] Encryption state persisted");
 
+        eprintln!("[InitializeEncryption] All steps completed successfully");
         Ok(())
     }
 }

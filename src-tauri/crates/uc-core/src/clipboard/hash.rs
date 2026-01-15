@@ -51,7 +51,15 @@ impl From<&str> for ContentHash {
     }
 }
 
-// from bytes
+// from bytes (array reference)
+impl From<&[u8; 32]> for ContentHash {
+    fn from(bytes: &[u8; 32]) -> Self {
+        let alg = HashAlgorithm::Blake3V1;
+        Self { alg, bytes: *bytes }
+    }
+}
+
+// from bytes (slice)
 impl From<&[u8]> for ContentHash {
     fn from(bytes: &[u8]) -> Self {
         let alg = HashAlgorithm::Blake3V1;

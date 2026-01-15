@@ -37,35 +37,37 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use uc_app::AppDeps;
+use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ports::*;
+use uc_infra::clipboard::ClipboardRepresentationMaterializer;
+use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
 use uc_infra::db::mappers::{
     blob_mapper::BlobRowMapper, clipboard_entry_mapper::ClipboardEntryRowMapper,
-    clipboard_selection_mapper::ClipboardSelectionRowMapper, clipboard_event_mapper::ClipboardEventRowMapper,
-    device_mapper::DeviceRowMapper,
+    clipboard_event_mapper::ClipboardEventRowMapper,
+    clipboard_selection_mapper::ClipboardSelectionRowMapper, device_mapper::DeviceRowMapper,
     snapshot_representation_mapper::RepresentationRowMapper,
 };
 use uc_infra::db::pool::{init_db_pool, DbPool};
 use uc_infra::db::repositories::{
-    DieselBlobRepository, DieselClipboardEntryRepository, DieselClipboardEventRepository, DieselClipboardRepresentationRepository,
-    DieselClipboardSelectionRepository, DieselDeviceRepository,
+    DieselBlobRepository, DieselClipboardEntryRepository, DieselClipboardEventRepository,
+    DieselClipboardRepresentationRepository, DieselClipboardSelectionRepository,
+    DieselDeviceRepository,
 };
+use uc_infra::device::LocalDeviceIdentity;
 use uc_infra::fs::key_slot_store::JsonKeySlotStore;
-use uc_infra::security::{Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository};
+use uc_infra::security::{
+    Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository,
+};
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
-use uc_infra::device::LocalDeviceIdentity;
 use uc_platform::adapters::{
-    FilesystemBlobStore, PlaceholderAutostartPort, PlaceholderBlobMaterializerPort,
-    InMemoryEncryptionSessionPort,
-    PlaceholderNetworkPort, PlaceholderUiPort,
+    FilesystemBlobStore, InMemoryEncryptionSessionPort, PlaceholderAutostartPort,
+    PlaceholderBlobMaterializerPort, PlaceholderNetworkPort, PlaceholderUiPort,
 };
-use uc_infra::clipboard::ClipboardRepresentationMaterializer;
-use uc_infra::config::ClipboardStorageConfig;
 use uc_platform::clipboard::LocalClipboard;
 use uc_platform::keyring::SystemKeyring;
-use uc_core::clipboard::SelectRepresentationPolicyV1;
 
 /// Result type for wiring operations
 pub type WiringResult<T> = Result<T, WiringError>;
@@ -91,6 +93,9 @@ pub enum WiringError {
 
     #[error("Settings repository initialization failed: {0}")]
     SettingsInit(String),
+
+    #[error("Configuration initialization failed: {0}")]
+    ConfigInit(String),
 }
 
 /// Create SQLite database connection pool
@@ -268,7 +273,8 @@ fn create_infra_layer(
         event_row_mapper,
         RepresentationRowMapper,
     );
-    let clipboard_event_repo: Arc<dyn ClipboardEventWriterPort> = Arc::new(clipboard_event_repo_impl);
+    let clipboard_event_repo: Arc<dyn ClipboardEventWriterPort> =
+        Arc::new(clipboard_event_repo_impl);
 
     let rep_repo = DieselClipboardRepresentationRepository::new(Arc::clone(&db_executor));
     let representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort> = Arc::new(rep_repo);
@@ -318,8 +324,9 @@ fn create_infra_layer(
 
     // Create onboarding state repository
     // 创建入门引导状态仓库
-    let onboarding_state: Arc<dyn OnboardingStatePort> =
-        Arc::new(FileOnboardingStateRepository::with_defaults(vault_path.clone()));
+    let onboarding_state: Arc<dyn OnboardingStatePort> = Arc::new(
+        FileOnboardingStateRepository::with_defaults(vault_path.clone()),
+    );
 
     // Create system services
     // 创建系统服务
@@ -384,8 +391,9 @@ fn create_platform_layer(
 
     // Create device identity (filesystem-backed UUID)
     // 创建设备身份（基于文件系统的 UUID）
-    let device_identity = LocalDeviceIdentity::load_or_create(config_dir.clone())
-        .map_err(|e| WiringError::SettingsInit(format!("Failed to create device identity: {}", e)))?;
+    let device_identity = LocalDeviceIdentity::load_or_create(config_dir.clone()).map_err(|e| {
+        WiringError::SettingsInit(format!("Failed to create device identity: {}", e))
+    })?;
     let device_identity: Arc<dyn DeviceIdentityPort> = Arc::new(device_identity);
 
     // Create blob store (filesystem-based)
@@ -447,6 +455,30 @@ fn create_platform_layer(
 ///
 /// * `WiringResult<AppDeps>` - The wired dependencies on success / 成功时返回已连接的依赖
 ///
+
+/// Get default configuration directory for application data
+/// 获取应用数据的默认配置目录
+///
+/// Returns the system config directory with app-specific subdirectory.
+/// 返回系统配置目录的应用特定子目录。
+///
+/// Uses `dirs` crate to find platform-specific config directory:
+/// 使用 `dirs` crate 查找平台特定的配置目录：
+/// - macOS: `~/Library/Application Support/uniclipboard.dev-dev`
+/// - Linux: `~/.config/uniclipboard.dev-dev`
+/// - Windows: `%APPDATA%\uniclipboard.dev-dev`
+fn get_default_config_dir() -> WiringResult<PathBuf> {
+    let base_dir = dirs::config_dir().ok_or_else(|| {
+        WiringError::ConfigInit("Could not find system config directory".to_string())
+    })?;
+
+    // Use development-specific directory name to avoid conflicts with production
+    // 使用开发特定的目录名称以避免与生产环境冲突
+    let config_dir = base_dir.join("uniclipboard.dev-dev");
+
+    Ok(config_dir)
+}
+
 /// # Errors / 错误
 ///
 /// Returns `WiringError` if dependency construction fails.
@@ -474,12 +506,20 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     // 步骤 2：创建基础设施层实现
     //
     // Create vault path from config (use vault_key_path parent directory)
+    // If config path is empty, use system config directory as fallback
     // 从配置创建 vault 路径（使用 vault_key_path 的父目录）
-    let vault_path = config
-        .vault_key_path
-        .parent()
-        .unwrap_or(&config.vault_key_path)
-        .to_path_buf();
+    // 如果配置路径为空，使用系统配置目录作为后备
+    let vault_path = if config.vault_key_path.as_os_str().is_empty() {
+        // Use system config directory as default
+        // 使用系统配置目录作为默认值
+        get_default_config_dir()?
+    } else {
+        config
+            .vault_key_path
+            .parent()
+            .unwrap_or(&config.vault_key_path)
+            .to_path_buf()
+    };
 
     // Create settings path (use same directory as vault for now)
     // 创建设置路径（目前使用与 vault 相同的目录）
