@@ -2,13 +2,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import React, { useState, useEffect, ReactNode } from 'react'
 import i18n, { normalizeLanguage, persistLanguage } from '@/i18n'
+import type { SettingChangedEvent } from '@/types/events'
 import { SettingContext, type SettingContextType, type Setting } from '@/types/setting'
-
-// 设置变更事件数据接口
-interface SettingChangedEvent {
-  settingJson: string
-  timestamp: number
-}
 
 // 设置提供者属性接口
 interface SettingProviderProps {
