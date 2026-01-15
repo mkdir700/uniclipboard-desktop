@@ -479,6 +479,26 @@ fn get_default_config_dir() -> WiringResult<PathBuf> {
     Ok(config_dir)
 }
 
+/// Get default data directory for application data (database, vault, etc.)
+/// 获取应用数据的默认数据目录（数据库、vault 等）
+///
+/// Uses `dirs` crate to find platform-specific data directory:
+/// 使用 `dirs` crate 查找平台特定的数据目录：
+/// - macOS: `~/Library/Application Support/uniclipboard`
+/// - Linux: `~/.local/share/uniclipboard`
+/// - Windows: `%LOCALAPPDATA%\uniclipboard`
+fn get_default_data_dir() -> WiringResult<PathBuf> {
+    let base_dir = dirs::data_local_dir().ok_or_else(|| {
+        WiringError::ConfigInit("Could not find system data directory".to_string())
+    })?;
+
+    // Use production directory name
+    // 使用生产环境目录名称
+    let data_dir = base_dir.join("uniclipboard");
+
+    Ok(data_dir)
+}
+
 /// # Errors / 错误
 ///
 /// Returns `WiringError` if dependency construction fails.
@@ -500,7 +520,17 @@ fn get_default_config_dir() -> WiringResult<PathBuf> {
 pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池
-    let db_pool = create_db_pool(&config.database_path)?;
+    //
+    // Defensive: Use system default if database_path is empty
+    // 防御性编程：如果 database_path 为空，使用系统默认值
+    let db_path = if config.database_path.as_os_str().is_empty() {
+        let data_dir = get_default_data_dir()?;
+        data_dir.join("uniclipboard.db")
+    } else {
+        config.database_path.clone()
+    };
+
+    let db_pool = create_db_pool(&db_path)?;
 
     // Step 2: Create infrastructure layer implementations
     // 步骤 2：创建基础设施层实现
@@ -802,5 +832,28 @@ mod tests {
             // 此闭包只有在 PlatformLayer 有 `keyring` 字段时才能编译
             unimplemented!()
         };
+    }
+
+    #[test]
+    fn test_wire_dependencies_handles_empty_database_path() {
+        // Test that wire_dependencies handles empty database_path gracefully
+        // 测试 wire_dependencies 优雅地处理空的 database_path
+        let empty_config = AppConfig::empty();
+        let result = wire_dependencies(&empty_config);
+
+        // Should succeed by using fallback default data directory
+        // 应该通过使用后备默认数据目录成功
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_default_data_dir_returns_expected_path() {
+        // Test that get_default_data_dir returns a valid path
+        // 测试 get_default_data_dir 返回有效路径
+        let result = get_default_data_dir();
+
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert!(path.ends_with("uniclipboard"));
     }
 }

@@ -108,6 +108,29 @@ impl AppConfig {
             silent_start: false,
         }
     }
+
+    /// Create AppConfig with system-default paths for production use
+    /// 生产环境使用：创建具有系统默认路径的 AppConfig
+    ///
+    /// **Note**: This is a pure data constructor that builds paths from a provided base directory.
+    /// The base directory should be computed by the caller using platform-specific logic (e.g., `dirs` crate).
+    /// 注意：这是一个纯数据构造函数，从提供的基础目录构建路径。
+    /// 基础目录应由调用方使用平台特定逻辑（如 `dirs` crate）计算。
+    ///
+    /// # Arguments / 参数
+    ///
+    /// * `data_dir` - Base directory for app data (e.g., `~/Library/Application Support/uniclipboard`)
+    ///                应用数据的基础目录（例如 `~/Library/Application Support/uniclipboard`）
+    pub fn with_system_defaults(data_dir: PathBuf) -> Self {
+        Self {
+            device_name: String::new(),
+            vault_key_path: data_dir.join("vault/key"),
+            vault_snapshot_path: data_dir.join("vault/snapshot"),
+            webserver_port: 0,
+            database_path: data_dir.join("uniclipboard.db"),
+            silent_start: false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -167,5 +190,21 @@ mod tests {
         // We don't validate - the value is truncated (99999 as u16 = 34463)
         // This is the raw "fact" from the data conversion
         assert_eq!(config.webserver_port, 34463);
+    }
+
+    #[test]
+    fn test_with_system_defaults_creates_valid_paths() {
+        let data_dir = PathBuf::from("/tmp/test");
+        let config = AppConfig::with_system_defaults(data_dir);
+
+        assert!(!config.database_path.as_os_str().is_empty());
+        assert!(!config.vault_key_path.as_os_str().is_empty());
+        assert!(!config.vault_snapshot_path.as_os_str().is_empty());
+        assert_eq!(config.database_path, PathBuf::from("/tmp/test/uniclipboard.db"));
+        assert_eq!(config.vault_key_path, PathBuf::from("/tmp/test/vault/key"));
+        assert_eq!(config.vault_snapshot_path, PathBuf::from("/tmp/test/vault/snapshot"));
+        assert_eq!(config.device_name, "");
+        assert_eq!(config.webserver_port, 0);
+        assert!(!config.silent_start);
     }
 }
