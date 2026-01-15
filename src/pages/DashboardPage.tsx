@@ -9,6 +9,7 @@ import { useSearch } from '@/contexts/SearchContext'
 import { useShortcutScope } from '@/hooks/useShortcutScope'
 import { useAppDispatch } from '@/store/hooks'
 import { fetchClipboardItems } from '@/store/slices/clipboardSlice'
+import { ClipboardEvent } from '@/types/events'
 
 // Debounce delay in milliseconds
 const DEBOUNCE_DELAY = 500
@@ -106,11 +107,7 @@ const DashboardPage: React.FC = () => {
           }
 
           // Listen to new clipboard://event format
-          const unlisten = await listen<{
-            type: string
-            entry_id?: string
-            preview?: string
-          }>('clipboard://event', event => {
+          const unlisten = await listen<ClipboardEvent>('clipboard://event', event => {
             console.log(t('dashboard.logs.newClipboardEvent'), event)
 
             // Check event type
