@@ -2,7 +2,7 @@
 //! 剪贴板相关的 Tauri 命令
 
 use crate::bootstrap::AppRuntime;
-use crate::models::ClipboardEntryProjection;
+use crate::models::{ClipboardEntryDetail, ClipboardEntryProjection};
 use std::sync::Arc;
 use tauri::State;
 
@@ -138,4 +138,38 @@ pub async fn delete_clipboard_entry(
 
     log::info!("Deleted clipboard entry: {}", entry_id);
     Ok(())
+}
+
+/// Get full clipboard entry detail
+/// 获取剪贴板条目完整详情
+#[tauri::command]
+pub async fn get_clipboard_entry_detail(
+    runtime: State<'_, Arc<AppRuntime>>,
+    entry_id: String,
+) -> Result<ClipboardEntryDetail, String> {
+    log::info!("Getting clipboard entry detail: entry_id={}", entry_id);
+
+    // Parse entry_id
+    let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
+
+    // Execute use case - returns domain model EntryDetailResult
+    let use_case = runtime.usecases().get_entry_detail();
+    let result = use_case.execute(&parsed_id).await.map_err(|e| {
+        log::error!("Failed to get entry detail {}: {}", entry_id, e);
+        e.to_string()
+    })?;
+
+    // Convert domain model to DTO (Command layer responsibility)
+    let detail = ClipboardEntryDetail {
+        id: result.id,
+        content: result.content,
+        size_bytes: result.size_bytes,
+        content_type: "clipboard".to_string(),
+        is_favorited: false,
+        updated_at: result.created_at_ms,
+        active_time: result.created_at_ms,
+    };
+
+    log::info!("Retrieved clipboard entry detail: {}", entry_id);
+    Ok(detail)
 }
