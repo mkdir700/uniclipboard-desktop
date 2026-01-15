@@ -37,7 +37,7 @@ fn is_development() -> bool {
 /// - **Development**: Debug level, outputs to stdout
 /// - **Production**: Info level, outputs to stdout
 /// - **Environment filter**: Respects RUST_LOG, with sensible defaults
-/// - **No log bridge**: Does NOT capture `log::info!()` calls (those go to tauri-plugin-log)
+/// - **No log bridge**: Does NOT capture `log::info!()` calls directly
 ///
 /// ## English
 ///
@@ -46,10 +46,10 @@ fn is_development() -> bool {
 /// 2. Sets up fmt layer with log-compatible formatting
 /// 3. Registers the global subscriber
 ///
-/// ## Dual-Track System
+/// ## Migration Strategy
 ///
-/// - `log::` macros → tauri-plugin-log → Webview/File
-/// - `tracing::` macros → tracing-subscriber → stdout
+/// All code should use `tracing::` macros (tracing::info!, etc.) instead of `log::` macros.
+/// The `log::` macros are re-exported for compatibility but will NOT use the tracing system.
 ///
 /// ## Call this / 调用位置
 ///

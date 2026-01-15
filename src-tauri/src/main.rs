@@ -20,7 +20,6 @@ use uc_platform::runtime::event_bus::{
 };
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
-use uc_tauri::bootstrap::logging;
 use uc_tauri::bootstrap::tracing as bootstrap_tracing;
 
 // Platform-specific command modules

@@ -136,7 +136,7 @@ where
                     .optional()?)
             })
             .map_err(|e| {
-                log::error!(
+                tracing::error!(
                     "Failed to query clipboard_selection for entry_id '{}': {}",
                     entry_id_str,
                     e
