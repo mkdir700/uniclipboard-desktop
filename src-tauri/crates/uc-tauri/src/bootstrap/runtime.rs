@@ -72,7 +72,8 @@ pub struct AppRuntime {
     /// Application dependencies
     pub deps: AppDeps,
     /// Tauri AppHandle for emitting events (optional, set after Tauri setup)
-    app_handle: Option<tauri::AppHandle>,
+    /// Uses RwLock for interior mutability since Arc<AppRuntime> is shared
+    app_handle: std::sync::RwLock<Option<tauri::AppHandle>>,
 }
 
 impl AppRuntime {
@@ -81,19 +82,20 @@ impl AppRuntime {
     pub fn new(deps: AppDeps) -> Self {
         Self {
             deps,
-            app_handle: None,
+            app_handle: std::sync::RwLock::new(None),
         }
     }
 
     /// Set the Tauri AppHandle for event emission.
     /// This must be called after Tauri setup completes.
-    pub fn set_app_handle(&mut self, handle: tauri::AppHandle) {
-        self.app_handle = Some(handle);
+    pub fn set_app_handle(&self, handle: tauri::AppHandle) {
+        let mut app_handle_guard = self.app_handle.write().unwrap();
+        *app_handle_guard = Some(handle);
     }
 
     /// Get a reference to the AppHandle, if available.
-    pub fn app_handle(&self) -> Option<&tauri::AppHandle> {
-        self.app_handle.as_ref()
+    pub fn app_handle(&self) -> std::sync::RwLockReadGuard<'_, Option<tauri::AppHandle>> {
+        self.app_handle.read().unwrap()
     }
 
     /// Get use cases accessor.
@@ -459,7 +461,8 @@ impl ClipboardChangeHandler for AppRuntime {
                 tracing::debug!("Successfully captured clipboard, event_id: {}", event_id);
 
                 // Emit event to frontend if AppHandle is available
-                if let Some(app) = &self.app_handle {
+                let app_handle_guard = self.app_handle.read().unwrap();
+                if let Some(app) = app_handle_guard.as_ref() {
                     let event = ClipboardEvent::NewContent {
                         entry_id: event_id.to_string(),
                         preview: "New clipboard content".to_string(),
@@ -473,6 +476,7 @@ impl ClipboardChangeHandler for AppRuntime {
                 } else {
                     tracing::debug!("AppHandle not available, skipping event emission");
                 }
+                drop(app_handle_guard);
 
                 Ok(())
             }

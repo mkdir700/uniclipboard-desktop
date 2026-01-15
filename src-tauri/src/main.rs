@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use dirs;
 use log::error;
+use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -149,11 +150,7 @@ fn run_app(config: AppConfig) {
     // Wrap runtime in Arc for clipboard handler (PlatformRuntime needs Arc<dyn ClipboardChangeHandler>)
     let runtime_for_handler = Arc::new(runtime);
 
-    // Get a reference to the runtime for Tauri state management
-    // We need to use Arc::try_unwrap() or create a clone without moving
-    // Since AppRuntime doesn't implement Clone, we need a different approach
-    // The solution: manage Arc<AppRuntime> and update commands to use State<'_, Arc<AppRuntime>>
-    // For now, let's use the Arc directly for Tauri state management
+    // Clone Arc for Tauri state management (will have app_handle injected in setup)
     let runtime_for_tauri = runtime_for_handler.clone();
 
     // Create event channels for PlatformRuntime
@@ -173,9 +170,7 @@ fn run_app(config: AppConfig) {
     // The actual startup will be completed in a follow-up task
 
     Builder::default()
-        // Manage Arc<AppRuntime> for use case access
-        // NOTE: Commands need to use State<'_, Arc<AppRuntime>> instead of State<'_, AppRuntime>
-        .manage(runtime_for_tauri)
+        // NOTE: Runtime will be managed in setup block after AppHandle injection
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
