@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
+use tracing::{info_span, info};
 use uc_core::clipboard::ClipboardEntry;
 use uc_core::ports::ClipboardEntryRepositoryPort;
 
@@ -50,6 +51,16 @@ impl ListClipboardEntries {
     /// # Ok(()) }
     /// ```
     pub async fn execute(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
+        // Create use case span (child of command's root span)
+        let span = info_span!(
+            "usecase.list_clipboard_entries.execute",
+            limit = limit,
+            offset = offset,
+        );
+        let _enter = span.enter();
+
+        info!("Starting clipboard entries query");
+
         // Validate limit
         if limit == 0 {
             return Err(anyhow::anyhow!(
@@ -67,10 +78,13 @@ impl ListClipboardEntries {
         }
 
         // Query repository
-        self.entry_repo
+        let result = self.entry_repo
             .list_entries(limit, offset)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to query clipboard entries: {}", e))
+            .map_err(|e| anyhow::anyhow!("Failed to query clipboard entries: {}", e))?;
+
+        info!(count = result.len(), "Retrieved clipboard entries");
+        Ok(result)
     }
 }
 
