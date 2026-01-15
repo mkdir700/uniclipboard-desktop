@@ -109,8 +109,8 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
       // Get type suitable for UI display
       const type = getDisplayType(item.item)
 
-      // Format time
-      const activeTime = new Date(item.active_time * 1000) // Convert to milliseconds
+      // Format time (active_time is already in milliseconds from backend)
+      const activeTime = new Date(item.active_time)
       const now = new Date()
       const diffMs = now.getTime() - activeTime.getTime()
       const diffMins = Math.round(diffMs / 60000)
