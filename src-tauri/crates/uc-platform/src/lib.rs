@@ -12,6 +12,7 @@ pub mod adapters;
 pub mod bootstrap;
 pub mod capability;
 pub mod clipboard;
+pub mod file_keyring;
 pub mod ipc;
 pub mod key_scope;
 pub mod keyring;
