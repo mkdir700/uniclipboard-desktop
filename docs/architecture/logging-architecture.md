@@ -7,6 +7,43 @@ This document describes the logging architecture, configuration, and usage patte
 
 ## Architecture
 
+### Logging Framework
+
+**Current Implementation: `log` crate (NOT `tracing`)**
+
+The application uses the standard `log` crate for logging, which provides simple level-based logging (error, warn, info, debug, trace).
+
+**❌ Does NOT support:**
+
+- **Spans** - No structured context spans like `tracing::info_span!`
+- **Structured fields** - No field-based structured logging
+- **Distributed tracing** - No trace ID propagation
+- **Span relationships** - No parent-child span relationships
+
+**✅ Does support:**
+
+- Simple level-based logging (`log::error!`, `log::info!`, etc.)
+- Timestamp formatting
+- Color-coded console output
+- File/line/module information
+- Environment-based filtering
+
+**Why `log` instead of `tracing`?**
+
+1. `tauri-plugin-log` is built on `log` crate
+2. Simpler integration for Tauri apps
+3. Sufficient for current debugging needs
+4. Lower overhead than `tracing`
+
+**Future migration to `tracing`:**
+
+If span-based tracing becomes necessary (e.g., for distributed systems, complex request flows), consider:
+
+1. Switch to `tauri-plugin-tracing` or custom `tracing` subscriber
+2. Replace `log::info!` with `tracing::info!` macros
+3. Add spans for request/context tracking
+4. Integrate with OpenTelemetry for distributed tracing
+
 ### Module Location
 
 The logging configuration is centralized in the Tauri integration layer:

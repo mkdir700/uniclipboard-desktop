@@ -59,6 +59,14 @@ Coverage is automatically uploaded to Codecov on each push/PR for tracking incre
 
 The application uses `tauri-plugin-log` for configurable logging across all crates.
 
+**Important: Uses `log` crate, NOT `tracing`**
+
+- ❌ **Does NOT support spans** (e.g., `tracing::info_span!`)
+- ❌ **Does NOT support structured fields**
+- ✅ **DOES support** simple level-based logging (`log::info!`, `log::error!`, etc.)
+
+See [docs/architecture/logging-architecture.md](docs/architecture/logging-architecture.md) for details on framework choice and future migration to `tracing` if needed.
+
 ### Configuration
 
 Logging is initialized in `src-tauri/src/main.rs` using the builder from `src-tauri/crates/uc-tauri/src/bootstrap/logging.rs`.
