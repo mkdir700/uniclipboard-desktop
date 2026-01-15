@@ -75,6 +75,18 @@ pub async fn initialize_encryption(
 pub async fn is_encryption_initialized(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<bool, String> {
+    let span = info_span!(
+        "command.encryption.is_initialized",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    let _enter = span.enter();
+
     let uc = runtime.usecases().is_encryption_initialized();
-    uc.execute().await.map_err(|e| e.to_string())
+    let result = uc.execute().await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to check encryption status");
+        e.to_string()
+    })?;
+
+    tracing::info!(is_initialized = result, "Encryption status checked");
+    Ok(result)
 }
