@@ -19,11 +19,27 @@ use tracing::info_span;  // NEW
 pub async fn get_settings(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Value, String> {
+    let span = info_span!(
+        "command.settings.get",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    let _enter = span.enter();
+
     let uc = runtime.usecases().get_settings();
-    let settings = uc.execute().await.map_err(|e| e.to_string())?;
+    let settings = uc.execute().await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to get settings");
+        e.to_string()
+    })?;
 
     // Convert Settings to JSON value
-    serde_json::to_value(&settings).map_err(|e| format!("Failed to serialize settings: {}", e))
+    let json_value = serde_json::to_value(&settings)
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to serialize settings");
+            format!("Failed to serialize settings: {}", e)
+        })?;
+
+    tracing::info!("Retrieved settings successfully");
+    Ok(json_value)
 }
 
 /// Update application settings
