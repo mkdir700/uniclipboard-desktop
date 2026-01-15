@@ -33,6 +33,7 @@ use uc_app::{App, AppDeps};
 use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_core::SystemClipboardSnapshot;
+use tauri::AppHandle;
 
 /// Application runtime with dependencies.
 ///
@@ -68,13 +69,29 @@ use uc_core::SystemClipboardSnapshot;
 pub struct AppRuntime {
     /// Application dependencies
     pub deps: AppDeps,
+    /// Tauri AppHandle for emitting events (optional, set after Tauri setup)
+    app_handle: Option<tauri::AppHandle>,
 }
 
 impl AppRuntime {
     /// Create a new AppRuntime from dependencies.
     /// 从依赖创建新的 AppRuntime。
     pub fn new(deps: AppDeps) -> Self {
-        Self { deps }
+        Self {
+            deps,
+            app_handle: None,
+        }
+    }
+
+    /// Set the Tauri AppHandle for event emission.
+    /// This must be called after Tauri setup completes.
+    pub fn set_app_handle(&mut self, handle: tauri::AppHandle) {
+        self.app_handle = Some(handle);
+    }
+
+    /// Get a reference to the AppHandle, if available.
+    pub fn app_handle(&self) -> Option<&tauri::AppHandle> {
+        self.app_handle.as_ref()
     }
 
     /// Get use cases accessor.
