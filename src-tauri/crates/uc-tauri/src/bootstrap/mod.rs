@@ -6,6 +6,7 @@ pub mod runtime;
 pub mod wiring;
 pub mod run;
 pub mod logging;
+pub mod tracing;
 
 // Re-export commonly used bootstrap functions
 pub use config::load_config;
