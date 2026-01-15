@@ -13,10 +13,6 @@
 // ---------------------------------
 //         ↓
 // MaterializeClipboardSelectionUseCase → 粘贴 / 恢复 / 同步
-
-// Use case tracing instrumentation
-use tracing::{info_span, info, debug, error, warn};
-
 pub mod change_passphrase;
 pub mod clipboard;
 pub mod delete_clipboard_entry;

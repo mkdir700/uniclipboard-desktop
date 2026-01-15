@@ -98,7 +98,6 @@ macro_rules! generate_invoke_handler {
             // Clipboard commands
             uc_tauri::commands::clipboard::get_clipboard_entries,
             uc_tauri::commands::clipboard::delete_clipboard_entry,
-            uc_tauri::commands::clipboard::capture_clipboard,
             // Encryption commands
             uc_tauri::commands::encryption::initialize_encryption,
             uc_tauri::commands::encryption::is_encryption_initialized,
@@ -166,8 +165,6 @@ fn run_app(config: AppConfig) {
         // Manage Arc<AppRuntime> for use case access
         // NOTE: Commands need to use State<'_, Arc<AppRuntime>> instead of State<'_, AppRuntime>
         .manage(runtime_for_tauri)
-        // Initialize logging system
-        .plugin(logging::get_builder().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
