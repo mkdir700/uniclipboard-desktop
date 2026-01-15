@@ -20,6 +20,7 @@ use uc_platform::runtime::event_bus::{
 };
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
+use uc_tauri::bootstrap::logging;
 
 // Platform-specific command modules
 mod plugins;
@@ -61,10 +62,9 @@ impl PlatformCommandExecutorPort for SimplePlatformCommandExecutor {
 
 /// Main entry point
 fn main() {
-    // TODO: In a real application, we would:
+    // NOTE: In a production application, we would:
     // 1. Load configuration from a proper path
     // 2. Handle configuration errors gracefully
-    // 3. Initialize logging
 
     // For now, use a default config path
     let config_path = PathBuf::from("config.toml");
@@ -159,6 +159,8 @@ fn run_app(config: AppConfig) {
         // Manage Arc<AppRuntime> for use case access
         // NOTE: Commands need to use State<'_, Arc<AppRuntime>> instead of State<'_, AppRuntime>
         .manage(runtime_for_tauri)
+        // Initialize logging system
+        .plugin(logging::get_builder().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
