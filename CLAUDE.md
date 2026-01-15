@@ -53,6 +53,61 @@ open src-tauri/target/llvm-cov/html/index.html
 
 Coverage is automatically uploaded to Codecov on each push/PR for tracking incremental changes.
 
+## Logging
+
+### Overview
+
+The application uses `tauri-plugin-log` for configurable logging across all crates.
+
+### Configuration
+
+Logging is initialized in `src-tauri/src/main.rs` using the builder from `src-tauri/crates/uc-tauri/src/bootstrap/logging.rs`.
+
+### Environment Behavior
+
+- **Development**: Debug level, outputs to Webview console (browser DevTools)
+- **Production**: Info level, outputs to `uniclipboard.log` + stdout
+
+### Log File Locations
+
+- **macOS**: `~/Library/Logs/com.uniclipboard/uniclipboard.log`
+- **Linux**: `~/.local/share/com.uniclipboard/logs/uniclipboard.log`
+- **Windows**: `%LOCALAPPDATA%\com.uniclipboard\logs/uniclipboard.log`
+
+### Using Logs in Code
+
+```rust
+use log::{info, error, warn, debug, trace};
+
+pub fn my_function() {
+    info!("Something happened");
+    error!("Something went wrong: {}", error);
+    debug!("Detailed debugging info");
+}
+```
+
+### Viewing Logs
+
+**Development:**
+
+- Terminal: Logs appear in the terminal where `bun tauri dev` is running
+- Browser: Open DevTools (F12) → Console tab
+
+**Production:**
+
+- Check the log file at the platform-specific location above
+- Run `tail -f ~/Library/Logs/com.uniclipboard/uniclipboard.log` (macOS) for live monitoring
+
+### Log Filtering
+
+The logging system filters out:
+
+- `libp2p_mdns` errors below WARN level (harmless proxy software errors)
+- Tauri internal event logs to avoid infinite loops
+- `ipc::request` logs in production builds
+
+See `src-tauri/crates/uc-tauri/src/bootstrap/logging.rs` for configuration.
+
 ## Architecture
 
 ### Backend (Rust with Tauri 2)
