@@ -33,7 +33,7 @@ use uc_app::{App, AppDeps};
 use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_core::SystemClipboardSnapshot;
-use tauri::{AppHandle, Emitter};
+use tauri::Emitter;
 
 use crate::events::ClipboardEvent;
 
@@ -187,6 +187,31 @@ impl<'a> UseCases<'a> {
             self.runtime.deps.clipboard_entry_repo.clone(),
             self.runtime.deps.selection_repo.clone(),
             self.runtime.deps.clipboard_event_repo.clone(),
+        )
+    }
+
+    /// Get the GetEntryDetail use case for fetching full clipboard entry content.
+    ///
+    /// 获取 GetEntryDetail 用例以获取完整剪贴板条目内容。
+    ///
+    /// ## Example / 示例
+    ///
+    /// ```rust,no_run
+    /// # use uc_tauri::bootstrap::AppRuntime;
+    /// # use tauri::State;
+    /// # use uc_core::ids::EntryId;
+    /// # async fn example(runtime: State<'_, AppRuntime>, entry_id: &EntryId) -> Result<uc_app::usecases::clipboard::get_entry_detail::EntryDetailResult, String> {
+    /// let uc = runtime.usecases().get_entry_detail();
+    /// let detail = uc.execute(entry_id).await.map_err(|e| e.to_string())?;
+    /// # Ok(detail)
+    /// # }
+    /// ```
+    pub fn get_entry_detail(&self) -> uc_app::usecases::clipboard::get_entry_detail::GetEntryDetailUseCase {
+        uc_app::usecases::clipboard::get_entry_detail::GetEntryDetailUseCase::new(
+            self.runtime.deps.clipboard_entry_repo.clone(),
+            self.runtime.deps.selection_repo.clone(),
+            self.runtime.deps.representation_repo.clone(),
+            self.runtime.deps.blob_store.clone(),
         )
     }
 
