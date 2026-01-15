@@ -33,7 +33,11 @@ pub async fn initialize_encryption(
     app_handle: AppHandle,
     passphrase: String,
 ) -> Result<(), String> {
-    log::debug!("{} Command called with passphrase length: {}", LOG_CONTEXT, passphrase.len());
+    let span = info_span!(
+        "command.encryption.initialize",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    let _enter = span.enter();
 
     let uc = runtime.usecases().initialize_encryption();
     log::debug!("{} Use case created, executing...", LOG_CONTEXT);
@@ -41,11 +45,10 @@ pub async fn initialize_encryption(
     uc.execute(uc_core::security::model::Passphrase(passphrase))
         .await
         .map_err(|e| {
-            log::error!("{} Use case execution failed: {:?}", LOG_CONTEXT, e);
+            tracing::error!(error = %e, "Failed to initialize encryption");
             e.to_string()
         })?;
-
-    log::debug!("{} Use case executed successfully, emitting event...", LOG_CONTEXT);
+    tracing::info!("Encryption initialized successfully");
 
     // Emit onboarding-password-set event for frontend
     let timestamp = SystemTime::now()
@@ -58,8 +61,8 @@ pub async fn initialize_encryption(
         .emit("onboarding-password-set", event)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
 
-    log::debug!("{} Event emitted successfully", LOG_CONTEXT);
-    log::info!("Onboarding: encryption password initialized successfully");
+    tracing::debug!("{} Event emitted successfully", LOG_CONTEXT);
+    tracing::info!("Onboarding: encryption password initialized successfully");
     Ok(())
 }
 
