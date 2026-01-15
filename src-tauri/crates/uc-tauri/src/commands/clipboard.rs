@@ -72,15 +72,27 @@ pub async fn delete_clipboard_entry(
     runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
 ) -> Result<(), String> {
-    // Parse entry_id
-    let entry_id = uc_core::ids::EntryId::from(entry_id);
+    // Create root span for this command
+    let span = info_span!(
+        "command.clipboard.delete_entry",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+        entry_id = %entry_id,
+    );
+    let _enter = span.enter();
+
+    // Parse entry_id (From trait always succeeds)
+    let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
 
     // Execute use case
     let use_case = runtime.usecases().delete_clipboard_entry();
-    use_case.execute(&entry_id)
+    use_case.execute(&parsed_id)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!(error = %e, entry_id = %entry_id, "Failed to delete entry");
+            e.to_string()
+        })?;
 
+    tracing::info!(entry_id = %entry_id, "Deleted clipboard entry");
     Ok(())
 }
 
