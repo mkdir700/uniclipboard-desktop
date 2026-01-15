@@ -8,6 +8,7 @@ use crate::db::{
 };
 use anyhow::Result;
 use diesel::prelude::*;
+use tracing::debug_span;
 use uc_core::{
     clipboard::{ClipboardEvent, PersistedClipboardRepresentation},
     ids::EventId,
@@ -63,6 +64,13 @@ where
         event: &ClipboardEvent,
         reps: &Vec<PersistedClipboardRepresentation>,
     ) -> Result<()> {
+        let span = debug_span!(
+            "infra.sqlite.insert_clipboard_event",
+            table = "clipboard_event",
+            event_id = %event.event_id,
+        );
+        let _enter = span.enter();
+
         let new_event: NewClipboardEventRow = self.event_mapper.to_row(event)?;
         let new_reps: Vec<NewSnapshotRepresentationRow> = reps
             .iter()
@@ -111,6 +119,13 @@ where
     /// # }
     /// ```
     async fn delete_event_and_representations(&self, event_id: &EventId) -> Result<()> {
+        let span = debug_span!(
+            "infra.sqlite.delete_clipboard_event",
+            table = "clipboard_event",
+            event_id = %event_id,
+        );
+        let _enter = span.enter();
+
         let event_id_str = event_id.to_string();
         self.executor.run(|conn| {
             conn.transaction(|conn| {
@@ -142,6 +157,14 @@ where
         event_id: &EventId,
         representation_id: &str,
     ) -> Result<uc_core::ObservedClipboardRepresentation> {
+        let span = debug_span!(
+            "infra.sqlite.query_snapshot_representation",
+            table = "snapshot_representation",
+            event_id = %event_id,
+            representation_id = representation_id,
+        );
+        let _enter = span.enter();
+
         use crate::db::schema::clipboard_snapshot_representation;
 
         let event_id_str = event_id.as_ref().to_string();
