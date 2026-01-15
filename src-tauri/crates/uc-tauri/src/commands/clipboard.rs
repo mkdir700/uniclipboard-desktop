@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tauri::State;
 use crate::bootstrap::AppRuntime;
 use crate::models::ClipboardEntryProjection;
+use tracing::info_span;  // NEW: Import for span creation
 
 /// Get clipboard history entries
 /// 获取剪贴板历史条目
