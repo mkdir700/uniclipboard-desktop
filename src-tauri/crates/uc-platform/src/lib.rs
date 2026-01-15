@@ -10,6 +10,7 @@ pub use tracing;
 
 pub mod adapters;
 pub mod bootstrap;
+pub mod capability;
 pub mod clipboard;
 pub mod ipc;
 pub mod key_scope;
