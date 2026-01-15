@@ -69,14 +69,21 @@ pub fn get_builder() -> tauri_plugin_log::Builder {
         })
         .format(|out, message, record| {
             // Format: 2025-12-29 10:30:45.123 INFO [main.rs:34] [uniclipboard] Self device already exists
-            let level_color = match record.level() {
-                log::Level::Error => "\x1b[31;1m", // Bold red
-                log::Level::Warn => "\x1b[33m",    // Yellow
-                log::Level::Info => "\x1b[32m",    // Green
-                log::Level::Debug => "\x1b[34m",   // Blue
-                log::Level::Trace => "\x1b[36m",   // Cyan
+            let uses_ansi = !is_dev;
+            let (level_color, reset) = if uses_ansi {
+                (
+                    match record.level() {
+                        log::Level::Error => "\x1b[31;1m", // Bold red
+                        log::Level::Warn => "\x1b[33m",    // Yellow
+                        log::Level::Info => "\x1b[32m",    // Green
+                        log::Level::Debug => "\x1b[34m",   // Blue
+                        log::Level::Trace => "\x1b[36m",   // Cyan
+                    },
+                    "\x1b[0m",
+                )
+            } else {
+                ("", "")
             };
-            let reset = "\x1b[0m";
 
             let file = record.file().unwrap_or("unknown");
             let line = record.line().unwrap_or(0);
