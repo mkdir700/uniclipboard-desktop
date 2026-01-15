@@ -142,6 +142,13 @@ pub async fn delete_clipboard_entry(
 pub async fn capture_clipboard(
     _runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<String, String> {
+    // Create root span for this command (even in stub state)
+    let span = info_span!(
+        "command.clipboard.capture",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    let _enter = span.enter();
+
     // TODO: Implement CaptureClipboard use case
     // This is a complex use case requiring:
     //
@@ -156,5 +163,7 @@ pub async fn capture_clipboard(
     // 6. Update this command to use runtime.usecases().capture_clipboard()
     //
     // Tracking: Complex multi-port orchestration
+
+    tracing::warn!("capture_clipboard command not yet implemented");
     Err("Not yet implemented - requires CaptureClipboard use case with multiple ports".to_string())
 }
