@@ -16,8 +16,10 @@ use serde::{Deserialize, Serialize};
 pub struct ClipboardEntryProjection {
     /// Unique identifier for the entry
     pub id: String,
-    /// Full text content (not truncated)
+    /// Preview content (truncated for large text, placeholder for images)
     pub preview: String,
+    /// Whether full detail is available (has blob or is expandable)
+    pub has_detail: bool,
     /// Total size in bytes
     pub size_bytes: i64,
     /// Timestamp when captured (Unix timestamp)
@@ -26,6 +28,26 @@ pub struct ClipboardEntryProjection {
     pub content_type: String,
     /// Whether the content is encrypted
     pub is_encrypted: bool,
+    /// Whether the entry is favorited
+    pub is_favorited: bool,
+    /// Timestamp when last updated
+    pub updated_at: i64,
+    /// Timestamp of last access/use
+    pub active_time: i64,
+}
+
+/// Full clipboard entry detail
+/// 剪贴板条目完整详情
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClipboardEntryDetail {
+    /// Unique identifier for the entry
+    pub id: String,
+    /// Full content
+    pub content: String,
+    /// Total size in bytes
+    pub size_bytes: i64,
+    /// Content type description
+    pub content_type: String,
     /// Whether the entry is favorited
     pub is_favorited: bool,
     /// Timestamp when last updated
