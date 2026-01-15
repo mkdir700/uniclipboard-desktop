@@ -5,7 +5,6 @@ use crate::bootstrap::AppRuntime;
 use crate::models::ClipboardEntryProjection;
 use std::sync::Arc;
 use tauri::State;
-use tracing::{info_span, Instrument}; // NEW: Import for span creation
 
 /// Get clipboard history entries
 /// 获取剪贴板历史条目
@@ -14,46 +13,101 @@ pub async fn get_clipboard_entries(
     runtime: State<'_, Arc<AppRuntime>>,
     limit: Option<usize>,
 ) -> Result<Vec<ClipboardEntryProjection>, String> {
-    // Create root span for this command
     let resolved_limit = limit.unwrap_or(50);
-    let span = info_span!(
-        "command.clipboard.get_entries",
-        device_id = %runtime.deps.device_identity.current_device_id(),
-        limit = resolved_limit,
+    let device_id = runtime.deps.device_identity.current_device_id();
+
+    log::info!(
+        "Getting clipboard entries: device_id={}, limit={}",
+        device_id,
+        resolved_limit
     );
-    async move {
-        // Use UseCases accessor pattern (consistent with other commands)
-        let uc = runtime.usecases().list_clipboard_entries();
 
-        // Query entries through use case
-        let entries = uc.execute(resolved_limit, 0).await.map_err(|e| {
-            tracing::error!(error = %e, "Failed to get clipboard entries");
-            e.to_string()
-        })?;
+    // Use UseCases accessor pattern (consistent with other commands)
+    let uc = runtime.usecases().list_clipboard_entries();
 
-        // Convert domain models to DTOs
-        let projections: Vec<ClipboardEntryProjection> = entries
-            .into_iter()
-            .map(|entry| {
-                let captured_at = entry.created_at_ms;
-                ClipboardEntryProjection {
-                    id: entry.entry_id.to_string(),
-                    preview: entry.title.unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
-                    captured_at,
-                    content_type: "clipboard".to_string(),
-                    is_encrypted: false, // TODO: Determine from actual entry state
-                    is_favorited: false, // TODO: Implement favorites feature
-                    updated_at: captured_at,  // Same as captured_at initially
-                    active_time: captured_at,  // Same as captured_at initially
+    // Query entries through use case
+    let entries = uc.execute(resolved_limit, 0).await.map_err(|e| {
+        log::error!("Failed to get clipboard entries: {}", e);
+        e.to_string()
+    })?;
+
+    // Convert domain models to DTOs
+    let mut projections = Vec::with_capacity(entries.len());
+
+    for entry in entries {
+        let captured_at = entry.created_at_ms;
+
+        // Try to get actual text content from selection and representation
+        // Return full content, not truncated - frontend will handle display truncation
+        let (preview, size_bytes) = if let Ok(Some(selection)) = runtime
+            .deps
+            .selection_repo
+            .get_selection(&entry.entry_id)
+            .await
+        {
+            // Get the preview representation
+            if let Ok(rep) = runtime
+                .deps
+                .clipboard_event_reader
+                .get_representation(
+                    &entry.event_id,
+                    selection.selection.preview_rep_id.as_ref(),
+                )
+                .await
+            {
+                // Try to convert bytes to UTF-8 string
+                if let Ok(text) = std::str::from_utf8(&rep.bytes) {
+                    let trimmed = text.trim();
+                    if !trimmed.is_empty() {
+                        (trimmed.to_string(), rep.bytes.len() as i64)
+                    } else {
+                        (
+                            entry.title.unwrap_or_else(|| {
+                                format!("Entry ({} bytes)", entry.total_size)
+                            }),
+                            entry.total_size,
+                        )
+                    }
+                } else {
+                    (
+                        entry
+                            .title
+                            .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
+                        entry.total_size,
+                    )
                 }
-            })
-            .collect();
+            } else {
+                (
+                    entry
+                        .title
+                        .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
+                    entry.total_size,
+                )
+            }
+        } else {
+            (
+                entry
+                    .title
+                    .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
+                entry.total_size,
+            )
+        };
 
-        tracing::info!(count = projections.len(), "Retrieved clipboard entries");
-        Ok(projections)
+        projections.push(ClipboardEntryProjection {
+            id: entry.entry_id.to_string(),
+            preview,
+            size_bytes,
+            captured_at,
+            content_type: "clipboard".to_string(),
+            is_encrypted: false, // TODO: Determine from actual entry state
+            is_favorited: false, // TODO: Implement favorites feature
+            updated_at: captured_at, // Same as captured_at initially
+            active_time: captured_at, // Same as captured_at initially
+        });
     }
-    .instrument(span)
-    .await
+
+    log::info!("Retrieved {} clipboard entries", projections.len());
+    Ok(projections)
 }
 
 /// Deletes a clipboard entry identified by `entry_id`.
@@ -79,26 +133,24 @@ pub async fn delete_clipboard_entry(
     runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
 ) -> Result<(), String> {
-    // Create root span for this command
-    let span = info_span!(
-        "command.clipboard.delete_entry",
-        device_id = %runtime.deps.device_identity.current_device_id(),
-        entry_id = %entry_id,
+    let device_id = runtime.deps.device_identity.current_device_id();
+
+    log::info!(
+        "Deleting clipboard entry: device_id={}, entry_id={}",
+        device_id,
+        entry_id
     );
-    async move {
-        // Parse entry_id (From trait always succeeds)
-        let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
 
-        // Execute use case
-        let use_case = runtime.usecases().delete_clipboard_entry();
-        use_case.execute(&parsed_id).await.map_err(|e| {
-            tracing::error!(error = %e, entry_id = %entry_id, "Failed to delete entry");
-            e.to_string()
-        })?;
+    // Parse entry_id (From trait always succeeds)
+    let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
 
-        tracing::info!(entry_id = %entry_id, "Deleted clipboard entry");
-        Ok(())
-    }
-    .instrument(span)
-    .await
+    // Execute use case
+    let use_case = runtime.usecases().delete_clipboard_entry();
+    use_case.execute(&parsed_id).await.map_err(|e| {
+        log::error!("Failed to delete entry {}: {}", entry_id, e);
+        e.to_string()
+    })?;
+
+    log::info!("Deleted clipboard entry: {}", entry_id);
+    Ok(())
 }
