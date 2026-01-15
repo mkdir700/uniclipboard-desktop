@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, State};
 use crate::bootstrap::AppRuntime;
+use tracing::info_span;  // NEW
 
 const LOG_CONTEXT: &str = "[initialize_encryption]";
 
