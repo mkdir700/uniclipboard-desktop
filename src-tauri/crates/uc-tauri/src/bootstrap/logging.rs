@@ -67,7 +67,7 @@ pub fn get_builder() -> tauri_plugin_log::Builder {
                 !is_basic_noise && !metadata.target().contains("ipc::request")
             }
         })
-        .format(|out, message, record| {
+        .format(move |out, message, record| {
             // Format: 2025-12-29 10:30:45.123 INFO [main.rs:34] [uniclipboard] Self device already exists
             let uses_ansi = !is_dev;
             let (level_color, reset) = if uses_ansi {
