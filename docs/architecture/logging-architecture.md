@@ -2,72 +2,103 @@
 
 ## Overview
 
-UniClipboard uses the `tauri-plugin-log` plugin for configurable, cross-platform logging.
-This document describes the logging architecture, configuration, and usage patterns.
+UniClipboard uses **`tracing`** crate as the primary logging framework with structured logging and span-based context tracking. The system runs a **dual-track setup** during the transition from legacy `log` crate to `tracing`.
+
+**Current Status**: Phases 0-3 complete, actively using `tracing` across all architectural layers.
 
 ## Architecture
 
-### Logging Framework
+### Primary Logging Framework: `tracing`
 
-**Current Implementation: `log` crate (NOT `tracing`)**
+The application uses `tracing` crate for structured, span-aware logging:
 
-The application uses the standard `log` crate for logging, which provides simple level-based logging (error, warn, info, debug, trace).
+**✅ Supported Features**:
 
-**❌ Does NOT support:**
+- **Spans** - Structured context spans with parent-child relationships
+- **Structured fields** - Field-based logging with typed values
+- **Span hierarchy** - Cross-layer traceability
+- **Instrumentation** - `.instrument()` for async operations
+- **Event logging** - `tracing::info!`, `tracing::error!`, etc.
 
-- **Spans** - No structured context spans like `tracing::info_span!`
-- **Structured fields** - No field-based structured logging
-- **Distributed tracing** - No trace ID propagation
-- **Span relationships** - No parent-child span relationships
+**Migration Status**:
 
-**✅ Does support:**
+| Phase   | Description                                             | Status          |
+| ------- | ------------------------------------------------------- | --------------- |
+| Phase 0 | Infrastructure setup (tracing dependencies, subscriber) | ✅ Complete     |
+| Phase 1 | Command layer root spans                                | ✅ Complete     |
+| Phase 2 | UseCase layer child spans                               | ✅ Complete     |
+| Phase 3 | Infra/Platform layer debug spans                        | ✅ Complete     |
+| Phase 4 | Remove `log` dependency (optional)                      | ⏸️ Not required |
 
-- Simple level-based logging (`log::error!`, `log::info!`, etc.)
-- Timestamp formatting
-- Color-coded console output
-- File/line/module information
-- Environment-based filtering
+### Dual-Track System
 
-**Why `log` instead of `tracing`?**
+During the transition, both `log` and `tracing` coexist:
 
-1. `tauri-plugin-log` is built on `log` crate
-2. Simpler integration for Tauri apps
-3. Sufficient for current debugging needs
-4. Lower overhead than `tracing`
+```rust
+// Legacy code (still works via tauri-plugin-log)
+log::info!("Application started");
 
-**Future migration to `tracing`:**
-
-If span-based tracing becomes necessary (e.g., for distributed systems, complex request flows), consider:
-
-1. Switch to `tauri-plugin-tracing` or custom `tracing` subscriber
-2. Replace `log::info!` with `tracing::info!` macros
-3. Add spans for request/context tracking
-4. Integrate with OpenTelemetry for distributed tracing
-
-### Module Location
-
-The logging configuration is centralized in the Tauri integration layer:
-
-```
-src-tauri/crates/uc-tauri/src/bootstrap/logging.rs
+// New code (preferred)
+tracing::info!("Application started");
+tracing::info_span!("command.clipboard.capture", device_id = %id);
 ```
 
-This location was chosen because:
+**Note**: `tracing-log` bridge is NOT configured. The two systems operate independently:
 
-1. Logging is Tauri-specific infrastructure code
-2. The bootstrap module handles app initialization concerns
-3. It's not domain logic (not uc-core)
-4. It's not a use case (not uc-app)
+- `log::` macros → `tauri-plugin-log` → Webview (dev) / file (prod)
+- `tracing::` macros → `tracing-subscriber` → stdout
 
-### Initialization Flow
+### Module Organization
+
+#### 1. Bootstrap Configuration
+
+**Location**: `src-tauri/crates/uc-tauri/src/bootstrap/`
+
+```
+bootstrap/
+├── logging.rs       # tauri-plugin-log configuration (legacy)
+└── tracing.rs       # tracing-subscriber configuration (primary)
+```
+
+**Initialization Flow**:
 
 ```
 main.rs
-  └─> run_app()
-       └─> Builder::default()
-            └─> .plugin(logging::get_builder().build())
-                 └─> All log::info! macros now produce output
+  ├─> init_tracing_subscriber()     // Global tracing registry
+  │    └─> All tracing::* macros now produce output
+  │
+  └─> Builder::default()
+       └─> .plugin(logging::get_builder().build())
+            └─> Legacy log::* macros still work
 ```
+
+#### 2. Layer-Based Tracing
+
+Each architectural layer has specific span naming conventions:
+
+**Command Layer** (`uc-tauri/src/commands/`):
+
+- Root spans for Tauri commands
+- Naming: `command.{module}.{action}`
+- Example: `command.clipboard.get_entries`, `command.encryption.initialize`
+
+**UseCase Layer** (`uc-app/src/usecases/`):
+
+- Business logic spans
+- Naming: `usecase.{usecase_name}.{method}`
+- Example: `usecase.list_clipboard_entries.execute`
+
+**Infrastructure Layer** (`uc-infra/src/`):
+
+- Database and repository operations
+- Naming: `infra.{component}.{operation}`
+- Example: `infra.sqlite.insert_clipboard_event`, `infra.blob.materialize`
+
+**Platform Layer** (`uc-platform/src/`):
+
+- Platform-specific operations
+- Naming: `platform.{module}.{operation}`
+- Example: `platform.linux.read_clipboard`, `platform.encryption.set_master_key`
 
 ## Configuration
 
@@ -75,21 +106,51 @@ main.rs
 
 When `debug_assertions` is true (debug builds):
 
+**tracing-subscriber**:
+
+- **Level**: `Debug`
+- **Targets**: `uc_platform=debug`, `uc_infra=debug`
+- **Output**: `stdout` (terminal)
+- **Filter**: `libp2p_mdns=warn`
+
+**tauri-plugin-log**:
+
 - **Level**: `Debug`
 - **Target**: `Webview` (browser DevTools console)
-- **Format**: Colored with timestamps
-- **Filters**: Basic noise only
+- **Filters**: Tauri internals, wry noise
 
 ### Production Mode
 
 When `debug_assertions` is false (release builds):
 
+**tracing-subscriber**:
+
 - **Level**: `Info`
-- **Targets**: `LogDir` (file) + `Stdout` (terminal)
-- **Format**: Colored with timestamps
-- **Filters**: Basic noise + `ipc::request`
+- **Targets**: `uc_platform=info`, `uc_infra=info`
+- **Output**: `stdout`
+- **Filter**: `libp2p_mdns=warn`
+
+**tauri-plugin-log**:
+
+- **Level**: `Info`
+- **Targets**: `LogDir` (file) + `Stdout`
+- **Filters**: Tauri internals, wry noise, `ipc::request`
+
+### Environment Variables
+
+Override defaults with `RUST_LOG`:
+
+```bash
+# Enable trace for specific module
+RUST_LOG=uc_platform::clipboard=trace,bun tauri dev
+
+# Enable all debug logs
+RUST_LOG=debug,bun tauri dev
+```
 
 ### Log Format
+
+Both systems output compatible formats:
 
 ```
 YYYY-MM-DD HH:MM:SS.mmm LEVEL [file:line] [module] message
@@ -98,8 +159,8 @@ YYYY-MM-DD HH:MM:SS.mmm LEVEL [file:line] [module] message
 Example:
 
 ```
-2025-01-15 10:30:45.123 INFO [main.rs:140] [uniclipboard] Creating platform runtime with clipboard callback
-2025-01-15 10:30:45.456 ERROR [clipboard.rs:52] [uc_platform::clipboard] Failed to read clipboard: NotFound
+2025-01-15 10:30:45.123 INFO [clipboard.rs:51] [command.clipboard.get_entries] Fetching entries
+2025-01-15 10:30:45.456 ERROR [clipboard.rs:52] [platform.linux.read_clipboard] Failed to read clipboard: NotFound
 ```
 
 ### Color Coding
@@ -110,42 +171,12 @@ Example:
 - DEBUG: Blue
 - TRACE: Cyan
 
-## Filtering
-
-The logging system filters out noise from various sources:
-
-### libp2p_mdns
-
-Set to `LevelFilter::Warn` to avoid spam from harmless mDNS errors
-caused by proxy software virtual network interfaces.
-
-### Tauri Internal Events
-
-Filtered to prevent infinite loops when using Webview target:
-
-- `tauri::*` modules
-- `tracing::*` modules
-- `tauri-` prefixed modules
-- `wry::*` modules (underlying WebView library)
-
-### IPC Request Logs
-
-In production, `ipc::request` logs are filtered to reduce verbosity.
-In development, they're kept for debugging frontend-backend communication.
-
-**Note**: During tracing migration, these filters are configured in both:
-
-- `bootstrap/logging.rs` (tauri-plugin-log filters)
-- `bootstrap/tracing.rs` (tracing-subscriber env-filter)
-
-See `bootstrap/tracing.rs` for current RUST_LOG defaults.
-
-## Usage
+## Usage Patterns
 
 ### Basic Logging
 
 ```rust
-use log::{error, warn, info, debug, trace};
+use tracing::{info, error, warn, debug, trace};
 
 pub fn process_clipboard(content: String) {
     debug!("Processing clipboard content: {} bytes", content.len());
@@ -157,118 +188,197 @@ pub fn process_clipboard(content: String) {
 }
 ```
 
-### Structured Logging
-
-For complex data, use formatting:
+### Span Creation
 
 ```rust
-log::info!(
-    "Device connected: id={}, name={}, platform={}",
-    device.id,
-    device.name,
-    device.platform
+use tracing::info_span;
+
+// Create span with fields
+let span = info_span!(
+    "command.clipboard.capture",
+    device_id = %device.id,
+    limit = limit,
+    offset = offset
 );
+
+// Use with async operation
+async move {
+    // ... operation logic
+}.instrument(span).await
+```
+
+### Structured Fields
+
+Add context to spans with typed fields:
+
+```rust
+use tracing::{info_span, debug_span};
+
+// Command layer - user-facing spans
+info_span!(
+    "command.encryption.initialize",
+    passphrase_hash = %hash,
+    salt_length = salt.len()
+)
+
+// Infra layer - debug spans
+debug_span!(
+    "infra.sqlite.insert",
+    table = "clipboard_entries",
+    entry_id = %id
+)
+```
+
+### Span Hierarchy
+
+Spans automatically form parent-child relationships:
+
+```
+command.clipboard.get_entries{device_id=abc123}
+└─ usecase.list_clipboard_entries.execute{limit=50, offset=0}
+   ├─ infra.sqlite.fetch_entries{sql="SELECT..."}
+   └─ event: returning 42 entries
+```
+
+### Instrumentation Pattern
+
+Standard pattern for async operations:
+
+```rust
+use tracing::{info_span, Instrument};
+use tracing::debug_span;
+
+// For async operations
+pub async fn execute(&self, params: Params) -> Result<()> {
+    let span = info_span!(
+        "usecase.example.execute",
+        param1 = %params.param1,
+        param2 = params.param2
+    );
+
+    async move {
+        // Business logic here
+        self.inner_operation().await?;
+        Ok(())
+    }.instrument(span).await
+}
+
+// For debug-level operations (only in debug builds)
+#[cfg(debug_assertions)]
+fn debug_operation(&self) {
+    let span = debug_span!("platform.debug.operation");
+    span.in_scope(|| {
+        // Debug logic here
+    });
+}
 ```
 
 ### Error Logging with Context
 
-Always include error context for better debugging:
-
 ```rust
+use tracing::error;
+
 match risky_operation().await {
-    Ok(result) => log::info!("Operation succeeded"),
-    Err(e) => log::error!("Operation failed: {} (context: {})", e, additional_context),
+    Ok(result) => {
+        tracing::info!("Operation succeeded");
+    }
+    Err(e) => {
+        error!(
+            error = %e,
+            context = "failed to process clipboard",
+            "Operation failed: {}", e
+        );
+    }
 }
 ```
 
-## Tracing Migration (In Progress)
+## Span Naming Conventions
 
-### Current Status: Phase 0 Complete
+### Standard Format
 
-The application is migrating from `log` crate to `tracing` crate for structured logging with spans.
+```
+{layer}.{module}.{operation}
+```
 
-**Migration Strategy**: Gradual (dual-track system)
+### Layer Prefixes
 
-- **Phase 0** ✅: Infrastructure setup (tracing dependencies, subscriber initialization)
-- **Phase 1** 🚧: Command layer (root spans)
-- **Phase 2**: UseCase layer (child spans)
-- **Phase 3**: Infra/Platform layer (debug spans)
-- **Phase 4**: Cleanup (remove `log` dependency)
+| Prefix      | Usage                        | Examples                            |
+| ----------- | ---------------------------- | ----------------------------------- |
+| `command.`  | Tauri command handlers       | `command.clipboard.get_entries`     |
+| `usecase.`  | UseCase business logic       | `usecase.capture_clipboard.execute` |
+| `infra.`    | Infrastructure (DB, storage) | `infra.sqlite.insert_blob`          |
+| `platform.` | Platform adapters            | `platform.macos.read_clipboard`     |
 
-### Dual-Track Logging System
+### Field Naming
 
-During migration, both `log` and `tracing` macros work simultaneously:
+- **Use snake_case** for field names
+- **Use `%` formatting** for types implementing `Display`
+- **Use `?` formatting** for types implementing `Debug`
 
 ```rust
-// Existing log macros (still work)
-log::info!("Application started");
+// Display formatting (cleaner output)
+device_id = %device.id
 
-// New tracing macros (now available)
-tracing::info!("Application started");
-tracing::info_span!("command.clipboard.capture", device_id = %id);
+// Debug formatting (detailed output)
+config = ?config.options
+
+// Direct values
+count = 42
 ```
 
-The `tracing-log` bridge captures all `log::` macros into the tracing system, ensuring consistent output.
+## Filtering
 
-### Tracing Configuration
+### Noise Reduction
 
-Tracing is initialized in `main.rs` via `uc_tauri::bootstrap::tracing::init_tracing_subscriber()`.
+**libp2p_mdns**:
 
-**Behavior**:
+- Set to `LevelFilter::Warn` to avoid spam from harmless mDNS errors
+- Caused by proxy software virtual network interfaces
 
-- Development: Debug level, stdout output (Webview via tauri-plugin-log)
-- Production: Info level, file + stdout output
-- Environment filter: Respects `RUST_LOG`, with defaults:
-  - `libp2p_mdns=warn` (noisy proxy errors)
-  - `uc_platform=debug` (platform layer)
-  - `uc_infra=debug` (infrastructure layer)
+**Tauri Internal Events** (tauri-plugin-log only):
 
-### Format Compatibility
+- Filtered to prevent infinite loops with Webview target
+- `tauri::*` modules
+- `tracing::*` modules
+- `tauri-` prefixed modules
+- `wry::*` modules
 
-Tracing output format matches existing `log` format:
+**IPC Request Logs**:
 
-```
-2025-01-15 10:30:45.123 INFO [main.rs:42] [uniclipboard] Application started
-```
-
-This ensures continuity with existing log parsing tools and workflows.
-
-### Future: Span-Based Tracing
-
-Once migration is complete, logs will include span hierarchy for cross-layer traceability:
-
-```
-command.clipboard.capture{device_id=abc123}
-└─ usecase.capture_clipboard.execute{policy_version=v1}
-   ├─ platform.macos.read_clipboard
-   │  └─ event: formats=3
-   ├─ infra.sqlite.insert_clipboard_event
-   └─ event: capture completed
-```
-
-See [Tracing Migration Design](../plans/2025-01-15-tracing-migration-design.md) for complete architecture.
+- Development: Enabled for debugging
+- Production: Filtered to reduce verbosity
 
 ## Viewing Logs
 
 ### Development
 
-**Terminal:**
+**Terminal (tracing output)**:
 
 ```bash
 bun tauri dev
-# Logs appear in the running terminal
+# tracing::* macros appear here
 ```
 
-**Browser DevTools:**
+**Browser DevTools (log output)**:
 
 1. Open app in development mode
 2. Press F12 or right-click → Inspect
 3. Go to Console tab
-4. Logs appear with full formatting
+4. `log::*` macros appear here
 
 ### Production
 
-**View log file:**
+**Terminal**:
+
+```bash
+# Run the application
+./uniclipboard
+
+# tracing::* output appears in terminal
+# log::* output appears in log file
+```
+
+**Log file**:
 
 ```bash
 # macOS
@@ -281,45 +391,29 @@ tail -f ~/.local/share/com.uniclipboard/logs/uniclipboard.log
 Get-Content "$env:LOCALAPPDATA\com.uniclipboard\logs\uniclipboard.log" -Wait
 ```
 
-**Filter for errors:**
+**Filter for errors**:
 
 ```bash
 grep ERROR ~/Library/Logs/com.uniclipboard/uniclipboard.log
 ```
 
-**View last 100 lines:**
+**View last 100 lines**:
 
 ```bash
 tail -n 100 ~/Library/Logs/com.uniclipboard/uniclipboard.log
-```
-
-## Log Rotation
-
-Currently, the log file grows indefinitely. In production, you may want to:
-
-1. **Manual rotation**: Periodically archive/delete old logs
-2. **Log rotation tools**: Use system utilities (logrotate on Linux)
-3. **Tauri plugin rotation**: Configure `.rotation_strategy()` in the builder
-
-To enable automatic rotation:
-
-```rust
-tauri_plugin_log::Builder::new()
-    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
-    // or
-    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepDays(7))
 ```
 
 ## Testing
 
 ### Unit Tests
 
-The logging module includes basic tests:
+The tracing module includes basic tests:
 
 ```rust
 #[test]
-fn test_logger_builder() {
-    let _builder = get_builder();
+fn test_tracing_init() {
+    let is_dev = is_development();
+    let _ = is_dev;
 }
 ```
 
@@ -327,32 +421,150 @@ Run with: `cd src-tauri && cargo test --package uc-tauri`
 
 ### Manual Testing
 
-1. **Development**: Run `bun tauri dev` and check terminal/console output
-2. **Production**: Build and run, check log file exists and contains entries
+1. **Development**: Run `bun tauri dev` and check:
+   - Terminal for `tracing::*` output
+   - Browser DevTools for `log::*` output
+2. **Production**: Build and run, check:
+   - Log file exists and contains entries
+   - Terminal shows `tracing::*` output
 3. **Level filtering**: Verify DEBUG logs appear in dev but not in production
 
 ## Troubleshooting
 
 ### No logs appearing
 
-1. Check `main.rs` has `.plugin(logging::get_builder().build())`
-2. Verify `log` crate dependency is present
-3. Ensure you're using `log::info!` not `println!`
+**Check tracing initialization**:
+
+1. Verify `main.rs` calls `init_tracing_subscriber()` before any logging
+2. Check `tracing` dependency is present
+3. Ensure you're using `tracing::info!` not `println!`
+
+**Check log plugin**:
+
+1. Verify `main.rs` has `.plugin(logging::get_builder().build())`
+2. Check `log` crate dependency is present
 
 ### Logs not appearing in browser
 
-1. Check Webview target is enabled in development mode
+1. Check Webview target is enabled in `logging.rs` for development mode
 2. Open browser DevTools and check Console tab
 3. Verify there are no JavaScript errors preventing log display
 
 ### Log file not created
 
 1. Check app has write permissions to log directory
-2. Verify LogDir target is enabled in production mode
+2. Verify LogDir target is enabled in production mode (`logging.rs`)
 3. Check platform-specific log directory path
+
+### Span hierarchy not visible
+
+1. Ensure spans are created with `info_span!` or `debug_span!`
+2. Verify `.instrument(span)` is used for async operations
+3. Check that parent spans are not closed before child operations complete
+
+## Migration Guide
+
+### Adding Tracing to New Code
+
+**1. Import tracing**:
+
+```rust
+use tracing::{info_span, info, Instrument};
+```
+
+**2. Create span for operations**:
+
+```rust
+let span = info_span!(
+    "layer.module.operation",
+    field1 = %value1,
+    field2 = value2
+);
+```
+
+**3. Instrument async operations**:
+
+```rust
+async move {
+    // operation
+}.instrument(span).await
+```
+
+### Converting Legacy Code
+
+**Before** (log crate):
+
+```rust
+use log::info;
+
+pub async fn get_entries(&self) -> Result<Vec<Entry>> {
+    info!("Fetching entries");
+    // ...
+}
+```
+
+**After** (tracing crate):
+
+```rust
+use tracing::{info_span, info, Instrument};
+
+pub async fn get_entries(&self) -> Result<Vec<Entry>> {
+    let span = info_span!("usecase.get_entries.execute");
+    async move {
+        info!("Fetching entries");
+        // ...
+    }.instrument(span).await
+}
+```
+
+## Best Practices
+
+### DO ✅
+
+- **Use spans for operations**: Every usecase/command should have a span
+- **Add structured fields**: Include operation parameters as span fields
+- **Follow naming conventions**: Use `{layer}.{module}.{operation}` format
+- **Use appropriate log levels**: `error!`, `warn!`, `info!`, `debug!`, `trace!`
+- **Instrument async operations**: Use `.instrument(span)` for async functions
+- **Add context to errors**: Include error details and context in error logs
+
+### DON'T ❌
+
+- **Don't use `log::*` in new code**: Prefer `tracing::*` macros
+- **Don't create spans for trivial operations**: Spans should represent meaningful work
+- **Don't mix formatting styles**: Be consistent with field formatting
+- **Don't forget to close spans**: Spans end when their scope ends
+- **Don't use `unwrap()` in spans**: Handle errors explicitly
+
+## Performance Considerations
+
+### Span Creation Overhead
+
+- Spans are **cheap** to create but not free
+- Use `debug_span!` for operations that should only be traced in debug builds
+- Avoid creating spans in tight loops
+
+### Field Formatting
+
+- **`%` formatting** (Display): Faster, cleaner output
+- **`?` formatting** (Debug): Slower, detailed output
+- Use `%` for production-critical fields
+- Use `?` for development-only fields
+
+### Level Filtering
+
+- Spans below the configured level are **not created** (zero overhead)
+- Set appropriate levels for each layer
+- Use environment-specific filtering in production
 
 ## References
 
+- [Tracing Crate Documentation](https://docs.rs/tracing/)
+- [Tracing Subscriber Documentation](https://docs.rs/tracing-subscriber/)
 - [Tauri Plugin Log Documentation](https://v2.tauri.app/plugin/logging/)
-- [log Crate Documentation](https://docs.rs/log/)
-- Source: `src-tauri/crates/uc-tauri/src/bootstrap/logging.rs`
+- Source:
+  - `src-tauri/crates/uc-tauri/src/bootstrap/tracing.rs`
+  - `src-tauri/crates/uc-tauri/src/bootstrap/logging.rs`
+- Guides:
+  - [Tracing Usage Guide](../guides/tracing.md)
+  - [Coding Standards](../guides/coding-standards.md)
