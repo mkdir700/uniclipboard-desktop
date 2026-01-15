@@ -33,7 +33,9 @@ use uc_app::{App, AppDeps};
 use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_core::SystemClipboardSnapshot;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
+
+use crate::events::ClipboardEvent;
 
 /// Application runtime with dependencies.
 ///
@@ -455,6 +457,23 @@ impl ClipboardChangeHandler for AppRuntime {
         match usecase.execute_with_snapshot(snapshot).await {
             Ok(event_id) => {
                 tracing::debug!("Successfully captured clipboard, event_id: {}", event_id);
+
+                // Emit event to frontend if AppHandle is available
+                if let Some(app) = &self.app_handle {
+                    let event = ClipboardEvent::NewContent {
+                        entry_id: event_id.to_string(),
+                        preview: "New clipboard content".to_string(),
+                    };
+
+                    if let Err(e) = app.emit("clipboard://event", event) {
+                        tracing::warn!("Failed to emit clipboard event to frontend: {}", e);
+                    } else {
+                        tracing::debug!("Successfully emitted clipboard://event to frontend");
+                    }
+                } else {
+                    tracing::debug!("AppHandle not available, skipping event emission");
+                }
+
                 Ok(())
             }
             Err(e) => {
