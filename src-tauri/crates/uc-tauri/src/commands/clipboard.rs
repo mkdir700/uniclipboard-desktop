@@ -6,8 +6,8 @@ use crate::models::ClipboardEntryProjection;
 use std::sync::Arc;
 use tauri::State;
 
-/// Get clipboard history entries
-/// 获取剪贴板历史条目
+/// Get clipboard history entries (preview only)
+/// 获取剪贴板历史条目（仅预览）
 #[tauri::command]
 pub async fn get_clipboard_entries(
     runtime: State<'_, Arc<AppRuntime>>,
@@ -22,87 +22,72 @@ pub async fn get_clipboard_entries(
         resolved_limit
     );
 
-    // Use UseCases accessor pattern (consistent with other commands)
     let uc = runtime.usecases().list_clipboard_entries();
-
-    // Query entries through use case
     let entries = uc.execute(resolved_limit, 0).await.map_err(|e| {
         log::error!("Failed to get clipboard entries: {}", e);
         e.to_string()
     })?;
 
-    // Convert domain models to DTOs
     let mut projections = Vec::with_capacity(entries.len());
 
     for entry in entries {
         let captured_at = entry.created_at_ms;
 
-        // Try to get actual text content from selection and representation
-        // Return full content, not truncated - frontend will handle display truncation
-        let (preview, size_bytes) = if let Ok(Some(selection)) = runtime
+        // Get preview from inline_data (already truncated if large)
+        let (preview, has_detail) = if let Ok(Some(selection)) = runtime
             .deps
             .selection_repo
             .get_selection(&entry.entry_id)
             .await
         {
-            // Get the preview representation
-            if let Ok(rep) = runtime
+            if let Ok(Some(rep)) = runtime
                 .deps
-                .clipboard_event_reader
+                .representation_repo
                 .get_representation(
                     &entry.event_id,
-                    selection.selection.preview_rep_id.as_ref(),
+                    &selection.selection.preview_rep_id,
                 )
                 .await
             {
-                // Try to convert bytes to UTF-8 string
-                if let Ok(text) = std::str::from_utf8(&rep.bytes) {
-                    let trimmed = text.trim();
-                    if !trimmed.is_empty() {
-                        (trimmed.to_string(), rep.bytes.len() as i64)
-                    } else {
-                        (
-                            entry.title.unwrap_or_else(|| {
-                                format!("Entry ({} bytes)", entry.total_size)
-                            }),
-                            entry.total_size,
-                        )
-                    }
+                let preview_text = if let Some(data) = rep.inline_data {
+                    String::from_utf8_lossy(&data).trim().to_string()
                 } else {
-                    (
-                        entry
-                            .title
-                            .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
-                        entry.total_size,
-                    )
-                }
+                    // Large image with no inline: show placeholder
+                    format!("Image ({} bytes)", rep.size_bytes)
+                };
+
+                // has_detail = blob exists (content was truncated or is blob-only)
+                let has_detail = rep.blob_id.is_some();
+
+                (preview_text, has_detail)
             } else {
                 (
-                    entry
-                        .title
-                        .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
-                    entry.total_size,
+                    entry.title.unwrap_or_else(|| {
+                        format!("Entry ({} bytes)", entry.total_size)
+                    }),
+                    false
                 )
             }
         } else {
             (
-                entry
-                    .title
-                    .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
-                entry.total_size,
+                entry.title.unwrap_or_else(|| {
+                    format!("Entry ({} bytes)", entry.total_size)
+                }),
+                false
             )
         };
 
         projections.push(ClipboardEntryProjection {
             id: entry.entry_id.to_string(),
             preview,
-            size_bytes,
+            has_detail,
+            size_bytes: entry.total_size,
             captured_at,
             content_type: "clipboard".to_string(),
-            is_encrypted: false, // TODO: Determine from actual entry state
-            is_favorited: false, // TODO: Implement favorites feature
-            updated_at: captured_at, // Same as captured_at initially
-            active_time: captured_at, // Same as captured_at initially
+            is_encrypted: false,
+            is_favorited: false,
+            updated_at: captured_at,
+            active_time: captured_at,
         });
     }
 
