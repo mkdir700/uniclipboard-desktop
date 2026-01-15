@@ -18,10 +18,6 @@
 //! Phase 3: Infra/Platform layers add debug spans
 //! Phase 4: Remove `log` dependency (optional)
 
-// Re-export log for backward compatibility during migration
-// This allows crates to use `use uc_tauri::bootstrap::tracing::log`
-pub use log;
-
 use tracing_subscriber::{fmt, registry, prelude::*};
 use std::io;
 
