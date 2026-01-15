@@ -32,6 +32,8 @@ impl CompleteOnboarding {
 
 #[cfg(test)]
 mod tests {
+    use uc_core::onboarding::OnboardingState;
+
     use super::*;
 
     struct MockOnboardingStatePort {
