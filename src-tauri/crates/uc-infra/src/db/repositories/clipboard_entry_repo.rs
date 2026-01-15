@@ -13,6 +13,7 @@ use diesel::Connection;
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::RunQueryDsl;
+use tracing::debug_span;
 use uc_core::clipboard::{ClipboardEntry, ClipboardSelectionDecision};
 use uc_core::ids::EntryId;
 use uc_core::ports::ClipboardEntryRepositoryPort;
@@ -48,6 +49,13 @@ where
         entry: &ClipboardEntry,
         selection: &ClipboardSelectionDecision,
     ) -> Result<()> {
+        let span = debug_span!(
+            "infra.sqlite.insert_clipboard_entry",
+            table = "clipboard_entry",
+            entry_id = %entry.entry_id,
+        );
+        let _enter = span.enter();
+
         self.executor.run(|conn| {
             let new_entry_row = self.entry_mapper.to_row(entry)?;
             let new_selection_row = self.selection_mapper.to_row(selection)?;
@@ -67,6 +75,13 @@ where
     }
 
     async fn get_entry(&self, entry_id: &EntryId) -> Result<Option<ClipboardEntry>> {
+        let span = debug_span!(
+            "infra.sqlite.query_clipboard_entry",
+            table = "clipboard_entry",
+            entry_id = %entry_id,
+        );
+        let _enter = span.enter();
+
         let entry_id_str = entry_id.to_string();
         self.executor.run(|conn| {
             let entry_row = clipboard_entry::table
@@ -104,6 +119,14 @@ where
     /// # }
     /// ```
     async fn list_entries(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
+        let span = debug_span!(
+            "infra.sqlite.query_clipboard_entries",
+            table = "clipboard_entry",
+            limit = limit,
+            offset = offset,
+        );
+        let _enter = span.enter();
+
         self.executor.run(|conn| {
             let entry_rows = clipboard_entry::table
                 .order(clipboard_entry::created_at_ms.desc())
@@ -131,6 +154,13 @@ where
     /// # }
     /// ```
     async fn delete_entry(&self, entry_id: &EntryId) -> Result<()> {
+        let span = debug_span!(
+            "infra.sqlite.delete_clipboard_entry",
+            table = "clipboard_entry",
+            entry_id = %entry_id,
+        );
+        let _enter = span.enter();
+
         let entry_id_str = entry_id.to_string();
         self.executor.run(|conn| {
             diesel::delete(clipboard_entry::table)
