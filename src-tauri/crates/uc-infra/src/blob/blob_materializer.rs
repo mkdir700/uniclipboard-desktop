@@ -1,5 +1,6 @@
 use anyhow::{Ok, Result};
 use async_trait::async_trait;
+use tracing::debug_span;
 use uc_core::blob::BlobStorageLocator;
 use uc_core::ports::ClockPort;
 use uc_core::ports::{BlobMaterializerPort, BlobRepositoryPort, BlobStorePort};
@@ -40,6 +41,13 @@ where
     C: ClockPort,
 {
     async fn materialize(&self, data: &[u8], content_hash: &ContentHash) -> Result<Blob> {
+        let span = debug_span!(
+            "infra.blob.materialize",
+            size_bytes = data.len(),
+            content_hash = %content_hash,
+        );
+        let _enter = span.enter();
+
         if let Some(blob) = self.blob_repo.find_by_hash(content_hash).await? {
             return Ok(blob);
         }
