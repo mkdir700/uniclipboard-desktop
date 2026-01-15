@@ -133,6 +133,13 @@ Filtered to prevent infinite loops when using Webview target:
 In production, `ipc::request` logs are filtered to reduce verbosity.
 In development, they're kept for debugging frontend-backend communication.
 
+**Note**: During tracing migration, these filters are configured in both:
+
+- `bootstrap/logging.rs` (tauri-plugin-log filters)
+- `bootstrap/tracing.rs` (tracing-subscriber env-filter)
+
+See `bootstrap/tracing.rs` for current RUST_LOG defaults.
+
 ## Usage
 
 ### Basic Logging
@@ -173,6 +180,73 @@ match risky_operation().await {
     Err(e) => log::error!("Operation failed: {} (context: {})", e, additional_context),
 }
 ```
+
+## Tracing Migration (In Progress)
+
+### Current Status: Phase 0 Complete
+
+The application is migrating from `log` crate to `tracing` crate for structured logging with spans.
+
+**Migration Strategy**: Gradual (dual-track system)
+
+- **Phase 0** ✅: Infrastructure setup (tracing dependencies, subscriber initialization)
+- **Phase 1** 🚧: Command layer (root spans)
+- **Phase 2**: UseCase layer (child spans)
+- **Phase 3**: Infra/Platform layer (debug spans)
+- **Phase 4**: Cleanup (remove `log` dependency)
+
+### Dual-Track Logging System
+
+During migration, both `log` and `tracing` macros work simultaneously:
+
+```rust
+// Existing log macros (still work)
+log::info!("Application started");
+
+// New tracing macros (now available)
+tracing::info!("Application started");
+tracing::info_span!("command.clipboard.capture", device_id = %id);
+```
+
+The `tracing-log` bridge captures all `log::` macros into the tracing system, ensuring consistent output.
+
+### Tracing Configuration
+
+Tracing is initialized in `main.rs` via `uc_tauri::bootstrap::tracing::init_tracing_subscriber()`.
+
+**Behavior**:
+
+- Development: Debug level, stdout output (Webview via tauri-plugin-log)
+- Production: Info level, file + stdout output
+- Environment filter: Respects `RUST_LOG`, with defaults:
+  - `libp2p_mdns=warn` (noisy proxy errors)
+  - `uc_platform=debug` (platform layer)
+  - `uc_infra=debug` (infrastructure layer)
+
+### Format Compatibility
+
+Tracing output format matches existing `log` format:
+
+```
+2025-01-15 10:30:45.123 INFO [main.rs:42] [uniclipboard] Application started
+```
+
+This ensures continuity with existing log parsing tools and workflows.
+
+### Future: Span-Based Tracing
+
+Once migration is complete, logs will include span hierarchy for cross-layer traceability:
+
+```
+command.clipboard.capture{device_id=abc123}
+└─ usecase.capture_clipboard.execute{policy_version=v1}
+   ├─ platform.macos.read_clipboard
+   │  └─ event: formats=3
+   ├─ infra.sqlite.insert_clipboard_event
+   └─ event: capture completed
+```
+
+See [Tracing Migration Design](../plans/2025-01-15-tracing-migration-design.md) for complete architecture.
 
 ## Viewing Logs
 
