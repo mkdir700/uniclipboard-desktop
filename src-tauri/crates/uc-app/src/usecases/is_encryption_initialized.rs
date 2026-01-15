@@ -2,6 +2,7 @@
 //! 检查加密是否已初始化的用例
 
 use anyhow::Result;
+use tracing::{info_span, info, Instrument};
 use uc_core::ports::security::encryption_state::EncryptionStatePort;
 use uc_core::security::state::EncryptionState;
 
@@ -31,9 +32,18 @@ impl IsEncryptionInitialized {
     /// - `Ok(false)` if encryption is not initialized
     /// - `Err(e)` if loading state fails
     pub async fn execute(&self) -> Result<bool> {
-        let state = self.encryption_state
-            .load_state()
-            .await?;
-        Ok(state == EncryptionState::Initialized)
+        let span = info_span!("usecase.is_encryption_initialized.execute");
+
+        async {
+            info!("Checking encryption initialization status");
+
+            let state = self.encryption_state.load_state().await?;
+            let result = state == EncryptionState::Initialized;
+
+            info!(is_initialized = result, "Encryption status checked");
+            Ok(result)
+        }
+        .instrument(span)
+        .await
     }
 }

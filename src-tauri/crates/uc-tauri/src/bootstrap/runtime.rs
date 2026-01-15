@@ -437,11 +437,11 @@ impl ClipboardChangeHandler for AppRuntime {
         // Execute capture with the provided snapshot
         match usecase.execute_with_snapshot(snapshot).await {
             Ok(event_id) => {
-                log::debug!("Successfully captured clipboard, event_id: {}", event_id);
+                tracing::debug!("Successfully captured clipboard, event_id: {}", event_id);
                 Ok(())
             }
             Err(e) => {
-                log::error!("Failed to capture clipboard: {:?}", e);
+                tracing::error!("Failed to capture clipboard: {:?}", e);
                 Err(e)
             }
         }

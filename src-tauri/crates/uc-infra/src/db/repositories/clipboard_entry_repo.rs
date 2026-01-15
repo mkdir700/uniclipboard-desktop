@@ -13,6 +13,7 @@ use diesel::Connection;
 use diesel::ExpressionMethods;
 use diesel::OptionalExtension;
 use diesel::RunQueryDsl;
+use tracing::debug_span;
 use uc_core::clipboard::{ClipboardEntry, ClipboardSelectionDecision};
 use uc_core::ids::EntryId;
 use uc_core::ports::ClipboardEntryRepositoryPort;
@@ -48,39 +49,53 @@ where
         entry: &ClipboardEntry,
         selection: &ClipboardSelectionDecision,
     ) -> Result<()> {
-        self.executor.run(|conn| {
-            let new_entry_row = self.entry_mapper.to_row(entry)?;
-            let new_selection_row = self.selection_mapper.to_row(selection)?;
+        let span = debug_span!(
+            "infra.sqlite.insert_clipboard_entry",
+            table = "clipboard_entry",
+            entry_id = %entry.entry_id,
+        );
+        span.in_scope(|| {
+            self.executor.run(|conn| {
+                let new_entry_row = self.entry_mapper.to_row(entry)?;
+                let new_selection_row = self.selection_mapper.to_row(selection)?;
 
-            conn.transaction(|conn| {
-                diesel::insert_into(clipboard_entry::table)
-                    .values(&new_entry_row)
-                    .execute(conn)?;
+                conn.transaction(|conn| {
+                    diesel::insert_into(clipboard_entry::table)
+                        .values(&new_entry_row)
+                        .execute(conn)?;
 
-                diesel::insert_into(clipboard_selection::table)
-                    .values(&new_selection_row)
-                    .execute(conn)?;
+                    diesel::insert_into(clipboard_selection::table)
+                        .values(&new_selection_row)
+                        .execute(conn)?;
 
-                Ok(())
+                    Ok(())
+                })
             })
         })
     }
 
     async fn get_entry(&self, entry_id: &EntryId) -> Result<Option<ClipboardEntry>> {
-        let entry_id_str = entry_id.to_string();
-        self.executor.run(|conn| {
-            let entry_row = clipboard_entry::table
-                .filter(clipboard_entry::entry_id.eq(&entry_id_str))
-                .first::<ClipboardEntryRow>(conn)
-                .optional()?;
+        let span = debug_span!(
+            "infra.sqlite.query_clipboard_entry",
+            table = "clipboard_entry",
+            entry_id = %entry_id,
+        );
+        span.in_scope(|| {
+            let entry_id_str = entry_id.to_string();
+            self.executor.run(|conn| {
+                let entry_row = clipboard_entry::table
+                    .filter(clipboard_entry::entry_id.eq(&entry_id_str))
+                    .first::<ClipboardEntryRow>(conn)
+                    .optional()?;
 
-            match entry_row {
-                Some(row) => {
-                    let entry = self.row_entry_mapper.to_domain(&row)?;
-                    Ok(Some(entry))
+                match entry_row {
+                    Some(row) => {
+                        let entry = self.row_entry_mapper.to_domain(&row)?;
+                        Ok(Some(entry))
+                    }
+                    None => Ok(None),
                 }
-                None => Ok(None),
-            }
+            })
         })
     }
 
@@ -104,17 +119,25 @@ where
     /// # }
     /// ```
     async fn list_entries(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
-        self.executor.run(|conn| {
-            let entry_rows = clipboard_entry::table
-                .order(clipboard_entry::created_at_ms.desc())
-                .limit(limit as i64)
-                .offset(offset as i64)
-                .load::<ClipboardEntryRow>(conn)?;
+        let span = debug_span!(
+            "infra.sqlite.query_clipboard_entries",
+            table = "clipboard_entry",
+            limit = limit,
+            offset = offset,
+        );
+        span.in_scope(|| {
+            self.executor.run(|conn| {
+                let entry_rows = clipboard_entry::table
+                    .order(clipboard_entry::created_at_ms.desc())
+                    .limit(limit as i64)
+                    .offset(offset as i64)
+                    .load::<ClipboardEntryRow>(conn)?;
 
-            entry_rows
-                .into_iter()
-                .map(|row| self.row_entry_mapper.to_domain(&row))
-                .collect()
+                entry_rows
+                    .into_iter()
+                    .map(|row| self.row_entry_mapper.to_domain(&row))
+                    .collect()
+            })
         })
     }
 
@@ -131,12 +154,19 @@ where
     /// # }
     /// ```
     async fn delete_entry(&self, entry_id: &EntryId) -> Result<()> {
-        let entry_id_str = entry_id.to_string();
-        self.executor.run(|conn| {
-            diesel::delete(clipboard_entry::table)
-                .filter(clipboard_entry::entry_id.eq(&entry_id_str))
-                .execute(conn)?;
-            Ok(())
+        let span = debug_span!(
+            "infra.sqlite.delete_clipboard_entry",
+            table = "clipboard_entry",
+            entry_id = %entry_id,
+        );
+        span.in_scope(|| {
+            let entry_id_str = entry_id.to_string();
+            self.executor.run(|conn| {
+                diesel::delete(clipboard_entry::table)
+                    .filter(clipboard_entry::entry_id.eq(&entry_id_str))
+                    .execute(conn)?;
+                Ok(())
+            })
         })
     }
 }

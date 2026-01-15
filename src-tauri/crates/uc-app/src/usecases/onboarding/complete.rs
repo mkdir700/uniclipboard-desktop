@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use uc_core::onboarding::OnboardingState;
 use uc_core::ports::OnboardingStatePort;
 
 /// Use case for completing onboarding.
@@ -33,6 +32,8 @@ impl CompleteOnboarding {
 
 #[cfg(test)]
 mod tests {
+    use uc_core::onboarding::OnboardingState;
+
     use super::*;
 
     struct MockOnboardingStatePort {
@@ -96,7 +97,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_from_ports() {
-        let mock = Arc::new(MockOnboardingStatePort::new(OnboardingState::default())) as Arc<dyn OnboardingStatePort>;
+        let mock = Arc::new(MockOnboardingStatePort::new(OnboardingState::default()))
+            as Arc<dyn OnboardingStatePort>;
         let use_case = CompleteOnboarding::from_ports(mock.clone());
 
         use_case.execute().await.unwrap();

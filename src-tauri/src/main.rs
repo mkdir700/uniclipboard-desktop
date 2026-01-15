@@ -20,6 +20,7 @@ use uc_platform::runtime::event_bus::{
 };
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
+use uc_tauri::bootstrap::tracing as bootstrap_tracing;
 
 // Platform-specific command modules
 mod plugins;
@@ -61,10 +62,16 @@ impl PlatformCommandExecutorPort for SimplePlatformCommandExecutor {
 
 /// Main entry point
 fn main() {
-    // TODO: In a real application, we would:
+    // Initialize tracing subscriber FIRST (before any logging)
+    // This sets up the tracing infrastructure and enables log-tracing bridge
+    if let Err(e) = bootstrap_tracing::init_tracing_subscriber() {
+        eprintln!("Failed to initialize tracing: {}", e);
+        std::process::exit(1);
+    }
+
+    // NOTE: In a production application, we would:
     // 1. Load configuration from a proper path
     // 2. Handle configuration errors gracefully
-    // 3. Initialize logging
 
     // For now, use a default config path
     let config_path = PathBuf::from("config.toml");
@@ -91,7 +98,6 @@ macro_rules! generate_invoke_handler {
             // Clipboard commands
             uc_tauri::commands::clipboard::get_clipboard_entries,
             uc_tauri::commands::clipboard::delete_clipboard_entry,
-            uc_tauri::commands::clipboard::capture_clipboard,
             // Encryption commands
             uc_tauri::commands::encryption::initialize_encryption,
             uc_tauri::commands::encryption::is_encryption_initialized,

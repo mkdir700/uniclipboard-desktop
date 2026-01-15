@@ -5,10 +5,11 @@
 use std::sync::Arc;
 use uc_core::ports::{AutostartPort, UiPort};
 
-pub mod bootstrap;
+// Tracing support for use case instrumentation
+pub use tracing;
+
 pub mod deps;
 pub mod models;
-pub mod usecase_factory;
 pub mod usecases;
 
 pub use deps::AppDeps;

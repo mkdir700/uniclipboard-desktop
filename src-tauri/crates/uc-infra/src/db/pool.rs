@@ -2,7 +2,7 @@ use anyhow::Result;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use log::info;
+use tracing::info;
 
 /// Embed all diesel migrations at compile time
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");

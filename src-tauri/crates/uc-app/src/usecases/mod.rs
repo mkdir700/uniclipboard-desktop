@@ -1,6 +1,6 @@
 //! Business logic use cases
 //! 是否是独立 Use Case，
-//! 取决于“是否需要用户 / 系统再次做出决策”
+//! 取决于"是否需要用户 / 系统再次做出决策"
 //!
 //! [ClipboardWatcher]
 //        ↓
@@ -13,7 +13,6 @@
 // ---------------------------------
 //         ↓
 // MaterializeClipboardSelectionUseCase → 粘贴 / 恢复 / 同步
-
 pub mod change_passphrase;
 pub mod clipboard;
 pub mod delete_clipboard_entry;

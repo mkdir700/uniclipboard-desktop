@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, State};
 use crate::bootstrap::AppRuntime;
+use tracing::{info_span, Instrument};  // NEW
 
 const LOG_CONTEXT: &str = "[initialize_encryption]";
 
@@ -32,19 +33,22 @@ pub async fn initialize_encryption(
     app_handle: AppHandle,
     passphrase: String,
 ) -> Result<(), String> {
-    log::debug!("{} Command called with passphrase length: {}", LOG_CONTEXT, passphrase.len());
+    let span = info_span!(
+        "command.encryption.initialize",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
 
     let uc = runtime.usecases().initialize_encryption();
     log::debug!("{} Use case created, executing...", LOG_CONTEXT);
 
     uc.execute(uc_core::security::model::Passphrase(passphrase))
+        .instrument(span)
         .await
         .map_err(|e| {
-            log::error!("{} Use case execution failed: {:?}", LOG_CONTEXT, e);
+            tracing::error!(error = %e, "Failed to initialize encryption");
             e.to_string()
         })?;
-
-    log::debug!("{} Use case executed successfully, emitting event...", LOG_CONTEXT);
+    tracing::info!("Encryption initialized successfully");
 
     // Emit onboarding-password-set event for frontend
     let timestamp = SystemTime::now()
@@ -57,8 +61,8 @@ pub async fn initialize_encryption(
         .emit("onboarding-password-set", event)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
 
-    log::debug!("{} Event emitted successfully", LOG_CONTEXT);
-    log::info!("Onboarding: encryption password initialized successfully");
+    tracing::debug!("{} Event emitted successfully", LOG_CONTEXT);
+    tracing::info!("Onboarding: encryption password initialized successfully");
     Ok(())
 }
 
@@ -71,6 +75,20 @@ pub async fn initialize_encryption(
 pub async fn is_encryption_initialized(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<bool, String> {
-    let uc = runtime.usecases().is_encryption_initialized();
-    uc.execute().await.map_err(|e| e.to_string())
+    let span = info_span!(
+        "command.encryption.is_initialized",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    async {
+        let uc = runtime.usecases().is_encryption_initialized();
+        let result = uc.execute().await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to check encryption status");
+            e.to_string()
+        })?;
+
+        tracing::info!(is_initialized = result, "Encryption status checked");
+        Ok(result)
+    }
+    .instrument(span)
+    .await
 }

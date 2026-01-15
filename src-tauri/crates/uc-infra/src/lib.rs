@@ -1,3 +1,6 @@
+// Tracing support for infra layer instrumentation
+pub use tracing;
+
 pub mod blob;
 pub mod clipboard;
 pub mod config;

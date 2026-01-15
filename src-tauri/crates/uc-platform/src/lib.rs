@@ -5,6 +5,9 @@
 //! This crate contains infrastructure implementations that interact with
 //! the operating system, external services, and hardware.
 
+// Tracing support for platform layer instrumentation
+pub use tracing;
+
 pub mod adapters;
 pub mod bootstrap;
 pub mod clipboard;

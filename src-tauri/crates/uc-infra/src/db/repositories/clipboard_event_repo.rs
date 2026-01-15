@@ -8,6 +8,7 @@ use crate::db::{
 };
 use anyhow::Result;
 use diesel::prelude::*;
+use tracing::debug_span;
 use uc_core::{
     clipboard::{ClipboardEvent, PersistedClipboardRepresentation},
     ids::EventId,
@@ -63,33 +64,40 @@ where
         event: &ClipboardEvent,
         reps: &Vec<PersistedClipboardRepresentation>,
     ) -> Result<()> {
-        let new_event: NewClipboardEventRow = self.event_mapper.to_row(event)?;
-        let new_reps: Vec<NewSnapshotRepresentationRow> = reps
-            .iter()
-            .map(|rep| self.snapshot_mapper.to_row(&(rep, &event.event_id)))
-            .collect::<Result<Vec<_>, _>>()?;
+        let span = debug_span!(
+            "infra.sqlite.insert_clipboard_event",
+            table = "clipboard_event",
+            event_id = %event.event_id,
+        );
+        span.in_scope(|| {
+            let new_event: NewClipboardEventRow = self.event_mapper.to_row(event)?;
+            let new_reps: Vec<NewSnapshotRepresentationRow> = reps
+                .iter()
+                .map(|rep| self.snapshot_mapper.to_row(&(rep, &event.event_id)))
+                .collect::<Result<Vec<_>, _>>()?;
 
-        self.executor.run(|conn| {
-            conn.transaction(|conn| {
-                diesel::insert_into(clipboard_event::table)
-                    .values(&new_event)
-                    .execute(conn)?;
-
-                for rep in new_reps {
-                    diesel::insert_into(clipboard_snapshot_representation::table)
-                        .values((
-                            clipboard_snapshot_representation::id.eq(rep.id),
-                            clipboard_snapshot_representation::event_id.eq(&new_event.event_id),
-                            clipboard_snapshot_representation::format_id.eq(rep.format_id),
-                            clipboard_snapshot_representation::mime_type.eq(rep.mime_type),
-                            clipboard_snapshot_representation::size_bytes.eq(rep.size_bytes),
-                            clipboard_snapshot_representation::inline_data.eq(rep.inline_data),
-                            clipboard_snapshot_representation::blob_id.eq(rep.blob_id),
-                        ))
+            self.executor.run(|conn| {
+                conn.transaction(|conn| {
+                    diesel::insert_into(clipboard_event::table)
+                        .values(&new_event)
                         .execute(conn)?;
-                }
 
-                Ok(())
+                    for rep in new_reps {
+                        diesel::insert_into(clipboard_snapshot_representation::table)
+                            .values((
+                                clipboard_snapshot_representation::id.eq(rep.id),
+                                clipboard_snapshot_representation::event_id.eq(&new_event.event_id),
+                                clipboard_snapshot_representation::format_id.eq(rep.format_id),
+                                clipboard_snapshot_representation::mime_type.eq(rep.mime_type),
+                                clipboard_snapshot_representation::size_bytes.eq(rep.size_bytes),
+                                clipboard_snapshot_representation::inline_data.eq(rep.inline_data),
+                                clipboard_snapshot_representation::blob_id.eq(rep.blob_id),
+                            ))
+                            .execute(conn)?;
+                    }
+
+                    Ok(())
+                })
             })
         })
     }
@@ -111,20 +119,27 @@ where
     /// # }
     /// ```
     async fn delete_event_and_representations(&self, event_id: &EventId) -> Result<()> {
-        let event_id_str = event_id.to_string();
-        self.executor.run(|conn| {
-            conn.transaction(|conn| {
-                // Delete representations first (they reference the event)
-                diesel::delete(clipboard_snapshot_representation::table)
-                    .filter(clipboard_snapshot_representation::event_id.eq(&event_id_str))
-                    .execute(conn)?;
+        let span = debug_span!(
+            "infra.sqlite.delete_clipboard_event",
+            table = "clipboard_event",
+            event_id = %event_id,
+        );
+        span.in_scope(|| {
+            let event_id_str = event_id.to_string();
+            self.executor.run(|conn| {
+                conn.transaction(|conn| {
+                    // Delete representations first (they reference the event)
+                    diesel::delete(clipboard_snapshot_representation::table)
+                        .filter(clipboard_snapshot_representation::event_id.eq(&event_id_str))
+                        .execute(conn)?;
 
-                // Then delete the event
-                diesel::delete(clipboard_event::table)
-                    .filter(clipboard_event::event_id.eq(&event_id_str))
-                    .execute(conn)?;
+                    // Then delete the event
+                    diesel::delete(clipboard_event::table)
+                        .filter(clipboard_event::event_id.eq(&event_id_str))
+                        .execute(conn)?;
 
-                Ok(())
+                    Ok(())
+                })
             })
         })
     }
@@ -142,22 +157,29 @@ where
         event_id: &EventId,
         representation_id: &str,
     ) -> Result<uc_core::ObservedClipboardRepresentation> {
-        use crate::db::schema::clipboard_snapshot_representation;
+        let span = debug_span!(
+            "infra.sqlite.query_snapshot_representation",
+            table = "snapshot_representation",
+            event_id = %event_id,
+            representation_id = representation_id,
+        );
+        let rep_row = span.in_scope(|| {
+            use crate::db::schema::clipboard_snapshot_representation;
 
-        let event_id_str = event_id.as_ref().to_string();
-        let rep_id_str = representation_id.to_string();
+            let event_id_str = event_id.as_ref().to_string();
+            let rep_id_str = representation_id.to_string();
 
-        let rep_row = self
-            .executor
-            .run(|conn| {
-                let rep = clipboard_snapshot_representation::table
-                    .filter(clipboard_snapshot_representation::event_id.eq(&event_id_str))
-                    .filter(clipboard_snapshot_representation::id.eq(&rep_id_str))
-                    .first::<SnapshotRepresentationRow>(conn)
-                    .map_err(|e| anyhow::anyhow!("Failed to fetch representation: {}", e))?;
-                Ok(rep)
-            })
-            .map_err(|e| anyhow::anyhow!("Database error: {}", e))?;
+            self.executor
+                .run(|conn| {
+                    let rep = clipboard_snapshot_representation::table
+                        .filter(clipboard_snapshot_representation::event_id.eq(&event_id_str))
+                        .filter(clipboard_snapshot_representation::id.eq(&rep_id_str))
+                        .first::<SnapshotRepresentationRow>(conn)
+                        .map_err(|e| anyhow::anyhow!("Failed to fetch representation: {}", e))?;
+                    Ok(rep)
+                })
+                .map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
 
         // Convert from PersistedClipboardRepresentation to ObservedClipboardRepresentation
         let persisted = self.snapshot_mapper.to_domain(&rep_row)?;

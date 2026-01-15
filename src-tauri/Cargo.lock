@@ -9077,6 +9077,7 @@ version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f30143827ddab0d256fd843b7a66d164e9f271cfa0dde49142c5ca0ca291f1e"
 dependencies = [
+ "chrono",
  "matchers",
  "nu-ansi-term",
  "once_cell",
@@ -9191,6 +9192,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "toml 0.8.23",
+ "tracing",
  "twox-hash",
  "uuid",
 ]
@@ -9218,6 +9220,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
+ "tracing",
  "uc-app",
  "uc-core",
  "uuid",
@@ -9251,6 +9254,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
+ "tracing",
  "uc-core",
  "uuid",
  "winapi",
@@ -9262,16 +9266,21 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "dirs 6.0.0",
  "log",
  "serde",
  "serde_json",
  "tauri",
  "tauri-plugin-autostart",
+ "tauri-plugin-log",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
  "toml 0.8.23",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
  "uc-app",
  "uc-core",
  "uc-infra",

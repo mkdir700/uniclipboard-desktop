@@ -1,6 +1,7 @@
 //! In-memory encryption session port implementation
 //! 内存加密会话端口实现
 
+use tracing::{debug_span, debug};
 use uc_core::ports::EncryptionSessionPort;
 use uc_core::security::model::{EncryptionError, MasterKey};
 use async_trait::async_trait;
@@ -23,19 +24,27 @@ impl EncryptionSessionPort for InMemoryEncryptionSessionPort {
     }
 
     async fn set_master_key(&self, master_key: MasterKey) -> Result<(), EncryptionError> {
-        let mut state = self.state.lock().expect("lock state");
-        // Replace old key - MasterKey will be dropped and zeroized automatically
-        // 替换旧密钥 - MasterKey 将被丢弃并自动零化
-        state.master_key = Some(master_key);
-        Ok(())
+        let span = debug_span!("platform.encryption.set_master_key");
+        span.in_scope(|| {
+            let mut state = self.state.lock().expect("lock state");
+            // Replace old key - MasterKey will be dropped and zeroized automatically
+            // 替换旧密钥 - MasterKey 将被丢弃并自动零化
+            state.master_key = Some(master_key);
+            debug!("Master key set successfully");
+            Ok(())
+        })
     }
 
     async fn clear(&self) -> Result<(), EncryptionError> {
-        let mut state = self.state.lock().expect("lock state");
-        // Drop old key - MasterKey will be zeroized automatically
-        // 丢弃旧密钥 - MasterKey 将自动零化
-        state.master_key = None;
-        Ok(())
+        let span = debug_span!("platform.encryption.clear");
+        span.in_scope(|| {
+            let mut state = self.state.lock().expect("lock state");
+            // Drop old key - MasterKey will be zeroized automatically
+            // 丢弃旧密钥 - MasterKey 将自动零化
+            state.master_key = None;
+            debug!("Master key cleared");
+            Ok(())
+        })
     }
 }
 

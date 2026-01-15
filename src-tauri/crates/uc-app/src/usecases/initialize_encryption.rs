@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{info_span, info, Instrument};
 
 use uc_core::{
     ports::{
@@ -98,64 +99,70 @@ impl InitializeEncryption {
     }
 
     pub async fn execute(&self, passphrase: Passphrase) -> Result<(), InitializeEncryptionError> {
-        log::debug!("{} Starting execution", LOG_CONTEXT);
+        let span = info_span!("usecase.initialize_encryption.execute");
 
-        let state = self.encryption_state_repo.load_state().await?;
-        log::debug!("{} Loaded encryption state: {:?}", LOG_CONTEXT, state);
+        async {
+            info!("Starting encryption initialization");
 
-        // 1. assert not initialized
-        if state == EncryptionState::Initialized {
-            return Err(InitializeEncryptionError::AlreadyInitialized);
+            let state = self.encryption_state_repo.load_state().await?;
+            log::debug!("{} Loaded encryption state: {:?}", LOG_CONTEXT, state);
+
+            // 1. assert not initialized
+            if state == EncryptionState::Initialized {
+                return Err(InitializeEncryptionError::AlreadyInitialized);
+            }
+
+            log::debug!("{} Getting current scope...", LOG_CONTEXT);
+            let scope = self.key_scope.current_scope().await?;
+            log::debug!("{} Got scope: {}", LOG_CONTEXT, scope.to_identifier());
+
+            log::debug!("{} Creating keyslot draft...", LOG_CONTEXT);
+            let keyslot_draft = KeySlot::draft_v1(scope.clone())?;
+            log::debug!("{} Keyslot draft created", LOG_CONTEXT);
+
+            // 2. derive KEK
+            log::debug!("{} Deriving KEK...", LOG_CONTEXT);
+            let kek = self
+                .encryption
+                .derive_kek(&passphrase, &keyslot_draft.salt, &keyslot_draft.kdf)
+                .await?;
+            log::debug!("{} KEK derived successfully", LOG_CONTEXT);
+
+            // 3. generate MasterKey
+            log::debug!("{} Generating master key...", LOG_CONTEXT);
+            let master_key = MasterKey::generate()?;
+            log::debug!("{} Master key generated", LOG_CONTEXT);
+
+            // 4. wrap MasterKey
+            log::debug!("{} Wrapping master key...", LOG_CONTEXT);
+            let blob = self
+                .encryption
+                .wrap_master_key(&kek, &master_key, EncryptionAlgo::XChaCha20Poly1305)
+                .await?;
+            log::debug!("{} Master key wrapped successfully", LOG_CONTEXT);
+
+            let keyslot = keyslot_draft.finalize(WrappedMasterKey { blob });
+            log::debug!("{} Keyslot finalized", LOG_CONTEXT);
+
+            // 5. persist wrapped key, store keyslot
+            log::debug!("{} Storing keyslot...", LOG_CONTEXT);
+            self.key_material.store_keyslot(&keyslot).await?;
+            log::debug!("{} Keyslot stored successfully", LOG_CONTEXT);
+
+            // 6. store KEK material into keyring
+            log::debug!("{} Storing KEK in keyring...", LOG_CONTEXT);
+            self.key_material.store_kek(&scope, &kek).await?;
+            log::debug!("{} KEK stored successfully", LOG_CONTEXT);
+
+            // 7. persist initialized state
+            log::debug!("{} Persisting initialized state...", LOG_CONTEXT);
+            self.encryption_state_repo.persist_initialized().await?;
+            log::debug!("{} Encryption state persisted", LOG_CONTEXT);
+
+            info!("Encryption initialized successfully");
+            Ok(())
         }
-
-        log::debug!("{} Getting current scope...", LOG_CONTEXT);
-        let scope = self.key_scope.current_scope().await?;
-        log::debug!("{} Got scope: {}", LOG_CONTEXT, scope.to_identifier());
-
-        log::debug!("{} Creating keyslot draft...", LOG_CONTEXT);
-        let keyslot_draft = KeySlot::draft_v1(scope.clone())?;
-        log::debug!("{} Keyslot draft created", LOG_CONTEXT);
-
-        // 2. derive KEK
-        log::debug!("{} Deriving KEK...", LOG_CONTEXT);
-        let kek = self
-            .encryption
-            .derive_kek(&passphrase, &keyslot_draft.salt, &keyslot_draft.kdf)
-            .await?;
-        log::debug!("{} KEK derived successfully", LOG_CONTEXT);
-
-        // 3. generate MasterKey
-        log::debug!("{} Generating master key...", LOG_CONTEXT);
-        let master_key = MasterKey::generate()?;
-        log::debug!("{} Master key generated", LOG_CONTEXT);
-
-        // 4. wrap MasterKey
-        log::debug!("{} Wrapping master key...", LOG_CONTEXT);
-        let blob = self
-            .encryption
-            .wrap_master_key(&kek, &master_key, EncryptionAlgo::XChaCha20Poly1305)
-            .await?;
-        log::debug!("{} Master key wrapped successfully", LOG_CONTEXT);
-
-        let keyslot = keyslot_draft.finalize(WrappedMasterKey { blob });
-        log::debug!("{} Keyslot finalized", LOG_CONTEXT);
-
-        // 5. persist wrapped key, store keyslot
-        log::debug!("{} Storing keyslot...", LOG_CONTEXT);
-        self.key_material.store_keyslot(&keyslot).await?;
-        log::debug!("{} Keyslot stored successfully", LOG_CONTEXT);
-
-        // 6. store KEK material into keyring
-        log::debug!("{} Storing KEK in keyring...", LOG_CONTEXT);
-        self.key_material.store_kek(&scope, &kek).await?;
-        log::debug!("{} KEK stored successfully", LOG_CONTEXT);
-
-        // 7. persist initialized state
-        log::debug!("{} Persisting initialized state...", LOG_CONTEXT);
-        self.encryption_state_repo.persist_initialized().await?;
-        log::debug!("{} Encryption state persisted", LOG_CONTEXT);
-
-        log::info!("{} All steps completed successfully", LOG_CONTEXT);
-        Ok(())
+        .instrument(span)
+        .await
     }
 }

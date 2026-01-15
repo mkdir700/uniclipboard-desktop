@@ -2,6 +2,7 @@
 //! 更新应用设置的用例
 
 use anyhow::Result;
+use tracing::{info_span, info, Instrument};
 use uc_core::ports::SettingsPort;
 use uc_core::settings::model::Settings;
 
@@ -33,17 +34,28 @@ impl UpdateSettings {
     /// - `Ok(())` if settings are saved successfully
     /// - `Err(e)` if validation or save fails
     pub async fn execute(&self, settings: Settings) -> Result<()> {
-        // Basic validation: ensure schema version is current
-        let current_version = uc_core::settings::model::CURRENT_SCHEMA_VERSION;
-        if settings.schema_version != current_version {
-            return Err(anyhow::anyhow!(
-                "Invalid schema version: expected {}, got {}",
-                current_version,
-                settings.schema_version
-            ));
-        }
+        let span = info_span!("usecase.update_settings.execute");
 
-        // Persist settings
-        self.settings.save(&settings).await
+        async {
+            info!("Updating application settings");
+
+            // Basic validation: ensure schema version is current
+            let current_version = uc_core::settings::model::CURRENT_SCHEMA_VERSION;
+            if settings.schema_version != current_version {
+                return Err(anyhow::anyhow!(
+                    "Invalid schema version: expected {}, got {}",
+                    current_version,
+                    settings.schema_version
+                ));
+            }
+
+            // Persist settings
+            self.settings.save(&settings).await?;
+
+            info!("Settings updated successfully");
+            Ok(())
+        }
+        .instrument(span)
+        .await
     }
 }
