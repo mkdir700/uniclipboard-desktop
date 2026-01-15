@@ -8,10 +8,8 @@ use uc_core::ports::{AutostartPort, UiPort};
 // Tracing support for use case instrumentation
 pub use tracing;
 
-pub mod bootstrap;
 pub mod deps;
 pub mod models;
-pub mod usecase_factory;
 pub mod usecases;
 
 pub use deps::AppDeps;
