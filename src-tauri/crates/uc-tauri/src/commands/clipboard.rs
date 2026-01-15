@@ -34,14 +34,18 @@ pub async fn get_clipboard_entries(
         // Convert domain models to DTOs
         let projections: Vec<ClipboardEntryProjection> = entries
             .into_iter()
-            .map(|entry| ClipboardEntryProjection {
-                id: entry.entry_id.to_string(),
-                preview: entry
-                    .title
-                    .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
-                captured_at: entry.created_at_ms,
-                content_type: "clipboard".to_string(),
-                is_encrypted: false, // TODO: Determine from actual entry state
+            .map(|entry| {
+                let captured_at = entry.created_at_ms;
+                ClipboardEntryProjection {
+                    id: entry.entry_id.to_string(),
+                    preview: entry.title.unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
+                    captured_at,
+                    content_type: "clipboard".to_string(),
+                    is_encrypted: false, // TODO: Determine from actual entry state
+                    is_favorited: false, // TODO: Implement favorites feature
+                    updated_at: captured_at,  // Same as captured_at initially
+                    active_time: captured_at,  // Same as captured_at initially
+                }
             })
             .collect();
 

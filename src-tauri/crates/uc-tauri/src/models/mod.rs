@@ -24,4 +24,10 @@ pub struct ClipboardEntryProjection {
     pub content_type: String,
     /// Whether the content is encrypted
     pub is_encrypted: bool,
+    /// Whether the entry is favorited
+    pub is_favorited: bool,
+    /// Timestamp when last updated
+    pub updated_at: i64,
+    /// Timestamp of last access/use
+    pub active_time: i64,
 }
