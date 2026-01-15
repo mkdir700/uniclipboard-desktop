@@ -33,11 +33,15 @@ impl GetSettings {
     pub async fn execute(&self) -> Result<Settings> {
         let span = info_span!("usecase.get_settings.execute");
 
-        info!("Retrieving application settings");
+        async {
+            info!("Retrieving application settings");
 
-        let result = self.settings.load().instrument(span).await?;
+            let result = self.settings.load().await?;
 
-        info!("Settings retrieved successfully");
-        Ok(result)
+            info!("Settings retrieved successfully");
+            Ok(result)
+        }
+        .instrument(span)
+        .await
     }
 }
