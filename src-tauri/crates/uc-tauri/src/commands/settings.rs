@@ -6,6 +6,7 @@ use serde_json::Value;
 use tauri::State;
 use uc_core::settings::model::Settings;
 use crate::bootstrap::AppRuntime;
+use tracing::info_span;  // NEW
 
 /// Get application settings
 /// 获取应用设置
