@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 interface ClipboardEntryProjection {
   id: string
   preview: string
+  size_bytes: number
   captured_at: number
   content_type: string
   is_encrypted: boolean
@@ -131,6 +132,8 @@ export async function getClipboardItems(
     })
 
     // Transform backend projection to frontend response format
+    // TODO: Currently treating all entries as text. Implement proper content type detection
+    // when backend provides accurate content_type values
     return entries.map(entry => ({
       id: entry.id,
       device_id: '', // Not in projection yet, use empty string
@@ -140,14 +143,13 @@ export async function getClipboardItems(
       updated_at: entry.updated_at,
       active_time: entry.active_time,
       item: {
-        text:
-          entry.content_type === 'text'
-            ? {
-                display_text: entry.preview,
-                is_truncated: entry.preview.length > 100,
-                size: entry.preview.length,
-              }
-            : (null as unknown as ClipboardTextItem),
+        text: {
+          display_text: entry.preview,
+          // is_truncated indicates if display should be collapsed by default in UI
+          // Use 500 chars threshold for UI truncation (backend returns full content)
+          is_truncated: entry.preview.length > 500,
+          size: entry.size_bytes,
+        },
         image: null as unknown as ClipboardImageItem,
         file: null as unknown as ClipboardFileItem,
         link: null as unknown as ClipboardLinkItem,
