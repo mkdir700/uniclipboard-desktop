@@ -14,6 +14,14 @@ pub async fn get_clipboard_entries(
     runtime: State<'_, Arc<AppRuntime>>,
     limit: Option<usize>,
 ) -> Result<Vec<ClipboardEntryProjection>, String> {
+    // Create root span for this command
+    let span = info_span!(
+        "command.clipboard.get_entries",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+        limit = limit.unwrap_or(50),
+    );
+    let _enter = span.enter();
+
     // Use UseCases accessor pattern (consistent with other commands)
     let uc = runtime.usecases().list_clipboard_entries();
     let limit = limit.unwrap_or(50);
@@ -21,7 +29,10 @@ pub async fn get_clipboard_entries(
     // Query entries through use case
     let entries = uc.execute(limit, 0)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to get clipboard entries");
+            e.to_string()
+        })?;
 
     // Convert domain models to DTOs
     let projections: Vec<ClipboardEntryProjection> = entries
@@ -35,6 +46,7 @@ pub async fn get_clipboard_entries(
         })
         .collect();
 
+    tracing::info!(count = projections.len(), "Retrieved clipboard entries");
     Ok(projections)
 }
 
