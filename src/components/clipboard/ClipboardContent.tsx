@@ -376,6 +376,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
                 time={item.time}
                 device={item.device}
                 content={item.content}
+                entryId={item.id}
                 isSelected={selectedIds.has(item.id)}
                 onSelect={e => handleSelect(item.id, index, e)}
               />

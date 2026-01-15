@@ -3,11 +3,23 @@ import { invoke } from '@tauri-apps/api/core'
 // Backend projection type
 interface ClipboardEntryProjection {
   id: string
-  preview: string
+  preview: string // Preview content (may be truncated)
+  has_detail: boolean // Whether full detail is available
   size_bytes: number
   captured_at: number
   content_type: string
   is_encrypted: boolean
+  is_favorited: boolean
+  updated_at: number
+  active_time: number
+}
+
+// Detail response type (for fetching full content)
+export interface ClipboardEntryDetail {
+  id: string
+  content: string // Full content
+  content_type: string
+  size_bytes: number
   is_favorited: boolean
   updated_at: number
   active_time: number
@@ -43,8 +55,8 @@ export enum Filter {
 }
 
 export interface ClipboardTextItem {
-  display_text: string
-  is_truncated: boolean
+  display_text: string // Changed: now always shows preview
+  has_detail: boolean // NEW: replaced is_truncated, indicates if full content is available
   size: number
 }
 
@@ -144,10 +156,8 @@ export async function getClipboardItems(
       active_time: entry.active_time,
       item: {
         text: {
-          display_text: entry.preview,
-          // is_truncated indicates if display should be collapsed by default in UI
-          // Use 500 chars threshold for UI truncation (backend returns full content)
-          is_truncated: entry.preview.length > 500,
+          display_text: entry.preview, // Use preview directly from backend
+          has_detail: entry.has_detail, // Use has_detail from backend (indicates expandability)
           size: entry.size_bytes,
         },
         image: null as unknown as ClipboardImageItem,
@@ -177,6 +187,21 @@ export async function getClipboardItem(
     return await invoke('get_clipboard_item', { id, fullContent })
   } catch (error) {
     console.error('获取剪贴板条目失败:', error)
+    throw error
+  }
+}
+
+/**
+ * Get clipboard entry detail (full content)
+ * 获取剪切板条目详情（完整内容）
+ * @param id Entry ID
+ * @returns Promise with full entry detail
+ */
+export async function getClipboardEntryDetail(id: string): Promise<ClipboardEntryDetail> {
+  try {
+    return await invoke('get_clipboard_entry_detail', { entryId: id })
+  } catch (error) {
+    console.error('Failed to get clipboard entry detail:', error)
     throw error
   }
 }

@@ -251,6 +251,7 @@
     },
     "errors": {
       "copyFailed": "复制到剪贴板失败",
+      "loadDetailFailed": "加载详情失败",
       "unknown": "发生未知错误"
     },
     "item": {
@@ -260,6 +261,7 @@
       "unknownContent": "未知内容",
       "expand": "展开",
       "collapse": "收起",
+      "loading": "加载中...",
       "actions": {
         "copy": "复制",
         "favorite": "收藏",
