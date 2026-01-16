@@ -438,28 +438,21 @@ fn create_platform_layer(
     })
 }
 
-/// Wire all dependencies together.
-/// 将所有依赖连接在一起。
+/// Resolves the application's default directories for storing data and configuration.
 ///
-/// This function constructs the complete dependency graph by creating instances
-/// from infrastructure and platform layers, then packaging them into `AppDeps`.
+/// Returns an AppDirs adapter populated with platform-appropriate paths for the application.
 ///
-/// 此函数通过从基础设施层和平台层创建实例，然后将它们打包到 `AppDeps` 中来构建完整的依赖图。
+/// # Errors
 ///
-/// # Arguments / 参数
+/// Returns `WiringError::ConfigInit` if the platform adapter fails to determine the directories.
 ///
-/// * `config` - Application configuration / 应用配置
+/// # Examples
 ///
-/// # Returns / 返回
-///
-/// * `WiringResult<AppDeps>` - The wired dependencies on success / 成功时返回已连接的依赖
-///
-
-/// Get default data directory for application data (database, vault, etc.)
-/// 获取应用数据的默认数据目录（数据库、vault 等）
-///
-/// Uses the AppDirsPort adapter to resolve the data directory.
-/// 使用 AppDirsPort 适配器解析数据目录。
+/// ```
+/// let dirs = get_default_app_dirs().expect("failed to get app dirs");
+/// // `dirs` contains platform-specific paths such as config, data, and cache roots
+/// assert!(!dirs.app_name.is_empty());
+/// ```
 fn get_default_app_dirs() -> WiringResult<uc_core::app_dirs::AppDirs> {
     let adapter = DirsAppDirsAdapter::new();
     adapter
@@ -475,12 +468,65 @@ struct DefaultPaths {
     settings_path: PathBuf,
 }
 
+/// Compute default application file-system paths from the given configuration.
+///
+/// The returned paths combine platform-specific application directories with any
+/// explicit overrides present in `config`, producing concrete locations for:
+/// - app_data_root: base application data directory
+/// - db_path: path to the SQLite database file
+/// - vault_dir: directory for vault/key material
+/// - settings_path: path to the settings file
+///
+/// # Examples
+///
+/// ```
+/// let cfg = AppConfig::default();
+/// let paths = derive_default_paths(&cfg).expect("derive default paths");
+/// assert!(!paths.app_data_root.as_os_str().is_empty());
+/// assert!(!paths.settings_path.as_os_str().is_empty());
+/// ```
 fn derive_default_paths(config: &AppConfig) -> WiringResult<DefaultPaths> {
     let app_dirs = get_default_app_dirs()?;
 
     derive_default_paths_from_app_dirs(&app_dirs, config)
 }
 
+/// Derives concrete filesystem paths (database, vault, settings, and app data root)
+/// from platform `AppDirs`, applying any overrides present in `AppConfig`.
+///
+/// If `config.database_path` is empty the default database path from `AppDirs` is used;
+/// otherwise `config.database_path` is returned. If `config.vault_key_path` is empty
+/// the default vault directory from `AppDirs` is used; otherwise the parent directory
+/// of `config.vault_key_path` is used as the vault directory.
+///
+/// # Parameters
+///
+/// - `app_dirs`: Platform-specific base directories to derive defaults from.
+/// - `config`: Application configuration that may override the default database path
+///   and vault key path.
+///
+/// # Returns
+///
+/// `DefaultPaths` containing:
+/// - `app_data_root`: the application data root from `AppDirs`.
+/// - `db_path`: the resolved database file path.
+/// - `vault_dir`: the resolved vault directory.
+/// - `settings_path`: the resolved settings file path.
+///
+/// # Examples
+///
+/// ```
+/// use uc_core::app_dirs::AppDirs;
+/// use uniclipboard_wiring::{AppConfig, derive_default_paths_from_app_dirs};
+///
+/// // Assuming `AppDirs` and `AppConfig` implement `Default` in tests/setup.
+/// let app_dirs = AppDirs::default();
+/// let config = AppConfig::default();
+/// let paths = derive_default_paths_from_app_dirs(&app_dirs, &config).unwrap();
+/// // Basic sanity check: returned paths are populated.
+/// assert!(!paths.app_data_root.as_os_str().is_empty());
+/// assert!(!paths.settings_path.as_os_str().is_empty());
+/// ```
 fn derive_default_paths_from_app_dirs(
     app_dirs: &uc_core::app_dirs::AppDirs,
     config: &AppConfig,
@@ -513,24 +559,34 @@ fn derive_default_paths_from_app_dirs(
     })
 }
 
-/// # Errors / 错误
+/// Wires and constructs the application's dependency graph, returning a ready-to-use AppDeps.
 ///
-/// Returns `WiringError` if dependency construction fails.
-/// 如果依赖构造失败，返回 `WiringError`。
+/// On success returns an AppDeps value with all infrastructure and platform components
+/// (database pool, repositories, security, platform adapters, materializers, settings, etc.)
+/// wrapped for shared use.
 ///
-/// # Phase 3 Implementation Plan / 第3阶段实现计划
+/// # Errors
 ///
-/// When implementing Phase 3, this function will:
-/// 实现第3阶段时，此函数将：
+/// Returns a `WiringError` when any required dependency cannot be constructed, for example:
+/// - `WiringError::DatabaseInit` for database/pool initialization failures
+/// - `WiringError::KeyringInit` for keyring creation failures
+/// - `WiringError::ClipboardInit` for clipboard adapter failures
+/// - `WiringError::NetworkInit` for network adapter failures
+/// - `WiringError::BlobStorageInit` for blob store initialization failures
+/// - `WiringError::SettingsInit` for settings repository failures
+/// - `WiringError::ConfigInit` for application directory / configuration discovery failures
 ///
-/// 1. Create infrastructure implementations (database repos, encryption, etc.)
-///    创建基础设施实现（数据库仓库、加密等）
-/// 2. Create platform adapters (clipboard, network, UI, etc.)
-///    创建平台适配器（剪贴板、网络、UI等）
-/// 3. Wrap all in `Arc<dyn Trait>` for shared ownership
-///    将所有内容包装在 `Arc<dyn Trait>` 中以实现共享所有权
-/// 4. Construct `AppDeps` with all dependencies
-///    使用所有依赖构造 `AppDeps`
+/// # Examples
+///
+/// ```
+/// // The function will either return fully wired dependencies or a WiringError describing
+/// // what failed during construction.
+/// let config = AppConfig::default();
+/// match wire_dependencies(&config) {
+///     Ok(_deps) => { /* ready to run the application */ }
+///     Err(_err) => { /* handle initialization failure */ }
+/// }
+/// ```
 pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池

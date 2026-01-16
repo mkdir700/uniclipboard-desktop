@@ -61,7 +61,19 @@ impl PlatformCommandExecutorPort for SimplePlatformCommandExecutor {
     }
 }
 
-/// Main entry point
+/// Starts the application.
+///
+/// Initializes tracing, attempts to load `config.toml` (development mode), falls back to system
+/// defaults using the platform app-data directory when no config file is present, and then runs
+/// the Tauri application. On fatal initialization failures (tracing or app-data resolution) the
+/// process exits with code 1.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Running the application (example; do not run in doctests)
+/// crate::main();
+/// ```
 fn main() {
     // Initialize tracing subscriber FIRST (before any logging)
     // This sets up the tracing infrastructure and enables log-tracing bridge
