@@ -26,7 +26,7 @@ uc-infra = { path = "crates/uc-infra" }
 uc-tauri = { path = "crates/uc-tauri" }
 
 # ===== Tauri 相关依赖 =====
-tauri = { version = "2", features = ["macos-private-api"] } # Tauri 框架核心库
+tauri = { version = "2", features = [] } # Tauri 框架核心库
 tauri-plugin-opener = "2"                # 用于打开文件或URL的Tauri插件
 tauri-plugin-devtools = "2.0.0"          # Tauri开发工具插件
 tauri-plugin-decorum = "1"               # Windows窗口管理插件，提供原生Windows窗口行为
@@ -109,13 +109,10 @@ integration_tests = []
 network_tests = []
 hardware_tests = []
 testing = []
-cargo-clippy = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
 objc = "0.2"
-objc2 = "0.6"
-objc2-app-kit = "0.3"
-objc2-foundation = { version = "0.3", features = ["objc2-core-foundation"] }
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = { version = "5.4.0" }
