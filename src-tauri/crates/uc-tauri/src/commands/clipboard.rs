@@ -5,6 +5,7 @@ use crate::bootstrap::AppRuntime;
 use crate::models::{ClipboardEntryDetail, ClipboardEntryProjection};
 use std::sync::Arc;
 use tauri::State;
+use tracing::{info_span, Instrument};
 
 /// Get clipboard history entries (preview only)
 /// 获取剪贴板历史条目（仅预览）
@@ -12,87 +13,111 @@ use tauri::State;
 pub async fn get_clipboard_entries(
     runtime: State<'_, Arc<AppRuntime>>,
     limit: Option<usize>,
+    offset: Option<usize>,
 ) -> Result<Vec<ClipboardEntryProjection>, String> {
     let resolved_limit = limit.unwrap_or(50);
+    let resolved_offset = offset.unwrap_or(0);
     let device_id = runtime.deps.device_identity.current_device_id();
 
-    log::info!(
-        "Getting clipboard entries: device_id={}, limit={}",
-        device_id,
-        resolved_limit
+    let span = info_span!(
+        "command.clipboard.get_entries",
+        device_id = %device_id,
+        limit = resolved_limit,
+        offset = resolved_offset,
     );
 
-    let uc = runtime.usecases().list_clipboard_entries();
-    let entries = uc.execute(resolved_limit, 0).await.map_err(|e| {
-        log::error!("Failed to get clipboard entries: {}", e);
-        e.to_string()
-    })?;
+    async move {
+        let uc = runtime.usecases().list_clipboard_entries();
+        let entries = uc.execute(resolved_limit, resolved_offset).await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to get clipboard entries");
+            e.to_string()
+        })?;
 
-    let mut projections = Vec::with_capacity(entries.len());
+        let mut projections = Vec::with_capacity(entries.len());
 
-    for entry in entries {
-        let captured_at = entry.created_at_ms;
+        for entry in entries {
+            let captured_at = entry.created_at_ms;
 
-        // Get preview from inline_data (already truncated if large)
-        let (preview, has_detail) = if let Ok(Some(selection)) = runtime
-            .deps
-            .selection_repo
-            .get_selection(&entry.entry_id)
-            .await
-        {
-            if let Ok(Some(rep)) = runtime
+            // Get selection and representation in one pass
+            let content_type = match runtime
                 .deps
-                .representation_repo
-                .get_representation(
-                    &entry.event_id,
-                    &selection.selection.preview_rep_id,
-                )
+                .selection_repo
+                .get_selection(&entry.entry_id)
                 .await
             {
-                let preview_text = if let Some(data) = rep.inline_data {
-                    String::from_utf8_lossy(&data).trim().to_string()
+                Ok(Some(selection)) => {
+                    match runtime
+                        .deps
+                        .representation_repo
+                        .get_representation(&entry.event_id, &selection.selection.preview_rep_id)
+                        .await
+                    {
+                        Ok(Some(rep)) => rep
+                            .mime_type
+                            .as_ref()
+                            .map(|mt| mt.as_str().to_string())
+                            .unwrap_or_else(|| "unknown".to_string()),
+                        _ => "unknown".to_string(),
+                    }
+                }
+                _ => "unknown".to_string(),
+            };
+
+            let (preview, has_detail) = if let Ok(Some(selection)) = runtime
+                .deps
+                .selection_repo
+                .get_selection(&entry.entry_id)
+                .await
+            {
+                if let Ok(Some(rep)) = runtime
+                    .deps
+                    .representation_repo
+                    .get_representation(&entry.event_id, &selection.selection.preview_rep_id)
+                    .await
+                {
+                    let preview_text = if let Some(data) = rep.inline_data {
+                        String::from_utf8_lossy(&data).trim().to_string()
+                    } else {
+                        format!("Image ({} bytes)", rep.size_bytes)
+                    };
+                    let has_detail = rep.blob_id.is_some();
+                    (preview_text, has_detail)
                 } else {
-                    // Large image with no inline: show placeholder
-                    format!("Image ({} bytes)", rep.size_bytes)
-                };
-
-                // has_detail = blob exists (content was truncated or is blob-only)
-                let has_detail = rep.blob_id.is_some();
-
-                (preview_text, has_detail)
+                    (
+                        entry
+                            .title
+                            .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
+                        false,
+                    )
+                }
             } else {
                 (
-                    entry.title.unwrap_or_else(|| {
-                        format!("Entry ({} bytes)", entry.total_size)
-                    }),
-                    false
+                    entry
+                        .title
+                        .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
+                    false,
                 )
-            }
-        } else {
-            (
-                entry.title.unwrap_or_else(|| {
-                    format!("Entry ({} bytes)", entry.total_size)
-                }),
-                false
-            )
-        };
+            };
 
-        projections.push(ClipboardEntryProjection {
-            id: entry.entry_id.to_string(),
-            preview,
-            has_detail,
-            size_bytes: entry.total_size,
-            captured_at,
-            content_type: "clipboard".to_string(),
-            is_encrypted: false,
-            is_favorited: false,
-            updated_at: captured_at,
-            active_time: captured_at,
-        });
+            projections.push(ClipboardEntryProjection {
+                id: entry.entry_id.to_string(),
+                preview,
+                has_detail,
+                size_bytes: entry.total_size,
+                captured_at,
+                content_type,
+                is_encrypted: false,
+                is_favorited: false,
+                updated_at: captured_at,
+                active_time: captured_at,
+            });
+        }
+
+        tracing::info!(count = projections.len(), "Retrieved clipboard entries");
+        Ok(projections)
     }
-
-    log::info!("Retrieved {} clipboard entries", projections.len());
-    Ok(projections)
+    .instrument(span)
+    .await
 }
 
 /// Deletes a clipboard entry identified by `entry_id`.
@@ -120,24 +145,25 @@ pub async fn delete_clipboard_entry(
 ) -> Result<(), String> {
     let device_id = runtime.deps.device_identity.current_device_id();
 
-    log::info!(
-        "Deleting clipboard entry: device_id={}, entry_id={}",
-        device_id,
-        entry_id
+    let span = info_span!(
+        "command.clipboard.delete_entry",
+        device_id = %device_id,
+        entry_id = %entry_id,
     );
 
-    // Parse entry_id (From trait always succeeds)
-    let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
+    async move {
+        let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
+        let use_case = runtime.usecases().delete_clipboard_entry();
+        use_case.execute(&parsed_id).await.map_err(|e| {
+            tracing::error!(error = %e, entry_id = %entry_id, "Failed to delete entry");
+            e.to_string()
+        })?;
 
-    // Execute use case
-    let use_case = runtime.usecases().delete_clipboard_entry();
-    use_case.execute(&parsed_id).await.map_err(|e| {
-        log::error!("Failed to delete entry {}: {}", entry_id, e);
-        e.to_string()
-    })?;
-
-    log::info!("Deleted clipboard entry: {}", entry_id);
-    Ok(())
+        tracing::info!(entry_id = %entry_id, "Deleted clipboard entry");
+        Ok(())
+    }
+    .instrument(span)
+    .await
 }
 
 /// Get full clipboard entry detail
@@ -147,29 +173,34 @@ pub async fn get_clipboard_entry_detail(
     runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
 ) -> Result<ClipboardEntryDetail, String> {
-    log::info!("Getting clipboard entry detail: entry_id={}", entry_id);
+    let span = info_span!(
+        "command.clipboard.get_entry_detail",
+        entry_id = %entry_id,
+    );
 
-    // Parse entry_id
-    let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
+    async move {
+        let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
+        let use_case = runtime.usecases().get_entry_detail();
+        let result = use_case.execute(&parsed_id).await.map_err(|e| {
+            tracing::error!(error = %e, entry_id = %entry_id, "Failed to get entry detail");
+            e.to_string()
+        })?;
 
-    // Execute use case - returns domain model EntryDetailResult
-    let use_case = runtime.usecases().get_entry_detail();
-    let result = use_case.execute(&parsed_id).await.map_err(|e| {
-        log::error!("Failed to get entry detail {}: {}", entry_id, e);
-        e.to_string()
-    })?;
+        let detail = ClipboardEntryDetail {
+            id: result.id,
+            content: result.content,
+            size_bytes: result.size_bytes,
+            content_type: result
+                .mime_type
+                .unwrap_or_else(|| "unknown".to_string()),
+            is_favorited: false,
+            updated_at: result.created_at_ms,
+            active_time: result.created_at_ms,
+        };
 
-    // Convert domain model to DTO (Command layer responsibility)
-    let detail = ClipboardEntryDetail {
-        id: result.id,
-        content: result.content,
-        size_bytes: result.size_bytes,
-        content_type: "clipboard".to_string(),
-        is_favorited: false,
-        updated_at: result.created_at_ms,
-        active_time: result.created_at_ms,
-    };
-
-    log::info!("Retrieved clipboard entry detail: {}", entry_id);
-    Ok(detail)
+        tracing::info!(entry_id = %entry_id, "Retrieved clipboard entry detail");
+        Ok(detail)
+    }
+    .instrument(span)
+    .await
 }

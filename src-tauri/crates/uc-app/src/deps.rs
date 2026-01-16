@@ -26,7 +26,6 @@ pub struct AppDeps {
     pub clipboard: Arc<dyn PlatformClipboardPort>,
     pub clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     pub clipboard_event_repo: Arc<dyn ClipboardEventWriterPort>,
-    pub clipboard_event_reader: Arc<dyn uc_core::ports::ClipboardEventRepositoryPort>,
     pub representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
     pub representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,
     pub selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,

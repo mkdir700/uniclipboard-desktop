@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::sync::Arc;
 
 use uc_core::{
+    clipboard::MimeType,
     ids::EntryId,
     ports::{
         BlobStorePort, ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
@@ -20,11 +21,13 @@ pub struct GetEntryDetailUseCase {
 
 /// Detail result from GetEntryDetailUseCase
 /// GetEntryDetailUseCase 返回的详情结果
+#[derive(Debug)]
 pub struct EntryDetailResult {
     pub id: String,
     pub content: String,
     pub size_bytes: i64,
     pub created_at_ms: i64,
+    pub mime_type: Option<String>,
 }
 
 impl GetEntryDetailUseCase {
@@ -43,34 +46,34 @@ impl GetEntryDetailUseCase {
     }
 
     pub async fn execute(&self, entry_id: &EntryId) -> Result<EntryDetailResult> {
-        // Get entry
         let entry = self
             .entry_repo
             .get_entry(entry_id)
             .await?
             .ok_or(anyhow::anyhow!("Entry not found"))?;
 
-        // Get selection
         let selection = self
             .selection_repo
             .get_selection(entry_id)
             .await?
             .ok_or(anyhow::anyhow!("Selection not found"))?;
 
-        // Get preview representation
         let preview_rep = self
             .representation_repo
             .get_representation(&entry.event_id, &selection.selection.preview_rep_id)
             .await?
             .ok_or(anyhow::anyhow!("Preview representation not found"))?;
 
-        // Determine if we need to read from blob
-        let full_content = if let Some(blob_id) = preview_rep.blob_id {
-            // Read from blob
-            let blob_content = self.blob_store.get(&blob_id).await?;
+        if !Self::is_text_mime(&preview_rep.mime_type) {
+            return Err(anyhow::anyhow!("Entry is not text content"));
+        }
+
+        let mime_type_str = preview_rep.mime_type.as_ref().map(|mt| mt.as_str());
+
+        let full_content = if let Some(blob_id) = &preview_rep.blob_id {
+            let blob_content = self.blob_store.get(blob_id).await?;
             String::from_utf8_lossy(&blob_content).to_string()
         } else {
-            // Use inline data
             String::from_utf8_lossy(
                 preview_rep
                     .inline_data
@@ -85,6 +88,20 @@ impl GetEntryDetailUseCase {
             content: full_content,
             size_bytes: entry.total_size,
             created_at_ms: entry.created_at_ms,
+            mime_type: mime_type_str.map(String::from),
         })
+    }
+
+    fn is_text_mime(mime: &Option<MimeType>) -> bool {
+        match mime {
+            None => false,
+            Some(mt) => {
+                let s = mt.as_str();
+                s.starts_with("text/")
+                    || s.contains("json")
+                    || s.contains("xml")
+                    || s.contains("javascript")
+            }
+        }
     }
 }

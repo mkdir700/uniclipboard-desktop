@@ -147,7 +147,6 @@ struct InfraLayer {
     #[allow(dead_code)]
     clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     clipboard_event_repo: Arc<dyn ClipboardEventWriterPort>,
-    clipboard_event_reader: Arc<dyn uc_core::ports::ClipboardEventRepositoryPort>,
     representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
     selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
 
@@ -274,10 +273,8 @@ fn create_infra_layer(
         event_row_mapper,
         RepresentationRowMapper,
     );
-    // Wrap in Arc first, then clone the Arc for different trait object conversions
-    let event_repo_arc = Arc::new(clipboard_event_repo_impl);
-    let clipboard_event_repo: Arc<dyn ClipboardEventWriterPort> = event_repo_arc.clone();
-    let clipboard_event_reader: Arc<dyn uc_core::ports::ClipboardEventRepositoryPort> = event_repo_arc;
+    let clipboard_event_repo: Arc<dyn ClipboardEventWriterPort> =
+        Arc::new(clipboard_event_repo_impl);
 
     let rep_repo = DieselClipboardRepresentationRepository::new(Arc::clone(&db_executor));
     let representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort> = Arc::new(rep_repo);
@@ -341,7 +338,6 @@ fn create_infra_layer(
     let infra = InfraLayer {
         clipboard_entry_repo,
         clipboard_event_repo,
-        clipboard_event_reader,
         representation_repo,
         selection_repo,
         device_repo,
@@ -572,7 +568,6 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
         clipboard: platform.clipboard,
         clipboard_entry_repo: infra.clipboard_entry_repo,
         clipboard_event_repo: infra.clipboard_event_repo,
-        clipboard_event_reader: infra.clipboard_event_reader,
         representation_repo: infra.representation_repo,
         representation_materializer: platform.representation_materializer,
         selection_repo: infra.selection_repo,

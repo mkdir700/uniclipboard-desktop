@@ -199,7 +199,7 @@ export async function getClipboardItem(
  */
 export async function getClipboardEntryDetail(id: string): Promise<ClipboardEntryDetail> {
   try {
-    return await invoke('get_clipboard_entry_detail', { entryId: id })
+    return await invoke('get_clipboard_entry_detail', { entry_id: id })
   } catch (error) {
     console.error('Failed to get clipboard entry detail:', error)
     throw error
