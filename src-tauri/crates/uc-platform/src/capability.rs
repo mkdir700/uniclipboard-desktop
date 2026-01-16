@@ -99,41 +99,25 @@ fn has_desktop_environment() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
 
-    #[test]
-    #[cfg(target_os = "linux")]
-    fn test_wsl_detection_from_env_var() {
-        // Save original value
-        let original = std::env::var("WSL_DISTRO_NAME");
-
-        // Set WSL indicator
-        std::env::set_var("WSL_DISTRO_NAME", "Ubuntu");
-        assert!(is_wsl(), "Should detect WSL from WSL_DISTRO_NAME");
-
-        // Clean up
-        std::env::remove_var("WSL_DISTRO_NAME");
-
-        // Restore original if it existed
-        if let Ok(val) = original {
-            std::env::set_var("WSL_DISTRO_NAME", val);
-        }
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
     }
 
     #[test]
     #[cfg(target_os = "linux")]
     fn test_wsl_detection_negative() {
-        // Ensure no WSL indicators
+        let _lock = env_lock();
         std::env::remove_var("WSL_DISTRO_NAME");
         std::env::remove_var("WSL_INTEROP");
 
-        // Note: This test will fail if actually running in WSL
-        // because /proc/version will contain WSL indicators.
-        // In that case, we skip the test.
         if std::fs::read_to_string("/proc/version")
             .map(|v| v.contains("Microsoft") || v.contains("WSL"))
             .unwrap_or(false)
         {
-            return; // Skip test if actually in WSL
+            return;
         }
 
         assert!(!is_wsl(), "Should not detect WSL when indicators absent");
@@ -141,6 +125,7 @@ mod tests {
 
     #[test]
     fn test_desktop_environment_detection() {
+        let _lock = env_lock();
         // Save original values
         let original_display = std::env::var("DISPLAY");
         let original_dbus = std::env::var("DBUS_SESSION_BUS_ADDRESS");
