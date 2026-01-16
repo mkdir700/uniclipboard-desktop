@@ -3,7 +3,9 @@ use std::path::PathBuf;
 
 #[test]
 fn identifier_matches_uniclipboard() {
-    let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
+    let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../")
+        .join("tauri.conf.json");
     let content = fs::read_to_string(&config_path)
         .unwrap_or_else(|e| panic!("Failed to read {:?}: {}", config_path, e));
     let json: serde_json::Value = serde_json::from_str(&content)
@@ -14,5 +16,5 @@ fn identifier_matches_uniclipboard() {
         .and_then(|value| value.as_str())
         .unwrap_or("<missing>");
 
-    assert_eq!(identifier, "uniclipboard");
+    assert_eq!(identifier, "com.uniclipboard.app");
 }
