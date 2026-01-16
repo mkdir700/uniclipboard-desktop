@@ -191,54 +191,10 @@ fn run_app(config: AppConfig) {
             .build(),
         )
         .setup(move |_app_handle| {
-            // Create the main window
-            // Use dark background color to prevent white flash on startup
-            // Color matches bg-gray-950 (#09090b) from Tailwind CSS
-            // let win_builder = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::default())
-            //     .title("UniClipboard")
-            //     .inner_size(800.0, 600.0)
-            //     .min_inner_size(800.0, 600.0);
-
-            // #[cfg(target_os = "macos")]
-            // let win_builder = win_builder.decorations(false);
-
-            // #[cfg(target_os = "windows")]
-            // let win_builder = win_builder.decorations(false).shadow(true);
-
-            // Apply silent start setting
-            // let win_builder = if config.silent_start {
-            //     win_builder.visible(false)
-            // } else {
-            //     win_builder
-            // };
-
-            // let window = match win_builder.build() {
-            //     Ok(window) => window,
-            //     Err(e) => {
-            //         log::error!("Failed to build main window: {}", e);
-            //         return Err(Box::new(e));
-            //     }
-            // };
-
-            // #[cfg(target_os = "macos")]
-            // fix_webview_flash(&window);
-
-            // Apply macOS rounded corners immediately after window creation
-            // This prevents the "white screen without rounded corners" flash
-            // #[cfg(target_os = "macos")]
-            // if let Err(e) = plugins::apply_modern_window_style_immediately(
-            //     &window,
-            //     MAC_WINDOW_CORNER_RADIUS,
-            //     MAC_WINDOW_OFFSET_X,
-            //     MAC_WINDOW_OFFSET_Y,
-            // ) {
-            //     log::warn!("Failed to apply rounded corners immediately: {}", e);
-            //     // Don't fail setup - frontend will retry via TitleBar
-            // }
-
             // Start the platform runtime in background
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
+
             tauri::async_runtime::spawn(async move {
                 log::info!("Platform runtime task started");
 
@@ -278,8 +234,6 @@ fn run_app(config: AppConfig) {
 
             Ok(())
         })
-        // Register Tauri command handlers
-        // Commands are defined in uc-tauri crate and need to be referenced by full path
         .invoke_handler(generate_invoke_handler!())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
