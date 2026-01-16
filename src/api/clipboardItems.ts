@@ -91,7 +91,6 @@ export interface ClipboardItem {
 
 export interface ClipboardItemResponse {
   id: string
-  device_id: string
   is_downloaded: boolean
   is_favorited: boolean
   created_at: number
@@ -148,7 +147,6 @@ export async function getClipboardItems(
     // when backend provides accurate content_type values
     return entries.map(entry => ({
       id: entry.id,
-      device_id: '', // Not in projection yet, use empty string
       is_downloaded: true, // Default to true for local entries
       is_favorited: entry.is_favorited,
       created_at: entry.captured_at,
