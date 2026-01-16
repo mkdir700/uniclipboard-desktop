@@ -6,6 +6,8 @@ use std::sync::Arc;
 
 use dirs;
 use log::error;
+use tauri::WebviewUrl;
+use tauri::WebviewWindowBuilder;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -190,51 +192,51 @@ fn run_app(config: AppConfig) {
             })
             .build(),
         )
-        .setup(move |_app_handle| {
+        .setup(move |app_handle| {
             // Create the main window
             // Use dark background color to prevent white flash on startup
             // Color matches bg-gray-950 (#09090b) from Tailwind CSS
-            // let win_builder = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::default())
-            //     .title("UniClipboard")
-            //     .inner_size(800.0, 600.0)
-            //     .min_inner_size(800.0, 600.0);
+            let win_builder = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::default())
+                .title("UniClipboard")
+                .inner_size(800.0, 600.0)
+                .min_inner_size(800.0, 600.0);
 
-            // #[cfg(target_os = "macos")]
-            // let win_builder = win_builder.decorations(false);
+            #[cfg(target_os = "macos")]
+            let win_builder = win_builder.decorations(false);
 
-            // #[cfg(target_os = "windows")]
-            // let win_builder = win_builder.decorations(false).shadow(true);
+            #[cfg(target_os = "windows")]
+            let win_builder = win_builder.decorations(false).shadow(true);
 
             // Apply silent start setting
-            // let win_builder = if config.silent_start {
-            //     win_builder.visible(false)
-            // } else {
-            //     win_builder
-            // };
+            let win_builder = if config.silent_start {
+                win_builder.visible(false)
+            } else {
+                win_builder
+            };
 
-            // let window = match win_builder.build() {
-            //     Ok(window) => window,
-            //     Err(e) => {
-            //         log::error!("Failed to build main window: {}", e);
-            //         return Err(Box::new(e));
-            //     }
-            // };
+            let window = match win_builder.build() {
+                Ok(window) => window,
+                Err(e) => {
+                    log::error!("Failed to build main window: {}", e);
+                    return Err(Box::new(e));
+                }
+            };
 
-            // #[cfg(target_os = "macos")]
-            // fix_webview_flash(&window);
+            #[cfg(target_os = "macos")]
+            plugins::mac_rounded_corners::fix_webview_flash(&window);
 
             // Apply macOS rounded corners immediately after window creation
             // This prevents the "white screen without rounded corners" flash
-            // #[cfg(target_os = "macos")]
-            // if let Err(e) = plugins::apply_modern_window_style_immediately(
-            //     &window,
-            //     MAC_WINDOW_CORNER_RADIUS,
-            //     MAC_WINDOW_OFFSET_X,
-            //     MAC_WINDOW_OFFSET_Y,
-            // ) {
-            //     log::warn!("Failed to apply rounded corners immediately: {}", e);
-            //     // Don't fail setup - frontend will retry via TitleBar
-            // }
+            #[cfg(target_os = "macos")]
+            if let Err(e) = plugins::mac_rounded_corners::apply_modern_window_style_immediately(
+                &window,
+                plugins::mac_rounded_corners::MAC_WINDOW_CORNER_RADIUS,
+                plugins::mac_rounded_corners::MAC_WINDOW_OFFSET_X,
+                plugins::mac_rounded_corners::MAC_WINDOW_OFFSET_Y,
+            ) {
+                log::warn!("Failed to apply rounded corners immediately: {}", e);
+                // Don't fail setup - frontend will retry via TitleBar
+            }
 
             // Start the platform runtime in background
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();

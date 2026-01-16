@@ -15,6 +15,15 @@ use objc::{msg_send, sel, sel_impl};
 #[cfg(target_os = "macos")]
 type ObjcId = *mut objc::runtime::Object;
 
+/// macOS window corner radius for modern style
+pub const MAC_WINDOW_CORNER_RADIUS: f64 = 12.0;
+
+/// macOS window traffic lights offset X (pixels from left)
+pub const MAC_WINDOW_OFFSET_X: f64 = 0.0;
+
+/// macOS window traffic lights offset Y (pixels from top)
+pub const MAC_WINDOW_OFFSET_Y: f64 = 0.0;
+
 /// Configuration for Traffic Lights positioning
 pub struct TrafficLightsConfig {
     /// Offset in pixels from default position (positive = right, negative = left)
@@ -211,4 +220,97 @@ unsafe fn position_traffic_lights(ns_window: ObjcId, offset_x: f64, offset_y: f6
             NSRect::new(NSPoint::new(new_x + 40.0, new_y), frame.size);
         let _: () = msg_send![zoom_button, setFrame: new_frame];
     }
+}
+
+/// Fixes the webview flash on startup by setting the webview background color
+/// to match the dark theme, preventing white flash before React/Tailwind loads.
+#[cfg(target_os = "macos")]
+pub fn fix_webview_flash<R: Runtime>(window: &WebviewWindow<R>) {
+    use log::warn;
+
+    window
+        .with_webview(|webview| {
+            #[cfg(target_os = "macos")]
+            unsafe {
+                let ns_window = webview.ns_window() as ObjcId;
+
+                // Set the webview background to transparent to prevent flash
+                let _: () = msg_send![ns_window, setOpaque: Bool::NO];
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = webview;
+            }
+        })
+        .map_err(|e| warn!("Failed to fix webview flash: {}", e))
+        .ok();
+}
+
+/// Applies modern window style immediately after window creation.
+/// This is called during setup to prevent the "white screen without rounded corners" flash.
+#[cfg(target_os = "macos")]
+pub fn apply_modern_window_style_immediately<R: Runtime>(
+    window: &WebviewWindow<R>,
+    corner_radius: f64,
+    offset_x: f64,
+    offset_y: f64,
+) -> Result<(), String> {
+    window
+        .with_webview(move |webview| {
+            #[cfg(target_os = "macos")]
+            unsafe {
+                let ns_window = webview.ns_window() as ObjcId;
+
+                let mut style_mask: NSWindowStyleMask = msg_send![ns_window, styleMask];
+
+                style_mask |= NSWindowStyleMask::FullSizeContentView;
+                style_mask |= NSWindowStyleMask::Titled;
+                style_mask |= NSWindowStyleMask::Closable;
+                style_mask |= NSWindowStyleMask::Miniaturizable;
+                style_mask |= NSWindowStyleMask::Resizable;
+
+                let _: () = msg_send![ns_window, setStyleMask: style_mask];
+                let _: () = msg_send![ns_window, setTitlebarAppearsTransparent: Bool::YES];
+                let _: () = msg_send![
+                    ns_window,
+                    setTitleVisibility: NSWindowTitleVisibility::Hidden
+                ];
+                let _: () = msg_send![ns_window, setHasShadow: Bool::YES];
+                let _: () = msg_send![ns_window, setOpaque: Bool::NO];
+
+                let content_view: ObjcId = msg_send![ns_window, contentView];
+                let _: () = msg_send![content_view, setWantsLayer: Bool::YES];
+
+                let layer: ObjcId = msg_send![content_view, layer];
+                if !layer.is_null() {
+                    let _: () = msg_send![layer, setCornerRadius: corner_radius];
+                    let _: () = msg_send![layer, setMasksToBounds: Bool::YES];
+                }
+
+                position_traffic_lights(ns_window, offset_x, offset_y);
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (corner_radius, offset_x, offset_y);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Stub implementations for non-macOS platforms
+#[cfg(not(target_os = "macos"))]
+pub fn fix_webview_flash<R: Runtime>(_window: &WebviewWindow<R>) {
+    // No-op on non-macOS platforms
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn apply_modern_window_style_immediately<R: Runtime>(
+    _window: &WebviewWindow<R>,
+    _corner_radius: f64,
+    _offset_x: f64,
+    _offset_y: f64,
+) -> Result<(), String> {
+    Ok(())
 }
