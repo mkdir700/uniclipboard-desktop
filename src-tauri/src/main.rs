@@ -238,6 +238,10 @@ fn run_app(config: AppConfig) {
                 // Don't fail setup - frontend will retry via TitleBar
             }
 
+            // Explicitly mark window as intentionally unused on non-macOS platforms
+            #[cfg(not(target_os = "macos"))]
+            let _ = &window;
+
             // Start the platform runtime in background
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
