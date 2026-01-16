@@ -36,10 +36,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use uc_app::app_paths::AppPaths;
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ports::*;
+use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_infra::clipboard::ClipboardRepresentationMaterializer;
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -453,47 +455,62 @@ fn create_platform_layer(
 /// * `WiringResult<AppDeps>` - The wired dependencies on success / 成功时返回已连接的依赖
 ///
 
-/// Get default configuration directory for application data
-/// 获取应用数据的默认配置目录
-///
-/// Returns the system config directory with app-specific subdirectory.
-/// 返回系统配置目录的应用特定子目录。
-///
-/// Uses `dirs` crate to find platform-specific config directory:
-/// 使用 `dirs` crate 查找平台特定的配置目录：
-/// - macOS: `~/Library/Application Support/uniclipboard.dev-dev`
-/// - Linux: `~/.config/uniclipboard.dev-dev`
-/// - Windows: `%APPDATA%\uniclipboard.dev-dev`
-fn get_default_config_dir() -> WiringResult<PathBuf> {
-    let base_dir = dirs::config_dir().ok_or_else(|| {
-        WiringError::ConfigInit("Could not find system config directory".to_string())
-    })?;
-
-    // Use development-specific directory name to avoid conflicts with production
-    // 使用开发特定的目录名称以避免与生产环境冲突
-    let config_dir = base_dir.join("uniclipboard.dev-dev");
-
-    Ok(config_dir)
-}
-
 /// Get default data directory for application data (database, vault, etc.)
 /// 获取应用数据的默认数据目录（数据库、vault 等）
 ///
-/// Uses `dirs` crate to find platform-specific data directory:
-/// 使用 `dirs` crate 查找平台特定的数据目录：
-/// - macOS: `~/Library/Application Support/uniclipboard`
-/// - Linux: `~/.local/share/uniclipboard`
-/// - Windows: `%LOCALAPPDATA%\uniclipboard`
-fn get_default_data_dir() -> WiringResult<PathBuf> {
-    let base_dir = dirs::data_local_dir().ok_or_else(|| {
-        WiringError::ConfigInit("Could not find system data directory".to_string())
-    })?;
+/// Uses the AppDirsPort adapter to resolve the data directory.
+/// 使用 AppDirsPort 适配器解析数据目录。
+fn get_default_app_dirs() -> WiringResult<uc_core::app_dirs::AppDirs> {
+    let adapter = DirsAppDirsAdapter::new();
+    adapter
+        .get_app_dirs()
+        .map_err(|e| WiringError::ConfigInit(e.to_string()))
+}
 
-    // Use production directory name
-    // 使用生产环境目录名称
-    let data_dir = base_dir.join("uniclipboard");
+#[derive(Debug, Clone)]
+struct DefaultPaths {
+    app_data_root: PathBuf,
+    db_path: PathBuf,
+    vault_dir: PathBuf,
+    settings_path: PathBuf,
+}
 
-    Ok(data_dir)
+fn derive_default_paths(config: &AppConfig) -> WiringResult<DefaultPaths> {
+    let app_dirs = get_default_app_dirs()?;
+
+    derive_default_paths_from_app_dirs(&app_dirs, config)
+}
+
+fn derive_default_paths_from_app_dirs(
+    app_dirs: &uc_core::app_dirs::AppDirs,
+    config: &AppConfig,
+) -> WiringResult<DefaultPaths> {
+    let base_paths = AppPaths::from_app_dirs(app_dirs);
+
+    let db_path = if config.database_path.as_os_str().is_empty() {
+        base_paths.db_path
+    } else {
+        config.database_path.clone()
+    };
+
+    let vault_dir = if config.vault_key_path.as_os_str().is_empty() {
+        base_paths.vault_dir
+    } else {
+        config
+            .vault_key_path
+            .parent()
+            .unwrap_or(&config.vault_key_path)
+            .to_path_buf()
+    };
+
+    let settings_path = base_paths.settings_path;
+
+    Ok(DefaultPaths {
+        app_data_root: app_dirs.app_data_root.clone(),
+        db_path,
+        vault_dir,
+        settings_path,
+    })
 }
 
 /// # Errors / 错误
@@ -520,12 +537,9 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     //
     // Defensive: Use system default if database_path is empty
     // 防御性编程：如果 database_path 为空，使用系统默认值
-    let db_path = if config.database_path.as_os_str().is_empty() {
-        let data_dir = get_default_data_dir()?;
-        data_dir.join("uniclipboard.db")
-    } else {
-        config.database_path.clone()
-    };
+    let paths = derive_default_paths(config)?;
+
+    let db_path = paths.db_path;
 
     let db_pool = create_db_pool(&db_path)?;
 
@@ -536,24 +550,14 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     // If config path is empty, use system config directory as fallback
     // 从配置创建 vault 路径（使用 vault_key_path 的父目录）
     // 如果配置路径为空，使用系统配置目录作为后备
-    let vault_path = if config.vault_key_path.as_os_str().is_empty() {
-        // Use system config directory as default
-        // 使用系统配置目录作为默认值
-        get_default_config_dir()?
-    } else {
-        config
-            .vault_key_path
-            .parent()
-            .unwrap_or(&config.vault_key_path)
-            .to_path_buf()
-    };
+    let vault_path = paths.vault_dir;
 
-    // Create settings path (use same directory as vault for now)
-    // 创建设置路径（目前使用与 vault 相同的目录）
-    let settings_path = vault_path.join("settings.json");
+    let settings_path = paths.settings_path;
 
-    let keyring = uc_platform::secure_storage::create_default_keyring()
-        .map_err(|e| WiringError::KeyringInit(e.to_string()))?;
+    let keyring = uc_platform::secure_storage::create_default_keyring_in_app_data_root(
+        paths.app_data_root.clone(),
+    )
+    .map_err(|e| WiringError::KeyringInit(e.to_string()))?;
 
     let infra = create_infra_layer(db_pool, &vault_path, &settings_path, keyring.clone())?;
 
@@ -899,13 +903,35 @@ The functionality is still validated in development mode when running the app wi
     }
 
     #[test]
-    fn test_get_default_data_dir_returns_expected_path() {
-        // Test that get_default_data_dir returns a valid path
-        // 测试 get_default_data_dir 返回有效路径
-        let result = get_default_data_dir();
+    fn test_get_default_app_dirs_returns_expected_path() {
+        // Test that get_default_app_dirs returns a valid path
+        // 测试 get_default_app_dirs 返回有效路径
+        let result = get_default_app_dirs();
 
         assert!(result.is_ok());
-        let path = result.unwrap();
-        assert!(path.ends_with("uniclipboard"));
+        let dirs = result.unwrap();
+        assert!(dirs.app_data_root.ends_with("uniclipboard"));
+    }
+
+    #[test]
+    fn derive_default_paths_from_empty_config_uses_single_app_data_root() {
+        let config = AppConfig::empty();
+
+        let paths = derive_default_paths(&config).expect("derive_default_paths failed");
+
+        assert!(paths.app_data_root.ends_with("uniclipboard"));
+        assert_eq!(paths.db_path, paths.app_data_root.join("uniclipboard.db"));
+        assert_eq!(paths.vault_dir, paths.app_data_root.join("vault"));
+        assert_eq!(paths.settings_path, paths.app_data_root.join("settings.json"));
+    }
+
+    #[test]
+    fn wiring_derives_paths_from_port_fact() {
+        let dirs = uc_core::app_dirs::AppDirs {
+            app_data_root: std::path::PathBuf::from("/tmp/uniclipboard"),
+        };
+        let paths = derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
+            .expect("derive_default_paths_from_app_dirs failed");
+        assert!(paths.db_path.ends_with("uniclipboard.db"));
     }
 }

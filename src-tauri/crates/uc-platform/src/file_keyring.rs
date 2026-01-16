@@ -22,7 +22,7 @@ fn build_filename(scope: &KeyScope) -> String {
 
 /// File-based keyring implementation.
 ///
-/// KEK material is stored as binary files in `~/.config/com.uniclipboard/`.
+/// KEK material is stored as binary files in `<app_data_root>/keyring/`.
 /// Each scope gets its own file: `kek:v1:<scope-identifier>.bin`
 ///
 /// # Security
@@ -36,25 +36,32 @@ pub struct FileBasedKeyring {
 }
 
 impl FileBasedKeyring {
+    /// Create a new FileBasedKeyring using the provided app data root directory.
+    ///
+    /// # Behavior / 行为
+    ///
+    /// - Stores KEK files under `<app_data_root>/keyring/`
+    /// - Ensures the directory exists
+    ///
+    /// - 将 KEK 文件存放在 `<app_data_root>/keyring/`
+    /// - 确保目录存在
+    pub fn new_in_app_data_root(app_data_root: PathBuf) -> Result<Self, io::Error> {
+        let base_dir = app_data_root.join("keyring");
+        fs::create_dir_all(&base_dir)?;
+        Ok(Self { base_dir })
+    }
+
     /// Create a new FileBasedKeyring with the default base directory.
     ///
-    /// The default directory is `~/.config/com.uniclipboard/`.
+    /// # Note
     ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The config directory cannot be determined
-    /// - The base directory cannot be created
+    /// This constructor is kept for backwards compatibility in tests/tools.
+    /// Production code should prefer `new_in_app_data_root`.
     pub fn new() -> Result<Self, io::Error> {
-        let base_dir = dirs::config_dir()
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::NotFound, "Cannot determine config directory")
-            })?
-            .join("com.uniclipboard");
-
-        fs::create_dir_all(&base_dir)?;
-
-        Ok(Self { base_dir })
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "FileBasedKeyring requires app data root",
+        ))
     }
 
     /// Create a FileBasedKeyring with a custom base directory for testing.
@@ -229,6 +236,18 @@ mod tests {
     }
 
     #[test]
+    fn file_based_keyring_uses_app_data_root_keyring_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let app_data_root = temp_dir.path().join("uniclipboard");
+
+        let keyring = FileBasedKeyring::new_in_app_data_root(app_data_root.clone())
+            .expect("new_in_app_data_root failed");
+
+        assert_eq!(keyring.base_dir(), &app_data_root.join("keyring"));
+        assert!(keyring.base_dir().exists());
+    }
+
+    #[test]
     fn file_permissions_are_restricted() {
         let temp_dir = TempDir::new().unwrap();
         let keyring = FileBasedKeyring::with_base_dir(temp_dir.path().to_path_buf());
@@ -238,6 +257,7 @@ mod tests {
         keyring.store_kek(&scope, &kek).expect("store failed");
 
         #[cfg(unix)]
+
         {
             use std::os::unix::fs::PermissionsExt;
             let path = keyring.kek_file_path(&scope);
