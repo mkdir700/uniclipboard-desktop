@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use dirs;
 use log::error;
-use tauri::{WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -20,14 +19,11 @@ use uc_platform::runtime::event_bus::{
     PlatformCommandReceiver, PlatformEventReceiver, PlatformEventSender,
 };
 use uc_platform::runtime::runtime::PlatformRuntime;
-use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 use uc_tauri::bootstrap::tracing as bootstrap_tracing;
+use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 
 // Platform-specific command modules
 mod plugins;
-
-#[cfg(target_os = "macos")]
-use plugins::{enable_modern_window_style, enable_rounded_corners, reposition_traffic_lights};
 
 /// Simple executor for platform commands
 ///
@@ -125,11 +121,11 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::onboarding::initialize_onboarding,
             // macOS-specific commands (conditionally compiled)
             #[cfg(target_os = "macos")]
-            enable_rounded_corners,
+            plugins::mac_rounded_corners::enable_rounded_corners,
             #[cfg(target_os = "macos")]
-            enable_modern_window_style,
+            plugins::mac_rounded_corners::enable_modern_window_style,
             #[cfg(target_os = "macos")]
-            reposition_traffic_lights,
+            plugins::mac_rounded_corners::reposition_traffic_lights,
         ]
     };
 }
@@ -194,34 +190,51 @@ fn run_app(config: AppConfig) {
             })
             .build(),
         )
-        .setup(move |app_handle| {
+        .setup(move |_app_handle| {
             // Create the main window
-            let win_builder = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::default())
-                .title("UniClipboard")
-                .inner_size(800.0, 600.0)
-                .min_inner_size(800.0, 600.0);
+            // Use dark background color to prevent white flash on startup
+            // Color matches bg-gray-950 (#09090b) from Tailwind CSS
+            // let win_builder = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::default())
+            //     .title("UniClipboard")
+            //     .inner_size(800.0, 600.0)
+            //     .min_inner_size(800.0, 600.0);
 
-            // Use platform-specific title bar settings
-            #[cfg(target_os = "macos")]
-            let win_builder = win_builder.decorations(false);
+            // #[cfg(target_os = "macos")]
+            // let win_builder = win_builder.decorations(false);
 
-            #[cfg(target_os = "windows")]
-            let win_builder = win_builder.decorations(false).shadow(true);
+            // #[cfg(target_os = "windows")]
+            // let win_builder = win_builder.decorations(false).shadow(true);
 
             // Apply silent start setting
-            let win_builder = if config.silent_start {
-                win_builder.visible(false)
-            } else {
-                win_builder
-            };
+            // let win_builder = if config.silent_start {
+            //     win_builder.visible(false)
+            // } else {
+            //     win_builder
+            // };
 
-            let _window = match win_builder.build() {
-                Ok(window) => window,
-                Err(e) => {
-                    log::error!("Failed to build main window: {}", e);
-                    return Err(Box::new(e));
-                }
-            };
+            // let window = match win_builder.build() {
+            //     Ok(window) => window,
+            //     Err(e) => {
+            //         log::error!("Failed to build main window: {}", e);
+            //         return Err(Box::new(e));
+            //     }
+            // };
+
+            // #[cfg(target_os = "macos")]
+            // fix_webview_flash(&window);
+
+            // Apply macOS rounded corners immediately after window creation
+            // This prevents the "white screen without rounded corners" flash
+            // #[cfg(target_os = "macos")]
+            // if let Err(e) = plugins::apply_modern_window_style_immediately(
+            //     &window,
+            //     MAC_WINDOW_CORNER_RADIUS,
+            //     MAC_WINDOW_OFFSET_X,
+            //     MAC_WINDOW_OFFSET_Y,
+            // ) {
+            //     log::warn!("Failed to apply rounded corners immediately: {}", e);
+            //     // Don't fail setup - frontend will retry via TitleBar
+            // }
 
             // Start the platform runtime in background
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
