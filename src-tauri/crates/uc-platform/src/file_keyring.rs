@@ -36,27 +36,38 @@ pub struct FileBasedKeyring {
 }
 
 impl FileBasedKeyring {
-    /// Create a new FileBasedKeyring using the provided app data root directory.
+    /// Creates a FileBasedKeyring rooted at the given application data directory.
     ///
-    /// # Behavior / 行为
+    /// The keyring base directory will be `<app_data_root>/keyring`. This function ensures that
+    /// the directory exists by creating it if necessary.
     ///
-    /// - Stores KEK files under `<app_data_root>/keyring/`
-    /// - Ensures the directory exists
+    /// Returns `Err(io::Error)` if creating the directory or performing other filesystem operations fails.
     ///
-    /// - 将 KEK 文件存放在 `<app_data_root>/keyring/`
-    /// - 确保目录存在
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// # // pretend we are in the same crate/module where FileBasedKeyring is defined
+    /// let app_root = std::env::temp_dir().join("example_app_data_root");
+    /// let keyring = FileBasedKeyring::new_in_app_data_root(app_root)?;
+    /// assert!(keyring.base_dir().ends_with("keyring"));
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
     pub fn new_in_app_data_root(app_data_root: PathBuf) -> Result<Self, io::Error> {
         let base_dir = app_data_root.join("keyring");
         fs::create_dir_all(&base_dir)?;
         Ok(Self { base_dir })
     }
 
-    /// Create a new FileBasedKeyring with the default base directory.
+    /// Compatibility constructor kept for tests and tooling.
     ///
-    /// # Note
+    /// This constructor exists for backwards compatibility but does not create or select an
+    /// application data root; it indicates that an explicit app data root is required.
+    /// Use `new_in_app_data_root` to construct a `FileBasedKeyring` with a concrete base directory.
     ///
-    /// This constructor is kept for backwards compatibility in tests/tools.
-    /// Production code should prefer `new_in_app_data_root`.
+    /// # Returns
+    ///
+    /// `Err(io::Error)` of kind `io::ErrorKind::NotFound` with the message "FileBasedKeyring requires app data root".
     pub fn new() -> Result<Self, io::Error> {
         Err(io::Error::new(
             io::ErrorKind::NotFound,
@@ -64,7 +75,16 @@ impl FileBasedKeyring {
         ))
     }
 
-    /// Create a FileBasedKeyring with a custom base directory for testing.
+    /// Construct a FileBasedKeyring that stores KEK files under the given base directory.
+    ///
+    /// The provided `base_dir` is used as the root directory where KEK files will be read from and written to.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let kb = FileBasedKeyring::with_base_dir(std::path::PathBuf::from("/tmp/keyring_test"));
+    /// assert_eq!(kb.base_dir(), &std::path::PathBuf::from("/tmp/keyring_test"));
+    /// ```
     pub fn with_base_dir(base_dir: PathBuf) -> Self {
         Self { base_dir }
     }

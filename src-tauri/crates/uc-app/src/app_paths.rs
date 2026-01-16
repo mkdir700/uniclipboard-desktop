@@ -12,6 +12,24 @@ pub struct AppPaths {
 }
 
 impl AppPaths {
+    /// Constructs an AppPaths instance whose file and directory locations are rooted at the provided AppDirs' `app_data_root`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use uc_core::app_dirs::AppDirs;
+    /// use uc_app::app_paths::AppPaths;
+    ///
+    /// let dirs = AppDirs { app_data_root: PathBuf::from("/tmp/uniclipboard") };
+    /// let paths = AppPaths::from_app_dirs(&dirs);
+    ///
+    /// assert_eq!(paths.db_path, PathBuf::from("/tmp/uniclipboard/uniclipboard.db"));
+    /// assert_eq!(paths.vault_dir, PathBuf::from("/tmp/uniclipboard/vault"));
+    /// assert_eq!(paths.settings_path, PathBuf::from("/tmp/uniclipboard/settings.json"));
+    /// assert_eq!(paths.keyring_dir, PathBuf::from("/tmp/uniclipboard/keyring"));
+    /// assert_eq!(paths.logs_dir, PathBuf::from("/tmp/uniclipboard/logs"));
+    /// ```
     pub fn from_app_dirs(dirs: &AppDirs) -> Self {
         Self {
             db_path: dirs.app_data_root.join("uniclipboard.db"),
