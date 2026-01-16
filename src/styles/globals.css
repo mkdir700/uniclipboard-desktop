@@ -197,8 +197,23 @@
   #root {
     margin: 0;
     padding: 0;
-    background-color: transparent;
     overflow: hidden;
+  }
+
+  /* Set default background based on system theme */
+  /* This prevents white flash on startup before React/Tailwind loads */
+  html {
+    background-color: white;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html {
+      background-color: #09090b; /* zinc-950 */
+    }
+  }
+
+  body {
+    background-color: transparent;
   }
 
   html {
@@ -228,6 +243,6 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
   }
 }
