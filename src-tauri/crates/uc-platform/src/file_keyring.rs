@@ -31,6 +31,7 @@ fn build_filename(scope: &KeyScope) -> String {
 /// - Files are created with mode 0600 (owner read/write only) on Unix
 /// - Uses atomic write-and-rename to prevent corruption
 /// - Only suitable for development environments
+#[derive(Clone)]
 pub struct FileBasedKeyring {
     base_dir: PathBuf,
 }
@@ -63,6 +64,11 @@ impl FileBasedKeyring {
     /// Create a FileBasedKeyring with a custom base directory for testing.
     pub fn with_base_dir(base_dir: PathBuf) -> Self {
         Self { base_dir }
+    }
+
+    /// Get the base directory where KEK files are stored.
+    pub fn base_dir(&self) -> &PathBuf {
+        &self.base_dir
     }
 
     /// Get the full path to the KEK file for the given scope.

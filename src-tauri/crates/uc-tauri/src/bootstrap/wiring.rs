@@ -56,7 +56,7 @@ use uc_infra::db::repositories::{
     DieselDeviceRepository,
 };
 use uc_infra::device::LocalDeviceIdentity;
-use uc_infra::fs::key_slot_store::JsonKeySlotStore;
+use uc_infra::fs::key_slot_store::{JsonKeySlotStore, KeySlotStore};
 use uc_infra::security::{
     Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository,
 };
@@ -66,7 +66,9 @@ use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, PlaceholderAutostartPort,
     PlaceholderBlobMaterializerPort, PlaceholderNetworkPort, PlaceholderUiPort,
 };
+use uc_platform::capability::detect_storage_capability;
 use uc_platform::clipboard::LocalClipboard;
+use uc_platform::file_keyring::FileBasedKeyring;
 use uc_platform::keyring::SystemKeyring;
 
 /// Result type for wiring operations
@@ -295,13 +297,49 @@ fn create_infra_layer(
 
     // Create keyring (concrete type for DefaultKeyMaterialService)
     // 创建密钥环（DefaultKeyMaterialService 的具体类型）
-    let keyring = SystemKeyring {};
-    let keyring_for_key_material = keyring.clone();
-    let keyring: Arc<dyn KeyringPort> = Arc::new(keyring);
+    //
+    // Detect platform capability and choose appropriate keyring implementation
+    // 检测平台能力并选择合适的密钥环实现
+    let capability = detect_storage_capability();
+    log::debug!("Detected secure storage capability: {:?}", capability);
+
+    // We need to store both the Arc<dyn KeyringPort> for use in ports,
+    // and the concrete type for DefaultKeyMaterialService (which requires KeyringPort trait bound)
+    // 我们需要存储 Arc<dyn KeyringPort> 供端口使用，以及具体类型供 DefaultKeyMaterialService 使用
+    // (它需要 KeyringPort trait bound)
+    let (keyring_for_key_material, keyring): (Arc<dyn KeyringPort>, Arc<dyn KeyringPort>) = match capability {
+        uc_platform::capability::SecureStorageCapability::SystemKeyring => {
+            log::info!("✅ Using system keyring for secure storage");
+            let kr = SystemKeyring {};
+            (Arc::new(kr.clone()) as Arc<dyn KeyringPort>, Arc::new(kr) as Arc<dyn KeyringPort>)
+        }
+        uc_platform::capability::SecureStorageCapability::FileBasedKeystore => {
+            log::warn!("⚠️  Using file-based keyring (WSL/headless environment)");
+            match FileBasedKeyring::new() {
+                Ok(kr) => {
+                    log::info!("✅ File-based keyring initialized at: {:?}",
+                        kr.base_dir());
+                    let arc_kr = Arc::new(kr.clone()) as Arc<dyn KeyringPort>;
+                    (arc_kr.clone(), arc_kr)
+                }
+                Err(e) => {
+                    return Err(WiringError::KeyringInit(format!(
+                        "Failed to initialize file-based keyring: {}", e
+                    )));
+                }
+            }
+        }
+        uc_platform::capability::SecureStorageCapability::Unsupported => {
+            return Err(WiringError::KeyringInit(
+                "Platform does not support secure storage".to_string()
+            ));
+        }
+    };
 
     // Create key slot store
     // 创建密钥槽存储
     let keyslot_store = JsonKeySlotStore::new(vault_path.join("keyslot.json"));
+    let keyslot_store: Arc<dyn KeySlotStore> = Arc::new(keyslot_store);
 
     // Create key material service
     // 创建密钥材料服务
