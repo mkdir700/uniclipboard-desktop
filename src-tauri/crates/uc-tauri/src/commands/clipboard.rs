@@ -1,11 +1,11 @@
 //! Clipboard-related Tauri commands
 //! 剪贴板相关的 Tauri 命令
 
-use std::sync::Arc;
-use tauri::State;
 use crate::bootstrap::AppRuntime;
 use crate::models::ClipboardEntryProjection;
-use tracing::{info_span, Instrument};  // NEW: Import for span creation
+use std::sync::Arc;
+use tauri::State;
+use tracing::{info_span, Instrument}; // NEW: Import for span creation
 
 /// Get clipboard history entries
 /// 获取剪贴板历史条目
@@ -26,19 +26,19 @@ pub async fn get_clipboard_entries(
         let uc = runtime.usecases().list_clipboard_entries();
 
         // Query entries through use case
-        let entries = uc.execute(resolved_limit, 0)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "Failed to get clipboard entries");
-                e.to_string()
-            })?;
+        let entries = uc.execute(resolved_limit, 0).await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to get clipboard entries");
+            e.to_string()
+        })?;
 
         // Convert domain models to DTOs
         let projections: Vec<ClipboardEntryProjection> = entries
             .into_iter()
             .map(|entry| ClipboardEntryProjection {
                 id: entry.entry_id.to_string(),
-                preview: entry.title.unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
+                preview: entry
+                    .title
+                    .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
                 captured_at: entry.created_at_ms,
                 content_type: "clipboard".to_string(),
                 is_encrypted: false, // TODO: Determine from actual entry state
@@ -60,6 +60,7 @@ pub async fn get_clipboard_entries(
 /// # Examples
 ///
 /// ```no_run
+/// # use std::sync::Arc;
 /// # async fn example(runtime: tauri::State<'_, Arc<uc_tauri::bootstrap::AppRuntime>>) {
 /// // Tauri provides `State<Arc<AppRuntime>>` when invoking commands from the frontend.
 /// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(runtime, "entry-id-123".to_string()).await;
@@ -86,12 +87,10 @@ pub async fn delete_clipboard_entry(
 
         // Execute use case
         let use_case = runtime.usecases().delete_clipboard_entry();
-        use_case.execute(&parsed_id)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, entry_id = %entry_id, "Failed to delete entry");
-                e.to_string()
-            })?;
+        use_case.execute(&parsed_id).await.map_err(|e| {
+            tracing::error!(error = %e, entry_id = %entry_id, "Failed to delete entry");
+            e.to_string()
+        })?;
 
         tracing::info!(entry_id = %entry_id, "Deleted clipboard entry");
         Ok(())

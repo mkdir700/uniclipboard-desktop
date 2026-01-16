@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use std::sync::Arc;
 use uc_core::{
     ports::{KeyMaterialPort, KeyringPort},
     security::model::{EncryptionError, Kek, KeyScope, KeySlot, KeySlotFile},
@@ -6,19 +7,15 @@ use uc_core::{
 
 use crate::fs::key_slot_store::KeySlotStore;
 
-pub struct DefaultKeyMaterialService<KR, KS> {
-    keyring: KR,
-    keyslot_store: KS,
+pub struct DefaultKeyMaterialService {
+    keyring: Arc<dyn KeyringPort>,
+    keyslot_store: Arc<dyn KeySlotStore>,
 }
 
-impl<KR, KS> DefaultKeyMaterialService<KR, KS>
-where
-    KR: KeyringPort,
-    KS: KeySlotStore,
-{
+impl DefaultKeyMaterialService {
     /// Create a new key material service
     /// 创建新的密钥材料服务
-    pub fn new(keyring: KR, keyslot_store: KS) -> Self {
+    pub fn new(keyring: Arc<dyn KeyringPort>, keyslot_store: Arc<dyn KeySlotStore>) -> Self {
         Self {
             keyring,
             keyslot_store,
@@ -27,10 +24,7 @@ where
 }
 
 #[async_trait]
-impl<KR, KS> KeyMaterialPort for DefaultKeyMaterialService<KR, KS>
-where
-    KR: KeyringPort,
-    KS: KeySlotStore,
+impl KeyMaterialPort for DefaultKeyMaterialService
 {
     async fn load_kek(&self, scope: &KeyScope) -> Result<Kek, EncryptionError> {
         self.keyring.load_kek(scope)
@@ -221,10 +215,10 @@ mod tests {
     async fn load_kek_delegates_to_keyring() {
         let (keyring, state) = TestKeyring::new();
         let (keyslot_store, _) = TestKeySlotStore::new();
-        let service = DefaultKeyMaterialService {
-            keyring,
-            keyslot_store,
-        };
+        let service = DefaultKeyMaterialService::new(
+            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
+        );
         let scope = sample_scope("profile-1");
         let kek = sample_kek();
 
@@ -241,10 +235,10 @@ mod tests {
     async fn store_kek_delegates_to_keyring() {
         let (keyring, state) = TestKeyring::new();
         let (keyslot_store, _) = TestKeySlotStore::new();
-        let service = DefaultKeyMaterialService {
-            keyring,
-            keyslot_store,
-        };
+        let service = DefaultKeyMaterialService::new(
+            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
+        );
         let scope = sample_scope("profile-2");
         let kek = sample_kek();
 
@@ -261,10 +255,10 @@ mod tests {
     async fn delete_kek_delegates_to_keyring() {
         let (keyring, state) = TestKeyring::new();
         let (keyslot_store, _) = TestKeySlotStore::new();
-        let service = DefaultKeyMaterialService {
-            keyring,
-            keyslot_store,
-        };
+        let service = DefaultKeyMaterialService::new(
+            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
+        );
         let scope = sample_scope("profile-3");
 
         state.lock().expect("lock keyring state").delete_result = Some(Ok(()));
@@ -279,10 +273,10 @@ mod tests {
     async fn load_keyslot_rejects_scope_mismatch() {
         let (keyring, _) = TestKeyring::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
-        let service = DefaultKeyMaterialService {
-            keyring,
-            keyslot_store,
-        };
+        let service = DefaultKeyMaterialService::new(
+            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
+        );
         let scope = sample_scope("profile-a");
         let file = KeySlotFile::try_from(&sample_keyslot(sample_scope("profile-b"))).unwrap();
 
@@ -300,10 +294,10 @@ mod tests {
     async fn load_keyslot_returns_keyslot_on_match() {
         let (keyring, _) = TestKeyring::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
-        let service = DefaultKeyMaterialService {
-            keyring,
-            keyslot_store,
-        };
+        let service = DefaultKeyMaterialService::new(
+            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
+        );
         let scope = sample_scope("profile-ok");
         let keyslot = sample_keyslot(scope.clone());
         let file = KeySlotFile::try_from(&keyslot).unwrap();
@@ -319,10 +313,10 @@ mod tests {
     async fn store_keyslot_persists_file_representation() {
         let (keyring, _) = TestKeyring::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
-        let service = DefaultKeyMaterialService {
-            keyring,
-            keyslot_store,
-        };
+        let service = DefaultKeyMaterialService::new(
+            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
+        );
         let keyslot = sample_keyslot(sample_scope("profile-store"));
 
         state.lock().expect("lock keyslot state").store_result = Some(Ok(()));
@@ -343,10 +337,10 @@ mod tests {
     async fn delete_keyslot_rejects_scope_mismatch_without_delete() {
         let (keyring, _) = TestKeyring::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
-        let service = DefaultKeyMaterialService {
-            keyring,
-            keyslot_store,
-        };
+        let service = DefaultKeyMaterialService::new(
+            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
+        );
         let scope = sample_scope("profile-x");
         let file = KeySlotFile::try_from(&sample_keyslot(sample_scope("profile-y"))).unwrap();
 
@@ -366,10 +360,10 @@ mod tests {
     async fn delete_keyslot_deletes_on_match() {
         let (keyring, _) = TestKeyring::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
-        let service = DefaultKeyMaterialService {
-            keyring,
-            keyslot_store,
-        };
+        let service = DefaultKeyMaterialService::new(
+            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
+        );
         let scope = sample_scope("profile-del");
         let file = KeySlotFile::try_from(&sample_keyslot(scope.clone())).unwrap();
 

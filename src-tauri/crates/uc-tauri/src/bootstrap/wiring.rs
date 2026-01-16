@@ -56,7 +56,7 @@ use uc_infra::db::repositories::{
     DieselDeviceRepository,
 };
 use uc_infra::device::LocalDeviceIdentity;
-use uc_infra::fs::key_slot_store::JsonKeySlotStore;
+use uc_infra::fs::key_slot_store::{JsonKeySlotStore, KeySlotStore};
 use uc_infra::security::{
     Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository,
 };
@@ -67,7 +67,6 @@ use uc_platform::adapters::{
     PlaceholderBlobMaterializerPort, PlaceholderNetworkPort, PlaceholderUiPort,
 };
 use uc_platform::clipboard::LocalClipboard;
-use uc_platform::keyring::SystemKeyring;
 
 /// Result type for wiring operations
 pub type WiringResult<T> = Result<T, WiringError>;
@@ -242,7 +241,8 @@ fn create_infra_layer(
     db_pool: DbPool,
     vault_path: &PathBuf,
     settings_path: &PathBuf,
-) -> WiringResult<(InfraLayer, Arc<dyn KeyringPort>)> {
+    keyring: Arc<dyn KeyringPort>,
+) -> WiringResult<InfraLayer> {
     // Create database executor and wrap in Arc for cloning
     // 创建数据库执行器并包装在 Arc 中以供克隆
     let db_executor = Arc::new(DieselSqliteExecutor::new(db_pool));
@@ -293,15 +293,12 @@ fn create_infra_layer(
     );
     let blob_repository: Arc<dyn BlobRepositoryPort> = Arc::new(blob_repo);
 
-    // Create keyring (concrete type for DefaultKeyMaterialService)
-    // 创建密钥环（DefaultKeyMaterialService 的具体类型）
-    let keyring = SystemKeyring {};
-    let keyring_for_key_material = keyring.clone();
-    let keyring: Arc<dyn KeyringPort> = Arc::new(keyring);
+    let keyring_for_key_material = Arc::clone(&keyring);
 
     // Create key slot store
     // 创建密钥槽存储
     let keyslot_store = JsonKeySlotStore::new(vault_path.join("keyslot.json"));
+    let keyslot_store: Arc<dyn KeySlotStore> = Arc::new(keyslot_store);
 
     // Create key material service
     // 创建密钥材料服务
@@ -354,7 +351,7 @@ fn create_infra_layer(
         hash,
     };
 
-    Ok((infra, keyring))
+    Ok(infra)
 }
 
 /// Create platform layer implementations
@@ -555,7 +552,10 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     // 创建设置路径（目前使用与 vault 相同的目录）
     let settings_path = vault_path.join("settings.json");
 
-    let (infra, keyring) = create_infra_layer(db_pool, &vault_path, &settings_path)?;
+    let keyring = uc_platform::secure_storage::create_default_keyring()
+        .map_err(|e| WiringError::KeyringInit(e.to_string()))?;
+
+    let infra = create_infra_layer(db_pool, &vault_path, &settings_path, keyring.clone())?;
 
     // Step 3: Create platform layer implementations
     // 步骤 3：创建平台层实现
@@ -769,11 +769,39 @@ mod tests {
         // 实际目录创建测试在集成测试中
     }
 
+    #[derive(Clone)]
+    struct DummyKeyring;
+
+    impl KeyringPort for DummyKeyring {
+        fn load_kek(
+            &self,
+            _scope: &uc_core::security::model::KeyScope,
+        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError>
+        {
+            Err(uc_core::security::model::EncryptionError::KeyNotFound)
+        }
+
+        fn store_kek(
+            &self,
+            _scope: &uc_core::security::model::KeyScope,
+            _kek: &uc_core::security::model::Kek,
+        ) -> Result<(), uc_core::security::model::EncryptionError> {
+            Ok(())
+        }
+
+        fn delete_kek(
+            &self,
+            _scope: &uc_core::security::model::KeyScope,
+        ) -> Result<(), uc_core::security::model::EncryptionError> {
+            Ok(())
+        }
+    }
+
     #[test]
     fn test_create_platform_layer_returns_expected_types() {
         // Test that platform layer creates the correct types
         // 测试平台层创建正确的类型
-        let keyring: Arc<dyn KeyringPort> = Arc::new(SystemKeyring {});
+        let keyring: Arc<dyn KeyringPort> = Arc::new(DummyKeyring);
         let temp_dir = std::env::temp_dir().join(format!("uc-wiring-test-{}", std::process::id()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
         let result = create_platform_layer(keyring, &temp_dir);
