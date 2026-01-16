@@ -13,7 +13,6 @@ use uc_core::{
     security::model::{EncryptionError, Kek, KeyScope},
 };
 
-const SERVICE_NAME: &str = "UniClipboard";
 const KEK_PREFIX: &str = "kek:v1:";
 
 /// Build the filename for a KEK file from the given scope.
@@ -49,10 +48,7 @@ impl FileBasedKeyring {
     pub fn new() -> Result<Self, io::Error> {
         let base_dir = dirs::config_dir()
             .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "Cannot determine config directory",
-                )
+                io::Error::new(io::ErrorKind::NotFound, "Cannot determine config directory")
             })?
             .join("com.uniclipboard");
 
@@ -97,11 +93,13 @@ impl KeyringPort for FileBasedKeyring {
         // Write to temporary file first, then atomic rename
         let temp_path = path.with_extension("tmp");
 
-        fs::write(&temp_path, &kek.0)
-            .map_err(|e| EncryptionError::KeyringError(format!("Failed to write KEK temp file: {}", e)))?;
+        fs::write(&temp_path, &kek.0).map_err(|e| {
+            EncryptionError::KeyringError(format!("Failed to write KEK temp file: {}", e))
+        })?;
 
-        fs::rename(&temp_path, &path)
-            .map_err(|e| EncryptionError::KeyringError(format!("Failed to rename KEK file: {}", e)))?;
+        fs::rename(&temp_path, &path).map_err(|e| {
+            EncryptionError::KeyringError(format!("Failed to rename KEK file: {}", e))
+        })?;
 
         // Set restrictive permissions on Unix
         #[cfg(unix)]
@@ -109,12 +107,16 @@ impl KeyringPort for FileBasedKeyring {
             use std::os::unix::fs::PermissionsExt;
             let mut perms = fs::metadata(&path)
                 .map_err(|e| {
-                    EncryptionError::KeyringError(format!("Failed to read KEK file metadata: {}", e))
+                    EncryptionError::KeyringError(format!(
+                        "Failed to read KEK file metadata: {}",
+                        e
+                    ))
                 })?
                 .permissions();
             perms.set_mode(0o600);
-            fs::set_permissions(&path, perms)
-                .map_err(|e| EncryptionError::KeyringError(format!("Failed to set KEK file permissions: {}", e)))?;
+            fs::set_permissions(&path, perms).map_err(|e| {
+                EncryptionError::KeyringError(format!("Failed to set KEK file permissions: {}", e))
+            })?;
         }
 
         Ok(())
@@ -186,8 +188,12 @@ mod tests {
         let kek1 = Kek([1u8; 32]);
         let kek2 = Kek([2u8; 32]);
 
-        keyring.store_kek(&scope, &kek1).expect("first store failed");
-        keyring.store_kek(&scope, &kek2).expect("second store failed");
+        keyring
+            .store_kek(&scope, &kek1)
+            .expect("first store failed");
+        keyring
+            .store_kek(&scope, &kek2)
+            .expect("second store failed");
 
         let loaded = keyring.load_kek(&scope).expect("load failed");
         assert_eq!(loaded, kek2, "should load the most recent value");

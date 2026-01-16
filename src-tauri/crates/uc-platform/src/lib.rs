@@ -18,3 +18,4 @@ pub mod key_scope;
 pub mod keyring;
 pub mod ports;
 pub mod runtime;
+pub mod secure_storage;
