@@ -42,6 +42,24 @@ Building is handled via GitHub Actions. Trigger manually from GitHub Actions tab
 - **platform**: macos-aarch64, macos-x86_64, ubuntu-22.04, windows-latest, or all
 - **version**: Version number (e.g., 1.0.0)
 
+### Cargo Command Location
+
+**CRITICAL**: All Rust-related commands (cargo build, cargo test, cargo check, etc.) MUST be executed from `src-tauri/`.
+
+```bash
+# ✅ CORRECT - Always run from src-tauri/
+cd src-tauri && cargo build
+cd src-tauri && cargo test
+cd src-tauri && cargo check
+
+# ❌ FORBIDDEN - Never run from project root
+cargo build
+cargo test
+```
+
+**Never run any Cargo command from the project root.**
+**If Cargo.toml is not present in the current directory, stop immediately and do not retry.**
+
 ### Test Coverage
 
 Generate local coverage report using cargo-llvm-cov:

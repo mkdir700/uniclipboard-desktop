@@ -26,6 +26,12 @@ Repeated workarounds indicate architectural flaws.
 Short-term compromises must be reversible
 Never break boundaries; always leave explicit TODOs.
 
+## Cargo Command Location
+
+**CRITICAL**: All Rust-related commands (cargo build, cargo test, cargo check, etc.) MUST be executed from `src-tauri/`.
+Never run any Cargo command from the project root.
+If Cargo.toml is not present in the current directory, stop immediately and do not retry.
+
 ## Rustdoc Bilingual Documentation Guide
 
 ### Recommended Approach: Structured Bilingual Side-by-Side
