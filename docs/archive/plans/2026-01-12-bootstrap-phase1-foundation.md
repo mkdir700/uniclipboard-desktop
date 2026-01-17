@@ -736,7 +736,6 @@ After Phase 1, run the validation checklist from the design doc:
 
 - **Design Document**: [docs/plans/2026-01-12-bootstrap-architecture-design.md](docs/plans/2026-01-12-bootstrap-architecture-design.md)
 - **Project DeepWiki**: https://deepwiki.com/mkdir700/uniclipboard-desktop
-- **OpenSpec Instructions**: See @/AGENTS.md for proposal process
 
 ---
 
