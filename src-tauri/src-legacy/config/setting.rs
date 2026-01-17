@@ -49,7 +49,7 @@ fn default_device_name() -> String {
 }
 
 fn default_theme_color() -> String {
-    "inc".to_string()
+    "zinc".to_string()
 }
 
 fn default_language() -> String {
@@ -164,7 +164,7 @@ impl Setting {
                 silent_start: false,
                 auto_check_update: true,
                 theme: ThemeMode::System,
-                theme_color: "inc".to_string(),
+                theme_color: "zinc".to_string(),
                 language: default_language(),
                 device_name: default_device_name(),
             },
