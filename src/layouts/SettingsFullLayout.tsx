@@ -1,10 +1,10 @@
 import { Outlet } from 'react-router-dom'
 
 /**
- * Layout for the standalone settings window.
- * This window does not include the main sidebar and has a simpler structure.
+ * Layout for the full-screen settings page.
+ * This layout does not include the main sidebar and has a simpler structure.
  */
-const SettingsWindowLayout = () => {
+const SettingsFullLayout = () => {
   return (
     <div className="h-screen w-full flex flex-col bg-background text-foreground transition-colors duration-200">
       <Outlet />
@@ -12,4 +12,4 @@ const SettingsWindowLayout = () => {
   )
 }
 
-export default SettingsWindowLayout
+export default SettingsFullLayout
