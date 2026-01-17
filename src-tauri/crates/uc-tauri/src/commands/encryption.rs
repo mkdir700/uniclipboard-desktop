@@ -50,7 +50,7 @@ pub async fn initialize_encryption(
         })?;
     tracing::info!("Encryption initialized successfully");
 
-    match runtime.deps.watcher_control.start_watcher().await {
+    match runtime.usecases().start_clipboard_watcher().execute().await {
         Ok(()) => {
             tracing::info!("Clipboard watcher started after encryption initialization");
         }

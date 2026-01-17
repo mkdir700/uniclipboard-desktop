@@ -378,6 +378,23 @@ impl<'a> UseCases<'a> {
         uc_app::usecases::UpdateSettings::new(self.runtime.deps.settings.clone())
     }
 
+    /// Start the clipboard watcher
+    ///
+    /// ## Example / 示例
+    ///
+    /// ```rust,no_run
+    /// # use uc_tauri::bootstrap::AppRuntime;
+    /// # use tauri::State;
+    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<(), String> {
+    /// let uc = runtime.usecases().start_clipboard_watcher();
+    /// uc.execute().await.map_err(|e| e.to_string())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn start_clipboard_watcher(&self) -> uc_app::usecases::StartClipboardWatcher {
+        uc_app::usecases::StartClipboardWatcher::from_port(self.runtime.deps.watcher_control.clone())
+    }
+
     // NOTE: Other use case methods will be added as the use case design evolves
     // to support trait object instantiation. Currently, use cases with generic
     // type parameters cannot be instantiated through this accessor.
