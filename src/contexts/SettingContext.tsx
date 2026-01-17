@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import React, { useState, useEffect, ReactNode } from 'react'
+import { DEFAULT_THEME_COLOR } from '@/constants/theme'
 import i18n, { normalizeLanguage, persistLanguage } from '@/i18n'
 import type { SettingChangedEvent } from '@/types/events'
 import { SettingContext, type SettingContextType, type Setting } from '@/types/setting'
@@ -164,7 +165,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
 
     const applyTheme = () => {
       const theme = setting?.general.theme
-      const themeColor = setting?.general.theme_color || 'catppuccin'
+      const themeColor = setting?.general.theme_color || DEFAULT_THEME_COLOR
 
       // 1. Apply Mode (Light/Dark)
       root.classList.remove('light', 'dark')
