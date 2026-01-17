@@ -2,9 +2,9 @@
 //!
 //! Wraps ClipboardEventWriterPort and encrypts inline_data before storage.
 
-use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use std::sync::Arc;
 use tracing::debug;
 
 use uc_core::{
@@ -27,7 +27,11 @@ impl EncryptingClipboardEventWriter {
         encryption: Arc<dyn EncryptionPort>,
         session: Arc<dyn EncryptionSessionPort>,
     ) -> Self {
-        Self { inner, encryption, session }
+        Self {
+            inner,
+            encryption,
+            session,
+        }
     }
 
     /// Generate AAD for inline data encryption.
@@ -44,7 +48,10 @@ impl ClipboardEventWriterPort for EncryptingClipboardEventWriter {
         representations: &Vec<PersistedClipboardRepresentation>,
     ) -> Result<()> {
         // Get master key from session
-        let master_key = self.session.get_master_key().await
+        let master_key = self
+            .session
+            .get_master_key()
+            .await
             .context("encryption session not ready - cannot encrypt clipboard data")?;
 
         // Encrypt inline_data for each representation
@@ -54,8 +61,14 @@ impl ClipboardEventWriterPort for EncryptingClipboardEventWriter {
             let encrypted_inline_data = if let Some(ref plaintext) = rep.inline_data {
                 // Encrypt the inline data
                 let aad = Self::aad_for_inline(&event.event_id, &rep.id);
-                let encrypted_blob = self.encryption
-                    .encrypt_blob(&master_key, plaintext, &aad, EncryptionAlgo::XChaCha20Poly1305)
+                let encrypted_blob = self
+                    .encryption
+                    .encrypt_blob(
+                        &master_key,
+                        plaintext,
+                        &aad,
+                        EncryptionAlgo::XChaCha20Poly1305,
+                    )
                     .await
                     .context("failed to encrypt inline_data")?;
 
@@ -63,8 +76,12 @@ impl ClipboardEventWriterPort for EncryptingClipboardEventWriter {
                 let encrypted_bytes = serde_json::to_vec(&encrypted_blob)
                     .context("failed to serialize encrypted inline_data")?;
 
-                debug!("Encrypted inline_data for rep {} ({} bytes -> {} bytes)",
-                    rep.id.as_ref(), plaintext.len(), encrypted_bytes.len());
+                debug!(
+                    "Encrypted inline_data for rep {} ({} bytes -> {} bytes)",
+                    rep.id.as_ref(),
+                    plaintext.len(),
+                    encrypted_bytes.len()
+                );
 
                 Some(encrypted_bytes)
             } else {
@@ -95,14 +112,14 @@ impl ClipboardEventWriterPort for EncryptingClipboardEventWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use std::sync::{Arc, Mutex};
     use uc_core::{
-        clipboard::{ClipboardEvent, PersistedClipboardRepresentation, MimeType, SnapshotHash},
-        ids::{DeviceId, EventId, FormatId, RepresentationId, BlobId},
+        clipboard::{ClipboardEvent, MimeType, PersistedClipboardRepresentation, SnapshotHash},
+        ids::{BlobId, DeviceId, EventId, FormatId, RepresentationId},
         security::model::{EncryptedBlob, EncryptionFormatVersion, MasterKey},
         ContentHash,
     };
-    use async_trait::async_trait;
 
     /// Mock ClipboardEventWriterPort that captures inserted representations
     struct MockEventWriter {
@@ -134,12 +151,18 @@ mod tests {
             _event: &ClipboardEvent,
             representations: &Vec<PersistedClipboardRepresentation>,
         ) -> Result<()> {
-            self.inserted_reps.lock().unwrap().extend(representations.clone());
+            self.inserted_reps
+                .lock()
+                .unwrap()
+                .extend(representations.clone());
             Ok(())
         }
 
         async fn delete_event_and_representations(&self, event_id: &EventId) -> Result<()> {
-            self.deleted_event_ids.lock().unwrap().push(event_id.clone());
+            self.deleted_event_ids
+                .lock()
+                .unwrap()
+                .push(event_id.clone());
             Ok(())
         }
     }
@@ -167,7 +190,8 @@ mod tests {
             _passphrase: &uc_core::security::model::Passphrase,
             _salt: &[u8],
             _kdf_params: &uc_core::security::model::KdfParams,
-        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError> {
+        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError>
+        {
             Ok(uc_core::security::model::Kek([0u8; 32]))
         }
 
@@ -246,11 +270,18 @@ mod tests {
             self.master_key.is_some()
         }
 
-        async fn get_master_key(&self) -> Result<MasterKey, uc_core::security::model::EncryptionError> {
-            self.master_key.clone().ok_or(uc_core::security::model::EncryptionError::Locked)
+        async fn get_master_key(
+            &self,
+        ) -> Result<MasterKey, uc_core::security::model::EncryptionError> {
+            self.master_key
+                .clone()
+                .ok_or(uc_core::security::model::EncryptionError::Locked)
         }
 
-        async fn set_master_key(&self, _master_key: MasterKey) -> Result<(), uc_core::security::model::EncryptionError> {
+        async fn set_master_key(
+            &self,
+            _master_key: MasterKey,
+        ) -> Result<(), uc_core::security::model::EncryptionError> {
             Ok(())
         }
 
@@ -299,7 +330,10 @@ mod tests {
         // Test that inline data is encrypted before being passed to inner writer
         let inner = Arc::new(MockEventWriter::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let writer = EncryptingClipboardEventWriter::new(inner.clone(), encryption, session);
 
@@ -311,10 +345,17 @@ mod tests {
         assert!(result.is_ok(), "insert_event should succeed");
 
         let inserted_reps = inner.get_inserted_reps();
-        assert_eq!(inserted_reps.len(), 1, "should have inserted one representation");
+        assert_eq!(
+            inserted_reps.len(),
+            1,
+            "should have inserted one representation"
+        );
 
         let inserted_rep = &inserted_reps[0];
-        assert!(inserted_rep.inline_data.is_some(), "should have inline data");
+        assert!(
+            inserted_rep.inline_data.is_some(),
+            "should have inline data"
+        );
 
         // Verify the inline data is an encrypted blob (serializes to JSON with expected fields)
         let encrypted_bytes = inserted_rep.inline_data.as_ref().unwrap();
@@ -322,7 +363,10 @@ mod tests {
             .expect("inline data should be a valid encrypted blob");
 
         assert_eq!(encrypted_blob.version, EncryptionFormatVersion::V1);
-        assert_eq!(encrypted_blob.aead, uc_core::security::model::EncryptionAlgo::XChaCha20Poly1305);
+        assert_eq!(
+            encrypted_blob.aead,
+            uc_core::security::model::EncryptionAlgo::XChaCha20Poly1305
+        );
         assert_eq!(encrypted_blob.nonce.len(), 24);
         // Ciphertext should contain the original plaintext
         assert_eq!(encrypted_blob.ciphertext, b"test plaintext data".to_vec());
@@ -333,7 +377,10 @@ mod tests {
         // Test that representations without inline data are passed through unchanged
         let inner = Arc::new(MockEventWriter::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let writer = EncryptingClipboardEventWriter::new(inner.clone(), encryption, session);
 
@@ -345,10 +392,17 @@ mod tests {
         assert!(result.is_ok(), "insert_event should succeed");
 
         let inserted_reps = inner.get_inserted_reps();
-        assert_eq!(inserted_reps.len(), 1, "should have inserted one representation");
+        assert_eq!(
+            inserted_reps.len(),
+            1,
+            "should have inserted one representation"
+        );
 
         let inserted_rep = &inserted_reps[0];
-        assert!(inserted_rep.inline_data.is_none(), "should not have inline data");
+        assert!(
+            inserted_rep.inline_data.is_none(),
+            "should not have inline data"
+        );
         assert_eq!(inserted_rep.blob_id, Some(BlobId::from("blob-id-123")));
     }
 
@@ -357,7 +411,10 @@ mod tests {
         // Test that multiple representations are encrypted correctly
         let inner = Arc::new(MockEventWriter::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let writer = EncryptingClipboardEventWriter::new(inner.clone(), encryption, session);
 
@@ -373,7 +430,11 @@ mod tests {
         assert!(result.is_ok(), "insert_event should succeed");
 
         let inserted_reps = inner.get_inserted_reps();
-        assert_eq!(inserted_reps.len(), 3, "should have inserted three representations");
+        assert_eq!(
+            inserted_reps.len(),
+            3,
+            "should have inserted three representations"
+        );
 
         // First representation should have encrypted inline data
         assert!(inserted_reps[0].inline_data.is_some());
@@ -399,7 +460,10 @@ mod tests {
 
         let result = writer.insert_event(&event, &representations).await;
 
-        assert!(result.is_err(), "insert_event should fail when session not ready");
+        assert!(
+            result.is_err(),
+            "insert_event should fail when session not ready"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("encryption session not ready"),
@@ -413,7 +477,10 @@ mod tests {
         // Test that encryption errors are propagated
         let inner = Arc::new(MockEventWriter::new());
         let encryption = Arc::new(MockEncryption::new().fail_on_encrypt());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let writer = EncryptingClipboardEventWriter::new(inner.clone(), encryption, session);
 
@@ -422,7 +489,10 @@ mod tests {
 
         let result = writer.insert_event(&event, &representations).await;
 
-        assert!(result.is_err(), "insert_event should fail when encryption fails");
+        assert!(
+            result.is_err(),
+            "insert_event should fail when encryption fails"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("failed to encrypt inline_data"),
@@ -444,7 +514,10 @@ mod tests {
 
         let result = writer.delete_event_and_representations(&event_id).await;
 
-        assert!(result.is_ok(), "delete_event_and_representations should succeed");
+        assert!(
+            result.is_ok(),
+            "delete_event_and_representations should succeed"
+        );
 
         let deleted_ids = inner.get_deleted_event_ids();
         assert_eq!(deleted_ids.len(), 1, "should have deleted one event");
@@ -470,6 +543,9 @@ mod tests {
         // Different rep ID should produce different AAD
         let different_rep_id = RepresentationId::from("different-rep-id");
         let aad4 = EncryptingClipboardEventWriter::aad_for_inline(&event_id, &different_rep_id);
-        assert_ne!(aad1, aad4, "AAD should differ for different representation IDs");
+        assert_ne!(
+            aad1, aad4,
+            "AAD should differ for different representation IDs"
+        );
     }
 }

@@ -22,7 +22,9 @@ impl RowMapper<DeviceRow, Device> for DeviceRowMapper {
         use uc_core::device::value_objects::{DeviceId, DeviceName};
         use uc_core::device::Platform;
 
-        let platform = row.platform.parse::<Platform>()
+        let platform = row
+            .platform
+            .parse::<Platform>()
             .unwrap_or(Platform::Unknown);
 
         Ok(Device::new(

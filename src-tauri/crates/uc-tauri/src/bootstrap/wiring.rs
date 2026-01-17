@@ -41,7 +41,6 @@ use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ports::*;
-use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_infra::clipboard::ClipboardRepresentationMaterializer;
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -60,8 +59,9 @@ use uc_infra::db::repositories::{
 use uc_infra::device::LocalDeviceIdentity;
 use uc_infra::fs::key_slot_store::{JsonKeySlotStore, KeySlotStore};
 use uc_infra::security::{
-    Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository,
-    EncryptedBlobStore, EncryptingClipboardEventWriter, DecryptingClipboardRepresentationRepository,
+    Blake3Hasher, DecryptingClipboardRepresentationRepository, DefaultKeyMaterialService,
+    EncryptedBlobStore, EncryptingClipboardEventWriter, EncryptionRepository,
+    FileEncryptionStateRepository,
 };
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
@@ -70,6 +70,7 @@ use uc_platform::adapters::{
     PlaceholderAutostartPort, PlaceholderBlobMaterializerPort, PlaceholderNetworkPort,
     PlaceholderUiPort,
 };
+use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::clipboard::LocalClipboard;
 use uc_platform::runtime::event_bus::PlatformCommandSender;
 
@@ -649,18 +650,20 @@ pub fn wire_dependencies(
     ));
 
     // Wrap clipboard_event_repo with encryption decorator
-    let encrypting_event_writer: Arc<dyn ClipboardEventWriterPort> = Arc::new(EncryptingClipboardEventWriter::new(
-        infra.clipboard_event_repo.clone(),
-        infra.encryption.clone(),
-        platform.encryption_session.clone(),
-    ));
+    let encrypting_event_writer: Arc<dyn ClipboardEventWriterPort> =
+        Arc::new(EncryptingClipboardEventWriter::new(
+            infra.clipboard_event_repo.clone(),
+            infra.encryption.clone(),
+            platform.encryption_session.clone(),
+        ));
 
     // Wrap representation_repo with decryption decorator
-    let decrypting_rep_repo: Arc<dyn ClipboardRepresentationRepositoryPort> = Arc::new(DecryptingClipboardRepresentationRepository::new(
-        infra.representation_repo.clone(),
-        infra.encryption.clone(),
-        platform.encryption_session.clone(),
-    ));
+    let decrypting_rep_repo: Arc<dyn ClipboardRepresentationRepositoryPort> =
+        Arc::new(DecryptingClipboardRepresentationRepository::new(
+            infra.representation_repo.clone(),
+            infra.encryption.clone(),
+            platform.encryption_session.clone(),
+        ));
 
     // Step 4: Construct AppDeps with all dependencies
     // 步骤 4：使用所有依赖构造 AppDeps
@@ -1032,7 +1035,10 @@ The functionality is still validated in development mode when running the app wi
         assert!(paths.app_data_root.ends_with("uniclipboard"));
         assert_eq!(paths.db_path, paths.app_data_root.join("uniclipboard.db"));
         assert_eq!(paths.vault_dir, paths.app_data_root.join("vault"));
-        assert_eq!(paths.settings_path, paths.app_data_root.join("settings.json"));
+        assert_eq!(
+            paths.settings_path,
+            paths.app_data_root.join("settings.json")
+        );
     }
 
     #[test]

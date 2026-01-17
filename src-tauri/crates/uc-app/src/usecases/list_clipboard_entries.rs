@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::{info_span, info, Instrument};
+use tracing::{info, info_span, Instrument};
 use uc_core::clipboard::ClipboardEntry;
 use uc_core::ports::ClipboardEntryRepositoryPort;
 
@@ -77,7 +77,8 @@ impl ListClipboardEntries {
             }
 
             // Query repository
-            let result = self.entry_repo
+            let result = self
+                .entry_repo
                 .list_entries(limit, offset)
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to query clipboard entries: {}", e))?;

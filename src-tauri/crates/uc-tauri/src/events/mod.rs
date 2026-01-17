@@ -10,14 +10,9 @@ use tauri::{AppHandle, Emitter};
 #[serde(tag = "type")]
 pub enum ClipboardEvent {
     /// New clipboard content captured
-    NewContent {
-        entry_id: String,
-        preview: String,
-    },
+    NewContent { entry_id: String, preview: String },
     /// Clipboard content deleted
-    Deleted {
-        entry_id: String,
-    },
+    Deleted { entry_id: String },
 }
 
 /// Encryption events emitted to frontend
@@ -27,9 +22,7 @@ pub enum EncryptionEvent {
     /// Encryption initialized
     Initialized,
     /// Encryption failed
-    Failed {
-        reason: String,
-    },
+    Failed { reason: String },
 }
 
 /// Forward clipboard event to frontend

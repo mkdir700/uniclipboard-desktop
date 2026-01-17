@@ -1,5 +1,5 @@
-use super::value_objects::{DeviceId, DeviceName};
 use super::platform::Platform;
+use super::value_objects::{DeviceId, DeviceName};
 
 /// Device information
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,7 +15,12 @@ pub struct Device {
 
 impl Device {
     pub fn new(id: DeviceId, name: DeviceName, platform: Platform, is_local: bool) -> Self {
-        Self { id, name, platform, is_local }
+        Self {
+            id,
+            name,
+            platform,
+            is_local,
+        }
     }
 
     pub fn id(&self) -> &DeviceId {

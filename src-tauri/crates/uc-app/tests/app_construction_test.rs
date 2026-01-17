@@ -20,8 +20,8 @@ fn test_app_new_signature_exists() {
 #[test]
 fn test_app_deps_is_plain_struct() {
     // Verify AppDeps is a plain struct, not a Builder
-    use uc_app::AppDeps;
     use std::mem;
+    use uc_app::AppDeps;
 
     // This test verifies AppDeps is a plain struct by checking its size
     // (Builders typically have smaller sizes due to being stateless)
@@ -30,5 +30,9 @@ fn test_app_deps_is_plain_struct() {
     // AppDeps should contain Arc<dyn Trait> pointers
     // Each Arc<dyn Trait> is typically 16 bytes (pointer + vtable)
     // We expect it to be reasonably large (not a zero-sized builder)
-    assert!(size > 100, "AppDeps should contain dependencies, size was {}", size);
+    assert!(
+        size > 100,
+        "AppDeps should contain dependencies, size was {}",
+        size
+    );
 }

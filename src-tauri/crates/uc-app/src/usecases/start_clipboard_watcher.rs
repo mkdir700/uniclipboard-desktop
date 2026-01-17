@@ -1,7 +1,7 @@
 //! Use case for starting the clipboard watcher
 //! 启动剪贴板监控器的用例
 
-use tracing::{info_span, info, Instrument};
+use tracing::{info, info_span, Instrument};
 use uc_core::ports::WatcherControlPort;
 
 /// Error type for clipboard watcher startup failures.
@@ -68,9 +68,9 @@ impl StartClipboardWatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use std::sync::Arc;
     use uc_core::ports::WatcherControlError;
-    use async_trait::async_trait;
 
     /// Mock WatcherControlPort
     struct MockWatcherControl {
@@ -104,7 +104,8 @@ mod tests {
             if self.should_fail {
                 return Err(WatcherControlError::StartFailed("mock failure".to_string()));
             }
-            self.started.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.started
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         }
 

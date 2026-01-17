@@ -157,8 +157,10 @@ pub fn create_default_keyring_in_app_data_root(
             log::warn!(
                 "Using file-based keyring (insecure dev fallback for WSL/headless environments)"
             );
-            Ok(Arc::new(FileBasedKeyring::new_in_app_data_root(app_data_root)?)
-                as Arc<dyn KeyringPort>)
+            Ok(
+                Arc::new(FileBasedKeyring::new_in_app_data_root(app_data_root)?)
+                    as Arc<dyn KeyringPort>,
+            )
         }
         SecureStorageCapability::Unsupported => {
             log::error!("Secure storage unsupported: {:?}", capability);

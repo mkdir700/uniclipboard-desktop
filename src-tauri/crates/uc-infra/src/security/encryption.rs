@@ -6,7 +6,7 @@ use chacha20poly1305::aead::Aead;
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use uc_core::ports::EncryptionPort;
 use uc_core::security::model::{
-    EncryptionAlgo, EncryptedBlob, EncryptionError, EncryptionFormatVersion, KdfAlgorithm,
+    EncryptedBlob, EncryptionAlgo, EncryptionError, EncryptionFormatVersion, KdfAlgorithm,
     KdfParams, Kek, MasterKey, Passphrase,
 };
 

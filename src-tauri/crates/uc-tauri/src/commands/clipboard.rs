@@ -28,10 +28,13 @@ pub async fn get_clipboard_entries(
 
     async move {
         let uc = runtime.usecases().list_clipboard_entries();
-        let entries = uc.execute(resolved_limit, resolved_offset).await.map_err(|e| {
-            tracing::error!(error = %e, "Failed to get clipboard entries");
-            e.to_string()
-        })?;
+        let entries = uc
+            .execute(resolved_limit, resolved_offset)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to get clipboard entries");
+                e.to_string()
+            })?;
 
         let mut projections = Vec::with_capacity(entries.len());
 
@@ -191,9 +194,7 @@ pub async fn get_clipboard_entry_detail(
             id: result.id,
             content: result.content,
             size_bytes: result.size_bytes,
-            content_type: result
-                .mime_type
-                .unwrap_or_else(|| "unknown".to_string()),
+            content_type: result.mime_type.unwrap_or_else(|| "unknown".to_string()),
             is_favorited: false,
             updated_at: result.created_at_ms,
             active_time: result.created_at_ms,

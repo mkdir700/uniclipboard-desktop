@@ -55,8 +55,13 @@ pub(crate) fn save_to_disk(config_dir: &PathBuf, id: &DeviceId) -> Result<()> {
         Err(rename_err) => {
             // Rename failed - likely cross-device link or permission issue
             // Fall back to direct write (non-atomic but better than failing)
-            std::fs::write(&path, id.as_str())
-                .with_context(|| format!("direct write device_id failed after rename error ({}): {}", rename_err, path.display()))?;
+            std::fs::write(&path, id.as_str()).with_context(|| {
+                format!(
+                    "direct write device_id failed after rename error ({}): {}",
+                    rename_err,
+                    path.display()
+                )
+            })?;
             // Clean up temp file if it still exists
             let _ = std::fs::remove_file(&tmp_path);
             Ok(())
@@ -69,7 +74,8 @@ mod tests {
     use super::*;
 
     fn make_temp_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("uc-device-storage-test-{}", uuid::Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("uc-device-storage-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("create temp dir");
         dir
     }
@@ -78,14 +84,20 @@ mod tests {
     fn load_from_nonexistent_dir_returns_none() {
         let dir = std::env::temp_dir().join("nonexistent-uc-device-test");
         let result = load_from_disk(&dir).expect("load_from_disk should succeed");
-        assert!(result.is_none(), "should return None for nonexistent directory");
+        assert!(
+            result.is_none(),
+            "should return None for nonexistent directory"
+        );
     }
 
     #[test]
     fn load_from_missing_file_returns_none() {
         let dir = make_temp_dir();
         let result = load_from_disk(&dir).expect("load_from_disk should succeed");
-        assert!(result.is_none(), "should return None when file doesn't exist");
+        assert!(
+            result.is_none(),
+            "should return None when file doesn't exist"
+        );
         std::fs::remove_dir_all(dir).expect("cleanup temp dir");
     }
 
@@ -98,7 +110,11 @@ mod tests {
         let loaded = load_from_disk(&dir).expect("load should succeed");
 
         assert!(loaded.is_some(), "should load saved device_id");
-        assert_eq!(loaded.unwrap().as_str(), id.as_str(), "loaded ID should match saved ID");
+        assert_eq!(
+            loaded.unwrap().as_str(),
+            id.as_str(),
+            "loaded ID should match saved ID"
+        );
 
         let path = dir.join(DEVICE_ID_FILE);
         assert!(path.exists(), "device_id file should exist");
@@ -123,7 +139,9 @@ mod tests {
 
     #[test]
     fn save_creates_parent_dir() {
-        let dir = std::env::temp_dir().join("uc-device-create-dir-test").join("nested");
+        let dir = std::env::temp_dir()
+            .join("uc-device-create-dir-test")
+            .join("nested");
         let id = DeviceId::new(uuid::Uuid::new_v4().to_string());
 
         save_to_disk(&dir, &id).expect("save should create parent dirs");
@@ -145,7 +163,11 @@ mod tests {
         save_to_disk(&dir, &id2).expect("second save should succeed");
 
         let loaded = load_from_disk(&dir).expect("load should succeed");
-        assert_eq!(loaded.unwrap().as_str(), id2.as_str(), "should have second ID");
+        assert_eq!(
+            loaded.unwrap().as_str(),
+            id2.as_str(),
+            "should have second ID"
+        );
 
         let tmp_path = dir.join("device_id.txt.tmp");
         assert!(!tmp_path.exists(), "temp file should be cleaned up");

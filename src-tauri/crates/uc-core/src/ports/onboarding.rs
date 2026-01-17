@@ -3,8 +3,8 @@
 //! This port defines the contract for persisting and retrieving onboarding state.
 //! Implementations are provided by the infrastructure layer (e.g., file-based storage).
 
-use async_trait::async_trait;
 use crate::onboarding::OnboardingState;
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait OnboardingStatePort: Send + Sync {

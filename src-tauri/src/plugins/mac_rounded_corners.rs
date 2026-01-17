@@ -200,15 +200,13 @@ unsafe fn position_traffic_lights(ns_window: ObjcId, offset_x: f64, offset_y: f6
 
     if !miniaturize_button.is_null() {
         let frame: NSRect = msg_send![miniaturize_button, frame];
-        let new_frame =
-            NSRect::new(NSPoint::new(new_x + 20.0, new_y), frame.size);
+        let new_frame = NSRect::new(NSPoint::new(new_x + 20.0, new_y), frame.size);
         let _: () = msg_send![miniaturize_button, setFrame: new_frame];
     }
 
     if !zoom_button.is_null() {
         let frame: NSRect = msg_send![zoom_button, frame];
-        let new_frame =
-            NSRect::new(NSPoint::new(new_x + 40.0, new_y), frame.size);
+        let new_frame = NSRect::new(NSPoint::new(new_x + 40.0, new_y), frame.size);
         let _: () = msg_send![zoom_button, setFrame: new_frame];
     }
 }

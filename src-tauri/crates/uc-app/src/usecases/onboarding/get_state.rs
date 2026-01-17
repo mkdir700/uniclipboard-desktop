@@ -44,7 +44,11 @@ impl GetOnboardingState {
         let onboarding_state = self.onboarding_state.get_state().await?;
 
         // Check if encryption is initialized
-        let encryption_state = self.encryption_state.load_state().await.unwrap_or(EncryptionState::Uninitialized);
+        let encryption_state = self
+            .encryption_state
+            .load_state()
+            .await
+            .unwrap_or(EncryptionState::Uninitialized);
         let encryption_initialized = encryption_state == EncryptionState::Initialized;
 
         Ok(OnboardingStateDto {
@@ -104,11 +108,15 @@ mod tests {
 
     #[async_trait::async_trait]
     impl EncryptionStatePort for MockEncryptionStatePort {
-        async fn load_state(&self) -> Result<EncryptionState, uc_core::security::state::EncryptionStateError> {
+        async fn load_state(
+            &self,
+        ) -> Result<EncryptionState, uc_core::security::state::EncryptionStateError> {
             Ok(*self.state.lock().unwrap())
         }
 
-        async fn persist_initialized(&self) -> Result<(), uc_core::security::state::EncryptionStateError> {
+        async fn persist_initialized(
+            &self,
+        ) -> Result<(), uc_core::security::state::EncryptionStateError> {
             *self.state.lock().unwrap() = EncryptionState::Initialized;
             Ok(())
         }
@@ -117,7 +125,8 @@ mod tests {
     #[tokio::test]
     async fn test_execute_returns_default_when_no_state() {
         let onboarding_mock = Arc::new(MockOnboardingStatePort::new(OnboardingState::default()));
-        let encryption_mock = Arc::new(MockEncryptionStatePort::new(EncryptionState::Uninitialized));
+        let encryption_mock =
+            Arc::new(MockEncryptionStatePort::new(EncryptionState::Uninitialized));
 
         let use_case = GetOnboardingState::new(onboarding_mock, encryption_mock);
         let result = use_case.execute().await.unwrap();
@@ -134,7 +143,8 @@ mod tests {
             ..Default::default()
         };
         let onboarding_mock = Arc::new(MockOnboardingStatePort::new(onboarding_state));
-        let encryption_mock = Arc::new(MockEncryptionStatePort::new(EncryptionState::Uninitialized));
+        let encryption_mock =
+            Arc::new(MockEncryptionStatePort::new(EncryptionState::Uninitialized));
 
         let use_case = GetOnboardingState::new(onboarding_mock, encryption_mock);
         let result = use_case.execute().await.unwrap();
@@ -176,10 +186,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_from_ports() {
-        let onboarding_mock = Arc::new(MockOnboardingStatePort::new(OnboardingState::default())) as Arc<dyn OnboardingStatePort>;
-        let encryption_mock = Arc::new(MockEncryptionStatePort::new(EncryptionState::Uninitialized)) as Arc<dyn EncryptionStatePort>;
+        let onboarding_mock = Arc::new(MockOnboardingStatePort::new(OnboardingState::default()))
+            as Arc<dyn OnboardingStatePort>;
+        let encryption_mock = Arc::new(MockEncryptionStatePort::new(EncryptionState::Uninitialized))
+            as Arc<dyn EncryptionStatePort>;
 
-        let use_case = GetOnboardingState::from_ports(onboarding_mock.clone(), encryption_mock.clone());
+        let use_case =
+            GetOnboardingState::from_ports(onboarding_mock.clone(), encryption_mock.clone());
         let result = use_case.execute().await.unwrap();
 
         assert!(!result.has_completed);
@@ -194,7 +207,8 @@ mod tests {
             device_registered: false, // This field is ignored
             ..Default::default()
         }));
-        let encryption_mock = Arc::new(MockEncryptionStatePort::new(EncryptionState::Uninitialized));
+        let encryption_mock =
+            Arc::new(MockEncryptionStatePort::new(EncryptionState::Uninitialized));
 
         let use_case = GetOnboardingState::new(onboarding_mock, encryption_mock);
         let result = use_case.execute().await.unwrap();

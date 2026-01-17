@@ -1,12 +1,12 @@
 //! Blob Repository Tests
 //! Blob 仓库测试
 
-use uc_core::{Blob, BlobId, ContentHash, blob::BlobStorageLocator, security::EncryptionAlgo};
-use uc_core::ports::BlobRepositoryPort;
-use uc_infra::db::repositories::DieselBlobRepository;
-use uc_infra::db::mappers::blob_mapper::BlobRowMapper;
-use std::sync::Arc;
 use std::path::PathBuf;
+use std::sync::Arc;
+use uc_core::ports::BlobRepositoryPort;
+use uc_core::{blob::BlobStorageLocator, security::EncryptionAlgo, Blob, BlobId, ContentHash};
+use uc_infra::db::mappers::blob_mapper::BlobRowMapper;
+use uc_infra::db::repositories::DieselBlobRepository;
 
 /// In-memory test executor for testing repositories
 struct TestDbExecutor {
@@ -16,15 +16,17 @@ struct TestDbExecutor {
 impl TestDbExecutor {
     fn new() -> Self {
         let pool = Arc::new(
-            uc_infra::db::pool::init_db_pool(":memory:")
-                .expect("Failed to create test DB pool")
+            uc_infra::db::pool::init_db_pool(":memory:").expect("Failed to create test DB pool"),
         );
         Self { pool }
     }
 }
 
 impl uc_infra::db::ports::DbExecutor for TestDbExecutor {
-    fn run<T>(&self, f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>) -> anyhow::Result<T> {
+    fn run<T>(
+        &self,
+        f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>,
+    ) -> anyhow::Result<T> {
         let mut conn = self.pool.get()?;
         f(&mut conn)
     }
@@ -61,11 +63,14 @@ async fn test_insert_and_find_by_hash() {
     );
 
     // Insert the blob
-    repo.insert_blob(&blob).await
+    repo.insert_blob(&blob)
+        .await
         .expect("Failed to insert blob");
 
     // Find the blob by hash
-    let found = repo.find_by_hash(&blob.content_hash).await
+    let found = repo
+        .find_by_hash(&blob.content_hash)
+        .await
         .expect("Failed to find blob by hash");
 
     assert!(found.is_some(), "Blob should be found by hash");
@@ -82,7 +87,9 @@ async fn test_find_by_hash_not_found() {
     let row_mapper = BlobRowMapper;
     let repo = DieselBlobRepository::new(executor, insert_mapper, row_mapper);
 
-    let result = repo.find_by_hash(&ContentHash::from(make_hash("nonexistent"))).await
+    let result = repo
+        .find_by_hash(&ContentHash::from(make_hash("nonexistent")))
+        .await
         .expect("Failed to execute find");
 
     assert!(result.is_none(), "Non-existent blob should return None");
@@ -116,12 +123,16 @@ async fn test_insert_duplicate_hash_fails() {
     );
 
     // Insert first blob
-    repo.insert_blob(&blob1).await
+    repo.insert_blob(&blob1)
+        .await
         .expect("Failed to insert first blob");
 
     // Insert second blob with same hash should fail due to UNIQUE constraint
     let result = repo.insert_blob(&blob2).await;
-    assert!(result.is_err(), "Inserting blob with duplicate hash should fail");
+    assert!(
+        result.is_err(),
+        "Inserting blob with duplicate hash should fail"
+    );
 }
 
 #[tokio::test]
@@ -143,11 +154,14 @@ async fn test_insert_encrypted_blob() {
     );
 
     // Insert the encrypted blob
-    repo.insert_blob(&blob).await
+    repo.insert_blob(&blob)
+        .await
         .expect("Failed to insert encrypted blob");
 
     // Find the blob by hash
-    let found = repo.find_by_hash(&blob.content_hash).await
+    let found = repo
+        .find_by_hash(&blob.content_hash)
+        .await
         .expect("Failed to find encrypted blob");
 
     assert!(found.is_some(), "Encrypted blob should be found");
@@ -183,14 +197,17 @@ async fn test_multiple_blobs_different_hash() {
             1704067200000 + (i as i64 * 1000),
         );
 
-        repo.insert_blob(&blob).await
+        repo.insert_blob(&blob)
+            .await
             .expect(&format!("Failed to insert blob {}", i));
     }
 
     // Verify each can be found by its hash
     for i in 1..=3 {
         let hash_str = make_hash(&format!("hash{}", i));
-        let found = repo.find_by_hash(&ContentHash::from(hash_str)).await
+        let found = repo
+            .find_by_hash(&ContentHash::from(hash_str))
+            .await
             .expect("Failed to find blob");
 
         assert!(found.is_some(), "Blob {} should be found", i);
@@ -216,14 +233,16 @@ async fn test_blob_with_zero_size() {
         1704067200000,
     );
 
-    repo.insert_blob(&blob).await
+    repo.insert_blob(&blob)
+        .await
         .expect("Failed to insert empty blob");
 
-    let found = repo.find_by_hash(&blob.content_hash).await
+    let found = repo
+        .find_by_hash(&blob.content_hash)
+        .await
         .expect("Failed to find empty blob");
 
     assert!(found.is_some());
     let found_blob = found.unwrap();
     assert_eq!(found_blob.size_bytes, 0);
 }
-

@@ -1,7 +1,13 @@
-use crate::db::models::snapshot_representation::{NewSnapshotRepresentationRow, SnapshotRepresentationRow};
+use crate::db::models::snapshot_representation::{
+    NewSnapshotRepresentationRow, SnapshotRepresentationRow,
+};
 use crate::db::ports::{InsertMapper, RowMapper};
 use anyhow::Result;
-use uc_core::{clipboard::PersistedClipboardRepresentation, ids::{EventId, FormatId, RepresentationId}, BlobId, MimeType};
+use uc_core::{
+    clipboard::PersistedClipboardRepresentation,
+    ids::{EventId, FormatId, RepresentationId},
+    BlobId, MimeType,
+};
 
 pub struct RepresentationRowMapper;
 
@@ -27,7 +33,8 @@ impl InsertMapper<(PersistedClipboardRepresentation, EventId), NewSnapshotRepres
 
 // Blanket implementation for references: if we can map from owned values,
 // we can also map from references by dereferencing
-impl<'a> InsertMapper<(&'a PersistedClipboardRepresentation, &'a EventId), NewSnapshotRepresentationRow>
+impl<'a>
+    InsertMapper<(&'a PersistedClipboardRepresentation, &'a EventId), NewSnapshotRepresentationRow>
     for RepresentationRowMapper
 where
     Self: InsertMapper<(PersistedClipboardRepresentation, EventId), NewSnapshotRepresentationRow>,
@@ -39,7 +46,10 @@ where
         let (rep, event_id) = domain;
         // Convert references to owned values for the owned implementation
         let owned_domain = ((**rep).clone(), (**event_id).clone());
-        <Self as InsertMapper<(PersistedClipboardRepresentation, EventId), NewSnapshotRepresentationRow>>::to_row(self, &owned_domain)
+        <Self as InsertMapper<
+            (PersistedClipboardRepresentation, EventId),
+            NewSnapshotRepresentationRow,
+        >>::to_row(self, &owned_domain)
     }
 }
 
@@ -65,7 +75,11 @@ impl RowMapper<SnapshotRepresentationRow, uc_core::clipboard::PersistedClipboard
 mod tests {
     use super::*;
     use crate::db::models::snapshot_representation::SnapshotRepresentationRow;
-    use uc_core::{clipboard::PersistedClipboardRepresentation, ids::{RepresentationId, FormatId, EventId}, BlobId, MimeType};
+    use uc_core::{
+        clipboard::PersistedClipboardRepresentation,
+        ids::{EventId, FormatId, RepresentationId},
+        BlobId, MimeType,
+    };
 
     #[test]
     fn test_row_mapper_all_fields() {

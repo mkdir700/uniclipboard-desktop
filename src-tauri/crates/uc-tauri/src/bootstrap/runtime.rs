@@ -29,11 +29,11 @@
 //! 2. Add a method to `UseCases` that calls `new()` with deps
 //! 3. Commands can now call `runtime.usecases().your_use_case()`
 
+use tauri::Emitter;
 use uc_app::{App, AppDeps};
 use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_core::SystemClipboardSnapshot;
-use tauri::Emitter;
 
 use crate::events::ClipboardEvent;
 
@@ -165,7 +165,9 @@ impl<'a> UseCases<'a> {
     /// # }
     /// ```
     pub fn list_clipboard_entries(&self) -> uc_app::usecases::ListClipboardEntries {
-        uc_app::usecases::ListClipboardEntries::from_arc(self.runtime.deps.clipboard_entry_repo.clone())
+        uc_app::usecases::ListClipboardEntries::from_arc(
+            self.runtime.deps.clipboard_entry_repo.clone(),
+        )
     }
 
     /// Create a `DeleteClipboardEntry` use case wired with this runtime's clipboard and selection repositories.
@@ -206,7 +208,9 @@ impl<'a> UseCases<'a> {
     /// # Ok(detail)
     /// # }
     /// ```
-    pub fn get_entry_detail(&self) -> uc_app::usecases::clipboard::get_entry_detail::GetEntryDetailUseCase {
+    pub fn get_entry_detail(
+        &self,
+    ) -> uc_app::usecases::clipboard::get_entry_detail::GetEntryDetailUseCase {
         uc_app::usecases::clipboard::get_entry_detail::GetEntryDetailUseCase::new(
             self.runtime.deps.clipboard_entry_repo.clone(),
             self.runtime.deps.selection_repo.clone(),
@@ -269,9 +273,7 @@ impl<'a> UseCases<'a> {
     /// # }
     /// ```
     pub fn is_encryption_initialized(&self) -> uc_app::usecases::IsEncryptionInitialized {
-        uc_app::usecases::IsEncryptionInitialized::new(
-            self.runtime.deps.encryption_state.clone(),
-        )
+        uc_app::usecases::IsEncryptionInitialized::new(self.runtime.deps.encryption_state.clone())
     }
 
     /// Onboarding use cases / 入门引导用例
@@ -392,7 +394,9 @@ impl<'a> UseCases<'a> {
     /// # }
     /// ```
     pub fn start_clipboard_watcher(&self) -> uc_app::usecases::StartClipboardWatcher {
-        uc_app::usecases::StartClipboardWatcher::from_port(self.runtime.deps.watcher_control.clone())
+        uc_app::usecases::StartClipboardWatcher::from_port(
+            self.runtime.deps.watcher_control.clone(),
+        )
     }
 
     // NOTE: Other use case methods will be added as the use case design evolves

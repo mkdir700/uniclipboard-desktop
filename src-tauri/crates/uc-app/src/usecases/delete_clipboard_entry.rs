@@ -3,9 +3,7 @@ use std::sync::Arc;
 use tracing::info;
 use uc_core::ids::EntryId;
 use uc_core::ports::{
-    ClipboardEntryRepositoryPort,
-    ClipboardSelectionRepositoryPort,
-    ClipboardEventWriterPort,
+    ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardSelectionRepositoryPort,
 };
 
 /// Use case for deleting clipboard entries with all associated data.
@@ -76,7 +74,8 @@ impl DeleteClipboardEntry {
         info!(entry_id = %entry_id, "Starting clipboard entry deletion");
 
         // 1. Verify entry exists
-        let entry = self.entry_repo
+        let entry = self
+            .entry_repo
             .get_entry(entry_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Clipboard entry not found: {}", entry_id))?;
@@ -107,9 +106,9 @@ impl DeleteClipboardEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use uc_core::clipboard::ClipboardEntry;
     use uc_core::ids::{EntryId, EventId};
-    use async_trait::async_trait;
 
     // Mock entry repository
     struct MockEntryRepo {
@@ -143,7 +142,8 @@ mod tests {
         }
 
         async fn delete_entry(&self, _entry_id: &EntryId) -> Result<()> {
-            self.delete_called.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.delete_called
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             if self.should_fail_delete {
                 return Err(anyhow::anyhow!("Mock delete_entry error"));
             }
@@ -151,49 +151,49 @@ mod tests {
         }
 
         /// Persists a clipboard entry together with its selection decision to the underlying stores.
-        
+
         ///
-        
+
         /// This saves both the provided `ClipboardEntry` and its associated `ClipboardSelectionDecision`.
-        
+
         ///
-        
+
         /// # Arguments
-        
+
         ///
-        
+
         /// * `entry` - The clipboard entry to persist.
-        
+
         /// * `selection` - The selection decision associated with the entry.
-        
+
         ///
-        
+
         /// # Returns
-        
+
         ///
-        
+
         /// `Ok(())` on success, or an error if persistence fails.
-        
+
         ///
-        
+
         /// # Examples
-        
+
         ///
-        
+
         /// ```no_run
-        
+
         /// # use std::sync::Arc;
-        
+
         /// # async fn _example() -> Result<(), Box<dyn std::error::Error>> {
-        
+
         /// // assuming `repo` is an implementation that provides this async method:
-        
+
         /// // repo.save_entry_and_selection(&entry, &selection).await?;
-        
+
         /// # Ok(())
-        
+
         /// # }
-        
+
         /// ```
         async fn save_entry_and_selection(
             &self,
@@ -252,7 +252,10 @@ mod tests {
         /// }
         /// # }
         /// ```
-        async fn get_selection(&self, _entry_id: &EntryId) -> Result<Option<uc_core::clipboard::ClipboardSelectionDecision>> {
+        async fn get_selection(
+            &self,
+            _entry_id: &EntryId,
+        ) -> Result<Option<uc_core::clipboard::ClipboardSelectionDecision>> {
             unimplemented!("Not used in tests")
         }
 
@@ -272,7 +275,8 @@ mod tests {
         /// });
         /// ```
         async fn delete_selection(&self, _entry_id: &EntryId) -> Result<()> {
-            self.delete_called.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.delete_called
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             if self.should_fail_delete {
                 return Err(anyhow::anyhow!("Mock delete_selection error"));
             }
@@ -334,9 +338,12 @@ mod tests {
         /// });
         /// ```
         async fn delete_event_and_representations(&self, _event_id: &EventId) -> Result<()> {
-            self.delete_called.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.delete_called
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             if self.should_fail_delete {
-                return Err(anyhow::anyhow!("Mock delete_event_and_representations error"));
+                return Err(anyhow::anyhow!(
+                    "Mock delete_event_and_representations error"
+                ));
             }
             Ok(())
         }
@@ -346,7 +353,8 @@ mod tests {
     async fn test_execute_deletes_all_related_data() {
         // Setup: Create mock repositories
         let delete_entry_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let delete_selection_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let delete_selection_called =
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let delete_event_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let entry_id = EntryId::from("test-entry".to_string());
@@ -400,7 +408,8 @@ mod tests {
     async fn test_execute_returns_not_found_for_nonexistent_entry() {
         // Setup: Mock entry repo returns None
         let delete_entry_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let delete_selection_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let delete_selection_called =
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let delete_event_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let entry_id = EntryId::from("nonexistent".to_string());
@@ -434,7 +443,11 @@ mod tests {
         // Assert error contains "not found"
         assert!(result.is_err(), "Should return error for nonexistent entry");
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("not found"), "Error should contain 'not found': {}", err);
+        assert!(
+            err.contains("not found"),
+            "Error should contain 'not found': {}",
+            err
+        );
 
         // Verify delete methods were NOT called (entry didn't exist)
         assert!(!delete_selection_called.load(std::sync::atomic::Ordering::SeqCst));
@@ -446,7 +459,8 @@ mod tests {
     async fn test_execute_propagates_repository_errors() {
         // Setup: Mock returns error
         let delete_entry_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let delete_selection_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let delete_selection_called =
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let delete_event_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let entry_id = EntryId::from("test-entry".to_string());
@@ -489,6 +503,10 @@ mod tests {
         // Assert error is propagated
         assert!(result.is_err(), "Should return error when repo fails");
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("Failed to delete selection"), "Error should indicate which operation failed: {}", err);
+        assert!(
+            err.contains("Failed to delete selection"),
+            "Error should indicate which operation failed: {}",
+            err
+        );
     }
 }

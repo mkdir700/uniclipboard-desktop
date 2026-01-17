@@ -23,12 +23,12 @@
 //! repo.update_blob_id(&rep_id, &blob_id).await?;
 //! ```
 
-use crate::db::models::snapshot_representation::SnapshotRepresentationRow;
 use crate::db::mappers::snapshot_representation_mapper::RepresentationRowMapper;
+use crate::db::models::snapshot_representation::SnapshotRepresentationRow;
 use crate::db::ports::{DbExecutor, RowMapper};
 use crate::db::schema::clipboard_snapshot_representation;
 use anyhow::Result;
-use diesel::{BoolExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, ExpressionMethods};
+use diesel::{BoolExpressionMethods, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl};
 use uc_core::clipboard::PersistedClipboardRepresentation;
 use uc_core::ids::{EventId, RepresentationId};
 use uc_core::ports::clipboard::ClipboardRepresentationRepositoryPort;

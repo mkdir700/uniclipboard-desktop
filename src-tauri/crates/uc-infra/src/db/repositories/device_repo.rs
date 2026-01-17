@@ -4,8 +4,8 @@ use diesel::prelude::*;
 use uc_core::device::{Device, DeviceId};
 use uc_core::ports::{DeviceRepositoryError, DeviceRepositoryPort};
 
-use crate::db::ports::{DbExecutor, InsertMapper, RowMapper};
 use crate::db::models::{DeviceRow, NewDeviceRow};
+use crate::db::ports::{DbExecutor, InsertMapper, RowMapper};
 use crate::db::schema::t_device::dsl::*;
 
 pub struct DieselDeviceRepository<E, M> {
@@ -40,7 +40,9 @@ where
 
                 match row {
                     Some(r) => {
-                        let device = self.mapper.to_domain(&r)
+                        let device = self
+                            .mapper
+                            .to_domain(&r)
                             .map_err(|e| DeviceRepositoryError::Storage(e.to_string()))?;
                         Ok(Some(device))
                     }
@@ -119,15 +121,16 @@ mod tests {
 
     impl TestDbExecutor {
         fn new() -> Self {
-            let pool = Arc::new(
-                init_db_pool(":memory:").expect("Failed to create test DB pool")
-            );
+            let pool = Arc::new(init_db_pool(":memory:").expect("Failed to create test DB pool"));
             Self { pool }
         }
     }
 
     impl DbExecutor for TestDbExecutor {
-        fn run<T>(&self, f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>) -> anyhow::Result<T> {
+        fn run<T>(
+            &self,
+            f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>,
+        ) -> anyhow::Result<T> {
             let mut conn = self.pool.get()?;
             f(&mut conn)
         }
@@ -147,11 +150,14 @@ mod tests {
         );
 
         // Save the device
-        repo.save(device.clone()).await
+        repo.save(device.clone())
+            .await
             .expect("Failed to save device");
 
         // Find the device
-        let found = repo.find_by_id(&device.id()).await
+        let found = repo
+            .find_by_id(&device.id())
+            .await
             .expect("Failed to find device");
 
         assert!(found.is_some(), "Device should be found");
@@ -168,7 +174,9 @@ mod tests {
         let mapper = DeviceRowMapper;
         let repo = DieselDeviceRepository::new(executor, mapper);
 
-        let result = repo.find_by_id(&DeviceId::new("non-existent")).await
+        let result = repo
+            .find_by_id(&DeviceId::new("non-existent"))
+            .await
             .expect("Failed to execute find");
 
         assert!(result.is_none(), "Non-existent device should return None");
@@ -188,7 +196,8 @@ mod tests {
         );
 
         // Save the device
-        repo.save(device.clone()).await
+        repo.save(device.clone())
+            .await
             .expect("Failed to save device");
 
         // Update the device
@@ -198,11 +207,14 @@ mod tests {
             Platform::Linux,
             true,
         );
-        repo.save(updated_device.clone()).await
+        repo.save(updated_device.clone())
+            .await
             .expect("Failed to update device");
 
         // Verify the update
-        let found = repo.find_by_id(&updated_device.id()).await
+        let found = repo
+            .find_by_id(&updated_device.id())
+            .await
             .expect("Failed to find device");
 
         assert!(found.is_some());
@@ -226,20 +238,26 @@ mod tests {
         );
 
         // Save the device
-        repo.save(device.clone()).await
+        repo.save(device.clone())
+            .await
             .expect("Failed to save device");
 
         // Verify it exists
-        let found = repo.find_by_id(&device.id()).await
+        let found = repo
+            .find_by_id(&device.id())
+            .await
             .expect("Failed to find device");
         assert!(found.is_some());
 
         // Delete the device
-        repo.delete(&device.id()).await
+        repo.delete(&device.id())
+            .await
             .expect("Failed to delete device");
 
         // Verify it's gone
-        let found = repo.find_by_id(&device.id()).await
+        let found = repo
+            .find_by_id(&device.id())
+            .await
             .expect("Failed to execute find");
         assert!(found.is_none(), "Device should be deleted");
     }
@@ -275,8 +293,7 @@ mod tests {
         repo.save(device3).await.expect("Failed to save device3");
 
         // List all devices
-        let devices = repo.list_all().await
-            .expect("Failed to list devices");
+        let devices = repo.list_all().await.expect("Failed to list devices");
 
         assert_eq!(devices.len(), 3, "Should have 3 devices");
     }
@@ -288,8 +305,7 @@ mod tests {
         let repo = DieselDeviceRepository::new(executor, mapper);
 
         // List all devices when none exist
-        let devices = repo.list_all().await
-            .expect("Failed to list devices");
+        let devices = repo.list_all().await.expect("Failed to list devices");
 
         assert_eq!(devices.len(), 0, "Should have 0 devices");
     }

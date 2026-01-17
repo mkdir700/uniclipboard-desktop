@@ -19,7 +19,10 @@ where
     /// Create a new ApplyAutostartSetting use case with all required ports.
     /// 使用所有必需的端口创建新的 ApplyAutostartSetting 用例。
     pub fn new(settings: Arc<S>, autostart: Arc<A>) -> Self {
-        Self { settings, autostart }
+        Self {
+            settings,
+            autostart,
+        }
     }
 
     pub async fn execute(&self, enabled: bool) -> Result<()> {

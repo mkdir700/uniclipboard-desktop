@@ -44,8 +44,8 @@ pub use clipboard_event::*;
 pub use clock::*;
 pub use hash::*;
 
-pub use app_runtime::AppRuntimePort;
 pub use app_dirs::AppDirsPort;
+pub use app_runtime::AppRuntimePort;
 pub use autostart::AutostartPort;
 pub use clipboard::*;
 pub use clipboard_change_handler::ClipboardChangeHandler;

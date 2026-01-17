@@ -3,8 +3,8 @@
 
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::interval;
 use tauri::{AppHandle, Emitter};
+use tokio::time::interval;
 use uc_app::AppDeps;
 
 /// Clipboard monitoring service
@@ -37,7 +37,7 @@ impl ClipboardMonitor {
             // This requires ClipboardEventWriterPort in AppDeps
             // TODO: 实现实际的剪贴板捕获
             // 这需要在 AppDeps 中添加 ClipboardEventWriterPort
-            
+
             // Emit heartbeat event for now
             // 目前发送心跳事件
             let _ = self.app.emit("clipboard://monitor_heartbeat", ());

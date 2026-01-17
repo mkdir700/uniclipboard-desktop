@@ -64,7 +64,10 @@ mod tests {
         let session = InMemoryEncryptionSession::new();
         let key = MasterKey([7u8; 32]);
 
-        session.set_master_key(key.clone()).await.expect("set master key");
+        session
+            .set_master_key(key.clone())
+            .await
+            .expect("set master key");
 
         assert!(session.is_ready().await);
         let stored = session.get_master_key().await.expect("get master key");
@@ -93,8 +96,14 @@ mod tests {
         let key_a = MasterKey([1u8; 32]);
         let key_b = MasterKey([2u8; 32]);
 
-        session.set_master_key(key_a.clone()).await.expect("set key a");
-        session.set_master_key(key_b.clone()).await.expect("set key b");
+        session
+            .set_master_key(key_a.clone())
+            .await
+            .expect("set key a");
+        session
+            .set_master_key(key_b.clone())
+            .await
+            .expect("set key b");
 
         let stored = session.get_master_key().await.expect("get master key");
         assert_eq!(stored, key_b);

@@ -3,10 +3,10 @@
 //! Wraps an inner BlobStorePort and transparently encrypts/decrypts
 //! blob data using the session's MasterKey.
 
-use std::path::PathBuf;
-use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::debug;
 
 use uc_core::{
@@ -28,7 +28,11 @@ impl EncryptedBlobStore {
         encryption: Arc<dyn EncryptionPort>,
         session: Arc<dyn EncryptionSessionPort>,
     ) -> Self {
-        Self { inner, encryption, session }
+        Self {
+            inner,
+            encryption,
+            session,
+        }
     }
 
     /// Generate AAD for blob encryption.
@@ -41,22 +45,30 @@ impl EncryptedBlobStore {
 impl BlobStorePort for EncryptedBlobStore {
     async fn put(&self, blob_id: &BlobId, data: &[u8]) -> Result<PathBuf> {
         // 1. Get master key from session
-        let master_key = self.session.get_master_key().await
+        let master_key = self
+            .session
+            .get_master_key()
+            .await
             .context("encryption session not ready - cannot encrypt blob")?;
 
         // 2. Encrypt the data
         let aad = Self::aad_for_blob(blob_id);
-        let encrypted_blob = self.encryption
+        let encrypted_blob = self
+            .encryption
             .encrypt_blob(&master_key, data, &aad, EncryptionAlgo::XChaCha20Poly1305)
             .await
             .context("failed to encrypt blob data")?;
 
         // 3. Serialize encrypted blob to bytes
-        let encrypted_bytes = serde_json::to_vec(&encrypted_blob)
-            .context("failed to serialize encrypted blob")?;
+        let encrypted_bytes =
+            serde_json::to_vec(&encrypted_blob).context("failed to serialize encrypted blob")?;
 
-        debug!("Encrypted blob {} ({} bytes plaintext -> {} bytes ciphertext)",
-            blob_id.as_ref(), data.len(), encrypted_bytes.len());
+        debug!(
+            "Encrypted blob {} ({} bytes plaintext -> {} bytes ciphertext)",
+            blob_id.as_ref(),
+            data.len(),
+            encrypted_bytes.len()
+        );
 
         // 4. Store encrypted bytes
         self.inner.put(blob_id, &encrypted_bytes).await
@@ -64,25 +76,38 @@ impl BlobStorePort for EncryptedBlobStore {
 
     async fn get(&self, blob_id: &BlobId) -> Result<Vec<u8>> {
         // 1. Get encrypted bytes from inner store
-        let encrypted_bytes = self.inner.get(blob_id).await
+        let encrypted_bytes = self
+            .inner
+            .get(blob_id)
+            .await
             .context("failed to read encrypted blob from storage")?;
 
         // 2. Deserialize encrypted blob
-        let encrypted_blob: uc_core::security::model::EncryptedBlob = serde_json::from_slice(&encrypted_bytes)
-            .context("failed to deserialize encrypted blob - data may be corrupted or unencrypted")?;
+        let encrypted_blob: uc_core::security::model::EncryptedBlob = serde_json::from_slice(
+            &encrypted_bytes,
+        )
+        .context("failed to deserialize encrypted blob - data may be corrupted or unencrypted")?;
 
         // 3. Get master key from session
-        let master_key = self.session.get_master_key().await
+        let master_key = self
+            .session
+            .get_master_key()
+            .await
             .context("encryption session not ready - cannot decrypt blob")?;
 
         // 4. Decrypt the data
         let aad = Self::aad_for_blob(blob_id);
-        let plaintext = self.encryption
+        let plaintext = self
+            .encryption
             .decrypt_blob(&master_key, &encrypted_blob, &aad)
             .await
             .context("failed to decrypt blob - key mismatch or data corrupted")?;
 
-        debug!("Decrypted blob {} ({} bytes)", blob_id.as_ref(), plaintext.len());
+        debug!(
+            "Decrypted blob {} ({} bytes)",
+            blob_id.as_ref(),
+            plaintext.len()
+        );
 
         Ok(plaintext)
     }
@@ -91,13 +116,13 @@ impl BlobStorePort for EncryptedBlobStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
+    use async_trait::async_trait;
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
     use uc_core::{
         security::model::{EncryptedBlob, EncryptionFormatVersion, MasterKey},
         BlobId,
     };
-    use async_trait::async_trait;
 
     /// Mock BlobStorePort that stores encrypted bytes in memory
     struct MockBlobStore {
@@ -119,7 +144,10 @@ mod tests {
     #[async_trait]
     impl BlobStorePort for MockBlobStore {
         async fn put(&self, blob_id: &BlobId, data: &[u8]) -> Result<PathBuf> {
-            self.storage.lock().unwrap().insert(blob_id.clone(), data.to_vec());
+            self.storage
+                .lock()
+                .unwrap()
+                .insert(blob_id.clone(), data.to_vec());
             Ok(PathBuf::from(format!("/fake/path/{}", blob_id.as_ref())))
         }
 
@@ -160,7 +188,8 @@ mod tests {
             _passphrase: &uc_core::security::model::Passphrase,
             _salt: &[u8],
             _kdf_params: &uc_core::security::model::KdfParams,
-        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError> {
+        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError>
+        {
             Ok(uc_core::security::model::Kek([0u8; 32]))
         }
 
@@ -242,11 +271,18 @@ mod tests {
             self.master_key.is_some()
         }
 
-        async fn get_master_key(&self) -> Result<MasterKey, uc_core::security::model::EncryptionError> {
-            self.master_key.clone().ok_or(uc_core::security::model::EncryptionError::Locked)
+        async fn get_master_key(
+            &self,
+        ) -> Result<MasterKey, uc_core::security::model::EncryptionError> {
+            self.master_key
+                .clone()
+                .ok_or(uc_core::security::model::EncryptionError::Locked)
         }
 
-        async fn set_master_key(&self, _master_key: MasterKey) -> Result<(), uc_core::security::model::EncryptionError> {
+        async fn set_master_key(
+            &self,
+            _master_key: MasterKey,
+        ) -> Result<(), uc_core::security::model::EncryptionError> {
             Ok(())
         }
 
@@ -260,7 +296,10 @@ mod tests {
         // Test that data is encrypted before being stored
         let inner = Arc::new(MockBlobStore::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let store = EncryptedBlobStore::new(inner.clone(), encryption, session);
 
@@ -277,7 +316,10 @@ mod tests {
             .expect("stored data should be a valid encrypted blob");
 
         assert_eq!(encrypted_blob.version, EncryptionFormatVersion::V1);
-        assert_eq!(encrypted_blob.aead, uc_core::security::model::EncryptionAlgo::XChaCha20Poly1305);
+        assert_eq!(
+            encrypted_blob.aead,
+            uc_core::security::model::EncryptionAlgo::XChaCha20Poly1305
+        );
         assert_eq!(encrypted_blob.ciphertext, data.to_vec());
     }
 
@@ -286,7 +328,10 @@ mod tests {
         // Test that data is decrypted when retrieved
         let inner = Arc::new(MockBlobStore::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let store = EncryptedBlobStore::new(inner.clone(), encryption, session);
 
@@ -300,7 +345,11 @@ mod tests {
         let retrieved = store.get(&blob_id).await;
 
         assert!(retrieved.is_ok(), "get should succeed");
-        assert_eq!(retrieved.unwrap(), data.to_vec(), "retrieved data should match original");
+        assert_eq!(
+            retrieved.unwrap(),
+            data.to_vec(),
+            "retrieved data should match original"
+        );
     }
 
     #[tokio::test]
@@ -332,7 +381,10 @@ mod tests {
         // First put some data (with a valid session)
         let inner = Arc::new(MockBlobStore::new());
         let encryption_good = Arc::new(MockEncryption::new());
-        let session_good = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session_good = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let store_good = EncryptedBlobStore::new(inner.clone(), encryption_good, session_good);
 
@@ -363,7 +415,10 @@ mod tests {
         // Test that encryption errors are propagated
         let inner = Arc::new(MockBlobStore::new());
         let encryption = Arc::new(MockEncryption::new().fail_on_encrypt());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let store = EncryptedBlobStore::new(inner, encryption, session);
 
@@ -394,7 +449,10 @@ mod tests {
 
         // Same blob ID should produce same AAD
         let aad1_again = EncryptedBlobStore::aad_for_blob(&blob_id1);
-        assert_eq!(aad1, aad1_again, "AAD should be deterministic for same blob ID");
+        assert_eq!(
+            aad1, aad1_again,
+            "AAD should be deterministic for same blob ID"
+        );
 
         // AAD should contain blob ID
         let aad_str = String::from_utf8(aad1).unwrap();

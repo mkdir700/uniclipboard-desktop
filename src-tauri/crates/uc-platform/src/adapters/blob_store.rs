@@ -4,8 +4,8 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use std::path::PathBuf;
-use uc_core::BlobId;
 use uc_core::ports::BlobStorePort;
+use uc_core::BlobId;
 
 /// Filesystem-based blob storage
 /// 基于文件系统的 blob 存储

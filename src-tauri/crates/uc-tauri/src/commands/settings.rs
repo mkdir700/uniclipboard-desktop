@@ -1,12 +1,12 @@
 //! Settings-related Tauri commands
 //! 设置相关的 Tauri 命令
 
-use std::sync::Arc;
-use serde_json::Value;
-use tauri::State;
-use uc_core::settings::model::Settings;
 use crate::bootstrap::AppRuntime;
+use serde_json::Value;
+use std::sync::Arc;
+use tauri::State;
 use tracing::{info_span, Instrument};
+use uc_core::settings::model::Settings;
 
 /// Get application settings
 /// 获取应用设置
@@ -16,9 +16,7 @@ use tracing::{info_span, Instrument};
 /// ## Returns / 返回值
 /// - JSON representation of current Settings
 #[tauri::command]
-pub async fn get_settings(
-    runtime: State<'_, Arc<AppRuntime>>,
-) -> Result<Value, String> {
+pub async fn get_settings(runtime: State<'_, Arc<AppRuntime>>) -> Result<Value, String> {
     let span = info_span!(
         "command.settings.get",
         device_id = %runtime.deps.device_identity.current_device_id(),
@@ -31,11 +29,10 @@ pub async fn get_settings(
         })?;
 
         // Convert Settings to JSON value
-        let json_value = serde_json::to_value(&settings)
-            .map_err(|e| {
-                tracing::error!(error = %e, "Failed to serialize settings");
-                format!("Failed to serialize settings: {}", e)
-            })?;
+        let json_value = serde_json::to_value(&settings).map_err(|e| {
+            tracing::error!(error = %e, "Failed to serialize settings");
+            format!("Failed to serialize settings: {}", e)
+        })?;
 
         tracing::info!("Retrieved settings successfully");
         Ok(json_value)
@@ -62,11 +59,10 @@ pub async fn update_settings(
     );
     async {
         // Parse JSON into Settings domain model
-        let parsed_settings: Settings = serde_json::from_value(settings.clone())
-            .map_err(|e| {
-                tracing::error!(error = %e, "Failed to parse settings JSON");
-                format!("Failed to parse settings: {}", e)
-            })?;
+        let parsed_settings: Settings = serde_json::from_value(settings.clone()).map_err(|e| {
+            tracing::error!(error = %e, "Failed to parse settings JSON");
+            format!("Failed to parse settings: {}", e)
+        })?;
 
         let uc = runtime.usecases().update_settings();
         uc.execute(parsed_settings).await.map_err(|e| {

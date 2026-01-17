@@ -55,10 +55,19 @@ mod tests {
 
         let paths = AppPaths::from_app_dirs(&dirs);
 
-        assert_eq!(paths.db_path, PathBuf::from("/tmp/uniclipboard/uniclipboard.db"));
+        assert_eq!(
+            paths.db_path,
+            PathBuf::from("/tmp/uniclipboard/uniclipboard.db")
+        );
         assert_eq!(paths.vault_dir, PathBuf::from("/tmp/uniclipboard/vault"));
-        assert_eq!(paths.settings_path, PathBuf::from("/tmp/uniclipboard/settings.json"));
-        assert_eq!(paths.keyring_dir, PathBuf::from("/tmp/uniclipboard/keyring"));
+        assert_eq!(
+            paths.settings_path,
+            PathBuf::from("/tmp/uniclipboard/settings.json")
+        );
+        assert_eq!(
+            paths.keyring_dir,
+            PathBuf::from("/tmp/uniclipboard/keyring")
+        );
         assert_eq!(paths.logs_dir, PathBuf::from("/tmp/uniclipboard/logs"));
     }
 }

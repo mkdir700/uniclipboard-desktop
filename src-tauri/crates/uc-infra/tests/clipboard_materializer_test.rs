@@ -1,13 +1,13 @@
 //! Clipboard Representation Materializer Tests
 //! 剪贴板表示物化器测试
 
-use uc_core::clipboard::{ObservedClipboardRepresentation};
-use uc_core::ids::{RepresentationId, FormatId};
-use uc_core::MimeType;
+use std::sync::Arc;
+use uc_core::clipboard::ObservedClipboardRepresentation;
+use uc_core::ids::{FormatId, RepresentationId};
 use uc_core::ports::ClipboardRepresentationMaterializerPort;
+use uc_core::MimeType;
 use uc_infra::clipboard::ClipboardRepresentationMaterializer;
 use uc_infra::config::ClipboardStorageConfig;
-use std::sync::Arc;
 
 #[tokio::test]
 async fn test_materialize_small_data_inline() {
@@ -29,7 +29,10 @@ async fn test_materialize_small_data_inline() {
     assert_eq!(result.size_bytes, 13);
     assert!(result.inline_data.is_some(), "Small data should be inline");
     assert_eq!(result.inline_data.unwrap(), b"Hello, World!".to_vec());
-    assert!(result.blob_id.is_none(), "Small data should not have blob_id");
+    assert!(
+        result.blob_id.is_none(),
+        "Small data should not have blob_id"
+    );
 }
 
 #[tokio::test]
@@ -52,8 +55,14 @@ async fn test_materialize_large_data_not_inline() {
 
     assert_eq!(result.id.to_string(), "test-rep-2");
     assert_eq!(result.size_bytes, 2048);
-    assert!(result.inline_data.is_none(), "Large data should NOT be inline");
-    assert!(result.blob_id.is_none(), "blob_id will be set by blob materializer later");
+    assert!(
+        result.inline_data.is_none(),
+        "Large data should NOT be inline"
+    );
+    assert!(
+        result.blob_id.is_none(),
+        "blob_id will be set by blob materializer later"
+    );
 }
 
 #[tokio::test]
@@ -74,7 +83,10 @@ async fn test_materialize_exactly_at_threshold() {
 
     let result = materializer.materialize(&observed).await.unwrap();
 
-    assert!(result.inline_data.is_some(), "Data at threshold should be inline");
+    assert!(
+        result.inline_data.is_some(),
+        "Data at threshold should be inline"
+    );
     assert_eq!(result.inline_data.unwrap().len(), 100);
 }
 
@@ -96,7 +108,10 @@ async fn test_materialize_one_byte_over_threshold() {
 
     let result = materializer.materialize(&observed).await.unwrap();
 
-    assert!(result.inline_data.is_none(), "Data over threshold should NOT be inline");
+    assert!(
+        result.inline_data.is_none(),
+        "Data over threshold should NOT be inline"
+    );
 }
 
 #[tokio::test]
@@ -119,7 +134,10 @@ async fn test_materialize_large_text_creates_inline_preview() {
 
     // Should have both inline preview AND no blob_id (blob_id set later)
     assert!(result.inline_data.is_some(), "Should have inline preview");
-    assert!(result.blob_id.is_none(), "blob_id will be set by blob materializer later");
+    assert!(
+        result.blob_id.is_none(),
+        "blob_id will be set by blob materializer later"
+    );
 
     // Inline should be truncated to 500 chars
     let inline_text = String::from_utf8(result.inline_data.unwrap()).unwrap();
@@ -146,7 +164,13 @@ async fn test_materialize_large_image_no_inline() {
     let result = materializer.materialize(&observed).await.unwrap();
 
     // Should have NO inline data, only blob (blob_id set later)
-    assert!(result.inline_data.is_none(), "Large images should not have inline data");
-    assert!(result.blob_id.is_none(), "blob_id will be set by blob materializer later");
+    assert!(
+        result.inline_data.is_none(),
+        "Large images should not have inline data"
+    );
+    assert!(
+        result.blob_id.is_none(),
+        "blob_id will be set by blob materializer later"
+    );
     assert_eq!(result.size_bytes, 20000);
 }

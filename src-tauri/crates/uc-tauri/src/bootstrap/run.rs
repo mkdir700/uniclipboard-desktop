@@ -1,7 +1,9 @@
 //! Application runtime management
 //! 应用运行时管理
 
-use crate::events::{forward_clipboard_event, forward_encryption_event, ClipboardEvent, EncryptionEvent};
+use crate::events::{
+    forward_clipboard_event, forward_encryption_event, ClipboardEvent, EncryptionEvent,
+};
 use std::sync::Arc;
 use tauri::AppHandle;
 use uc_app::App;

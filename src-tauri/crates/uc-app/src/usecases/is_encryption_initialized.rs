@@ -2,7 +2,7 @@
 //! 检查加密是否已初始化的用例
 
 use anyhow::Result;
-use tracing::{info_span, info, Instrument};
+use tracing::{info, info_span, Instrument};
 use uc_core::ports::security::encryption_state::EncryptionStatePort;
 use uc_core::security::state::EncryptionState;
 

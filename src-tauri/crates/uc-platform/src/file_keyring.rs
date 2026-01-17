@@ -277,7 +277,6 @@ mod tests {
         keyring.store_kek(&scope, &kek).expect("store failed");
 
         #[cfg(unix)]
-
         {
             use std::os::unix::fs::PermissionsExt;
             let path = keyring.kek_file_path(&scope);

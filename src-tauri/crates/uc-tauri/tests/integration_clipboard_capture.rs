@@ -2,12 +2,12 @@
 //!
 //! Tests the complete flow from clipboard change to entry persistence
 
-use std::sync::Arc;
-use uc_core::SystemClipboardSnapshot;
-use uc_core::ids::{RepresentationId, FormatId};
-use uc_core::ports::ClipboardChangeHandler;
-use uc_core::clipboard::ObservedClipboardRepresentation;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use uc_core::clipboard::ObservedClipboardRepresentation;
+use uc_core::ids::{FormatId, RepresentationId};
+use uc_core::ports::ClipboardChangeHandler;
+use uc_core::SystemClipboardSnapshot;
 
 /// Mock clipboard change handler for testing
 struct MockHandler {
@@ -52,24 +52,28 @@ async fn test_clipboard_change_handler_receives_callback() {
     // Create a dummy snapshot
     let snapshot = SystemClipboardSnapshot {
         ts_ms: 12345,
-        representations: vec![
-            ObservedClipboardRepresentation {
-                id: RepresentationId::from("test-rep-1".to_string()),
-                format_id: FormatId::from("public.utf8-plain-text".to_string()),
-                mime: Some(uc_core::MimeType("text/plain".to_string())),
-                bytes: vec![b'H', b'e', b'l', b'l', b'o'],
-            }
-        ],
+        representations: vec![ObservedClipboardRepresentation {
+            id: RepresentationId::from("test-rep-1".to_string()),
+            format_id: FormatId::from("public.utf8-plain-text".to_string()),
+            mime: Some(uc_core::MimeType("text/plain".to_string())),
+            bytes: vec![b'H', b'e', b'l', b'l', b'o'],
+        }],
     };
 
     // Clone the Arc to get the trait object
     let trait_handler: Arc<dyn ClipboardChangeHandler> = handler_arc.clone();
 
     // Call the handler
-    trait_handler.on_clipboard_changed(snapshot.clone()).await.unwrap();
+    trait_handler
+        .on_clipboard_changed(snapshot.clone())
+        .await
+        .unwrap();
 
     // Verify callback was called using the original handler reference
-    assert!(inner_handler.was_called(), "Handler should have been called");
+    assert!(
+        inner_handler.was_called(),
+        "Handler should have been called"
+    );
 
     // Verify snapshot was received
     let received = inner_handler.get_snapshot();
@@ -103,9 +107,16 @@ async fn test_clipboard_change_handler_multiple_calls() {
     trait_handler.on_clipboard_changed(snapshot2).await.unwrap();
 
     // Verify callback was called (last call should be tracked)
-    assert!(inner_handler.was_called(), "Handler should have been called");
+    assert!(
+        inner_handler.was_called(),
+        "Handler should have been called"
+    );
 
     let received = inner_handler.get_snapshot();
     assert!(received.is_some());
-    assert_eq!(received.unwrap().ts_ms, 2000, "Should have received last snapshot");
+    assert_eq!(
+        received.unwrap().ts_ms,
+        2000,
+        "Should have received last snapshot"
+    );
 }

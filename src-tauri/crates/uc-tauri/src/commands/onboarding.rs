@@ -1,9 +1,9 @@
 //! Onboarding-related Tauri commands
 //! 入门引导相关的 Tauri 命令
 
+use crate::bootstrap::AppRuntime;
 use std::sync::Arc;
 use tauri::State;
-use crate::bootstrap::AppRuntime;
 use uc_app::usecases::OnboardingStateDto;
 
 /// Get current onboarding state
@@ -25,9 +25,7 @@ pub async fn get_onboarding_state(
 /// This command uses the CompleteOnboarding use case.
 /// 此命令使用 CompleteOnboarding 用例。
 #[tauri::command]
-pub async fn complete_onboarding(
-    runtime: State<'_, Arc<AppRuntime>>,
-) -> Result<(), String> {
+pub async fn complete_onboarding(runtime: State<'_, Arc<AppRuntime>>) -> Result<(), String> {
     let uc = runtime.usecases().complete_onboarding();
     uc.execute().await.map_err(|e| e.to_string())
 }

@@ -10,10 +10,10 @@
 //! use cases to depend on this simpler interface while infrastructure
 //! implementations can depend on the more feature-rich `SystemClipboardPort`.
 
+use super::SystemClipboardPort;
 use crate::clipboard::SystemClipboardSnapshot;
 use anyhow::Result;
 use async_trait::async_trait;
-use super::SystemClipboardPort;
 
 /// Platform clipboard port for use case layer.
 ///

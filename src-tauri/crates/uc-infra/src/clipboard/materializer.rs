@@ -5,9 +5,11 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
 
-use uc_core::clipboard::{MimeType, ObservedClipboardRepresentation, PersistedClipboardRepresentation};
-use uc_core::ports::clipboard::ClipboardRepresentationMaterializerPort;
 use crate::config::clipboard_storage_config::ClipboardStorageConfig;
+use uc_core::clipboard::{
+    MimeType, ObservedClipboardRepresentation, PersistedClipboardRepresentation,
+};
+use uc_core::ports::clipboard::ClipboardRepresentationMaterializerPort;
 
 const PREVIEW_LENGTH_CHARS: usize = 500;
 
@@ -18,13 +20,13 @@ pub(crate) fn is_text_mime_type(mime_type: &Option<MimeType>) -> bool {
         None => false,
         Some(mt) => {
             let mt_str = mt.as_str();
-            mt_str.starts_with("text/") ||
-            mt_str == "text/plain" ||
-            mt_str.contains("json") ||
-            mt_str.contains("xml") ||
-            mt_str.contains("javascript") ||
-            mt_str.contains("html") ||
-            mt_str.contains("css")
+            mt_str.starts_with("text/")
+                || mt_str == "text/plain"
+                || mt_str.contains("json")
+                || mt_str.contains("xml")
+                || mt_str.contains("javascript")
+                || mt_str.contains("html")
+                || mt_str.contains("css")
         }
     }
 }
@@ -114,12 +116,16 @@ mod tests {
 
     #[test]
     fn test_is_text_mime_type_with_json() {
-        assert!(is_text_mime_type(&Some(MimeType::from_str("application/json").unwrap())));
+        assert!(is_text_mime_type(&Some(
+            MimeType::from_str("application/json").unwrap()
+        )));
     }
 
     #[test]
     fn test_is_text_mime_type_with_image() {
-        assert!(!is_text_mime_type(&Some(MimeType::from_str("image/png").unwrap())));
+        assert!(!is_text_mime_type(&Some(
+            MimeType::from_str("image/png").unwrap()
+        )));
     }
 
     #[test]

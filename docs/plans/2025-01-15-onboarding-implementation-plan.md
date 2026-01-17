@@ -47,11 +47,11 @@ Implement onboarding flow following Hexagonal Architecture (Ports and Adapters) 
 
 ## Use Cases
 
-| Use Case | Description | Frontend Integration |
-|----------|-------------|----------------------|
-| `InitializeOnboardingUseCase` | Get initial onboarding state | `useInitializeOnboarding` hook |
-| `GetOnboardingStateUseCase` | Get current state | Frontend polling |
-| `CompleteOnboardingUseCase` | Mark onboarding complete | `OnboardingContext.complete()` |
+| Use Case                                 | Description                    | Frontend Integration              |
+| ---------------------------------------- | ------------------------------ | --------------------------------- |
+| `InitializeOnboardingUseCase`            | Get initial onboarding state   | `useInitializeOnboarding` hook    |
+| `GetOnboardingStateUseCase`              | Get current state              | Frontend polling                  |
+| `CompleteOnboardingUseCase`              | Mark onboarding complete       | `OnboardingContext.complete()`    |
 | `InitializeEncryptionUseCase` (existing) | Initialize encryption password | `OnboardingContext.setPassword()` |
 
 ## Implementation Steps
@@ -525,6 +525,7 @@ fn main() {
 **Update: Frontend API bindings** (if needed)
 
 The frontend `useOnboarding` hook should already be compatible with the new command names. Verify that:
+
 - `get_onboarding_state` matches the expected API
 - `complete_onboarding` matches the expected API
 - `initialize_onboarding` matches the expected API

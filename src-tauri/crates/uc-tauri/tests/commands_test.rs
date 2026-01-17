@@ -7,4 +7,3 @@ async fn test_get_clipboard_entries_returns_empty_list_when_no_data() {
     // Full integration test requires AppDeps setup
     assert!(true, "Command signature verified");
 }
-

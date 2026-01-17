@@ -1,11 +1,11 @@
 //! In-memory encryption session port implementation
 //! 内存加密会话端口实现
 
-use tracing::{debug_span, debug};
-use uc_core::ports::EncryptionSessionPort;
-use uc_core::security::model::{EncryptionError, MasterKey};
 use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
+use tracing::{debug, debug_span};
+use uc_core::ports::EncryptionSessionPort;
+use uc_core::security::model::{EncryptionError, MasterKey};
 
 #[async_trait]
 impl EncryptionSessionPort for InMemoryEncryptionSessionPort {
@@ -89,9 +89,7 @@ impl InMemoryEncryptionSessionPort {
     /// 创建新的内存加密会话
     pub fn new() -> Self {
         Self {
-            state: Arc::new(Mutex::new(EncryptionSessionState {
-                master_key: None,
-            })),
+            state: Arc::new(Mutex::new(EncryptionSessionState { master_key: None })),
         }
     }
 }

@@ -24,8 +24,7 @@ impl DefaultKeyMaterialService {
 }
 
 #[async_trait]
-impl KeyMaterialPort for DefaultKeyMaterialService
-{
+impl KeyMaterialPort for DefaultKeyMaterialService {
     async fn load_kek(&self, scope: &KeyScope) -> Result<Kek, EncryptionError> {
         self.keyring.load_kek(scope)
     }

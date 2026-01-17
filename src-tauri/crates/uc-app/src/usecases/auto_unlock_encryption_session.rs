@@ -4,20 +4,14 @@
 //! and sets it in the EncryptionSessionPort for transparent encryption.
 
 use std::sync::Arc;
-use tracing::{info_span, info, Instrument};
+use tracing::{info, info_span, Instrument};
 
 use uc_core::{
     ports::{
-        security::{
-            encryption_state::EncryptionStatePort,
-            key_scope::KeyScopePort,
-        },
+        security::{encryption_state::EncryptionStatePort, key_scope::KeyScopePort},
         EncryptionPort, EncryptionSessionPort, KeyMaterialPort,
     },
-    security::{
-        model::EncryptionError,
-        state::EncryptionState,
-    },
+    security::{model::EncryptionError, state::EncryptionState},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -83,7 +77,13 @@ impl AutoUnlockEncryptionSession {
         encryption: Arc<dyn EncryptionPort>,
         encryption_session: Arc<dyn EncryptionSessionPort>,
     ) -> Self {
-        Self::new(encryption_state, key_scope, key_material, encryption, encryption_session)
+        Self::new(
+            encryption_state,
+            key_scope,
+            key_material,
+            encryption,
+            encryption_session,
+        )
     }
 
     /// Execute the auto-unlock flow.
@@ -100,7 +100,10 @@ impl AutoUnlockEncryptionSession {
             info!("Checking encryption state for auto-unlock");
 
             // 1. Check encryption state
-            let state = self.encryption_state.load_state().await
+            let state = self
+                .encryption_state
+                .load_state()
+                .await
                 .map_err(|e| AutoUnlockError::StateCheckFailed(e.to_string()))?;
 
             if state == EncryptionState::Uninitialized {
@@ -111,27 +114,42 @@ impl AutoUnlockEncryptionSession {
             info!("Encryption initialized, attempting auto-unlock");
 
             // 2. Get key scope
-            let scope = self.key_scope.current_scope().await
+            let scope = self
+                .key_scope
+                .current_scope()
+                .await
                 .map_err(|e| AutoUnlockError::ScopeFailed(e.to_string()))?;
 
             // 3. Load keyslot
-            let keyslot = self.key_material.load_keyslot(&scope).await
+            let keyslot = self
+                .key_material
+                .load_keyslot(&scope)
+                .await
                 .map_err(AutoUnlockError::KeySlotLoadFailed)?;
 
             // 4. Get wrapped master key
-            let wrapped_master_key = keyslot.wrapped_master_key
+            let wrapped_master_key = keyslot
+                .wrapped_master_key
                 .ok_or(AutoUnlockError::MissingWrappedMasterKey)?;
 
             // 5. Load KEK from keyring
-            let kek = self.key_material.load_kek(&scope).await
+            let kek = self
+                .key_material
+                .load_kek(&scope)
+                .await
                 .map_err(AutoUnlockError::KekLoadFailed)?;
 
             // 6. Unwrap master key
-            let master_key = self.encryption.unwrap_master_key(&kek, &wrapped_master_key.blob).await
+            let master_key = self
+                .encryption
+                .unwrap_master_key(&kek, &wrapped_master_key.blob)
+                .await
                 .map_err(AutoUnlockError::UnwrapFailed)?;
 
             // 7. Set master key in session
-            self.encryption_session.set_master_key(master_key).await
+            self.encryption_session
+                .set_master_key(master_key)
+                .await
                 .map_err(AutoUnlockError::SessionSetFailed)?;
 
             info!("Auto-unlock completed successfully");
@@ -145,15 +163,18 @@ impl AutoUnlockEncryptionSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use std::sync::Arc;
     use uc_core::{
         ports::security::key_scope::ScopeError,
         security::{
-            model::{KeyScope, MasterKey, Kek, WrappedMasterKey, EncryptedBlob, EncryptionFormatVersion, EncryptionAlgo},
+            model::{
+                EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, Kek, KeyScope, MasterKey,
+                WrappedMasterKey,
+            },
             state::EncryptionStateError,
         },
     };
-    use async_trait::async_trait;
 
     /// Mock EncryptionStatePort that returns a fixed state
     struct MockEncryptionState {
@@ -199,7 +220,9 @@ mod tests {
     #[async_trait]
     impl KeyScopePort for MockKeyScope {
         async fn current_scope(&self) -> Result<KeyScope, ScopeError> {
-            self.scope.clone().ok_or(ScopeError::FailedToGetCurrentScope)
+            self.scope
+                .clone()
+                .ok_or(ScopeError::FailedToGetCurrentScope)
         }
     }
 
@@ -230,11 +253,17 @@ mod tests {
 
     #[async_trait]
     impl uc_core::ports::KeyMaterialPort for MockKeyMaterial {
-        async fn load_keyslot(&self, _scope: &KeyScope) -> Result<uc_core::security::model::KeySlot, EncryptionError> {
+        async fn load_keyslot(
+            &self,
+            _scope: &KeyScope,
+        ) -> Result<uc_core::security::model::KeySlot, EncryptionError> {
             self.keyslot.clone().ok_or(EncryptionError::KeyNotFound)
         }
 
-        async fn store_keyslot(&self, _keyslot: &uc_core::security::model::KeySlot) -> Result<(), EncryptionError> {
+        async fn store_keyslot(
+            &self,
+            _keyslot: &uc_core::security::model::KeySlot,
+        ) -> Result<(), EncryptionError> {
             Ok(())
         }
 
@@ -262,7 +291,9 @@ mod tests {
 
     impl MockEncryption {
         fn new() -> Self {
-            Self { should_fail_unwrap: false }
+            Self {
+                should_fail_unwrap: false,
+            }
         }
 
         fn fail_on_unwrap(mut self) -> Self {
@@ -354,18 +385,23 @@ mod tests {
         }
 
         fn was_master_key_set(&self) -> bool {
-            self.master_key_set.load(std::sync::atomic::Ordering::SeqCst)
+            self.master_key_set
+                .load(std::sync::atomic::Ordering::SeqCst)
         }
     }
 
     #[async_trait]
     impl EncryptionSessionPort for MockEncryptionSession {
         async fn is_ready(&self) -> bool {
-            self.master_key_set.load(std::sync::atomic::Ordering::SeqCst)
+            self.master_key_set
+                .load(std::sync::atomic::Ordering::SeqCst)
         }
 
         async fn get_master_key(&self) -> Result<MasterKey, EncryptionError> {
-            if self.master_key_set.load(std::sync::atomic::Ordering::SeqCst) {
+            if self
+                .master_key_set
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
                 MasterKey::from_bytes(&[0u8; 32])
             } else {
                 Err(EncryptionError::Locked)
@@ -376,12 +412,14 @@ mod tests {
             if self.should_fail_set {
                 return Err(EncryptionError::CryptoFailure);
             }
-            self.master_key_set.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.master_key_set
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         }
 
         async fn clear(&self) -> Result<(), EncryptionError> {
-            self.master_key_set.store(false, std::sync::atomic::Ordering::SeqCst);
+            self.master_key_set
+                .store(false, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         }
     }
@@ -421,18 +459,17 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new());
         let session = Arc::new(MockEncryptionSession::new());
 
-        let use_case = AutoUnlockEncryptionSession::new(
-            state,
-            scope,
-            key_material,
-            encryption,
-            session,
-        );
+        let use_case =
+            AutoUnlockEncryptionSession::new(state, scope, key_material, encryption, session);
 
         let result = use_case.execute().await;
 
         assert!(result.is_ok(), "should succeed when uninitialized");
-        assert_eq!(result.unwrap(), false, "should return false when uninitialized");
+        assert_eq!(
+            result.unwrap(),
+            false,
+            "should return false when uninitialized"
+        );
     }
 
     #[tokio::test]
@@ -461,9 +498,19 @@ mod tests {
 
         let result = use_case.execute().await;
 
-        assert!(result.is_ok(), "should succeed when all dependencies succeed");
-        assert_eq!(result.unwrap(), true, "should return true on successful unlock");
-        assert!(session.was_master_key_set(), "master key should be set in session");
+        assert!(
+            result.is_ok(),
+            "should succeed when all dependencies succeed"
+        );
+        assert_eq!(
+            result.unwrap(),
+            true,
+            "should return true on successful unlock"
+        );
+        assert!(
+            session.was_master_key_set(),
+            "master key should be set in session"
+        );
     }
 
     #[tokio::test]
@@ -474,7 +521,9 @@ mod tests {
         #[async_trait]
         impl uc_core::ports::security::encryption_state::EncryptionStatePort for FailingState {
             async fn load_state(&self) -> Result<EncryptionState, EncryptionStateError> {
-                Err(EncryptionStateError::LoadError("state check failed".to_string()))
+                Err(EncryptionStateError::LoadError(
+                    "state check failed".to_string(),
+                ))
             }
 
             async fn persist_initialized(&self) -> Result<(), EncryptionStateError> {
@@ -490,13 +539,8 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new());
         let session = Arc::new(MockEncryptionSession::new());
 
-        let use_case = AutoUnlockEncryptionSession::new(
-            state,
-            scope,
-            key_material,
-            encryption,
-            session,
-        );
+        let use_case =
+            AutoUnlockEncryptionSession::new(state, scope, key_material, encryption, session);
 
         let result = use_case.execute().await;
 
@@ -518,13 +562,8 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new());
         let session = Arc::new(MockEncryptionSession::new());
 
-        let use_case = AutoUnlockEncryptionSession::new(
-            state,
-            scope,
-            key_material,
-            encryption,
-            session,
-        );
+        let use_case =
+            AutoUnlockEncryptionSession::new(state, scope, key_material, encryption, session);
 
         let result = use_case.execute().await;
 
@@ -549,13 +588,8 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new());
         let session = Arc::new(MockEncryptionSession::new());
 
-        let use_case = AutoUnlockEncryptionSession::new(
-            state,
-            scope,
-            key_material,
-            encryption,
-            session,
-        );
+        let use_case =
+            AutoUnlockEncryptionSession::new(state, scope, key_material, encryption, session);
 
         let result = use_case.execute().await;
 
@@ -584,17 +618,15 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new());
         let session = Arc::new(MockEncryptionSession::new());
 
-        let use_case = AutoUnlockEncryptionSession::new(
-            state,
-            scope,
-            key_material,
-            encryption,
-            session,
-        );
+        let use_case =
+            AutoUnlockEncryptionSession::new(state, scope, key_material, encryption, session);
 
         let result = use_case.execute().await;
 
-        assert!(result.is_err(), "should fail when wrapped master key is missing");
+        assert!(
+            result.is_err(),
+            "should fail when wrapped master key is missing"
+        );
         let err = result.unwrap_err().to_string();
         assert!(
             err.contains("keyslot has no wrapped master key"),
@@ -621,13 +653,8 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new().fail_on_unwrap());
         let session = Arc::new(MockEncryptionSession::new());
 
-        let use_case = AutoUnlockEncryptionSession::new(
-            state,
-            scope,
-            key_material,
-            encryption,
-            session,
-        );
+        let use_case =
+            AutoUnlockEncryptionSession::new(state, scope, key_material, encryption, session);
 
         let result = use_case.execute().await;
 
@@ -658,13 +685,8 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new());
         let session = Arc::new(MockEncryptionSession::new().fail_on_set());
 
-        let use_case = AutoUnlockEncryptionSession::new(
-            state,
-            scope,
-            key_material,
-            encryption,
-            session,
-        );
+        let use_case =
+            AutoUnlockEncryptionSession::new(state, scope, key_material, encryption, session);
 
         let result = use_case.execute().await;
 

@@ -18,8 +18,8 @@
 //! Phase 3: Infra/Platform layers add debug spans
 //! Phase 4: Remove `log` dependency (optional)
 
-use tracing_subscriber::{fmt, registry, prelude::*};
 use std::io;
+use tracing_subscriber::{fmt, prelude::*, registry};
 
 /// Check if running in development environment
 fn is_development() -> bool {
@@ -75,9 +75,17 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     // - Can be overridden with RUST_LOG environment variable
     let filter_directives = [
         if is_dev { "debug" } else { "info" },
-        "libp2p_mdns=warn",    // Filter noisy proxy errors
-        if is_dev { "uc_platform=debug" } else { "uc_platform=info" },
-        if is_dev { "uc_infra=debug" } else { "uc_infra=info" },
+        "libp2p_mdns=warn", // Filter noisy proxy errors
+        if is_dev {
+            "uc_platform=debug"
+        } else {
+            "uc_platform=info"
+        },
+        if is_dev {
+            "uc_infra=debug"
+        } else {
+            "uc_infra=info"
+        },
     ];
     let env_filter = tracing_subscriber::EnvFilter::try_new(filter_directives.join(","))
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::from_default_env());
@@ -86,20 +94,19 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     // Format matches existing log format for compatibility:
     // "2025-01-15 10:30:45.123 INFO [file.rs:42] [target] message"
     let fmt_layer = fmt::layer()
-        .with_timer(fmt::time::ChronoUtc::new("%Y-%m-%d %H:%M:%S%.3f".to_string()))
+        .with_timer(fmt::time::ChronoUtc::new(
+            "%Y-%m-%d %H:%M:%S%.3f".to_string(),
+        ))
         .with_level(true)
         .with_file(true)
         .with_line_number(true)
         .with_target(true)
-        .with_ansi(cfg!(not(test)))        // Disable colors in tests
-        .with_writer(io::stdout);          // Output to stdout
+        .with_ansi(cfg!(not(test))) // Disable colors in tests
+        .with_writer(io::stdout); // Output to stdout
 
     // Step 3: Register the global subscriber
     // This MUST be called once, before any logging occurs
-    registry()
-        .with(env_filter)
-        .with(fmt_layer)
-        .try_init()?;
+    registry().with(env_filter).with(fmt_layer).try_init()?;
 
     Ok(())
 }

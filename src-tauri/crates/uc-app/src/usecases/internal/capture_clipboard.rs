@@ -3,7 +3,7 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use futures::future::try_join_all;
-use tracing::{info_span, info, debug, Instrument};
+use tracing::{debug, info, info_span, Instrument};
 
 use uc_core::ids::{EntryId, EventId};
 use uc_core::ports::{
@@ -11,7 +11,9 @@ use uc_core::ports::{
     ClipboardRepresentationMaterializerPort, DeviceIdentityPort, PlatformClipboardPort,
     SelectRepresentationPolicyPort,
 };
-use uc_core::{ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, SystemClipboardSnapshot};
+use uc_core::{
+    ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, SystemClipboardSnapshot,
+};
 
 /// Capture clipboard content and create persistent entries.
 ///
@@ -198,7 +200,10 @@ impl CaptureClipboardUseCase {
     /// - 从剪贴板变化回调调用时（快照已读取）
     /// - Avoids redundant system clipboard reads
     /// - 避免重复读取系统剪贴板
-    pub async fn execute_with_snapshot(&self, snapshot: SystemClipboardSnapshot) -> Result<EventId> {
+    pub async fn execute_with_snapshot(
+        &self,
+        snapshot: SystemClipboardSnapshot,
+    ) -> Result<EventId> {
         let span = info_span!(
             "usecase.capture_clipboard.execute",
             source = "callback",

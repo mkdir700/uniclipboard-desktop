@@ -1,8 +1,8 @@
 //! Placeholder UI port implementation
 //! 占位符 UI 端口实现
 
-use uc_core::ports::UiPort;
 use anyhow::Result;
+use uc_core::ports::UiPort;
 
 #[async_trait::async_trait]
 impl UiPort for PlaceholderUiPort {

@@ -110,7 +110,8 @@ mod tests {
     /// ```
     #[test]
     fn adapter_appends_uniclipboard_dir_name() {
-        let adapter = DirsAppDirsAdapter::with_base_data_local_dir(std::path::PathBuf::from("/tmp"));
+        let adapter =
+            DirsAppDirsAdapter::with_base_data_local_dir(std::path::PathBuf::from("/tmp"));
         let dirs = adapter.get_app_dirs().unwrap();
         assert_eq!(
             dirs.app_data_root,

@@ -7,4 +7,3 @@ pub mod pool;
 pub mod ports;
 pub mod repositories;
 pub mod schema;
-

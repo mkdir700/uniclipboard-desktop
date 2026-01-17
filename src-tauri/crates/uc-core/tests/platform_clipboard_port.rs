@@ -3,10 +3,10 @@
 //! Verifies that the blanket implementation does NOT recursively call itself,
 //! which would cause a stack overflow.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
-use uc_core::ports::clipboard::{PlatformClipboardPort, SystemClipboardPort};
+use std::sync::Arc;
 use uc_core::clipboard::SystemClipboardSnapshot;
+use uc_core::ports::clipboard::{PlatformClipboardPort, SystemClipboardPort};
 
 /// Mock SystemClipboardPort that counts how many times read_snapshot is called
 ///
@@ -57,7 +57,8 @@ async fn test_platform_clipboard_port_does_not_recurse() {
     let port = CountingClipboardPort::new();
 
     // Call through PlatformClipboardPort trait (blanket impl)
-    let result: anyhow::Result<SystemClipboardSnapshot> = PlatformClipboardPort::read_snapshot(&port);
+    let result: anyhow::Result<SystemClipboardSnapshot> =
+        PlatformClipboardPort::read_snapshot(&port);
 
     // Verify it succeeds without recursion
     assert!(result.is_ok(), "read_snapshot should succeed");
@@ -65,7 +66,11 @@ async fn test_platform_clipboard_port_does_not_recurse() {
     // Verify SystemClipboardPort::read_snapshot was called exactly once
     // If blanket impl calls `self.read_snapshot()` instead of `SystemClipboardPort::read_snapshot(self)`,
     // it would recurse infinitely and panic
-    assert_eq!(port.call_count(), 1, "read_snapshot should be called exactly once");
+    assert_eq!(
+        port.call_count(),
+        1,
+        "read_snapshot should be called exactly once"
+    );
 }
 
 #[tokio::test]

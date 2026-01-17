@@ -200,9 +200,15 @@ mod tests {
         assert!(!config.database_path.as_os_str().is_empty());
         assert!(!config.vault_key_path.as_os_str().is_empty());
         assert!(!config.vault_snapshot_path.as_os_str().is_empty());
-        assert_eq!(config.database_path, PathBuf::from("/tmp/test/uniclipboard.db"));
+        assert_eq!(
+            config.database_path,
+            PathBuf::from("/tmp/test/uniclipboard.db")
+        );
         assert_eq!(config.vault_key_path, PathBuf::from("/tmp/test/vault/key"));
-        assert_eq!(config.vault_snapshot_path, PathBuf::from("/tmp/test/vault/snapshot"));
+        assert_eq!(
+            config.vault_snapshot_path,
+            PathBuf::from("/tmp/test/vault/snapshot")
+        );
         assert_eq!(config.device_name, "");
         assert_eq!(config.webserver_port, 0);
         assert!(!config.silent_start);

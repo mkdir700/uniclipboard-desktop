@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use std::path::PathBuf;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use uc_core::ports::OnboardingStatePort;
 use uc_core::onboarding::OnboardingState;
+use uc_core::ports::OnboardingStatePort;
 
 pub const DEFAULT_ONBOARDING_STATE_FILE: &str = ".onboarding_state";
 
@@ -70,13 +70,16 @@ impl OnboardingStatePort for FileOnboardingStateRepository {
         let json = serde_json::to_string_pretty(state)
             .map_err(|e| anyhow::anyhow!("Failed to serialize onboarding state: {}", e))?;
 
-        let mut file = fs::File::create(&self.state_file_path).await
+        let mut file = fs::File::create(&self.state_file_path)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to create state file: {}", e))?;
 
-        file.write_all(json.as_bytes()).await
+        file.write_all(json.as_bytes())
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to write state file: {}", e))?;
 
-        file.sync_all().await
+        file.sync_all()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to sync state file: {}", e))?;
 
         Ok(())
@@ -122,8 +125,14 @@ mod tests {
         let retrieved_state = repo.get_state().await.unwrap();
 
         assert_eq!(retrieved_state.has_completed, original_state.has_completed);
-        assert_eq!(retrieved_state.encryption_password_set, original_state.encryption_password_set);
-        assert_eq!(retrieved_state.device_registered, original_state.device_registered);
+        assert_eq!(
+            retrieved_state.encryption_password_set,
+            original_state.encryption_password_set
+        );
+        assert_eq!(
+            retrieved_state.device_registered,
+            original_state.device_registered
+        );
     }
 
     #[tokio::test]
@@ -175,7 +184,10 @@ mod tests {
     #[tokio::test]
     async fn test_with_base_dir() {
         let temp_dir = TempDir::new().unwrap();
-        let repo = FileOnboardingStateRepository::with_base_dir(temp_dir.path().to_path_buf(), "custom_state.json");
+        let repo = FileOnboardingStateRepository::with_base_dir(
+            temp_dir.path().to_path_buf(),
+            "custom_state.json",
+        );
 
         let expected_path = temp_dir.path().join("custom_state.json");
         assert_eq!(repo.state_file_path, expected_path);

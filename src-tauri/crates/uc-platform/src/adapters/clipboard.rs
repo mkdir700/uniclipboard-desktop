@@ -1,13 +1,15 @@
 //! Placeholder clipboard representation materializer port implementation
 //! 占位符剪贴板表示物化器端口实现
 
-use uc_core::ports::ClipboardRepresentationMaterializerPort;
-use uc_core::clipboard::{ObservedClipboardRepresentation, PersistedClipboardRepresentation};
 use anyhow::Result;
 use async_trait::async_trait;
+use uc_core::clipboard::{ObservedClipboardRepresentation, PersistedClipboardRepresentation};
+use uc_core::ports::ClipboardRepresentationMaterializerPort;
 
 #[async_trait]
-impl ClipboardRepresentationMaterializerPort for PlaceholderClipboardRepresentationMaterializerPort {
+impl ClipboardRepresentationMaterializerPort
+    for PlaceholderClipboardRepresentationMaterializerPort
+{
     async fn materialize(
         &self,
         _observed: &ObservedClipboardRepresentation,

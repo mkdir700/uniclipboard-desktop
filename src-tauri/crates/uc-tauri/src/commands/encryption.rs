@@ -1,11 +1,11 @@
 //! Encryption-related Tauri commands
 //! 加密相关的 Tauri 命令
 
+use crate::bootstrap::AppRuntime;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, State};
-use crate::bootstrap::AppRuntime;
-use tracing::{info_span, Instrument};  // NEW
+use tracing::{info_span, Instrument}; // NEW
 
 const LOG_CONTEXT: &str = "[initialize_encryption]";
 
@@ -56,10 +56,8 @@ pub async fn initialize_encryption(
         }
         Err(e) => {
             tracing::error!("Failed to start clipboard watcher: {}", e);
-            if let Err(err) = app_handle.emit(
-                "encryption://watcher-start-failed",
-                format!("{}", e),
-            ) {
+            if let Err(err) = app_handle.emit("encryption://watcher-start-failed", format!("{}", e))
+            {
                 tracing::error!("Failed to emit watcher start failure event: {}", err);
             }
             return Err(format!(

@@ -100,4 +100,3 @@ impl SettingsMigrator {
         Ok(settings)
     }
 }
-

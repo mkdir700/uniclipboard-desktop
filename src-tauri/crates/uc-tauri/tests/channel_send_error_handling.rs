@@ -3,8 +3,8 @@
 //! Tests that channel send failures are logged instead of silently ignored.
 //! This verifies the fix for: let _ = send(...).await
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// Helper struct to track if error was logged

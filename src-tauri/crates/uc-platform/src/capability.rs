@@ -92,8 +92,7 @@ fn is_wsl() -> bool {
 ///
 /// Both are required for keyring daemons (gnome-keyring, kwallet, etc.) to function.
 fn has_desktop_environment() -> bool {
-    std::env::var("DISPLAY").is_ok()
-        && std::env::var("DBUS_SESSION_BUS_ADDRESS").is_ok()
+    std::env::var("DISPLAY").is_ok() && std::env::var("DBUS_SESSION_BUS_ADDRESS").is_ok()
 }
 
 #[cfg(test)]

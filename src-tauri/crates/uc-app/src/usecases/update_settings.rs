@@ -2,7 +2,7 @@
 //! 更新应用设置的用例
 
 use anyhow::Result;
-use tracing::{info_span, info, Instrument};
+use tracing::{info, info_span, Instrument};
 use uc_core::ports::SettingsPort;
 use uc_core::settings::model::Settings;
 

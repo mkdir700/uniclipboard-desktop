@@ -2,9 +2,9 @@
 //!
 //! Wraps ClipboardRepresentationRepositoryPort and decrypts inline_data on read.
 
-use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use std::sync::Arc;
 use tracing::debug;
 
 use uc_core::{
@@ -28,7 +28,11 @@ impl DecryptingClipboardRepresentationRepository {
         encryption: Arc<dyn EncryptionPort>,
         session: Arc<dyn EncryptionSessionPort>,
     ) -> Self {
-        Self { inner, encryption, session }
+        Self {
+            inner,
+            encryption,
+            session,
+        }
     }
 
     /// Generate AAD for inline data decryption.
@@ -45,7 +49,10 @@ impl ClipboardRepresentationRepositoryPort for DecryptingClipboardRepresentation
         representation_id: &RepresentationId,
     ) -> Result<Option<PersistedClipboardRepresentation>> {
         // Get from inner
-        let rep_opt = self.inner.get_representation(event_id, representation_id).await?;
+        let rep_opt = self
+            .inner
+            .get_representation(event_id, representation_id)
+            .await?;
 
         let Some(rep) = rep_opt else {
             return Ok(None);
@@ -58,18 +65,25 @@ impl ClipboardRepresentationRepositoryPort for DecryptingClipboardRepresentation
                 .context("failed to deserialize encrypted inline_data - data may be corrupted")?;
 
             // Get master key
-            let master_key = self.session.get_master_key().await
+            let master_key = self
+                .session
+                .get_master_key()
+                .await
                 .context("encryption session not ready - cannot decrypt")?;
 
             // Decrypt
             let aad = Self::aad_for_inline(event_id, representation_id);
-            let plaintext = self.encryption
+            let plaintext = self
+                .encryption
                 .decrypt_blob(&master_key, &encrypted_blob, &aad)
                 .await
                 .context("failed to decrypt inline_data")?;
 
-            debug!("Decrypted inline_data for rep {} ({} bytes)",
-                representation_id.as_ref(), plaintext.len());
+            debug!(
+                "Decrypted inline_data for rep {} ({} bytes)",
+                representation_id.as_ref(),
+                plaintext.len()
+            );
 
             Some(plaintext)
         } else {
@@ -100,17 +114,24 @@ impl ClipboardRepresentationRepositoryPort for DecryptingClipboardRepresentation
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use std::sync::{Arc, Mutex};
     use uc_core::{
-        clipboard::{PersistedClipboardRepresentation, MimeType},
-        ids::{EventId, FormatId, RepresentationId, BlobId},
-        security::model::{EncryptedBlob, EncryptionFormatVersion, EncryptionAlgo, MasterKey},
+        clipboard::{MimeType, PersistedClipboardRepresentation},
+        ids::{BlobId, EventId, FormatId, RepresentationId},
+        security::model::{EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, MasterKey},
     };
-    use async_trait::async_trait;
 
     /// Mock ClipboardRepresentationRepositoryPort
     struct MockRepresentationRepo {
-        storage: Arc<Mutex<std::collections::HashMap<(EventId, RepresentationId), PersistedClipboardRepresentation>>>,
+        storage: Arc<
+            Mutex<
+                std::collections::HashMap<
+                    (EventId, RepresentationId),
+                    PersistedClipboardRepresentation,
+                >,
+            >,
+        >,
     }
 
     impl MockRepresentationRepo {
@@ -121,7 +142,10 @@ mod tests {
         }
 
         fn store(&self, event_id: &EventId, rep: PersistedClipboardRepresentation) {
-            self.storage.lock().unwrap().insert((event_id.clone(), rep.id.clone()), rep);
+            self.storage
+                .lock()
+                .unwrap()
+                .insert((event_id.clone(), rep.id.clone()), rep);
         }
     }
 
@@ -132,7 +156,12 @@ mod tests {
             event_id: &EventId,
             representation_id: &RepresentationId,
         ) -> Result<Option<PersistedClipboardRepresentation>> {
-            Ok(self.storage.lock().unwrap().get(&(event_id.clone(), representation_id.clone())).cloned())
+            Ok(self
+                .storage
+                .lock()
+                .unwrap()
+                .get(&(event_id.clone(), representation_id.clone()))
+                .cloned())
         }
 
         async fn update_blob_id(
@@ -157,7 +186,9 @@ mod tests {
 
     impl MockEncryption {
         fn new() -> Self {
-            Self { should_fail_decrypt: false }
+            Self {
+                should_fail_decrypt: false,
+            }
         }
     }
 
@@ -168,7 +199,8 @@ mod tests {
             _passphrase: &uc_core::security::model::Passphrase,
             _salt: &[u8],
             _kdf_params: &uc_core::security::model::KdfParams,
-        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError> {
+        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError>
+        {
             Ok(uc_core::security::model::Kek([0u8; 32]))
         }
 
@@ -246,11 +278,18 @@ mod tests {
             self.master_key.is_some()
         }
 
-        async fn get_master_key(&self) -> Result<MasterKey, uc_core::security::model::EncryptionError> {
-            self.master_key.clone().ok_or(uc_core::security::model::EncryptionError::Locked)
+        async fn get_master_key(
+            &self,
+        ) -> Result<MasterKey, uc_core::security::model::EncryptionError> {
+            self.master_key
+                .clone()
+                .ok_or(uc_core::security::model::EncryptionError::Locked)
         }
 
-        async fn set_master_key(&self, _master_key: MasterKey) -> Result<(), uc_core::security::model::EncryptionError> {
+        async fn set_master_key(
+            &self,
+            _master_key: MasterKey,
+        ) -> Result<(), uc_core::security::model::EncryptionError> {
             Ok(())
         }
 
@@ -260,7 +299,10 @@ mod tests {
     }
 
     /// Creates an encrypted representation for testing
-    fn create_encrypted_representation(rep_id: RepresentationId, plaintext: &[u8]) -> PersistedClipboardRepresentation {
+    fn create_encrypted_representation(
+        rep_id: RepresentationId,
+        plaintext: &[u8],
+    ) -> PersistedClipboardRepresentation {
         let encrypted_blob = EncryptedBlob {
             version: EncryptionFormatVersion::V1,
             aead: EncryptionAlgo::XChaCha20Poly1305,
@@ -285,16 +327,23 @@ mod tests {
         // Test that inline data is decrypted when retrieved
         let inner = Arc::new(MockRepresentationRepo::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
-        let repo = DecryptingClipboardRepresentationRepository::new(inner.clone(), encryption, session);
+        let repo =
+            DecryptingClipboardRepresentationRepository::new(inner.clone(), encryption, session);
 
         let event_id = EventId::new();
         let rep_id = RepresentationId::new();
         let plaintext = b"test plaintext data";
 
         // Store an encrypted representation
-        inner.store(&event_id, create_encrypted_representation(rep_id.clone(), plaintext));
+        inner.store(
+            &event_id,
+            create_encrypted_representation(rep_id.clone(), plaintext),
+        );
 
         // Retrieve it - should be decrypted
         let result = repo.get_representation(&event_id, &rep_id).await;
@@ -304,7 +353,11 @@ mod tests {
         assert!(rep_opt.is_some(), "representation should exist");
 
         let rep = rep_opt.unwrap();
-        assert_eq!(rep.inline_data, Some(plaintext.to_vec()), "inline data should be decrypted");
+        assert_eq!(
+            rep.inline_data,
+            Some(plaintext.to_vec()),
+            "inline data should be decrypted"
+        );
     }
 
     #[tokio::test]
@@ -312,9 +365,13 @@ mod tests {
         // Test that representations without inline data are passed through unchanged
         let inner = Arc::new(MockRepresentationRepo::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
-        let repo = DecryptingClipboardRepresentationRepository::new(inner.clone(), encryption, session);
+        let repo =
+            DecryptingClipboardRepresentationRepository::new(inner.clone(), encryption, session);
 
         let event_id = EventId::new();
         let rep_id = RepresentationId::new();
@@ -338,7 +395,10 @@ mod tests {
         assert!(rep_opt.is_some(), "representation should exist");
 
         let retrieved_rep = rep_opt.unwrap();
-        assert!(retrieved_rep.inline_data.is_none(), "inline data should remain None");
+        assert!(
+            retrieved_rep.inline_data.is_none(),
+            "inline data should remain None"
+        );
         assert_eq!(retrieved_rep.blob_id, Some(BlobId::from("blob-123")));
     }
 
@@ -347,7 +407,10 @@ mod tests {
         // Test that None is returned for non-existent representations
         let inner = Arc::new(MockRepresentationRepo::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let repo = DecryptingClipboardRepresentationRepository::new(inner, encryption, session);
 
@@ -367,19 +430,26 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new());
         let session = Arc::new(MockEncryptionSession::new()); // No master key
 
-        let repo = DecryptingClipboardRepresentationRepository::new(inner.clone(), encryption, session);
+        let repo =
+            DecryptingClipboardRepresentationRepository::new(inner.clone(), encryption, session);
 
         let event_id = EventId::new();
         let rep_id = RepresentationId::new();
         let plaintext = b"test data";
 
         // Store an encrypted representation
-        inner.store(&event_id, create_encrypted_representation(rep_id.clone(), plaintext));
+        inner.store(
+            &event_id,
+            create_encrypted_representation(rep_id.clone(), plaintext),
+        );
 
         // Try to retrieve it - should fail
         let result = repo.get_representation(&event_id, &rep_id).await;
 
-        assert!(result.is_err(), "get_representation should fail when session not ready");
+        assert!(
+            result.is_err(),
+            "get_representation should fail when session not ready"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("encryption session not ready"),
@@ -395,7 +465,8 @@ mod tests {
         let encryption = Arc::new(MockEncryption::new());
         let session = Arc::new(MockEncryptionSession::new());
 
-        let repo = DecryptingClipboardRepresentationRepository::new(inner.clone(), encryption, session);
+        let repo =
+            DecryptingClipboardRepresentationRepository::new(inner.clone(), encryption, session);
 
         let rep_id = RepresentationId::new();
         let blob_id = BlobId::from("new-blob");
@@ -418,7 +489,10 @@ mod tests {
 
         // Different event ID should produce different AAD
         let different_event_id = EventId::from("different-event-id");
-        let aad3 = DecryptingClipboardRepresentationRepository::aad_for_inline(&different_event_id, &rep_id);
+        let aad3 = DecryptingClipboardRepresentationRepository::aad_for_inline(
+            &different_event_id,
+            &rep_id,
+        );
         assert_ne!(aad1, aad3, "AAD should differ for different event IDs");
     }
 }

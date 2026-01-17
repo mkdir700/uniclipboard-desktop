@@ -60,5 +60,8 @@ async fn test_update_settings_validates_schema_version() {
     let result = update_uc.execute(settings).await;
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Invalid schema version"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Invalid schema version"));
 }

@@ -1,16 +1,16 @@
 //! Blob Materializer Tests
 //! Blob 物化器测试
 
-use uc_core::Blob;
-use uc_core::BlobId;
-use uc_core::ContentHash;
-use uc_core::ports::{BlobMaterializerPort, BlobStorePort, BlobRepositoryPort};
-use uc_infra::blob::BlobMaterializer;
-use uc_infra::SystemClock;
+use async_trait::async_trait;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::fs;
-use async_trait::async_trait;
+use uc_core::ports::{BlobMaterializerPort, BlobRepositoryPort, BlobStorePort};
+use uc_core::Blob;
+use uc_core::BlobId;
+use uc_core::ContentHash;
+use uc_infra::blob::BlobMaterializer;
+use uc_infra::SystemClock;
 
 /// Test blob store that uses temporary directory
 #[derive(Clone)]
@@ -117,7 +117,10 @@ async fn test_blob_materializer_deduplicates() {
     let result2: Blob = materializer.materialize(data, &hash).await.unwrap();
     let blob_id2 = result2.blob_id.clone();
 
-    assert_eq!(blob_id1, blob_id2, "Should return same blob for same content");
+    assert_eq!(
+        blob_id1, blob_id2,
+        "Should return same blob for same content"
+    );
 }
 
 #[tokio::test]
@@ -153,5 +156,8 @@ async fn test_blob_materializer_different_hashes_different_blobs() {
     let result1: Blob = materializer.materialize(data, &hash1).await.unwrap();
     let result2: Blob = materializer.materialize(data, &hash2).await.unwrap();
 
-    assert_ne!(result1.blob_id, result2.blob_id, "Different hashes should create different blobs");
+    assert_ne!(
+        result1.blob_id, result2.blob_id,
+        "Different hashes should create different blobs"
+    );
 }

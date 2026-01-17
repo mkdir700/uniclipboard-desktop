@@ -1,5 +1,5 @@
-mod event;
 mod command;
+mod event;
 
-pub use event::PlatformEvent;
 pub use command::PlatformCommand;
+pub use event::PlatformEvent;

@@ -76,7 +76,7 @@ impl KeySlotStore for JsonKeySlotStore {
 mod tests {
     use super::*;
     use uc_core::security::model::{
-        EncryptionAlgo, EncryptionFormatVersion, KdfParams, KeyScope, KeySlotVersion
+        EncryptionAlgo, EncryptionFormatVersion, KdfParams, KeyScope, KeySlotVersion,
     };
 
     fn make_temp_dir() -> PathBuf {

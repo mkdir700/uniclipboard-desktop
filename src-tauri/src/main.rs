@@ -5,18 +5,18 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use log::error;
-use tracing::{error as tracing_error, info as tracing_info};
 use tauri::Emitter;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
 use tokio::sync::mpsc;
+use tracing::{error as tracing_error, info as tracing_info};
 
 use uc_core::config::AppConfig;
+use uc_core::ports::AppDirsPort;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_platform::ipc::PlatformCommand;
 use uc_platform::ports::PlatformCommandExecutorPort;
-use uc_core::ports::AppDirsPort;
 use uc_platform::runtime::event_bus::{
     PlatformCommandReceiver, PlatformEventReceiver, PlatformEventSender,
 };
@@ -213,14 +213,18 @@ fn run_app(config: AppConfig) {
                 log::info!("Platform runtime task started");
 
                 // 1. Check if encryption initialized and auto-unlock
-                let uc = runtime_for_unlock.usecases().auto_unlock_encryption_session();
+                let uc = runtime_for_unlock
+                    .usecases()
+                    .auto_unlock_encryption_session();
                 let should_start_watcher = match uc.execute().await {
                     Ok(true) => {
                         tracing_info!("Encryption session auto-unlocked successfully");
                         true
                     }
                     Ok(false) => {
-                        tracing_info!("Encryption not initialized, clipboard watcher will not start");
+                        tracing_info!(
+                            "Encryption not initialized, clipboard watcher will not start"
+                        );
                         tracing_info!("User must set encryption password via onboarding");
                         false
                     }
@@ -229,8 +233,13 @@ fn run_app(config: AppConfig) {
                         // Emit error event to frontend for user notification
                         let app_handle_guard = runtime_for_unlock.app_handle();
                         if let Some(app) = app_handle_guard.as_ref() {
-                            if let Err(emit_err) = app.emit("encryption-auto-unlock-error", format!("{}", e)) {
-                                log::warn!("Failed to emit encryption-auto-unlock-error event: {}", emit_err);
+                            if let Err(emit_err) =
+                                app.emit("encryption-auto-unlock-error", format!("{}", e))
+                            {
+                                log::warn!(
+                                    "Failed to emit encryption-auto-unlock-error event: {}",
+                                    emit_err
+                                );
                             }
                         }
                         drop(app_handle_guard);
@@ -266,8 +275,13 @@ fn run_app(config: AppConfig) {
                             // Emit error event to frontend for user notification
                             let app_handle_guard = runtime_for_unlock.app_handle();
                             if let Some(app) = app_handle_guard.as_ref() {
-                                if let Err(emit_err) = app.emit("clipboard-watcher-start-failed", format!("{}", e)) {
-                                    log::warn!("Failed to emit clipboard-watcher-start-failed event: {}", emit_err);
+                                if let Err(emit_err) =
+                                    app.emit("clipboard-watcher-start-failed", format!("{}", e))
+                                {
+                                    log::warn!(
+                                        "Failed to emit clipboard-watcher-start-failed event: {}",
+                                        emit_err
+                                    );
                                 }
                             }
                             drop(app_handle_guard);

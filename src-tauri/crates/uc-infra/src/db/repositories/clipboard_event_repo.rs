@@ -208,14 +208,17 @@ mod tests {
     impl TestDbExecutor {
         fn new() -> Self {
             let pool = Arc::new(
-                crate::db::pool::init_db_pool(":memory:").expect("Failed to create test DB pool")
+                crate::db::pool::init_db_pool(":memory:").expect("Failed to create test DB pool"),
             );
             Self { pool }
         }
     }
 
     impl DbExecutor for TestDbExecutor {
-        fn run<T>(&self, f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>) -> anyhow::Result<T> {
+        fn run<T>(
+            &self,
+            f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>,
+        ) -> anyhow::Result<T> {
             let mut conn = self.pool.get()?;
             f(&mut conn)
         }
@@ -227,8 +230,8 @@ mod tests {
         event: &ClipboardEvent,
         reps: &Vec<PersistedClipboardRepresentation>,
     ) -> anyhow::Result<()> {
-        use crate::db::schema::{clipboard_event, clipboard_snapshot_representation};
         use crate::db::mappers::clipboard_event_mapper::ClipboardEventRowMapper;
+        use crate::db::schema::{clipboard_event, clipboard_snapshot_representation};
 
         let event_mapper = ClipboardEventRowMapper;
         let rep_mapper = RepresentationRowMapper;
@@ -238,7 +241,8 @@ mod tests {
             let new_reps: Vec<NewSnapshotRepresentationRow> = reps
                 .iter()
                 .map(|rep| {
-                    let tuple: (PersistedClipboardRepresentation, EventId) = (rep.clone(), event.event_id.clone());
+                    let tuple: (PersistedClipboardRepresentation, EventId) =
+                        (rep.clone(), event.event_id.clone());
                     rep_mapper.to_row(&tuple)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -277,14 +281,10 @@ mod tests {
         // Create test event
         let event_id = EventId::from("test-event-1".to_string());
         let device_id = uc_core::DeviceId::new("test-device-1".to_string());
-        let snapshot_hash = uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[1u8; 32][..]));
+        let snapshot_hash =
+            uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[1u8; 32][..]));
 
-        let event = ClipboardEvent::new(
-            event_id.clone(),
-            1234567890,
-            device_id,
-            snapshot_hash,
-        );
+        let event = ClipboardEvent::new(event_id.clone(), 1234567890, device_id, snapshot_hash);
 
         // Create test representation with inline data
         let rep_id = RepresentationId::from("test-rep-1".to_string());
@@ -293,13 +293,14 @@ mod tests {
             FormatId::from("public.utf8-plain-text".to_string()),
             Some(uc_core::MimeType("text/plain".to_string())),
             12,
-            Some(vec![b'H', b'e', b'l', b'l', b'o', b' ', b'W', b'o', b'r', b'l', b'd', b'!']),
+            Some(vec![
+                b'H', b'e', b'l', b'l', b'o', b' ', b'W', b'o', b'r', b'l', b'd', b'!',
+            ]),
             None,
         );
 
         // Insert test data
-        insert_test_event_data(&executor, &event, &vec![rep])
-            .expect("Failed to insert test data");
+        insert_test_event_data(&executor, &event, &vec![rep]).expect("Failed to insert test data");
 
         // Test get_representation
         let result = repo.get_representation(&event_id, "test-rep-1").await;
@@ -309,7 +310,10 @@ mod tests {
 
         assert_eq!(observed.id.to_string(), "test-rep-1");
         assert_eq!(observed.format_id.to_string(), "public.utf8-plain-text");
-        assert_eq!(observed.mime, Some(uc_core::MimeType("text/plain".to_string())));
+        assert_eq!(
+            observed.mime,
+            Some(uc_core::MimeType("text/plain".to_string()))
+        );
         assert_eq!(observed.bytes.len(), 12);
         assert_eq!(String::from_utf8_lossy(&observed.bytes), "Hello World!");
     }
@@ -324,14 +328,10 @@ mod tests {
         // Create test event
         let event_id = EventId::from("test-event-2".to_string());
         let device_id = uc_core::DeviceId::new("test-device-2".to_string());
-        let snapshot_hash = uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[2u8; 32][..]));
+        let snapshot_hash =
+            uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[2u8; 32][..]));
 
-        let event = ClipboardEvent::new(
-            event_id.clone(),
-            1234567891,
-            device_id,
-            snapshot_hash,
-        );
+        let event = ClipboardEvent::new(event_id.clone(), 1234567891, device_id, snapshot_hash);
 
         // Create test representation with blob_id
         // Note: We can't use a real blob_id without inserting into the blob table first
@@ -347,8 +347,7 @@ mod tests {
         );
 
         // Insert test data
-        insert_test_event_data(&executor, &event, &vec![rep])
-            .expect("Failed to insert test data");
+        insert_test_event_data(&executor, &event, &vec![rep]).expect("Failed to insert test data");
 
         // Test get_representation
         let result = repo.get_representation(&event_id, "test-rep-2").await;
@@ -358,7 +357,10 @@ mod tests {
 
         assert_eq!(observed.id.to_string(), "test-rep-2");
         assert_eq!(observed.format_id.to_string(), "public.png");
-        assert_eq!(observed.mime, Some(uc_core::MimeType("image/png".to_string())));
+        assert_eq!(
+            observed.mime,
+            Some(uc_core::MimeType("image/png".to_string()))
+        );
         // Should have the inline data
         assert_eq!(observed.bytes.len(), 5);
     }
@@ -373,33 +375,37 @@ mod tests {
         // Create test event but no representations
         let event_id = EventId::from("test-event-3".to_string());
         let device_id = uc_core::DeviceId::new("test-device-3".to_string());
-        let snapshot_hash = uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[3u8; 32][..]));
+        let snapshot_hash =
+            uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[3u8; 32][..]));
 
-        let event = ClipboardEvent::new(
-            event_id.clone(),
-            1234567892,
-            device_id,
-            snapshot_hash,
-        );
+        let event = ClipboardEvent::new(event_id.clone(), 1234567892, device_id, snapshot_hash);
 
         // Insert only the event (no representations)
-        let event_mapper_local = crate::db::mappers::clipboard_event_mapper::ClipboardEventRowMapper;
+        let event_mapper_local =
+            crate::db::mappers::clipboard_event_mapper::ClipboardEventRowMapper;
         let new_event: NewClipboardEventRow = event_mapper_local.to_row(&event).unwrap();
-        executor.run(|conn| {
-            diesel::insert_into(clipboard_event::table)
-                .values(&new_event)
-                .execute(conn)?;
-            Ok::<(), anyhow::Error>(())
-        }).expect("Failed to insert test event");
+        executor
+            .run(|conn| {
+                diesel::insert_into(clipboard_event::table)
+                    .values(&new_event)
+                    .execute(conn)?;
+                Ok::<(), anyhow::Error>(())
+            })
+            .expect("Failed to insert test event");
 
         // Test get_representation with non-existent representation
         let result = repo.get_representation(&event_id, "non-existent-rep").await;
 
-        assert!(result.is_err(), "get_representation should fail for non-existent representation");
+        assert!(
+            result.is_err(),
+            "get_representation should fail for non-existent representation"
+        );
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("Failed to fetch representation") ||
-                err.to_string().contains("not found"),
-                "Error should indicate representation not found");
+        assert!(
+            err.to_string().contains("Failed to fetch representation")
+                || err.to_string().contains("not found"),
+            "Error should indicate representation not found"
+        );
     }
 
     #[tokio::test]
@@ -412,14 +418,10 @@ mod tests {
         // Create test event
         let event_id = EventId::from("test-event-4".to_string());
         let device_id = uc_core::DeviceId::new("test-device-4".to_string());
-        let snapshot_hash = uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[4u8; 32][..]));
+        let snapshot_hash =
+            uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[4u8; 32][..]));
 
-        let event = ClipboardEvent::new(
-            event_id.clone(),
-            1234567893,
-            device_id,
-            snapshot_hash,
-        );
+        let event = ClipboardEvent::new(event_id.clone(), 1234567893, device_id, snapshot_hash);
 
         // Create test representation
         let rep_id = RepresentationId::from("test-rep-4".to_string());
@@ -433,14 +435,16 @@ mod tests {
         );
 
         // Insert test data
-        insert_test_event_data(&executor, &event, &vec![rep])
-            .expect("Failed to insert test data");
+        insert_test_event_data(&executor, &event, &vec![rep]).expect("Failed to insert test data");
 
         // Test get_representation with wrong event_id
         let wrong_event_id = EventId::from("wrong-event-id".to_string());
         let result = repo.get_representation(&wrong_event_id, "test-rep-4").await;
 
-        assert!(result.is_err(), "get_representation should fail for wrong event_id");
+        assert!(
+            result.is_err(),
+            "get_representation should fail for wrong event_id"
+        );
     }
 
     #[tokio::test]
@@ -453,14 +457,10 @@ mod tests {
         // Create test event
         let event_id = EventId::from("test-event-5".to_string());
         let device_id = uc_core::DeviceId::new("test-device-5".to_string());
-        let snapshot_hash = uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[5u8; 32][..]));
+        let snapshot_hash =
+            uc_core::clipboard::SnapshotHash(uc_core::ContentHash::from(&[5u8; 32][..]));
 
-        let event = ClipboardEvent::new(
-            event_id.clone(),
-            1234567894,
-            device_id,
-            snapshot_hash,
-        );
+        let event = ClipboardEvent::new(event_id.clone(), 1234567894, device_id, snapshot_hash);
 
         // Create test representation with optional fields as None
         // Note: CHECK constraint requires either inline_data or blob_id to be set
@@ -471,12 +471,11 @@ mod tests {
             None, // mime_type
             0,
             Some(vec![]), // inline_data must be set (empty array is OK)
-            None, // blob_id
+            None,         // blob_id
         );
 
         // Insert test data
-        insert_test_event_data(&executor, &event, &vec![rep])
-            .expect("Failed to insert test data");
+        insert_test_event_data(&executor, &event, &vec![rep]).expect("Failed to insert test data");
 
         // Test get_representation
         let result = repo.get_representation(&event_id, "test-rep-5").await;

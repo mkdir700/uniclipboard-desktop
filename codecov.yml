@@ -11,7 +11,7 @@ coverage:
       default:
         target: auto
         threshold: 0%
-        informational: true  # Don't fail PR, just show diff
+        informational: true # Don't fail PR, just show diff
 
 # Exclude generated code, tests, and migrations
 ignore:

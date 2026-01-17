@@ -67,8 +67,7 @@ mod tests {
             .expect("load_or_create should succeed");
 
         // Verify it's a valid UUID
-        uuid::Uuid::parse_str(identity.device_id.as_str())
-            .expect("device_id should be valid UUID");
+        uuid::Uuid::parse_str(identity.device_id.as_str()).expect("device_id should be valid UUID");
 
         std::fs::remove_dir_all(dir).expect("cleanup temp dir");
     }
@@ -101,7 +100,10 @@ mod tests {
         let id1 = identity.current_device_id();
         let id2 = identity.current_device_id();
 
-        assert_eq!(id1, id2, "current_device_id should return consistent values");
+        assert_eq!(
+            id1, id2,
+            "current_device_id should return consistent values"
+        );
 
         std::fs::remove_dir_all(dir).expect("cleanup temp dir");
     }

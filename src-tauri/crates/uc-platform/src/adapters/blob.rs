@@ -1,10 +1,10 @@
 //! Placeholder blob materializer implementation
 //! 占位符 blob 物化器实现
 
-use uc_core::ports::BlobMaterializerPort;
-use uc_core::{Blob, ContentHash};
 use anyhow::Result;
 use async_trait::async_trait;
+use uc_core::ports::BlobMaterializerPort;
+use uc_core::{Blob, ContentHash};
 
 // === Blob Materializer ===
 

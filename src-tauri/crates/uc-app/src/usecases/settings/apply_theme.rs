@@ -1,9 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
-use uc_core::{
-    ports::SettingsPort,
-    settings::model::Theme,
-};
+use uc_core::{ports::SettingsPort, settings::model::Theme};
 
 pub struct ApplyThemeSetting<S>
 where

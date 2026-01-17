@@ -55,16 +55,16 @@ use uc_core::config::AppConfig;
 pub fn load_config(config_path: PathBuf) -> anyhow::Result<AppConfig> {
     let content = std::fs::read_to_string(&config_path)
         .with_context(|| format!("Failed to read config file: {}", config_path.display()))?;
-    let toml_value: toml::Value = toml::from_str(&content)
-        .context("Failed to parse config as TOML")?;
+    let toml_value: toml::Value =
+        toml::from_str(&content).context("Failed to parse config as TOML")?;
     AppConfig::from_toml(&toml_value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     /// Test that valid TOML is parsed correctly
     /// 测试有效 TOML 被正确解析
@@ -96,7 +96,10 @@ mod tests {
         assert_eq!(config.webserver_port, 8080);
         assert_eq!(config.silent_start, true);
         assert_eq!(config.vault_key_path, PathBuf::from("/path/to/key"));
-        assert_eq!(config.vault_snapshot_path, PathBuf::from("/path/to/snapshot"));
+        assert_eq!(
+            config.vault_snapshot_path,
+            PathBuf::from("/path/to/snapshot")
+        );
         assert_eq!(config.database_path, PathBuf::from("/path/to/database"));
     }
 
@@ -170,9 +173,10 @@ mod tests {
         // Should mention file not found or similar IO error
         assert!(
             err_msg.contains("no such file")
-            || err_msg.contains("not found")
-            || err_msg.contains("failed to read"),
-            "Expected IO error message, got: {}", err
+                || err_msg.contains("not found")
+                || err_msg.contains("failed to read"),
+            "Expected IO error message, got: {}",
+            err
         );
     }
 }

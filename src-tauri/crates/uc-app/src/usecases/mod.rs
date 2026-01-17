@@ -38,8 +38,7 @@ pub use start_clipboard_watcher::StartClipboardWatcher;
 pub use update_settings::UpdateSettings;
 
 // Re-export onboarding types for Tauri command serialization
-pub use onboarding::OnboardingStateDto;
 pub use onboarding::CompleteOnboarding;
 pub use onboarding::GetOnboardingState;
 pub use onboarding::InitializeOnboarding;
-
+pub use onboarding::OnboardingStateDto;

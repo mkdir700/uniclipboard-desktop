@@ -13,10 +13,7 @@ pub struct TauriUiPort {
 
 impl TauriUiPort {
     #[allow(dead_code)]
-    pub(crate) fn new(
-        app: AppHandle,
-        settings_window_label: impl Into<String>,
-    ) -> Self {
+    pub(crate) fn new(app: AppHandle, settings_window_label: impl Into<String>) -> Self {
         Self {
             app,
             settings_window_label: settings_window_label.into(),

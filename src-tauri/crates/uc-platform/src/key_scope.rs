@@ -3,8 +3,8 @@
 
 use anyhow::Result;
 use uc_core::ports::security::key_scope::KeyScopePort;
-use uc_core::security::model::KeyScope;
 use uc_core::ports::security::key_scope::ScopeError;
+use uc_core::security::model::KeyScope;
 
 /// Default key scope implementation
 pub struct DefaultKeyScope {

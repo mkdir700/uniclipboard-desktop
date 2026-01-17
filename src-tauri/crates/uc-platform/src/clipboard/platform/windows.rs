@@ -3,7 +3,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use clipboard_rs::ClipboardContext;
 use std::sync::{Arc, Mutex};
-use tracing::{debug_span, debug};
+use tracing::{debug, debug_span};
 use uc_core::clipboard::SystemClipboardSnapshot;
 use uc_core::ports::SystemClipboardPort;
 

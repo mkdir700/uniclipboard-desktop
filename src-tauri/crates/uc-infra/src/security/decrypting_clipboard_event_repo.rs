@@ -2,18 +2,15 @@
 //!
 //! Wraps ClipboardEventRepositoryPort and decrypts ObservedClipboardRepresentation.bytes on read.
 
-use std::sync::Arc;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use std::sync::Arc;
 use tracing::debug;
 
 use uc_core::{
     clipboard::ObservedClipboardRepresentation,
     ids::EventId,
-    ports::{
-        ClipboardEventRepositoryPort,
-        EncryptionPort, EncryptionSessionPort,
-    },
+    ports::{ClipboardEventRepositoryPort, EncryptionPort, EncryptionSessionPort},
     security::model::EncryptedBlob,
 };
 
@@ -30,7 +27,11 @@ impl DecryptingClipboardEventRepository {
         encryption: Arc<dyn EncryptionPort>,
         session: Arc<dyn EncryptionSessionPort>,
     ) -> Self {
-        Self { inner, encryption, session }
+        Self {
+            inner,
+            encryption,
+            session,
+        }
     }
 
     /// Generate AAD for representation bytes decryption.
@@ -47,7 +48,10 @@ impl ClipboardEventRepositoryPort for DecryptingClipboardEventRepository {
         representation_id: &str,
     ) -> Result<ObservedClipboardRepresentation> {
         // Get from inner
-        let mut observed = self.inner.get_representation(event_id, representation_id).await?;
+        let mut observed = self
+            .inner
+            .get_representation(event_id, representation_id)
+            .await?;
 
         // Decrypt bytes if present
         if !observed.bytes.is_empty() {
@@ -55,18 +59,25 @@ impl ClipboardEventRepositoryPort for DecryptingClipboardEventRepository {
             match serde_json::from_slice::<EncryptedBlob>(&observed.bytes) {
                 Ok(encrypted_blob) => {
                     // Get master key
-                    let master_key = self.session.get_master_key().await
+                    let master_key = self
+                        .session
+                        .get_master_key()
+                        .await
                         .context("encryption session not ready - cannot decrypt")?;
 
                     // Decrypt
                     let aad = Self::aad_for_inline(event_id, representation_id);
-                    let plaintext = self.encryption
+                    let plaintext = self
+                        .encryption
                         .decrypt_blob(&master_key, &encrypted_blob, &aad)
                         .await
                         .context("failed to decrypt representation bytes")?;
 
-                    debug!("Decrypted representation bytes for {} ({} bytes)",
-                        representation_id, plaintext.len());
+                    debug!(
+                        "Decrypted representation bytes for {} ({} bytes)",
+                        representation_id,
+                        plaintext.len()
+                    );
 
                     observed.bytes = plaintext;
                 }
@@ -90,17 +101,19 @@ impl ClipboardEventRepositoryPort for DecryptingClipboardEventRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use std::sync::{Arc, Mutex};
     use uc_core::{
         clipboard::ObservedClipboardRepresentation,
         ids::EventId,
-        security::model::{EncryptedBlob, EncryptionFormatVersion, EncryptionAlgo, MasterKey},
+        security::model::{EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, MasterKey},
     };
-    use async_trait::async_trait;
 
     /// Mock ClipboardEventRepositoryPort
     struct MockEventRepo {
-        storage: Arc<Mutex<std::collections::HashMap<(EventId, String), ObservedClipboardRepresentation>>>,
+        storage: Arc<
+            Mutex<std::collections::HashMap<(EventId, String), ObservedClipboardRepresentation>>,
+        >,
     }
 
     impl MockEventRepo {
@@ -111,7 +124,10 @@ mod tests {
         }
 
         fn store(&self, event_id: &EventId, rep_id: &str, rep: ObservedClipboardRepresentation) {
-            self.storage.lock().unwrap().insert((event_id.clone(), rep_id.to_string()), rep);
+            self.storage
+                .lock()
+                .unwrap()
+                .insert((event_id.clone(), rep_id.to_string()), rep);
         }
     }
 
@@ -138,7 +154,9 @@ mod tests {
 
     impl MockEncryption {
         fn new() -> Self {
-            Self { should_fail_decrypt: false }
+            Self {
+                should_fail_decrypt: false,
+            }
         }
     }
 
@@ -149,7 +167,8 @@ mod tests {
             _passphrase: &uc_core::security::model::Passphrase,
             _salt: &[u8],
             _kdf_params: &uc_core::security::model::KdfParams,
-        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError> {
+        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError>
+        {
             Ok(uc_core::security::model::Kek([0u8; 32]))
         }
 
@@ -227,11 +246,18 @@ mod tests {
             self.master_key.is_some()
         }
 
-        async fn get_master_key(&self) -> Result<MasterKey, uc_core::security::model::EncryptionError> {
-            self.master_key.clone().ok_or(uc_core::security::model::EncryptionError::Locked)
+        async fn get_master_key(
+            &self,
+        ) -> Result<MasterKey, uc_core::security::model::EncryptionError> {
+            self.master_key
+                .clone()
+                .ok_or(uc_core::security::model::EncryptionError::Locked)
         }
 
-        async fn set_master_key(&self, _master_key: MasterKey) -> Result<(), uc_core::security::model::EncryptionError> {
+        async fn set_master_key(
+            &self,
+            _master_key: MasterKey,
+        ) -> Result<(), uc_core::security::model::EncryptionError> {
             Ok(())
         }
 
@@ -241,7 +267,9 @@ mod tests {
     }
 
     /// Creates an encrypted representation for testing
-    fn create_encrypted_observed_representation(plaintext: &[u8]) -> ObservedClipboardRepresentation {
+    fn create_encrypted_observed_representation(
+        plaintext: &[u8],
+    ) -> ObservedClipboardRepresentation {
         let encrypted_blob = EncryptedBlob {
             version: EncryptionFormatVersion::V1,
             aead: EncryptionAlgo::XChaCha20Poly1305,
@@ -260,7 +288,9 @@ mod tests {
     }
 
     /// Creates an unencrypted representation for testing
-    fn create_unencrypted_observed_representation(plaintext: &[u8]) -> ObservedClipboardRepresentation {
+    fn create_unencrypted_observed_representation(
+        plaintext: &[u8],
+    ) -> ObservedClipboardRepresentation {
         ObservedClipboardRepresentation {
             id: uc_core::ids::RepresentationId::from("test-rep"),
             format_id: uc_core::ids::FormatId::from("public.utf8-plain-text"),
@@ -274,7 +304,10 @@ mod tests {
         // Test that bytes are decrypted when retrieved
         let inner = Arc::new(MockEventRepo::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let repo = DecryptingClipboardEventRepository::new(inner.clone(), encryption, session);
 
@@ -283,14 +316,22 @@ mod tests {
         let plaintext = b"test plaintext data";
 
         // Store an encrypted representation
-        inner.store(&event_id, rep_id, create_encrypted_observed_representation(plaintext));
+        inner.store(
+            &event_id,
+            rep_id,
+            create_encrypted_observed_representation(plaintext),
+        );
 
         // Retrieve it - should be decrypted
         let result = repo.get_representation(&event_id, rep_id).await;
 
         assert!(result.is_ok(), "get_representation should succeed");
         let observed = result.unwrap();
-        assert_eq!(observed.bytes, plaintext.to_vec(), "bytes should be decrypted");
+        assert_eq!(
+            observed.bytes,
+            plaintext.to_vec(),
+            "bytes should be decrypted"
+        );
     }
 
     #[tokio::test]
@@ -298,7 +339,10 @@ mod tests {
         // Test that unencrypted data causes an error
         let inner = Arc::new(MockEventRepo::new());
         let encryption = Arc::new(MockEncryption::new());
-        let session = Arc::new(MockEncryptionSession::new().with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()));
+        let session = Arc::new(
+            MockEncryptionSession::new()
+                .with_master_key(MasterKey::from_bytes(&[0u8; 32]).unwrap()),
+        );
 
         let repo = DecryptingClipboardEventRepository::new(inner.clone(), encryption, session);
 
@@ -307,12 +351,19 @@ mod tests {
         let plaintext = b"test data";
 
         // Store an unencrypted representation
-        inner.store(&event_id, rep_id, create_unencrypted_observed_representation(plaintext));
+        inner.store(
+            &event_id,
+            rep_id,
+            create_unencrypted_observed_representation(plaintext),
+        );
 
         // Try to retrieve it - should fail
         let result = repo.get_representation(&event_id, rep_id).await;
 
-        assert!(result.is_err(), "get_representation should fail for unencrypted data");
+        assert!(
+            result.is_err(),
+            "get_representation should fail for unencrypted data"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("not in encrypted format"),
@@ -335,12 +386,19 @@ mod tests {
         let plaintext = b"test data";
 
         // Store an encrypted representation
-        inner.store(&event_id, rep_id, create_encrypted_observed_representation(plaintext));
+        inner.store(
+            &event_id,
+            rep_id,
+            create_encrypted_observed_representation(plaintext),
+        );
 
         // Try to retrieve it - should fail
         let result = repo.get_representation(&event_id, rep_id).await;
 
-        assert!(result.is_err(), "get_representation should fail when session not ready");
+        assert!(
+            result.is_err(),
+            "get_representation should fail when session not ready"
+        );
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("encryption session not ready"),
