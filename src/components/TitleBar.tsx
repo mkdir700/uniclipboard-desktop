@@ -185,7 +185,6 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
               data-tauri-drag-region="false"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span className="font-medium text-sm">Settings</span>
             </button>
           ) : isDashboardPage ? (
             <div
