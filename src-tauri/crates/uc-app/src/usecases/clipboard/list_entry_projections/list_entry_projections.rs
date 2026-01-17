@@ -3,8 +3,6 @@
 
 use anyhow::Result;
 use std::sync::Arc;
-use uc_core::clipboard::{ClipboardEntry, PersistedClipboardRepresentation};
-use uc_core::ids::{EntryId, EventId, RepresentationId};
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
     ClipboardSelectionRepositoryPort,
@@ -171,6 +169,8 @@ impl ListClipboardEntryProjections {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uc_core::clipboard::{ClipboardEntry, PersistedClipboardRepresentation};
+    use uc_core::ids::{EntryId, EventId, RepresentationId};
     use uc_core::ClipboardSelectionDecision;
 
     // Mock repositories for testing
@@ -250,16 +250,6 @@ mod tests {
         ) -> Result<()> {
             unimplemented!()
         }
-    }
-
-    fn create_test_entry(id: &str, timestamp: i64) -> ClipboardEntry {
-        ClipboardEntry::new(
-            EntryId::from_str(id),
-            EventId::from_str(id),
-            timestamp,
-            Some(format!("Entry {}", id)),
-            100 * id.len() as i64,
-        )
     }
 
     #[tokio::test]
