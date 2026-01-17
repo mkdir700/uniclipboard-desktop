@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::{debug, error, info, warn};
 
 use super::event_bus::{PlatformCommandReceiver, PlatformEventReceiver, PlatformEventSender};
 use crate::clipboard::watcher::ClipboardWatcher;
@@ -86,7 +87,7 @@ where
     #[allow(dead_code)]
     fn start_clipboard_watcher(&mut self) -> Result<()> {
         if self.watcher_running {
-            log::debug!("Clipboard watcher already running, skipping start");
+            debug!("Clipboard watcher already running, skipping start");
             return Ok(());
         }
 
@@ -98,9 +99,9 @@ where
         let shutdown = watcher_ctx.add_handler(handler).get_shutdown_channel();
 
         let join = tokio::task::spawn_blocking(move || {
-            log::info!("start clipboard watch");
+            info!("start clipboard watch");
             watcher_ctx.start_watch();
-            log::info!("clipboard watch stopped");
+            info!("clipboard watch stopped");
         });
 
         self.watcher_join = Some(join);
@@ -112,32 +113,32 @@ where
     async fn handle_event(&self, event: PlatformEvent) {
         match event {
             PlatformEvent::ClipboardChanged { snapshot } => {
-                log::debug!(
-                    "Clipboard changed: {} representations, {} bytes",
-                    snapshot.representation_count(),
-                    snapshot.total_size_bytes()
+                debug!(
+                    representation_count = snapshot.representation_count(),
+                    total_bytes = snapshot.total_size_bytes(),
+                    "Clipboard changed"
                 );
 
                 // Call the registered callback handler
                 if let Some(handler) = &self.clipboard_handler {
                     if let Err(e) = handler.on_clipboard_changed(snapshot).await {
-                        log::error!("Failed to handle clipboard change: {:?}", e);
+                        error!(error = %e, "Failed to handle clipboard change");
                     }
                 } else {
-                    log::warn!("Clipboard changed but no handler registered");
+                    warn!("Clipboard changed but no handler registered");
                 }
             }
             PlatformEvent::ClipboardSynced { peer_count } => {
-                log::debug!("Clipboard synced to {} peers", peer_count);
+                debug!(peer_count, "Clipboard synced to peers");
             }
             PlatformEvent::Started => {
-                log::info!("Platform runtime started");
+                info!("Platform runtime started");
             }
             PlatformEvent::Stopped => {
-                log::info!("Platform runtime stopped");
+                info!("Platform runtime stopped");
             }
             PlatformEvent::Error { message } => {
-                log::error!("Platform error: {}", message);
+                error!(error = %message, "Platform error");
             }
         }
     }
@@ -146,48 +147,48 @@ where
         match command {
             PlatformCommand::Shutdown => {
                 self.shutting_down = true;
-                log::info!("Platform runtime shutting down");
+                info!("Platform runtime shutting down");
             }
             PlatformCommand::ReadClipboard => {
                 match self.local_clipboard.read_snapshot() {
                     Ok(snapshot) => {
-                        log::debug!(
-                            "Read clipboard: {} representations, {} bytes",
-                            snapshot.representation_count(),
-                            snapshot.total_size_bytes()
+                        debug!(
+                            representation_count = snapshot.representation_count(),
+                            total_bytes = snapshot.total_size_bytes(),
+                            "Read clipboard"
                         );
                         // TODO: Send response back through a response channel
                         // For now, just log
                     }
                     Err(e) => {
-                        log::error!("Failed to read clipboard: {:?}", e);
+                        error!(error = %e, "Failed to read clipboard");
                     }
                 }
             }
             PlatformCommand::WriteClipboard { content: _ } => {
                 // Convert ClipboardContent to SystemClipboardSnapshot
                 // For now, we'll need to handle this conversion
-                log::debug!("WriteClipboard command received (conversion needed)");
+                debug!("WriteClipboard command received (conversion needed)");
                 // TODO: Implement proper conversion from ClipboardContent to SystemClipboardSnapshot
                 // This requires mapping clipboard-rs types to our snapshot format
             }
             PlatformCommand::StartClipboardWatcher => {
-                log::debug!("StartClipboardWatcher command received");
+                debug!("StartClipboardWatcher command received");
                 if let Err(e) = self.start_clipboard_watcher() {
-                    log::error!("Failed to start clipboard watcher: {:?}", e);
+                    error!(error = %e, "Failed to start clipboard watcher");
                 }
             }
             PlatformCommand::StopClipboardWatcher => {
-                log::debug!("StopClipboardWatcher command received");
+                debug!("StopClipboardWatcher command received");
                 if let Some(handle) = self.watcher_handle.take() {
                     handle.stop();
                     self.watcher_running = false;
-                    log::info!("Clipboard watcher stopped");
+                    info!("Clipboard watcher stopped");
                 } else {
                     if self.watcher_running {
                         self.watcher_running = false;
                     }
-                    log::debug!("Clipboard watcher already stopped");
+                    debug!("Clipboard watcher already stopped");
                 }
             }
         }

@@ -11,6 +11,7 @@ use uc_core::{
     clipboard::PersistedClipboardRepresentation,
     ids::{EventId, RepresentationId},
     ports::{ClipboardRepresentationRepositoryPort, EncryptionPort, EncryptionSessionPort},
+    security::aad,
     security::model::EncryptedBlob,
     BlobId,
 };
@@ -33,11 +34,6 @@ impl DecryptingClipboardRepresentationRepository {
             encryption,
             session,
         }
-    }
-
-    /// Generate AAD for inline data decryption.
-    fn aad_for_inline(event_id: &EventId, rep_id: &RepresentationId) -> Vec<u8> {
-        format!("uc:inline:v1|{}|{}", event_id.as_ref(), rep_id.as_ref()).into_bytes()
     }
 }
 
@@ -72,7 +68,7 @@ impl ClipboardRepresentationRepositoryPort for DecryptingClipboardRepresentation
                 .context("encryption session not ready - cannot decrypt")?;
 
             // Decrypt
-            let aad = Self::aad_for_inline(event_id, representation_id);
+            let aad = aad::for_inline(event_id, representation_id);
             let plaintext = self
                 .encryption
                 .decrypt_blob(&master_key, &encrypted_blob, &aad)
@@ -119,6 +115,7 @@ mod tests {
     use uc_core::{
         clipboard::{MimeType, PersistedClipboardRepresentation},
         ids::{BlobId, EventId, FormatId, RepresentationId},
+        security::aad,
         security::model::{EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, MasterKey},
     };
 
@@ -482,17 +479,14 @@ mod tests {
         let event_id = EventId::from("test-event-id");
         let rep_id = RepresentationId::from("test-rep-id");
 
-        let aad1 = DecryptingClipboardRepresentationRepository::aad_for_inline(&event_id, &rep_id);
-        let aad2 = DecryptingClipboardRepresentationRepository::aad_for_inline(&event_id, &rep_id);
+        let aad1 = aad::for_inline(&event_id, &rep_id);
+        let aad2 = aad::for_inline(&event_id, &rep_id);
 
         assert_eq!(aad1, aad2, "AAD should be deterministic for same inputs");
 
         // Different event ID should produce different AAD
         let different_event_id = EventId::from("different-event-id");
-        let aad3 = DecryptingClipboardRepresentationRepository::aad_for_inline(
-            &different_event_id,
-            &rep_id,
-        );
+        let aad3 = aad::for_inline(&different_event_id, &rep_id);
         assert_ne!(aad1, aad3, "AAD should differ for different event IDs");
     }
 }

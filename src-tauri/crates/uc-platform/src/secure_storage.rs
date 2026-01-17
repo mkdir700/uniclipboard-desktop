@@ -1,6 +1,7 @@
 //! Secure storage selection and default keyring factory.
 
 use std::{fs, path::PathBuf, sync::Arc};
+use tracing::{debug, error, info, warn};
 
 use uc_core::ports::KeyringPort;
 
@@ -94,15 +95,15 @@ fn keyring_from_capability_with_base_dir(
 /// ```
 pub fn create_default_keyring() -> Result<Arc<dyn KeyringPort>, KeyringFactoryError> {
     let capability = detect_storage_capability();
-    log::debug!("Detected secure storage capability: {:?}", capability);
+    debug!(capability = ?capability, "Detected secure storage capability");
 
     match capability {
         SecureStorageCapability::SystemKeyring => {
-            log::info!("Using system keyring for secure storage");
+            info!("Using system keyring for secure storage");
             keyring_from_capability(capability)
         }
         SecureStorageCapability::FileBasedKeystore => {
-            log::warn!(
+            warn!(
                 "File-based keyring requires app data root; use create_default_keyring_in_app_data_root"
             );
             Err(KeyringFactoryError::FileBasedInit(std::io::Error::new(
@@ -111,7 +112,7 @@ pub fn create_default_keyring() -> Result<Arc<dyn KeyringPort>, KeyringFactoryEr
             )))
         }
         SecureStorageCapability::Unsupported => {
-            log::error!("Secure storage unsupported: {:?}", capability);
+            error!(capability = ?capability, "Secure storage unsupported");
             Err(KeyringFactoryError::Unsupported { capability })
         }
     }
@@ -146,24 +147,22 @@ pub fn create_default_keyring_in_app_data_root(
     app_data_root: PathBuf,
 ) -> Result<Arc<dyn KeyringPort>, KeyringFactoryError> {
     let capability = detect_storage_capability();
-    log::debug!("Detected secure storage capability: {:?}", capability);
+    debug!(capability = ?capability, "Detected secure storage capability");
 
     match capability {
         SecureStorageCapability::SystemKeyring => {
-            log::info!("Using system keyring for secure storage");
+            info!("Using system keyring for secure storage");
             keyring_from_capability(capability)
         }
         SecureStorageCapability::FileBasedKeystore => {
-            log::warn!(
-                "Using file-based keyring (insecure dev fallback for WSL/headless environments)"
-            );
+            warn!("Using file-based keyring (insecure dev fallback for WSL/headless environments)");
             Ok(
                 Arc::new(FileBasedKeyring::new_in_app_data_root(app_data_root)?)
                     as Arc<dyn KeyringPort>,
             )
         }
         SecureStorageCapability::Unsupported => {
-            log::error!("Secure storage unsupported: {:?}", capability);
+            error!(capability = ?capability, "Secure storage unsupported");
             Err(KeyringFactoryError::Unsupported { capability })
         }
     }

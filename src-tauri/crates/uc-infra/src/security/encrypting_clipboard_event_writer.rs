@@ -9,8 +9,9 @@ use tracing::debug;
 
 use uc_core::{
     clipboard::{ClipboardEvent, PersistedClipboardRepresentation},
-    ids::{EventId, RepresentationId},
+    ids::EventId,
     ports::{ClipboardEventWriterPort, EncryptionPort, EncryptionSessionPort},
+    security::aad,
     security::model::EncryptionAlgo,
 };
 
@@ -32,11 +33,6 @@ impl EncryptingClipboardEventWriter {
             encryption,
             session,
         }
-    }
-
-    /// Generate AAD for inline data encryption.
-    fn aad_for_inline(event_id: &EventId, rep_id: &RepresentationId) -> Vec<u8> {
-        format!("uc:inline:v1|{}|{}", event_id.as_ref(), rep_id.as_ref()).into_bytes()
     }
 }
 
@@ -60,7 +56,7 @@ impl ClipboardEventWriterPort for EncryptingClipboardEventWriter {
         for rep in representations {
             let encrypted_inline_data = if let Some(ref plaintext) = rep.inline_data {
                 // Encrypt the inline data
-                let aad = Self::aad_for_inline(&event.event_id, &rep.id);
+                let aad = aad::for_inline(&event.event_id, &rep.id);
                 let encrypted_blob = self
                     .encryption
                     .encrypt_blob(
@@ -117,6 +113,7 @@ mod tests {
     use uc_core::{
         clipboard::{ClipboardEvent, MimeType, PersistedClipboardRepresentation, SnapshotHash},
         ids::{BlobId, DeviceId, EventId, FormatId, RepresentationId},
+        security::aad,
         security::model::{EncryptedBlob, EncryptionFormatVersion, MasterKey},
         ContentHash,
     };
@@ -530,19 +527,19 @@ mod tests {
         let event_id = EventId::from("test-event-id");
         let rep_id = RepresentationId::from("test-rep-id");
 
-        let aad1 = EncryptingClipboardEventWriter::aad_for_inline(&event_id, &rep_id);
-        let aad2 = EncryptingClipboardEventWriter::aad_for_inline(&event_id, &rep_id);
+        let aad1 = aad::for_inline(&event_id, &rep_id);
+        let aad2 = aad::for_inline(&event_id, &rep_id);
 
         assert_eq!(aad1, aad2, "AAD should be deterministic for same inputs");
 
         // Different event ID should produce different AAD
         let different_event_id = EventId::from("different-event-id");
-        let aad3 = EncryptingClipboardEventWriter::aad_for_inline(&different_event_id, &rep_id);
+        let aad3 = aad::for_inline(&different_event_id, &rep_id);
         assert_ne!(aad1, aad3, "AAD should differ for different event IDs");
 
         // Different rep ID should produce different AAD
         let different_rep_id = RepresentationId::from("different-rep-id");
-        let aad4 = EncryptingClipboardEventWriter::aad_for_inline(&event_id, &different_rep_id);
+        let aad4 = aad::for_inline(&event_id, &different_rep_id);
         assert_ne!(
             aad1, aad4,
             "AAD should differ for different representation IDs"
