@@ -48,10 +48,13 @@ const AuthenticatedLayout = () => {
   return (
     <MainLayout>
       <Outlet />
-      {/* Global pairing dialogs */}
-      <GlobalPairingDialogs />
     </MainLayout>
   )
+}
+
+// Global overlays that must be rendered regardless of route/layout
+const GlobalOverlays = () => {
+  return <GlobalPairingDialogs />
 }
 
 // 主应用程序内容
@@ -70,6 +73,7 @@ const AppContent = () => {
     <ShortcutProvider>
       <P2PProvider>
         <SettingProvider>
+          <GlobalOverlays />
           <Routes>
             <Route element={<AuthenticatedLayout />}>
               <Route

@@ -90,7 +90,7 @@ const Sidebar: React.FC = () => {
           to="/settings"
           icon={Settings}
           label={t('nav.settings')}
-          isActive={false}
+          isActive={location.pathname.startsWith('/settings')}
           layoutId="sidebar-nav-bottom"
         />
       </div>

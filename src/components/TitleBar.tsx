@@ -180,7 +180,10 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
         >
           {isSettingsPage ? (
             <button
+              type="button"
               onClick={handleBack}
+              aria-label={t('nav.back')}
+              title={t('nav.back')}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50"
               data-tauri-drag-region="false"
             >

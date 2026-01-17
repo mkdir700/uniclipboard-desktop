@@ -20,7 +20,12 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        navigate(-1)
+        const idx = (window.history.state as { idx?: number } | null)?.idx
+        if (typeof idx === 'number' && idx > 0) {
+          navigate(-1)
+        } else {
+          navigate('/')
+        }
       }
     }
     window.addEventListener('keydown', handleEsc)
