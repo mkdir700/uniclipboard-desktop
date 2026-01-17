@@ -316,6 +316,96 @@ fn run_app(config: AppConfig) {
 
 ---
 
+### 6. PlatformRuntime Idempotency
+
+**File:** `src-tauri/crates/uc-platform/src/runtime/runtime.rs`
+
+#### Problem
+
+Current `PlatformRuntime` does not check if watcher is already running before starting. Multiple `StartClipboardWatcher` commands would:
+
+1. Create duplicate watcher contexts
+2. Leak old watcher handles
+3. Potentially run multiple watchers simultaneously
+
+#### Solution: Add Running State Flag
+
+```rust
+pub struct PlatformRuntime<E>
+where
+    E: PlatformCommandExecutorPort,
+{
+    // ... existing fields ...
+    watcher_join: Option<JoinHandle<()>>,
+    watcher_handle: Option<WatcherShutdown>,
+    watcher_running: bool,  // NEW: Track running state
+    clipboard_handler: Option<Arc<dyn ClipboardChangeHandler>>,
+}
+
+impl<E> PlatformRuntime<E>
+where
+    E: PlatformCommandExecutorPort,
+{
+    pub fn new(...) -> Result<PlatformRuntime<E>, anyhow::Error> {
+        // ... existing code ...
+        Ok(Self {
+            // ... existing fields ...
+            watcher_running: false,  // Initialize to false
+            clipboard_handler,
+        })
+    }
+
+    fn start_clipboard_watcher(&mut self) -> Result<()> {
+        // Idempotency check: if already running, return success
+        if self.watcher_running {
+            log::debug!("Clipboard watcher already running, skipping start");
+            return Ok(());
+        }
+
+        // ... existing watcher start code ...
+
+        self.watcher_join = Some(join);
+        self.watcher_handle = Some(shutdown);
+        self.watcher_running = true;  // Mark as running
+
+        Ok(())
+    }
+}
+
+async fn handle_command(&mut self, command: PlatformCommand) {
+    match command {
+        // ... existing cases ...
+
+        PlatformCommand::StartClipboardWatcher => {
+            log::debug!("StartClipboardWatcher command received");
+            if let Err(e) = self.start_clipboard_watcher() {
+                log::error!("Failed to start clipboard watcher: {:?}", e);
+            }
+        }
+
+        PlatformCommand::StopClipboardWatcher => {
+            log::debug!("StopClipboardWatcher command received");
+            if let Some(handle) = self.watcher_handle.take() {
+                handle.stop();
+                self.watcher_running = false;  // Clear flag
+                log::info!("Clipboard watcher stopped");
+            }
+        }
+    }
+}
+```
+
+#### Idempotency Semantics
+
+| Call Pattern                     | Result                                 |
+| -------------------------------- | -------------------------------------- |
+| `start()`                        | Watcher starts                         |
+| `start()` → `start()`            | Second call is no-op, returns `Ok(())` |
+| `start()` → `stop()` → `start()` | Correctly restarts                     |
+| `stop()` → `stop()`              | Second call is no-op                   |
+
+---
+
 ## Error Handling
 
 ### Failure Scenarios
@@ -411,6 +501,7 @@ async fn test_start_watcher_channel_closed() {
 - [ ] `uc-tauri/src/bootstrap/wiring.rs` - Wire `WatcherControlPort`
 - [ ] `uc-tauri/src/commands/encryption.rs` - Call `start_watcher()` after init
 - [ ] `src-tauri/src/main.rs` - Pass `platform_cmd_tx` to wiring
+- [ ] `uc-platform/src/runtime/runtime.rs` - Add idempotency with `watcher_running` flag
 
 ---
 
@@ -422,6 +513,8 @@ async fn test_start_watcher_channel_closed() {
 - [ ] Auto-unlock on startup still works as before
 - [ ] All existing tests pass
 - [ ] New unit tests for `InMemoryWatcherControl` pass
+- [ ] Idempotency: repeated `start_watcher()` calls are safe no-ops
+- [ ] Idempotency: `start()` → `stop()` → `start()` correctly restarts watcher
 
 ---
 
