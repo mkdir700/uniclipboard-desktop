@@ -1,9 +1,9 @@
 import { enableModernWindowStyle } from '@cloudworxx/tauri-plugin-mac-rounded-corners'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { Minus, Square, X, Search } from 'lucide-react'
+import { ArrowLeft, Minus, Square, X, Search } from 'lucide-react'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { useOnboarding } from '@/contexts/OnboardingContext'
 import { usePlatform } from '@/hooks/usePlatform'
@@ -56,8 +56,21 @@ const TitleBarButton = ({
 export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleBarProps) => {
   const [isMaximized, setIsMaximized] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
   const { t } = useTranslation()
   const { status } = useOnboarding()
+
+  // 检测是否在设置页面
+  const isSettingsPage = location.pathname === '/settings'
+
+  const handleBack = () => {
+    // Check if there's history to go back to
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1)
+    } else {
+      navigate('/')
+    }
+  }
 
   // 使用 usePlatform hook 获取平台信息
   const { isWindows, isMac, isTauri } = usePlatform()
@@ -165,7 +178,16 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
           )}
           onDoubleClick={isWindows ? handleToggleMaximize : undefined}
         >
-          {isDashboardPage ? (
+          {isSettingsPage ? (
+            <button
+              onClick={handleBack}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50"
+              data-tauri-drag-region="false"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="font-medium text-sm">Settings</span>
+            </button>
+          ) : isDashboardPage ? (
             <div
               className={cn(
                 'relative flex items-center w-64 max-w-xs',
