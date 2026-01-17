@@ -1,5 +1,4 @@
 import { type LucideIcon, Check, Monitor, Moon, Sun } from 'lucide-react'
-import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from '@/constants/theme'
@@ -53,18 +52,13 @@ function ThemeOption({ value, icon: Icon, label, theme, handleThemeChange }: The
 export default function AppearanceSection() {
   const { t } = useTranslation()
   const { setting, updateGeneralSetting } = useSetting()
-  const [theme, setTheme] = useState<ThemeMode>('system')
 
-  useEffect(() => {
-    if (setting?.general) {
-      setTheme(setting.general.theme || 'system')
-    }
-  }, [setting])
+  // Use derived state instead of local state to avoid initial flash
+  const theme = setting?.general?.theme || 'system'
 
   const handleThemeChange = async (newTheme: ThemeMode) => {
     try {
       await updateGeneralSetting({ theme: newTheme })
-      setTheme(newTheme)
     } catch (error) {
       console.error('Failed to change theme:', error)
     }
