@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, info_span, Instrument};
 use uc_core::ids::EntryId;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardSelectionRepositoryPort,
@@ -42,11 +42,11 @@ impl DeleteClipboardEntry {
 
     /// Deletes a clipboard entry and its associated selection, event, and snapshot representations in the required order.
     ///
-    /// Deletion order:
+    /// Deletion order (respecting foreign key constraints):
     /// 1. Verify the entry exists (returns an error if missing).
     /// 2. Delete the clipboard selection associated with the entry.
-    /// 3. Delete the event and its snapshot representations using the entry's `event_id`.
-    /// 4. Delete the clipboard entry itself.
+    /// 3. Delete the clipboard entry (must be deleted before its referenced event).
+    /// 4. Delete the event and its snapshot representations using the entry's `event_id`.
     ///
     /// # Arguments
     /// * `entry_id` - ID of the clipboard entry to delete.
@@ -71,34 +71,55 @@ impl DeleteClipboardEntry {
         fields(entry_id = %entry_id)
     )]
     pub async fn execute(&self, entry_id: &EntryId) -> Result<()> {
-        info!(entry_id = %entry_id, "Starting clipboard entry deletion");
+        // 1. Fetch entry to verify existence and get event_id
+        let entry = async {
+            self.entry_repo
+                .get_entry(entry_id)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Clipboard entry not found: {}", entry_id))
+        }
+        .instrument(info_span!(
+            "fetch_entry",
+            entry_id = %entry_id
+        ))
+        .await?;
+        let event_id = entry.event_id.clone();
 
-        // 1. Verify entry exists
-        let entry = self
-            .entry_repo
-            .get_entry(entry_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Clipboard entry not found: {}", entry_id))?;
-
-        // 2. Delete selection (depends on entry)
+        // 2. Delete selection (references entry)
         self.selection_repo
             .delete_selection(entry_id)
+            .instrument(info_span!(
+                "delete_selection",
+                entry_id = %entry_id
+            ))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to delete selection: {}", e))?;
 
-        // 3. Delete event and representations (via event_id)
-        self.event_writer
-            .delete_event_and_representations(&entry.event_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to delete event: {}", e))?;
-
-        // 4. Delete entry (last, after dependencies removed)
+        // 3. Delete entry (references event - must delete before event)
         self.entry_repo
             .delete_entry(entry_id)
+            .instrument(info_span!(
+                "delete_entry",
+                entry_id = %entry_id
+            ))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to delete entry: {}", e))?;
 
-        info!(entry_id = %entry_id, "Deleted clipboard entry successfully");
+        // 4. Delete event and representations (now safe since entry is gone)
+        self.event_writer
+            .delete_event_and_representations(&event_id)
+            .instrument(info_span!(
+                "delete_event",
+                event_id = %event_id
+            ))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to delete event: {}", e))?;
+
+        info!(
+            entry_id = %entry_id,
+            event_id = %event_id,
+            "Deleted clipboard entry successfully"
+        );
         Ok(())
     }
 }

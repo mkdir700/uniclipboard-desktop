@@ -102,6 +102,67 @@ pub async fn my_async_function() {
 }
 ```
 
+### Span Best Practices
+
+**CRITICAL**: Understand the difference between **Spans** and **Events**:
+
+- **Span** = An operation's time range (has a beginning and end)
+- **Event** = Something that happens at a single moment in time
+
+**Correct Pattern**: Use spans to represent each operation step, not just individual debug events:
+
+```rust
+// ❌ WRONG - Too many debug events, no span context
+debug!("Deleting selection");
+self.selection_repo.delete_selection(entry_id).await?;
+debug!("Selection deleted");
+
+// ✅ CORRECT - Use span to represent the operation
+self.selection_repo
+    .delete_selection(entry_id)
+    .instrument(info_span!("delete_selection", entry_id = %entry_id))
+    .await?;
+
+// ✅ CORRECT - Span for async blocks with multiple steps
+let entry = async {
+    self.entry_repo
+        .get_entry(entry_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Entry not found: {}", entry_id))
+}
+.instrument(info_span!("fetch_entry", entry_id = %entry_id))
+.await?;
+```
+
+**Span Hierarchy Example**:
+
+```
+usecase.delete_clipboard_entry.execute        ← #[instrument] auto-created
+├── fetch_entry                               ← Manual span
+├── delete_selection                          ← Manual span
+├── delete_entry                              ← Manual span
+└── delete_event                              ← Manual span
+```
+
+**Key Benefits**:
+
+- Spans automatically record operation start/end time
+- Tokio Console and log aggregators show complete call hierarchy
+- Reduces redundant log code
+- Each operation's duration is automatically tracked
+- Better for debugging async systems where multiple operations interleave
+
+**When to Use Events vs Spans**:
+
+- Use **events** (`info!`, `error!`, etc.) for single-moment occurrences (errors, state changes)
+- Use **spans** (`info_span!` + `.instrument()`) for operations with duration
+- Use `#[tracing::instrument]` on functions to auto-create spans with parameters as fields
+
+**Sources**:
+
+- [Tokio Tracing Guide](https://tokio.rs/tokio/topics/tracing)
+- [tracing::instrument Tutorial](https://gist.github.com/oliverdaff/d1d5e5bc1baba088b768b89ff82dc3ec)
+
 ### Viewing Logs
 
 **Development:**
