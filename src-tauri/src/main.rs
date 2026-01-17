@@ -197,14 +197,34 @@ fn run_app(config: AppConfig) {
             .build(),
         )
         .setup(move |_app_handle| {
-            // Start the platform runtime in background
+            // Clone handle for use in async block
+            let runtime_for_unlock = runtime_for_handler.clone();
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
 
             tauri::async_runtime::spawn(async move {
                 log::info!("Platform runtime task started");
 
-                // Send StartClipboardWatcher command to enable monitoring
+                // 1. Check if encryption initialized and auto-unlock
+                let uc = runtime_for_unlock.usecases().auto_unlock_encryption_session();
+                match uc.execute().await {
+                    Ok(true) => {
+                        log::info!("Encryption session auto-unlocked successfully");
+                    }
+                    Ok(false) => {
+                        log::info!("Encryption not initialized, clipboard watcher will not start");
+                        log::info!("User must set encryption password via onboarding");
+                        // Don't start platform runtime - no watcher without encryption
+                        return;
+                    }
+                    Err(e) => {
+                        log::error!("Auto-unlock failed: {:?}", e);
+                        // TODO: Emit error event to frontend for user notification
+                        return;
+                    }
+                }
+
+                // 2. Send StartClipboardWatcher command
                 match platform_cmd_tx_for_spawn
                     .send(PlatformCommand::StartClipboardWatcher)
                     .await
@@ -213,7 +233,7 @@ fn run_app(config: AppConfig) {
                     Err(e) => log::error!("Failed to send StartClipboardWatcher command: {}", e),
                 }
 
-                // Create PlatformRuntime with the callback
+                // 3. Create and start PlatformRuntime
                 let executor = Arc::new(SimplePlatformCommandExecutor);
                 let platform_runtime = match PlatformRuntime::new(
                     platform_event_tx_clone,
@@ -229,15 +249,11 @@ fn run_app(config: AppConfig) {
                     }
                 };
 
-                // Start the platform runtime event loop
                 platform_runtime.start().await;
-
                 log::info!("Platform runtime task ended");
             });
 
             log::info!("App runtime initialized with clipboard capture integration");
-            log::info!("Platform runtime started with clipboard callback");
-
             Ok(())
         })
         .invoke_handler(generate_invoke_handler!())
