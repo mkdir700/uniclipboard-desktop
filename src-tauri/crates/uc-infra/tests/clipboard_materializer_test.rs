@@ -55,9 +55,11 @@ async fn test_materialize_large_data_not_inline() {
 
     assert_eq!(result.id.to_string(), "test-rep-2");
     assert_eq!(result.size_bytes, 2048);
-    assert!(
-        result.inline_data.is_none(),
-        "Large data should NOT be inline"
+    // Large non-text data gets empty placeholder to satisfy CHECK constraint
+    assert_eq!(
+        result.inline_data,
+        Some(vec![]),
+        "Large non-text data should have empty placeholder"
     );
     assert!(
         result.blob_id.is_none(),
@@ -108,9 +110,11 @@ async fn test_materialize_one_byte_over_threshold() {
 
     let result = materializer.materialize(&observed).await.unwrap();
 
-    assert!(
-        result.inline_data.is_none(),
-        "Data over threshold should NOT be inline"
+    // No mime type specified, treated as non-text → empty placeholder
+    assert_eq!(
+        result.inline_data,
+        Some(vec![]),
+        "Data over threshold without MIME type gets empty placeholder"
     );
 }
 
@@ -163,10 +167,11 @@ async fn test_materialize_large_image_no_inline() {
 
     let result = materializer.materialize(&observed).await.unwrap();
 
-    // Should have NO inline data, only blob (blob_id set later)
-    assert!(
-        result.inline_data.is_none(),
-        "Large images should not have inline data"
+    // Should have empty placeholder inline data (blob_id set later)
+    assert_eq!(
+        result.inline_data,
+        Some(vec![]),
+        "Large images should have empty placeholder inline data"
     );
     assert!(
         result.blob_id.is_none(),
