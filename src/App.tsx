@@ -9,7 +9,7 @@ import { SearchProvider, useSearch } from '@/contexts/SearchContext'
 import { SettingProvider } from '@/contexts/SettingContext'
 import { ShortcutProvider } from '@/contexts/ShortcutContext'
 import { useP2P } from '@/hooks/useP2P'
-import { MainLayout, SettingsWindowLayout } from '@/layouts'
+import { MainLayout, SettingsFullLayout } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
 import DevicesPage from '@/pages/DevicesPage'
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -82,7 +82,7 @@ const AppContent = () => {
               />
               <Route path="/devices" element={<DevicesPage />} />
             </Route>
-            <Route element={<SettingsWindowLayout />}>
+            <Route element={<SettingsFullLayout />}>
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
