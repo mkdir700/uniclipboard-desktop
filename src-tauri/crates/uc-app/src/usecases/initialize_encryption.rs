@@ -476,4 +476,57 @@ mod tests {
 
         assert!(!session.was_master_key_set(), "master key should NOT be set when initialization fails");
     }
+
+    #[tokio::test]
+    async fn test_initialize_encryption_stores_kek_and_keyslot() {
+        // Test that both kek and keyslot are stored during initialization
+        let state = Arc::new(MockEncryptionState::new(EncryptionState::Uninitialized));
+        let scope = Arc::new(MockKeyScope::succeed_with(KeyScope {
+            profile_id: "test".to_string(),
+        }));
+        let key_material = Arc::new(MockKeyMaterial::new());
+        let encryption = Arc::new(MockEncryption::new());
+        let session = Arc::new(MockEncryptionSession::new());
+
+        let use_case = InitializeEncryption::new(
+            encryption,
+            key_material.clone(),
+            scope,
+            state,
+            session,
+        );
+
+        let passphrase = Passphrase("test-password".to_string());
+        let result = use_case.execute(passphrase).await;
+
+        assert!(result.is_ok(), "initialization should succeed");
+        assert!(key_material.was_kek_stored(), "kek should be stored");
+        assert!(key_material.was_keyslot_stored(), "keyslot should be stored");
+    }
+
+    #[tokio::test]
+    async fn test_initialize_encryption_does_not_store_keys_on_failure() {
+        // Test that keys are not stored when initialization fails
+        let state = Arc::new(MockEncryptionState::new(EncryptionState::Initialized));
+        let scope = Arc::new(MockKeyScope::succeed_with(KeyScope {
+            profile_id: "test".to_string(),
+        }));
+        let key_material = Arc::new(MockKeyMaterial::new());
+        let encryption = Arc::new(MockEncryption::new());
+        let session = Arc::new(MockEncryptionSession::new());
+
+        let use_case = InitializeEncryption::new(
+            encryption,
+            key_material.clone(),
+            scope,
+            state,
+            session,
+        );
+
+        let passphrase = Passphrase("test-password".to_string());
+        let _ = use_case.execute(passphrase).await;
+
+        assert!(!key_material.was_kek_stored(), "kek should NOT be stored on failure");
+        assert!(!key_material.was_keyslot_stored(), "keyslot should NOT be stored on failure");
+    }
 }
