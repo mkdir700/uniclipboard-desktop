@@ -57,24 +57,24 @@ Coverage is automatically uploaded to Codecov on each push/PR for tracking incre
 
 ### Overview
 
-The application uses `tauri-plugin-log` for configurable logging across all crates.
+The application uses **`tracing`** crate as the primary logging framework with structured logging and span-based context tracking.
 
-**Important: Uses `log` crate, NOT `tracing`**
+**Supported Features**:
 
-- ❌ **Does NOT support spans** (e.g., `tracing::info_span!`)
-- ❌ **Does NOT support structured fields**
-- ✅ **DOES support** simple level-based logging (`log::info!`, `log::error!`, etc.)
+- ✅ **Spans** - Structured context spans with parent-child relationships (e.g., `tracing::info_span!`)
+- ✅ **Structured fields** - Field-based logging with typed values
+- ✅ **Event logging** - `tracing::info!`, `tracing::error!`, etc.
 
-See [docs/architecture/logging-architecture.md](docs/architecture/logging-architecture.md) for details on framework choice and future migration to `tracing` if needed.
+See [docs/architecture/logging-architecture.md](docs/architecture/logging-architecture.md) for detailed architecture, span naming conventions, and configuration.
 
 ### Configuration
 
-Logging is initialized in `src-tauri/src/main.rs` using the builder from `src-tauri/crates/uc-tauri/src/bootstrap/logging.rs`.
+Logging is initialized in `src-tauri/src/main.rs` using `init_tracing_subscriber()` from `src-tauri/crates/uc-tauri/src/bootstrap/tracing.rs`.
 
 ### Environment Behavior
 
-- **Development**: Debug level, outputs to Webview console (browser DevTools)
-- **Production**: Info level, outputs to `uniclipboard.log` + stdout
+- **Development**: Debug level, `tracing::*` outputs to terminal, legacy `log::*` outputs to Webview console
+- **Production**: Info level, `tracing::*` outputs to stdout, legacy `log::*` outputs to `uniclipboard.log` + stdout
 
 ### Log File Locations
 
@@ -85,12 +85,20 @@ Logging is initialized in `src-tauri/src/main.rs` using the builder from `src-ta
 ### Using Logs in Code
 
 ```rust
-use log::{info, error, warn, debug, trace};
+use tracing::{info, error, warn, debug, trace, info_span, Instrument};
 
 pub fn my_function() {
     info!("Something happened");
     error!("Something went wrong: {}", error);
     debug!("Detailed debugging info");
+}
+
+// For async operations with spans
+pub async fn my_async_function() {
+    let span = info_span!("usecase.example.execute", param = %value);
+    async move {
+        info!("Processing...");
+    }.instrument(span).await
 }
 ```
 
@@ -114,7 +122,7 @@ The logging system filters out:
 - Tauri internal event logs to avoid infinite loops
 - `ipc::request` logs in production builds
 
-See `src-tauri/crates/uc-tauri/src/bootstrap/logging.rs` for configuration.
+See `src-tauri/crates/uc-tauri/src/bootstrap/tracing.rs` for tracing configuration and `logging.rs` for legacy log configuration.
 
 ## Architecture
 
