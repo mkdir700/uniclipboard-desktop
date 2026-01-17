@@ -1,6 +1,7 @@
 import { useContext } from 'react'
 import { SettingContext } from '@/contexts/SettingContext'
-export type { SettingContextType, ThemeMode } from '@/types/setting'
+export type { SettingContextType } from '@/types/setting'
+export type { Theme } from '@/types/setting'
 
 /**
  * 使用设置上下文的钩子
@@ -8,6 +9,7 @@ export type { SettingContextType, ThemeMode } from '@/types/setting'
  */
 export const useSetting = () => {
   const context = useContext(SettingContext)
+
   if (context === undefined) {
     throw new Error('useSetting必须在SettingProvider内部使用')
   }

@@ -26,7 +26,7 @@ const SecuritySection: React.FC = () => {
   // Update local state when settings are loaded
   useEffect(() => {
     if (setting) {
-      setEndToEndEncryption(setting.security.end_to_end_encryption)
+      setEndToEndEncryption(setting.security.encryption_enabled)
       getEncryptionPassword().then(password => {
         setEncryptionPasswordInput(password || '')
       })
@@ -37,7 +37,7 @@ const SecuritySection: React.FC = () => {
   const handleEndToEndEncryptionChange = (checked: boolean) => {
     const newValue = checked
     setEndToEndEncryption(newValue)
-    updateSecuritySetting({ end_to_end_encryption: newValue })
+    updateSecuritySetting({ encryption_enabled: newValue })
   }
 
   // Display error message if there is an error

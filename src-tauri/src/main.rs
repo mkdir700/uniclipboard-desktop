@@ -22,7 +22,7 @@ use uc_platform::runtime::event_bus::{
 };
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::tracing as bootstrap_tracing;
-use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
+use uc_tauri::bootstrap::{ensure_default_device_name, load_config, wire_dependencies, AppRuntime};
 
 // Platform-specific command modules
 mod plugins;
@@ -214,6 +214,14 @@ fn run_app(config: AppConfig) {
 
             tauri::async_runtime::spawn(async move {
                 log::info!("Platform runtime task started");
+
+                // 0. Ensure device name is initialized (runs on every startup)
+                if let Err(e) =
+                    ensure_default_device_name(runtime_for_unlock.deps.settings.clone()).await
+                {
+                    log::warn!("Failed to initialize default device name: {}", e);
+                    // Non-fatal: continue startup even if device name initialization fails
+                }
 
                 // 1. Check if encryption initialized and auto-unlock
                 let uc = runtime_for_unlock
