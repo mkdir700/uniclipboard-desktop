@@ -302,14 +302,16 @@ fn run_app(config: AppConfig) {
                     }
                 }
 
-                platform_runtime.start().await;
-
-                // Emit backend-ready event to notify frontend
+                // 4. Emit backend-ready event to notify frontend
+                // This must happen BEFORE platform_runtime.start().await because that is an infinite loop
                 if let Some(app) = runtime_for_unlock.app_handle().as_ref() {
                     if let Err(e) = app.emit("backend-ready", ()) {
                         log::error!("Failed to emit backend-ready event: {}", e);
                     }
                 }
+
+                // 5. Start platform runtime (this is an infinite loop that runs until app exits)
+                platform_runtime.start().await;
 
                 log::info!("Platform runtime task ended");
             });
