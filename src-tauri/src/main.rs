@@ -303,6 +303,14 @@ fn run_app(config: AppConfig) {
                 }
 
                 platform_runtime.start().await;
+
+                // Emit backend-ready event to notify frontend
+                if let Some(app) = runtime_for_unlock.app_handle().as_ref() {
+                    if let Err(e) = app.emit("backend-ready", ()) {
+                        log::error!("Failed to emit backend-ready event: {}", e);
+                    }
+                }
+
                 log::info!("Platform runtime task ended");
             });
 
