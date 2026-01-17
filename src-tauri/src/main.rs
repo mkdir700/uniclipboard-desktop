@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use dirs;
 use log::error;
-use tauri::{WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -20,14 +19,11 @@ use uc_platform::runtime::event_bus::{
     PlatformCommandReceiver, PlatformEventReceiver, PlatformEventSender,
 };
 use uc_platform::runtime::runtime::PlatformRuntime;
-use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 use uc_tauri::bootstrap::tracing as bootstrap_tracing;
+use uc_tauri::bootstrap::{load_config, wire_dependencies, AppRuntime};
 
 // Platform-specific command modules
 mod plugins;
-
-#[cfg(target_os = "macos")]
-use plugins::{enable_modern_window_style, enable_rounded_corners, reposition_traffic_lights};
 
 /// Simple executor for platform commands
 ///
@@ -125,11 +121,11 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::onboarding::initialize_onboarding,
             // macOS-specific commands (conditionally compiled)
             #[cfg(target_os = "macos")]
-            enable_rounded_corners,
+            plugins::mac_rounded_corners::enable_rounded_corners,
             #[cfg(target_os = "macos")]
-            enable_modern_window_style,
+            plugins::mac_rounded_corners::enable_modern_window_style,
             #[cfg(target_os = "macos")]
-            reposition_traffic_lights,
+            plugins::mac_rounded_corners::reposition_traffic_lights,
         ]
     };
 }
@@ -194,38 +190,11 @@ fn run_app(config: AppConfig) {
             })
             .build(),
         )
-        .setup(move |app_handle| {
-            // Create the main window
-            let win_builder = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::default())
-                .title("UniClipboard")
-                .inner_size(800.0, 600.0)
-                .min_inner_size(800.0, 600.0);
-
-            // Use platform-specific title bar settings
-            #[cfg(target_os = "macos")]
-            let win_builder = win_builder.decorations(false);
-
-            #[cfg(target_os = "windows")]
-            let win_builder = win_builder.decorations(false).shadow(true);
-
-            // Apply silent start setting
-            let win_builder = if config.silent_start {
-                win_builder.visible(false)
-            } else {
-                win_builder
-            };
-
-            let _window = match win_builder.build() {
-                Ok(window) => window,
-                Err(e) => {
-                    log::error!("Failed to build main window: {}", e);
-                    return Err(Box::new(e));
-                }
-            };
-
+        .setup(move |_app_handle| {
             // Start the platform runtime in background
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
+
             tauri::async_runtime::spawn(async move {
                 log::info!("Platform runtime task started");
 
@@ -265,8 +234,6 @@ fn run_app(config: AppConfig) {
 
             Ok(())
         })
-        // Register Tauri command handlers
-        // Commands are defined in uc-tauri crate and need to be referenced by full path
         .invoke_handler(generate_invoke_handler!())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
