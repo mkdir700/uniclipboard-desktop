@@ -1,10 +1,13 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import React, { useState, useEffect, ReactNode } from 'react'
+import React, { useState, useEffect, createContext, ReactNode } from 'react'
 import { DEFAULT_THEME_COLOR } from '@/constants/theme'
 import i18n, { normalizeLanguage, persistLanguage } from '@/i18n'
 import type { SettingChangedEvent } from '@/types/events'
-import { SettingContext, type SettingContextType, type Setting } from '@/types/setting'
+import type { SettingContextType, Settings } from '@/types/setting'
+
+// 创建并导出 Context - 必须在文件顶部创建
+export const SettingContext = createContext<SettingContextType | undefined>(undefined)
 
 // 设置提供者属性接口
 interface SettingProviderProps {
@@ -13,7 +16,7 @@ interface SettingProviderProps {
 
 // 设置提供者组件
 export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) => {
-  const [setting, setSetting] = useState<Setting | null>(null)
+  const [setting, setSetting] = useState<Settings | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,8 +24,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   const loadSetting = async () => {
     try {
       setLoading(true)
-      // New command returns JSON object directly, no parsing needed
-      const settingObj = await invoke<Setting>('get_settings')
+      const settingObj = await invoke<Settings>('get_settings')
       setSetting(settingObj)
       setError(null)
     } catch (err) {
@@ -34,7 +36,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 保存设置
-  const saveSetting = async (newSetting: Setting) => {
+  const saveSetting = async (newSetting: Settings) => {
     try {
       setLoading(true)
       // New command: update_settings, takes JSON object directly
@@ -51,14 +53,14 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 更新整个设置
-  const updateSetting = async (newSetting: Setting) => {
+  const updateSetting = async (newSetting: Settings) => {
     await saveSetting(newSetting)
   }
 
   // 更新通用设置
-  const updateGeneralSetting = async (newGeneralSetting: Partial<Setting['general']>) => {
+  const updateGeneralSetting = async (newGeneralSetting: Partial<Settings['general']>) => {
     if (!setting) return
-    const updatedSetting = {
+    const updatedSetting: Settings = {
       ...setting,
       general: {
         ...setting.general,
@@ -69,9 +71,9 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 更新同步设置
-  const updateSyncSetting = async (newSyncSetting: Partial<Setting['sync']>) => {
+  const updateSyncSetting = async (newSyncSetting: Partial<Settings['sync']>) => {
     if (!setting) return
-    const updatedSetting = {
+    const updatedSetting: Settings = {
       ...setting,
       sync: {
         ...setting.sync,
@@ -82,9 +84,9 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   }
 
   // 更新安全设置
-  const updateSecuritySetting = async (newSecuritySetting: Partial<Setting['security']>) => {
+  const updateSecuritySetting = async (newSecuritySetting: Partial<Settings['security']>) => {
     if (!setting) return
-    const updatedSetting = {
+    const updatedSetting: Settings = {
       ...setting,
       security: {
         ...setting.security,
@@ -94,27 +96,14 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
     await saveSetting(updatedSetting)
   }
 
-  // 更新网络设置
-  const updateNetworkSetting = async (newNetworkSetting: Partial<Setting['network']>) => {
+  // 更新保留策略
+  const updateRetentionPolicy = async (newPolicy: Partial<Settings['retention_policy']>) => {
     if (!setting) return
-    const updatedSetting = {
+    const updatedSetting: Settings = {
       ...setting,
-      network: {
-        ...setting.network,
-        ...newNetworkSetting,
-      },
-    }
-    await saveSetting(updatedSetting)
-  }
-
-  // 更新存储设置
-  const updateStorageSetting = async (newStorageSetting: Partial<Setting['storage']>) => {
-    if (!setting) return
-    const updatedSetting = {
-      ...setting,
-      storage: {
-        ...setting.storage,
-        ...newStorageSetting,
+      retention_policy: {
+        ...setting.retention_policy,
+        ...newPolicy,
       },
     }
     await saveSetting(updatedSetting)
@@ -136,7 +125,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
 
           // 解析新的设置
           try {
-            const newSetting = JSON.parse(event.payload.settingJson) as Setting
+            const newSetting = JSON.parse(event.payload.settingJson) as Settings
 
             // 更新本地状态 (不触发再次保存)
             setSetting(newSetting)
@@ -213,11 +202,8 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
     updateGeneralSetting,
     updateSyncSetting,
     updateSecuritySetting,
-    updateNetworkSetting,
-    updateStorageSetting,
+    updateRetentionPolicy,
   }
 
   return <SettingContext.Provider value={value}>{children}</SettingContext.Provider>
 }
-
-export { SettingContext }

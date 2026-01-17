@@ -34,7 +34,11 @@ pub async fn get_settings(runtime: State<'_, Arc<AppRuntime>>) -> Result<Value, 
             format!("Failed to serialize settings: {}", e)
         })?;
 
-        tracing::info!("Retrieved settings successfully");
+        // DIAGNOSTIC: Log device_name in the JSON being sent to frontend
+        tracing::info!(
+            device_name = ?json_value.get("general").and_then(|g| g.get("device_name")),
+            "Retrieved settings successfully"
+        );
         Ok(json_value)
     }
     .instrument(span)

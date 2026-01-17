@@ -11,6 +11,9 @@ uc-app = { path = "../uc-app" }
 uc-infra = { path = "../uc-infra" }
 uc-platform = { path = "../uc-platform" }
 
+# System utilities
+gethostname = "1.1"
+
 # Tauri
 tauri = { workspace = true }
 tauri-plugin-autostart = { workspace = true }

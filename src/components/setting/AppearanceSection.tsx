@@ -2,15 +2,15 @@ import { type LucideIcon, Check, Monitor, Moon, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Card, CardContent } from '@/components/ui/card'
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from '@/constants/theme'
-import { useSetting, type ThemeMode } from '@/hooks/useSetting'
+import { useSetting, type Theme } from '@/hooks/useSetting'
 import { cn } from '@/lib/utils'
 
 interface ThemeOptionProps {
-  value: ThemeMode
+  value: Theme
   icon: LucideIcon
   label: string
-  theme: ThemeMode
-  handleThemeChange: (newTheme: ThemeMode) => Promise<void>
+  theme: Theme
+  handleThemeChange: (newTheme: Theme) => Promise<void>
 }
 
 function ThemeOption({ value, icon: Icon, label, theme, handleThemeChange }: ThemeOptionProps) {
@@ -56,7 +56,7 @@ export default function AppearanceSection() {
   // Use derived state instead of local state to avoid initial flash
   const theme = setting?.general?.theme || 'system'
 
-  const handleThemeChange = async (newTheme: ThemeMode) => {
+  const handleThemeChange = async (newTheme: Theme) => {
     try {
       await updateGeneralSetting({ theme: newTheme })
     } catch (error) {
