@@ -30,6 +30,7 @@ where
     watcher_join: Option<JoinHandle<()>>,
     #[allow(dead_code)]
     watcher_handle: Option<WatcherShutdown>,
+    watcher_running: bool,
     /// Callback handler for clipboard change events
     clipboard_handler: Option<Arc<dyn ClipboardChangeHandler>>,
 }
@@ -56,6 +57,7 @@ where
             shutting_down: false,
             watcher_join: None,
             watcher_handle: None,
+            watcher_running: false,
             clipboard_handler,
         })
     }
@@ -83,6 +85,11 @@ where
 
     #[allow(dead_code)]
     fn start_clipboard_watcher(&mut self) -> Result<()> {
+        if self.watcher_running {
+            log::debug!("Clipboard watcher already running, skipping start");
+            return Ok(());
+        }
+
         let mut watcher_ctx = ClipboardWatcherContext::new()
             .map_err(|e| anyhow::anyhow!("Failed to create watcher context: {}", e))?;
 
@@ -98,6 +105,7 @@ where
 
         self.watcher_join = Some(join);
         self.watcher_handle = Some(shutdown);
+        self.watcher_running = true;
         Ok(())
     }
 
@@ -173,7 +181,13 @@ where
                 log::debug!("StopClipboardWatcher command received");
                 if let Some(handle) = self.watcher_handle.take() {
                     handle.stop();
+                    self.watcher_running = false;
                     log::info!("Clipboard watcher stopped");
+                } else {
+                    if self.watcher_running {
+                        self.watcher_running = false;
+                    }
+                    log::debug!("Clipboard watcher already stopped");
                 }
             }
         }

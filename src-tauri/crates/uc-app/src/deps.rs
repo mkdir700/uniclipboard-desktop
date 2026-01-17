@@ -38,6 +38,7 @@ pub struct AppDeps {
     pub key_scope: Arc<dyn uc_core::ports::security::key_scope::KeyScopePort>,
     pub keyring: Arc<dyn KeyringPort>,
     pub key_material: Arc<dyn KeyMaterialPort>,
+    pub watcher_control: Arc<dyn WatcherControlPort>,
 
     // Device dependencies / 设备依赖
     pub device_repo: Arc<dyn DeviceRepositoryPort>,

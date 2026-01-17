@@ -58,6 +58,7 @@ impl GetEntryDetailUseCase {
             .await?
             .ok_or(anyhow::anyhow!("Selection not found"))?;
 
+        // Use preview_rep_id for detail view (PlainText preferred for UI preview)
         let preview_rep = self
             .representation_repo
             .get_representation(&entry.event_id, &selection.selection.preview_rep_id)

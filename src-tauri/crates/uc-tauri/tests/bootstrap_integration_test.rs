@@ -26,6 +26,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::TempDir;
+use tokio::sync::mpsc;
 use uc_core::config::AppConfig;
 use uc_tauri::bootstrap::{create_app, create_runtime, load_config, wire_dependencies};
 
@@ -263,7 +264,8 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
     file.write_all(toml_content.as_bytes()).unwrap();
 
     let config = load_config(config_path).unwrap();
-    let deps_result = wire_dependencies(&config);
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let deps_result = wire_dependencies(&config, cmd_tx);
 
     assert!(
         deps_result.is_ok(),
@@ -282,6 +284,7 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
     let _ = &deps.encryption_session;
     let _ = &deps.keyring;
     let _ = &deps.key_material;
+    let _ = &deps.watcher_control;
     let _ = &deps.device_repo;
     let _ = &deps.device_identity;
     let _ = &deps.network;
@@ -447,7 +450,8 @@ fn test_bootstrap_full_flow() {
 
     // Step 2: Wire dependencies
     // 步骤 2：连接依赖
-    let deps = wire_dependencies(&config).expect("wire_dependencies should succeed");
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let deps = wire_dependencies(&config, cmd_tx).expect("wire_dependencies should succeed");
 
     // Step 3: Create app
     // 步骤 3：创建应用
@@ -478,7 +482,8 @@ fn test_bootstrap_database_pool_real_filesystem() {
 
     // Wire dependencies (this will create the database)
     // 连接依赖（这将创建数据库）
-    let deps_result = wire_dependencies(&config);
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let deps_result = wire_dependencies(&config, cmd_tx);
 
     assert!(
         deps_result.is_ok(),
@@ -513,7 +518,8 @@ fn test_bootstrap_database_pool_invalid_path() {
     let mut config = AppConfig::empty();
     config.database_path = db_path;
 
-    let deps_result = wire_dependencies(&config);
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let deps_result = wire_dependencies(&config, cmd_tx);
 
     // Should fail gracefully with proper error
     // 应该优雅地失败并返回适当错误
@@ -568,7 +574,8 @@ fn test_bootstrap_create_runtime_wrapper() {
 fn test_bootstrap_wire_dependencies_with_empty_config() {
     let config = AppConfig::empty();
 
-    let deps_result = wire_dependencies(&config);
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let deps_result = wire_dependencies(&config, cmd_tx);
 
     // Should succeed even with empty config (uses in-memory database)
     // 应该成功，即使配置为空（使用内存数据库）
@@ -601,7 +608,8 @@ fn test_bootstrap_wire_dependencies_creates_real_repositories() {
     let mut config = AppConfig::empty();
     config.database_path = PathBuf::from(":memory:");
 
-    let deps = wire_dependencies(&config).expect("wire_dependencies should succeed");
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let deps = wire_dependencies(&config, cmd_tx).expect("wire_dependencies should succeed");
 
     // Verify clipboard repositories
     // 验证剪贴板仓库
@@ -634,7 +642,8 @@ fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
     let mut config = AppConfig::empty();
     config.database_path = PathBuf::from(":memory:");
 
-    let deps = wire_dependencies(&config).expect("wire_dependencies should succeed");
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let deps = wire_dependencies(&config, cmd_tx).expect("wire_dependencies should succeed");
 
     // Verify system clipboard (platform-specific)
     // 验证系统剪贴板（平台特定）
@@ -674,7 +683,8 @@ fn test_bootstrap_settings_repository_initialization() {
     config.vault_snapshot_path = vault_path.join("snapshot.json");
     config.database_path = PathBuf::from(":memory:");
 
-    let deps = wire_dependencies(&config).expect("wire_dependencies should succeed");
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let deps = wire_dependencies(&config, cmd_tx).expect("wire_dependencies should succeed");
 
     // Verify settings repository exists and can be cloned/accessed
     // 验证设置仓库存在并且可以克隆/访问
@@ -702,7 +712,8 @@ fn test_bootstrap_wire_dependencies_error_propagation() {
     let mut config = AppConfig::empty();
     config.database_path = PathBuf::from("/nonexistent/with/invalid/permissions/db/test.db");
 
-    let result = wire_dependencies(&config);
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let result = wire_dependencies(&config, cmd_tx);
 
     // Should fail gracefully
     // 应该优雅地失败

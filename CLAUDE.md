@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-uniclipboard-desktop is a cross-platform clipboard synchronization tool built with Tauri 2, React, and Rust. It enables real-time clipboard sharing between devices on LAN (WebSocket) and remotely (WebDAV), with AES-GCM encryption for security.
+uniclipboard-desktop is a cross-platform clipboard synchronization tool built with Tauri 2, React, and Rust. It enables real-time clipboard sharing between devices on LAN (WebSocket) and remotely (WebDAV), with XChaCha20-Poly1305 encryption for security.
 
 ## Architecture Documentation
 
@@ -183,7 +183,7 @@ src-tauri/src/
 ├── infrastructure/  # External implementations
 │   ├── clipboard/   # Platform-specific clipboard
 │   ├── p2p/         # P2P network (libp2p)
-│   ├── security/    # AES-GCM encryption
+│   ├── security/    # XChaCha20-Poly1305 encryption
 │   ├── storage/     # Diesel ORM + SQLite
 │   └── sync/        # WebSocket/WebDAV sync
 ├── application/     # Business services
@@ -230,9 +230,15 @@ Diesel migrations in [src-tauri/src/infrastructure/storage/db/migrations.rs](src
 
 ### Security Implementation
 
-- **Encryption**: AES-GCM for clipboard content ([infrastructure/security/encryption.rs](src-tauri/src/infrastructure/security/encryption.rs))
+- **Encryption**: XChaCha20-Poly1305 AEAD for clipboard content ([`src-tauri/crates/uc-infra/src/security/encryption.rs`](src-tauri/crates/uc-infra/src/security/encryption.rs))
+  - Chosen for its large nonce (192-bit) reducing nonce reuse risks
+  - Provides authenticated encryption with associated data (AEAD)
+  - Suitable for cross-platform applications with software-only implementation
 - **Password hashing**: Argon2 via Tauri Stronghold plugin
-- **Key storage**: `PasswordManager` manages salt file ([infrastructure/security/password.rs](src-tauri/src/infrastructure/security/password.rs))
+- **Key storage**: Key slot file system with KEK-wrapped master keys ([`src-tauri/crates/uc-infra/src/fs/key_slot_store.rs`](src-tauri/crates/uc-infra/src/fs/key_slot_store.rs))
+- **Key derivation**: Argon2id for passphrase-to-key derivation
+
+**Note**: The `aes-gcm` dependency in `Cargo.toml` is currently unused and can be removed in a future cleanup.
 
 ### Event System
 

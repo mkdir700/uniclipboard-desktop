@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use log::error;
+use tracing::{error as tracing_error, info as tracing_info};
+use tauri::Emitter;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -145,8 +147,16 @@ macro_rules! generate_invoke_handler {
 fn run_app(config: AppConfig) {
     use tauri::Builder;
 
+    // Create event channels for PlatformRuntime
+    let (platform_event_tx, platform_event_rx): (PlatformEventSender, PlatformEventReceiver) =
+        mpsc::channel(100);
+    let (platform_cmd_tx, platform_cmd_rx): (
+        tokio::sync::mpsc::Sender<uc_platform::ipc::PlatformCommand>,
+        PlatformCommandReceiver,
+    ) = mpsc::channel(100);
+
     // Wire all dependencies using the new bootstrap flow
-    let deps = match wire_dependencies(&config) {
+    let deps = match wire_dependencies(&config, platform_cmd_tx.clone()) {
         Ok(deps) => deps,
         Err(e) => {
             error!("Failed to wire dependencies: {}", e);
@@ -162,14 +172,6 @@ fn run_app(config: AppConfig) {
 
     // Clone Arc for Tauri state management (will have app_handle injected in setup)
     let runtime_for_tauri = runtime_for_handler.clone();
-
-    // Create event channels for PlatformRuntime
-    let (platform_event_tx, platform_event_rx): (PlatformEventSender, PlatformEventReceiver) =
-        mpsc::channel(100);
-    let (platform_cmd_tx, platform_cmd_rx): (
-        tokio::sync::mpsc::Sender<uc_platform::ipc::PlatformCommand>,
-        PlatformCommandReceiver,
-    ) = mpsc::channel(100);
 
     // Create clipboard handler from runtime (AppRuntime implements ClipboardChangeHandler)
     let clipboard_handler: Arc<dyn ClipboardChangeHandler> = runtime_for_handler.clone();
@@ -196,24 +198,47 @@ fn run_app(config: AppConfig) {
             })
             .build(),
         )
-        .setup(move |_app_handle| {
-            // Start the platform runtime in background
+        .setup(move |app| {
+            // Set AppHandle on runtime so it can emit events to frontend
+            // In Tauri 2, use app.handle() to get the AppHandle
+            runtime_for_handler.set_app_handle(app.handle().clone());
+            log::info!("AppHandle set on AppRuntime for event emission");
+
+            // Clone handle for use in async block
+            let runtime_for_unlock = runtime_for_handler.clone();
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
 
             tauri::async_runtime::spawn(async move {
                 log::info!("Platform runtime task started");
 
-                // Send StartClipboardWatcher command to enable monitoring
-                match platform_cmd_tx_for_spawn
-                    .send(PlatformCommand::StartClipboardWatcher)
-                    .await
-                {
-                    Ok(_) => log::info!("StartClipboardWatcher command sent"),
-                    Err(e) => log::error!("Failed to send StartClipboardWatcher command: {}", e),
-                }
+                // 1. Check if encryption initialized and auto-unlock
+                let uc = runtime_for_unlock.usecases().auto_unlock_encryption_session();
+                let should_start_watcher = match uc.execute().await {
+                    Ok(true) => {
+                        tracing_info!("Encryption session auto-unlocked successfully");
+                        true
+                    }
+                    Ok(false) => {
+                        tracing_info!("Encryption not initialized, clipboard watcher will not start");
+                        tracing_info!("User must set encryption password via onboarding");
+                        false
+                    }
+                    Err(e) => {
+                        tracing_error!("Auto-unlock failed: {:?}", e);
+                        // Emit error event to frontend for user notification
+                        let app_handle_guard = runtime_for_unlock.app_handle();
+                        if let Some(app) = app_handle_guard.as_ref() {
+                            if let Err(emit_err) = app.emit("encryption-auto-unlock-error", format!("{}", e)) {
+                                log::warn!("Failed to emit encryption-auto-unlock-error event: {}", emit_err);
+                            }
+                        }
+                        drop(app_handle_guard);
+                        false
+                    }
+                };
 
-                // Create PlatformRuntime with the callback
+                // 2. Create PlatformRuntime
                 let executor = Arc::new(SimplePlatformCommandExecutor);
                 let platform_runtime = match PlatformRuntime::new(
                     platform_event_tx_clone,
@@ -229,15 +254,32 @@ fn run_app(config: AppConfig) {
                     }
                 };
 
-                // Start the platform runtime event loop
-                platform_runtime.start().await;
+                // 3. Start watcher if encryption is ready
+                if should_start_watcher {
+                    match platform_cmd_tx_for_spawn
+                        .send(PlatformCommand::StartClipboardWatcher)
+                        .await
+                    {
+                        Ok(_) => log::info!("StartClipboardWatcher command sent"),
+                        Err(e) => {
+                            log::error!("Failed to send StartClipboardWatcher command: {}", e);
+                            // Emit error event to frontend for user notification
+                            let app_handle_guard = runtime_for_unlock.app_handle();
+                            if let Some(app) = app_handle_guard.as_ref() {
+                                if let Err(emit_err) = app.emit("clipboard-watcher-start-failed", format!("{}", e)) {
+                                    log::warn!("Failed to emit clipboard-watcher-start-failed event: {}", emit_err);
+                                }
+                            }
+                            drop(app_handle_guard);
+                        }
+                    }
+                }
 
+                platform_runtime.start().await;
                 log::info!("Platform runtime task ended");
             });
 
             log::info!("App runtime initialized with clipboard capture integration");
-            log::info!("Platform runtime started with clipboard callback");
-
             Ok(())
         })
         .invoke_handler(generate_invoke_handler!())

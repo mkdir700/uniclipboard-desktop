@@ -69,6 +69,7 @@ pub async fn get_clipboard_entries(
                 .get_selection(&entry.entry_id)
                 .await
             {
+                // Use preview_rep_id for list display (PlainText preferred for UI preview)
                 if let Ok(Some(rep)) = runtime
                     .deps
                     .representation_repo

@@ -11,8 +11,8 @@ use std::cmp::Ordering;
 /// v1 策略：稳定、可解释、保守
 ///
 /// v1 的核心：
-/// - UI Preview 优先视觉合理：files > image > rich > plain > uri > unknown
-/// - Default Paste 优先兼容不炸：files > plain > rich > image > uri > unknown
+/// - UI Preview 优先简洁预览：files > plain > image > rich > uri > unknown
+/// - Default Paste 优先保留格式：files > rich > plain > image > uri > unknown
 /// - stable sort: score desc, size asc, format_id asc, id asc
 #[derive(Debug, Default)]
 pub struct SelectRepresentationPolicyV1;
@@ -73,16 +73,18 @@ impl SelectRepresentationPolicyV1 {
 
     fn score(kind: RepKind, target: SelectionTarget) -> i32 {
         match (target, kind) {
+            // UiPreview: PlainText 优先（简洁预览），其次 Image，最后 RichText
             (SelectionTarget::UiPreview, RepKind::FileList) => 100,
-            (SelectionTarget::UiPreview, RepKind::Image) => 90,
-            (SelectionTarget::UiPreview, RepKind::RichText) => 80,
-            (SelectionTarget::UiPreview, RepKind::PlainText) => 70,
+            (SelectionTarget::UiPreview, RepKind::PlainText) => 90,
+            (SelectionTarget::UiPreview, RepKind::Image) => 80,
+            (SelectionTarget::UiPreview, RepKind::RichText) => 70,
             (SelectionTarget::UiPreview, RepKind::Uri) => 60,
             (SelectionTarget::UiPreview, RepKind::Unknown) => 10,
 
+            // DefaultPaste: RichText 优先（保留格式），其次 PlainText（兼容性），最后 Image
             (SelectionTarget::DefaultPaste, RepKind::FileList) => 100,
-            (SelectionTarget::DefaultPaste, RepKind::PlainText) => 90,
-            (SelectionTarget::DefaultPaste, RepKind::RichText) => 80,
+            (SelectionTarget::DefaultPaste, RepKind::RichText) => 90,
+            (SelectionTarget::DefaultPaste, RepKind::PlainText) => 80,
             (SelectionTarget::DefaultPaste, RepKind::Image) => 70,
             (SelectionTarget::DefaultPaste, RepKind::Uri) => 60,
             (SelectionTarget::DefaultPaste, RepKind::Unknown) => 10,

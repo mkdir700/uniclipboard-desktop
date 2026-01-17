@@ -85,6 +85,7 @@ gethostname = "1.1.0" # 获取主机名
 # ===== 日志/错误处理 =====
 anyhow = "1.0.98"      # 错误处理
 log = "0.4.27"         # 日志库
+tracing = "0.1"        # 结构化日志，支持 span
 tauri-plugin-log = "2" # Tauri 日志插件（替代 env_logger）
 
 # ===== 工具/辅助功能 =====
