@@ -1,3 +1,4 @@
+mod decrypting_clipboard_event_repo;
 mod decrypting_representation_repo;
 mod encrypted_blob_store;
 mod encrypting_clipboard_event_writer;
@@ -8,6 +9,7 @@ mod encryption_state_repo;
 mod hashing;
 mod key_material;
 
+pub use decrypting_clipboard_event_repo::DecryptingClipboardEventRepository;
 pub use decrypting_representation_repo::DecryptingClipboardRepresentationRepository;
 pub use encrypted_blob_store::EncryptedBlobStore;
 pub use encrypting_clipboard_event_writer::EncryptingClipboardEventWriter;
