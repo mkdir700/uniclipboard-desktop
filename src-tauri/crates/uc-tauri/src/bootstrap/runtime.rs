@@ -240,6 +240,18 @@ impl<'a> UseCases<'a> {
             self.runtime.deps.key_material.clone(),
             self.runtime.deps.key_scope.clone(),
             self.runtime.deps.encryption_state.clone(),
+            self.runtime.deps.encryption_session.clone(),
+        )
+    }
+
+    /// Get the AutoUnlockEncryptionSession use case for startup unlock.
+    pub fn auto_unlock_encryption_session(&self) -> uc_app::usecases::AutoUnlockEncryptionSession {
+        uc_app::usecases::AutoUnlockEncryptionSession::from_ports(
+            self.runtime.deps.encryption_state.clone(),
+            self.runtime.deps.key_scope.clone(),
+            self.runtime.deps.key_material.clone(),
+            self.runtime.deps.encryption.clone(),
+            self.runtime.deps.encryption_session.clone(),
         )
     }
 
