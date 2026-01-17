@@ -14,3 +14,6 @@ export * from './setting'
 // UI 组件 (shadcn)
 export * from './ui'
 export * from './TitleBar'
+
+// Loading 组件
+export { LoadingScreen } from './LoadingScreen'
