@@ -64,6 +64,64 @@ const GlobalOverlays = () => {
 // 主应用程序内容
 const AppContent = () => {
   const { status, loading } = useOnboarding()
+
+  if (loading || status === null) {
+    return null // Loading
+  }
+
+  if (!status.has_completed) {
+    return <OnboardingPage />
+  }
+
+  return (
+    <ShortcutProvider>
+      <P2PProvider>
+        <GlobalOverlays />
+        <Routes>
+          <Route element={<AuthenticatedLayout />}>
+            <Route
+              path="/"
+              element={
+                <div className="w-full h-full">
+                  <DashboardPage />
+                </div>
+              }
+            />
+            <Route path="/devices" element={<DevicesPage />} />
+          </Route>
+          <Route element={<SettingsFullLayout />}>
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <Toaster />
+      </P2PProvider>
+    </ShortcutProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <Router>
+      <SearchProvider>
+        <OnboardingProvider>
+          <SettingProvider>
+            <AppContentWithBar />
+          </SettingProvider>
+        </OnboardingProvider>
+      </SearchProvider>
+    </Router>
+  )
+}
+
+// TitleBar wrapper with search context
+const TitleBarWithSearch = () => {
+  const { searchValue, setSearchValue } = useSearch()
+  return <TitleBar searchValue={searchValue} onSearchChange={setSearchValue} />
+}
+
+// App content with conditional TitleBar
+const AppContentWithBar = () => {
   const { t } = useTranslation()
 
   // Backend loading state
@@ -116,65 +174,18 @@ const AppContent = () => {
     )
   }
 
-  // Show loading screen if backend not ready
+  // Show loading screen if backend not ready (no TitleBar during loading)
   if (!backendReady) {
     return (
       <LoadingScreen className={fadingOut ? 'opacity-0 transition-opacity duration-300' : ''} />
     )
   }
 
-  if (loading || status === null) {
-    return null // Loading
-  }
-
-  if (!status.has_completed) {
-    return <OnboardingPage />
-  }
-
+  // Backend ready - show TitleBar and main content
   return (
-    <ShortcutProvider>
-      <P2PProvider>
-        <SettingProvider>
-          <GlobalOverlays />
-          <Routes>
-            <Route element={<AuthenticatedLayout />}>
-              <Route
-                path="/"
-                element={
-                  <div className="w-full h-full">
-                    <DashboardPage />
-                  </div>
-                }
-              />
-              <Route path="/devices" element={<DevicesPage />} />
-            </Route>
-            <Route element={<SettingsFullLayout />}>
-              <Route path="/settings" element={<SettingsPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-          <Toaster />
-        </SettingProvider>
-      </P2PProvider>
-    </ShortcutProvider>
+    <>
+      <TitleBarWithSearch />
+      <AppContent />
+    </>
   )
-}
-
-export default function App() {
-  return (
-    <Router>
-      <SearchProvider>
-        <OnboardingProvider>
-          <TitleBarWithSearch />
-          <AppContent />
-        </OnboardingProvider>
-      </SearchProvider>
-    </Router>
-  )
-}
-
-// TitleBar wrapper with search context
-const TitleBarWithSearch = () => {
-  const { searchValue, setSearchValue } = useSearch()
-  return <TitleBar searchValue={searchValue} onSearchChange={setSearchValue} />
 }
