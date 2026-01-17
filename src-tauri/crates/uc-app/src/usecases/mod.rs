@@ -13,6 +13,7 @@
 // ---------------------------------
 //         ↓
 // MaterializeClipboardSelectionUseCase → 粘贴 / 恢复 / 同步
+pub mod auto_unlock_encryption_session;
 pub mod change_passphrase;
 pub mod clipboard;
 pub mod delete_clipboard_entry;
@@ -26,6 +27,7 @@ pub mod onboarding;
 pub mod settings;
 pub mod update_settings;
 
+pub use auto_unlock_encryption_session::AutoUnlockEncryptionSession;
 pub use delete_clipboard_entry::DeleteClipboardEntry;
 pub use get_settings::GetSettings;
 pub use initialize_encryption::InitializeEncryption;
