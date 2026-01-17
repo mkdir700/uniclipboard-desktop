@@ -7,7 +7,7 @@ use uc_core::{
             encryption_state::EncryptionStatePort,
             key_scope::{KeyScopePort, ScopeError},
         },
-        EncryptionPort, KeyMaterialPort,
+        EncryptionPort, EncryptionSessionPort, KeyMaterialPort,
     },
     security::{
         model::{EncryptionAlgo, EncryptionError, KeySlot, MasterKey, Passphrase, WrappedMasterKey},
@@ -62,6 +62,7 @@ pub struct InitializeEncryption {
     key_material: Arc<dyn KeyMaterialPort>,
     key_scope: Arc<dyn KeyScopePort>,
     encryption_state_repo: Arc<dyn EncryptionStatePort>,
+    encryption_session: Arc<dyn EncryptionSessionPort>,
 }
 
 impl InitializeEncryption {
@@ -75,12 +76,14 @@ impl InitializeEncryption {
         key_material: Arc<dyn KeyMaterialPort>,
         key_scope: Arc<dyn KeyScopePort>,
         encryption_state_repo: Arc<dyn EncryptionStatePort>,
+        encryption_session: Arc<dyn EncryptionSessionPort>,
     ) -> Self {
         Self {
             encryption,
             key_material,
             key_scope,
             encryption_state_repo,
+            encryption_session,
         }
     }
 
@@ -94,8 +97,9 @@ impl InitializeEncryption {
         key_material: Arc<dyn KeyMaterialPort>,
         key_scope: Arc<dyn KeyScopePort>,
         encryption_state_repo: Arc<dyn EncryptionStatePort>,
+        encryption_session: Arc<dyn EncryptionSessionPort>,
     ) -> Self {
-        Self::new(encryption, key_material, key_scope, encryption_state_repo)
+        Self::new(encryption, key_material, key_scope, encryption_state_repo, encryption_session)
     }
 
     pub async fn execute(&self, passphrase: Passphrase) -> Result<(), InitializeEncryptionError> {
@@ -158,6 +162,11 @@ impl InitializeEncryption {
             log::debug!("{} Persisting initialized state...", LOG_CONTEXT);
             self.encryption_state_repo.persist_initialized().await?;
             log::debug!("{} Encryption state persisted", LOG_CONTEXT);
+
+            // 8. set master key in session for immediate use
+            log::debug!("{} Setting master key in session...", LOG_CONTEXT);
+            self.encryption_session.set_master_key(master_key).await?;
+            log::debug!("{} Master key set in session successfully", LOG_CONTEXT);
 
             info!("Encryption initialized successfully");
             Ok(())
