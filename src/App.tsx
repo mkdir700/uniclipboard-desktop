@@ -80,6 +80,8 @@ const AppContent = () => {
       }
     }, 30000)
 
+    let fadeTimerId: ReturnType<typeof setTimeout> | null = null
+
     // Listen for backend-ready event
     const unlistenPromise = listen('backend-ready', () => {
       clearTimeout(timeoutId)
@@ -88,14 +90,17 @@ const AppContent = () => {
       setFadingOut(true)
 
       // Switch to main app after fade-out completes
-      setTimeout(() => {
+      fadeTimerId = setTimeout(() => {
         setBackendReady(true)
       }, 300)
     })
 
     return () => {
       clearTimeout(timeoutId)
-      unlistenPromise.then(unlisten => unlisten())
+      if (fadeTimerId) {
+        clearTimeout(fadeTimerId)
+      }
+      unlistenPromise.then(unlisten => unlisten?.()).catch(() => {})
     }
   }, [t])
 
