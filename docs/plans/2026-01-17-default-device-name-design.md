@@ -44,8 +44,8 @@ When the application starts:
 ### Function Signature
 
 ```rust
-pub async fn ensure_default_device_name<P: SettingsPort>(
-    settings: &P,
+pub async fn ensure_default_device_name(
+    settings: Arc<dyn SettingsPort>,
 ) -> Result<(), Box<dyn std::error::Error>>
 ```
 
@@ -78,11 +78,11 @@ if general.device_name.is_none() || general.device_name.as_deref() == Some("") {
 
 ## Error Handling
 
-| Error Scenario       | Handling Strategy                               |
-| -------------------- | ----------------------------------------------- |
-| Hostname not UTF-8   | Use fallback "Uniclipboard Device", log `warn!` |
-| Config read failure  | Log `error!`, use fallback in memory only       |
-| Config write failure | Log `error!`, continue startup (don't block)    |
+| Error Scenario       | Handling Strategy                                                 |
+| -------------------- | ----------------------------------------------------------------- |
+| Hostname not UTF-8   | Silent fallback to "Uniclipboard Device" (no in-function logging) |
+| Config read failure  | Propagate error to caller (caller logs and continues startup)     |
+| Config write failure | Propagate error to caller (caller logs and continues startup)     |
 
 **Principle**: Never block application startup due to device name initialization failures.
 

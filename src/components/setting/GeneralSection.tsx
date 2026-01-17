@@ -49,7 +49,11 @@ export default function GeneralSection() {
   useEffect(() => {
     if (!setting?.general) return
     setSilentStart(setting.general.silent_start)
-    setLanguage((setting.general.language as SupportedLanguage) || getInitialLanguage())
+    // Validate backend language value against supported languages
+    const backendLang = setting.general.language
+    const isValidLanguage =
+      backendLang && SUPPORTED_LANGUAGES.includes(backendLang as SupportedLanguage)
+    setLanguage(isValidLanguage ? (backendLang as SupportedLanguage) : getInitialLanguage())
     setDeviceName(setting.general.device_name ?? '')
   }, [setting])
 
@@ -58,14 +62,23 @@ export default function GeneralSection() {
     try {
       setSaving(true)
 
-      if (checked) {
-        await enableAutostart()
-      } else {
-        await disableAutostart()
+      // Update backend setting first (source of truth)
+      await updateGeneralSetting({ auto_start: checked })
+
+      // Then apply OS autostart change
+      try {
+        if (checked) {
+          await enableAutostart()
+        } else {
+          await disableAutostart()
+        }
+      } catch (osError) {
+        // Rollback backend setting if OS operation fails
+        await updateGeneralSetting({ auto_start: !checked })
+        throw osError
       }
 
-      // 更新设置和状态
-      await updateGeneralSetting({ auto_start: checked })
+      // Only update local state after both succeed
       setAutoStart(checked)
     } catch (error) {
       console.error('更改自启动状态失败:', error)
