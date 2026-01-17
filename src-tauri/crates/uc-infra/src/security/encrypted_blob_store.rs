@@ -11,6 +11,7 @@ use tracing::debug;
 
 use uc_core::{
     ports::{BlobStorePort, EncryptionPort, EncryptionSessionPort},
+    security::aad,
     security::model::EncryptionAlgo,
     BlobId,
 };
@@ -34,11 +35,6 @@ impl EncryptedBlobStore {
             session,
         }
     }
-
-    /// Generate AAD for blob encryption.
-    fn aad_for_blob(blob_id: &BlobId) -> Vec<u8> {
-        format!("uc:blob:v1|{}", blob_id.as_ref()).into_bytes()
-    }
 }
 
 #[async_trait]
@@ -52,7 +48,7 @@ impl BlobStorePort for EncryptedBlobStore {
             .context("encryption session not ready - cannot encrypt blob")?;
 
         // 2. Encrypt the data
-        let aad = Self::aad_for_blob(blob_id);
+        let aad = aad::for_blob(blob_id);
         let encrypted_blob = self
             .encryption
             .encrypt_blob(&master_key, data, &aad, EncryptionAlgo::XChaCha20Poly1305)
@@ -96,7 +92,7 @@ impl BlobStorePort for EncryptedBlobStore {
             .context("encryption session not ready - cannot decrypt blob")?;
 
         // 4. Decrypt the data
-        let aad = Self::aad_for_blob(blob_id);
+        let aad = aad::for_blob(blob_id);
         let plaintext = self
             .encryption
             .decrypt_blob(&master_key, &encrypted_blob, &aad)
@@ -120,6 +116,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
     use uc_core::{
+        security::aad,
         security::model::{EncryptedBlob, EncryptionFormatVersion, MasterKey},
         BlobId,
     };
@@ -442,13 +439,13 @@ mod tests {
         let blob_id1 = BlobId::from("blob-1");
         let blob_id2 = BlobId::from("blob-2");
 
-        let aad1 = EncryptedBlobStore::aad_for_blob(&blob_id1);
-        let aad2 = EncryptedBlobStore::aad_for_blob(&blob_id2);
+        let aad1 = aad::for_blob(&blob_id1);
+        let aad2 = aad::for_blob(&blob_id2);
 
         assert_ne!(aad1, aad2, "AAD should differ for different blob IDs");
 
         // Same blob ID should produce same AAD
-        let aad1_again = EncryptedBlobStore::aad_for_blob(&blob_id1);
+        let aad1_again = aad::for_blob(&blob_id1);
         assert_eq!(
             aad1, aad1_again,
             "AAD should be deterministic for same blob ID"

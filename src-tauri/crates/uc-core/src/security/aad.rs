@@ -1,0 +1,223 @@
+//! Additional Authenticated Data (AAD) generation for encryption.
+//!
+//! This module provides centralized AAD generation functions to ensure
+//! consistency across all encryption/decryption operations.
+//!
+//! # AAD Format
+//!
+//! AAD follows the pattern: `uc:<type>:v1|<identifiers>`
+//!
+//! - `uc:` - Application namespace prefix
+//! - `<type>` - Data type (inline, blob)
+//! - `:v1` - Format version
+//! - `|<identifiers>` - Pipe-separated context identifiers
+//!
+//! # Example
+//!
+//! ```rust
+//! use uc_core::security::aad;
+//! use uc_core::ids::{EventId, RepresentationId, BlobId};
+//!
+//! // For inline clipboard data
+//! let event_id = EventId::new();
+//! let rep_id = RepresentationId::new();
+//! let aad = aad::for_inline(&event_id, &rep_id);
+//!
+//! // For blob storage
+//! let blob_id = BlobId::new();
+//! let aad = aad::for_blob(&blob_id);
+//! ```
+
+use crate::ids::{BlobId, EventId, RepresentationId};
+
+/// Current AAD format version.
+const AAD_VERSION: &str = "v1";
+
+/// AAD namespace prefix for all application data.
+const AAD_NAMESPACE: &str = "uc";
+
+/// Generates AAD for inline clipboard data encryption/decryption.
+///
+/// # Format
+///
+/// `uc:inline:v1|{event_id}|{representation_id}`
+///
+/// # Arguments
+///
+/// * `event_id` - The clipboard event identifier
+/// * `rep_id` - The representation identifier
+///
+/// # Returns
+///
+/// AAD as bytes for use with AEAD encryption.
+///
+/// # Examples
+///
+/// ```rust
+/// use uc_core::security::aad::for_inline;
+/// use uc_core::ids::{EventId, RepresentationId};
+///
+/// let event_id = EventId::from("test-event");
+/// let rep_id = RepresentationId::from("test-rep");
+/// let aad = for_inline(&event_id, &rep_id);
+/// assert_eq!(aad, b"uc:inline:v1|test-event|test-rep".to_vec());
+/// ```
+pub fn for_inline(event_id: &EventId, rep_id: &RepresentationId) -> Vec<u8> {
+    format!(
+        "{AAD_NAMESPACE}:inline:{AAD_VERSION}|{}|{}",
+        event_id.as_ref(),
+        rep_id.as_ref()
+    )
+    .into_bytes()
+}
+
+/// Generates AAD for blob storage encryption/decryption.
+///
+/// # Format
+///
+/// `uc:blob:v1|{blob_id}`
+///
+/// # Arguments
+///
+/// * `blob_id` - The blob identifier
+///
+/// # Returns
+///
+/// AAD as bytes for use with AEAD encryption.
+///
+/// # Examples
+///
+/// ```rust
+/// use uc_core::security::aad::for_blob;
+/// use uc_core::ids::BlobId;
+///
+/// let blob_id = BlobId::from("test-blob");
+/// let aad = for_blob(&blob_id);
+/// assert_eq!(aad, b"uc:blob:v1|test-blob".to_vec());
+/// ```
+pub fn for_blob(blob_id: &BlobId) -> Vec<u8> {
+    format!("{AAD_NAMESPACE}:blob:{AAD_VERSION}|{}", blob_id.as_ref()).into_bytes()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_for_inline_is_deterministic() {
+        let event_id = EventId::from("test-event");
+        let rep_id = RepresentationId::from("test-rep");
+
+        let aad1 = for_inline(&event_id, &rep_id);
+        let aad2 = for_inline(&event_id, &rep_id);
+
+        assert_eq!(aad1, aad2, "AAD should be deterministic for same inputs");
+    }
+
+    #[test]
+    fn test_for_inline_includes_context() {
+        let event_id = EventId::from("my-event");
+        let rep_id = RepresentationId::from("my-rep");
+
+        let aad = for_inline(&event_id, &rep_id);
+        let aad_str = String::from_utf8(aad).unwrap();
+
+        assert!(aad_str.contains("my-event"), "AAD should contain event ID");
+        assert!(
+            aad_str.contains("my-rep"),
+            "AAD should contain representation ID"
+        );
+        assert!(
+            aad_str.starts_with("uc:inline:v1|"),
+            "AAD should have correct prefix"
+        );
+    }
+
+    #[test]
+    fn test_for_inline_differs_by_inputs() {
+        let event_id1 = EventId::from("event-1");
+        let event_id2 = EventId::from("event-2");
+        let rep_id = RepresentationId::from("rep-1");
+
+        let aad1 = for_inline(&event_id1, &rep_id);
+        let aad2 = for_inline(&event_id2, &rep_id);
+
+        assert_ne!(aad1, aad2, "AAD should differ for different event IDs");
+
+        let rep_id2 = RepresentationId::from("rep-2");
+        let aad3 = for_inline(&event_id1, &rep_id2);
+
+        assert_ne!(
+            aad1, aad3,
+            "AAD should differ for different representation IDs"
+        );
+    }
+
+    #[test]
+    fn test_for_blob_is_deterministic() {
+        let blob_id = BlobId::from("test-blob");
+
+        let aad1 = for_blob(&blob_id);
+        let aad2 = for_blob(&blob_id);
+
+        assert_eq!(aad1, aad2, "AAD should be deterministic for same blob ID");
+    }
+
+    #[test]
+    fn test_for_blob_includes_blob_id() {
+        let blob_id = BlobId::from("my-blob");
+
+        let aad = for_blob(&blob_id);
+        let aad_str = String::from_utf8(aad).unwrap();
+
+        assert!(aad_str.contains("my-blob"), "AAD should contain blob ID");
+        assert!(
+            aad_str.starts_with("uc:blob:v1|"),
+            "AAD should have correct prefix"
+        );
+    }
+
+    #[test]
+    fn test_for_blob_differs_by_blob_id() {
+        let blob_id1 = BlobId::from("blob-1");
+        let blob_id2 = BlobId::from("blob-2");
+
+        let aad1 = for_blob(&blob_id1);
+        let aad2 = for_blob(&blob_id2);
+
+        assert_ne!(aad1, aad2, "AAD should differ for different blob IDs");
+    }
+
+    #[test]
+    fn test_inline_and_blob_aad_are_distinct() {
+        let event_id = EventId::from("test-event");
+        let rep_id = RepresentationId::from("test-rep");
+        let blob_id = BlobId::from("test-id");
+
+        let inline_aad = for_inline(&event_id, &rep_id);
+        let blob_aad = for_blob(&blob_id);
+
+        assert_ne!(
+            inline_aad, blob_aad,
+            "Inline and blob AAD should use different prefixes"
+        );
+    }
+
+    #[test]
+    fn test_aad_format_version() {
+        // This test ensures version consistency across AAD types.
+        // If the version changes, update AAD_VERSION constant.
+        let event_id = EventId::from("test");
+        let rep_id = RepresentationId::from("test");
+        let blob_id = BlobId::from("test");
+
+        let inline_aad = String::from_utf8(for_inline(&event_id, &rep_id)).unwrap();
+        let blob_aad = String::from_utf8(for_blob(&blob_id)).unwrap();
+
+        assert!(
+            inline_aad.contains(":v1|"),
+            "Inline AAD should use v1 format"
+        );
+        assert!(blob_aad.contains(":v1|"), "Blob AAD should use v1 format");
+    }
+}

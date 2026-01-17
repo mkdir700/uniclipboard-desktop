@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::warn;
 
 use clipboard_rs::ClipboardHandler;
 
@@ -28,12 +29,12 @@ impl ClipboardHandler for ClipboardWatcher {
                     .sender
                     .try_send(PlatformEvent::ClipboardChanged { snapshot })
                 {
-                    log::warn!("failed to notify clipboard change: {}", err);
+                    warn!(error = %err, "Failed to notify clipboard change");
                 }
             }
 
             Err(e) => {
-                log::warn!("failed to read clipboard snapshot: {}", e);
+                warn!(error = %e, "Failed to read clipboard snapshot");
             }
         }
     }

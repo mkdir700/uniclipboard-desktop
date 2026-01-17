@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tracing::{info, info_span, Instrument};
+use tracing::{debug, info, info_span, Instrument};
 
 use uc_core::{
     ports::{
@@ -16,8 +16,6 @@ use uc_core::{
         state::{EncryptionState, EncryptionStateError},
     },
 };
-
-const LOG_CONTEXT: &str = "[InitializeEncryption]";
 
 #[derive(Debug, thiserror::Error)]
 pub enum InitializeEncryptionError {
@@ -117,64 +115,64 @@ impl InitializeEncryption {
             info!("Starting encryption initialization");
 
             let state = self.encryption_state_repo.load_state().await?;
-            log::debug!("{} Loaded encryption state: {:?}", LOG_CONTEXT, state);
+            debug!(state = ?state, "Loaded encryption state");
 
             // 1. assert not initialized
             if state == EncryptionState::Initialized {
                 return Err(InitializeEncryptionError::AlreadyInitialized);
             }
 
-            log::debug!("{} Getting current scope...", LOG_CONTEXT);
+            debug!("Getting current scope");
             let scope = self.key_scope.current_scope().await?;
-            log::debug!("{} Got scope: {}", LOG_CONTEXT, scope.to_identifier());
+            debug!(scope = %scope.to_identifier(), "Got scope");
 
-            log::debug!("{} Creating keyslot draft...", LOG_CONTEXT);
+            debug!("Creating keyslot draft");
             let keyslot_draft = KeySlot::draft_v1(scope.clone())?;
-            log::debug!("{} Keyslot draft created", LOG_CONTEXT);
+            debug!("Keyslot draft created");
 
             // 2. derive KEK
-            log::debug!("{} Deriving KEK...", LOG_CONTEXT);
+            debug!("Deriving KEK");
             let kek = self
                 .encryption
                 .derive_kek(&passphrase, &keyslot_draft.salt, &keyslot_draft.kdf)
                 .await?;
-            log::debug!("{} KEK derived successfully", LOG_CONTEXT);
+            debug!("KEK derived successfully");
 
             // 3. generate MasterKey
-            log::debug!("{} Generating master key...", LOG_CONTEXT);
+            debug!("Generating master key");
             let master_key = MasterKey::generate()?;
-            log::debug!("{} Master key generated", LOG_CONTEXT);
+            debug!("Master key generated");
 
             // 4. wrap MasterKey
-            log::debug!("{} Wrapping master key...", LOG_CONTEXT);
+            debug!("Wrapping master key");
             let blob = self
                 .encryption
                 .wrap_master_key(&kek, &master_key, EncryptionAlgo::XChaCha20Poly1305)
                 .await?;
-            log::debug!("{} Master key wrapped successfully", LOG_CONTEXT);
+            debug!("Master key wrapped successfully");
 
             let keyslot = keyslot_draft.finalize(WrappedMasterKey { blob });
-            log::debug!("{} Keyslot finalized", LOG_CONTEXT);
+            debug!("Keyslot finalized");
 
             // 5. persist wrapped key, store keyslot
-            log::debug!("{} Storing keyslot...", LOG_CONTEXT);
+            debug!("Storing keyslot");
             self.key_material.store_keyslot(&keyslot).await?;
-            log::debug!("{} Keyslot stored successfully", LOG_CONTEXT);
+            debug!("Keyslot stored successfully");
 
             // 6. store KEK material into keyring
-            log::debug!("{} Storing KEK in keyring...", LOG_CONTEXT);
+            debug!("Storing KEK in keyring");
             self.key_material.store_kek(&scope, &kek).await?;
-            log::debug!("{} KEK stored successfully", LOG_CONTEXT);
+            debug!("KEK stored successfully");
 
             // 7. persist initialized state
-            log::debug!("{} Persisting initialized state...", LOG_CONTEXT);
+            debug!("Persisting initialized state");
             self.encryption_state_repo.persist_initialized().await?;
-            log::debug!("{} Encryption state persisted", LOG_CONTEXT);
+            debug!("Encryption state persisted");
 
             // 8. set master key in session for immediate use
-            log::debug!("{} Setting master key in session...", LOG_CONTEXT);
+            debug!("Setting master key in session");
             self.encryption_session.set_master_key(master_key).await?;
-            log::debug!("{} Master key set in session successfully", LOG_CONTEXT);
+            debug!("Master key set in session successfully");
 
             info!("Encryption initialized successfully");
             Ok(())
