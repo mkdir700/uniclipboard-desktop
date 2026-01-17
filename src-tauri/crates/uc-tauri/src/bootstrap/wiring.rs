@@ -61,6 +61,7 @@ use uc_infra::device::LocalDeviceIdentity;
 use uc_infra::fs::key_slot_store::{JsonKeySlotStore, KeySlotStore};
 use uc_infra::security::{
     Blake3Hasher, DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository,
+    EncryptedBlobStore, EncryptingClipboardEventWriter, DecryptingClipboardRepresentationRepository,
 };
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
@@ -621,14 +622,38 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     // 步骤 3：创建平台层实现
     let platform = create_platform_layer(keyring, &vault_path)?;
 
+    // Step 3.5: Wrap ports with encryption decorators
+    // 步骤 3.5：用加密装饰器包装端口
+
+    // Wrap blob_store with encryption decorator
+    let encrypted_blob_store: Arc<dyn BlobStorePort> = Arc::new(EncryptedBlobStore::new(
+        platform.blob_store.clone(),
+        infra.encryption.clone(),
+        platform.encryption_session.clone(),
+    ));
+
+    // Wrap clipboard_event_repo with encryption decorator
+    let encrypting_event_writer: Arc<dyn ClipboardEventWriterPort> = Arc::new(EncryptingClipboardEventWriter::new(
+        infra.clipboard_event_repo.clone(),
+        infra.encryption.clone(),
+        platform.encryption_session.clone(),
+    ));
+
+    // Wrap representation_repo with decryption decorator
+    let decrypting_rep_repo: Arc<dyn ClipboardRepresentationRepositoryPort> = Arc::new(DecryptingClipboardRepresentationRepository::new(
+        infra.representation_repo.clone(),
+        infra.encryption.clone(),
+        platform.encryption_session.clone(),
+    ));
+
     // Step 4: Construct AppDeps with all dependencies
     // 步骤 4：使用所有依赖构造 AppDeps
     let deps = AppDeps {
         // Clipboard dependencies / 剪贴板依赖
         clipboard: platform.clipboard,
         clipboard_entry_repo: infra.clipboard_entry_repo,
-        clipboard_event_repo: infra.clipboard_event_repo,
-        representation_repo: infra.representation_repo,
+        clipboard_event_repo: encrypting_event_writer,
+        representation_repo: decrypting_rep_repo,
         representation_materializer: platform.representation_materializer,
         selection_repo: infra.selection_repo,
         representation_policy: Arc::new(SelectRepresentationPolicyV1::new()),
@@ -652,7 +677,7 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
         onboarding_state: infra.onboarding_state,
 
         // Storage dependencies / 存储依赖
-        blob_store: platform.blob_store,
+        blob_store: encrypted_blob_store,
         blob_repository: infra.blob_repository,
         blob_materializer: platform.blob_materializer,
 
