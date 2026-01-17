@@ -206,7 +206,6 @@ fn run_app(config: AppConfig) {
 
             // Clone handle for use in async block
             let runtime_for_unlock = runtime_for_handler.clone();
-            let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
 
             tauri::async_runtime::spawn(async move {
