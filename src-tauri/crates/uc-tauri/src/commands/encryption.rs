@@ -63,6 +63,13 @@ pub async fn initialize_encryption(
 
     tracing::debug!("{} Event emitted successfully", LOG_CONTEXT);
     tracing::info!("Onboarding: encryption password initialized successfully");
+
+    // Note: Watcher start is handled by the platform runtime
+    // which listens for encryption state changes
+    // For now, user needs to restart app after first-time setup
+    // TODO: Implement in-process watcher start via command channel
+    tracing::info!("Note: App restart required to start clipboard watcher after first-time encryption setup");
+
     Ok(())
 }
 
