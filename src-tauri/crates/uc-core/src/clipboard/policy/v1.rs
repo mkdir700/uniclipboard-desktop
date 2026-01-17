@@ -11,8 +11,8 @@ use std::cmp::Ordering;
 /// v1 策略：稳定、可解释、保守
 ///
 /// v1 的核心：
-/// - UI Preview 优先视觉合理：files > image > rich > plain > uri > unknown
-/// - Default Paste 优先兼容不炸：files > plain > rich > image > uri > unknown
+/// - UI Preview 优先简洁预览：files > plain > image > rich > uri > unknown
+/// - Default Paste 优先保留格式：files > rich > plain > image > uri > unknown
 /// - stable sort: score desc, size asc, format_id asc, id asc
 #[derive(Debug, Default)]
 pub struct SelectRepresentationPolicyV1;
