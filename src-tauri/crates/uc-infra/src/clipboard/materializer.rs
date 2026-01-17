@@ -4,6 +4,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
+use tracing::debug;
 
 use crate::config::clipboard_storage_config::ClipboardStorageConfig;
 use uc_core::clipboard::{
@@ -51,11 +52,13 @@ pub(crate) fn truncate_to_preview(bytes: &[u8]) -> Vec<u8> {
 /// Clipboard representation materializer with owned config
 /// 带有拥有所有权的配置的剪贴板表示物化器
 ///
-/// Valid states:
-/// 1. inline_data = Some, blob_id = None  -> inline payload
-/// 2. inline_data = None, blob_id = Some  -> materialized blob
-/// 3. inline_data = None, blob_id = None  -> lazy (metadata only)
-/// 4. inline_data = Some, blob_id = Some  -> transitional / debugging
+/// Valid states (per database CHECK constraint):
+/// 1. inline_data = Some(payload), blob_id = None  -> inline payload (small files)
+/// 2. inline_data = Some(preview), blob_id = None  -> preview (large text files)
+/// 3. inline_data = Some([]), blob_id = None  -> placeholder (large non-text files)
+///
+/// Note: The CHECK constraint requires exactly one of inline_data/blob_id to be non-NULL.
+/// blob_id is reserved for future blob materialization but currently unused.
 pub struct ClipboardRepresentationMaterializer {
     config: Arc<ClipboardStorageConfig>,
 }
@@ -81,15 +84,41 @@ impl ClipboardRepresentationMaterializerPort for ClipboardRepresentationMaterial
         // 决策：内联还是 blob，大文本生成预览
         let inline_data = if size_bytes <= inline_threshold_bytes {
             // Small content: store full data inline
+            debug!(
+                representation_id = %observed.id,
+                format_id = %observed.format_id,
+                size_bytes,
+                threshold = inline_threshold_bytes,
+                strategy = "inline",
+                "Materializing small content inline"
+            );
             Some(observed.bytes.clone())
         } else {
             // Large content: decide based on type
             if is_text_mime_type(&observed.mime) {
                 // Text type: generate truncated preview
+                debug!(
+                    representation_id = %observed.id,
+                    format_id = %observed.format_id,
+                    size_bytes,
+                    threshold = inline_threshold_bytes,
+                    preview_length_chars = PREVIEW_LENGTH_CHARS,
+                    strategy = "preview",
+                    "Materializing large text as preview"
+                );
                 Some(truncate_to_preview(&observed.bytes))
             } else {
-                // Non-text (images, etc.): no inline, blob only
-                None
+                // Non-text (images, etc.): use empty array to satisfy CHECK constraint
+                // The actual data will be stored separately via blob materialization
+                debug!(
+                    representation_id = %observed.id,
+                    format_id = %observed.format_id,
+                    size_bytes,
+                    threshold = inline_threshold_bytes,
+                    strategy = "placeholder",
+                    "Materializing large non-text as placeholder (blob storage pending)"
+                );
+                Some(vec![])
             }
         };
 
