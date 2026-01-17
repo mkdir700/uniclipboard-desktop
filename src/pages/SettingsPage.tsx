@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AboutSection from '@/components/setting/AboutSection'
 import AppearanceSection from '@/components/setting/AppearanceSection'
 import GeneralSection from '@/components/setting/GeneralSection'
@@ -13,6 +14,23 @@ import { SettingContentLayout } from '@/layouts'
 
 const SettingsPage: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState('general')
+  const navigate = useNavigate()
+
+  // Handle ESC key to navigate back
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const idx = (window.history.state as { idx?: number } | null)?.idx
+        if (typeof idx === 'number' && idx > 0) {
+          navigate(-1)
+        } else {
+          navigate('/')
+        }
+      }
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [navigate])
 
   // 处理类别点击事件
   const handleCategoryClick = (category: string) => {

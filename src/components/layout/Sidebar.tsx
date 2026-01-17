@@ -3,7 +3,6 @@ import { Home, Monitor, Settings } from 'lucide-react'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
-import { openSettingsWindow } from '@/api/window'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn, isMacPlatform } from '@/lib/utils'
 
@@ -13,13 +12,12 @@ const NavButton: React.FC<{
   label: string
   isActive: boolean
   layoutId: string
-  onClick?: (e: React.MouseEvent) => void
-}> = ({ to, icon: Icon, label, isActive, layoutId, onClick }) => {
+}> = ({ to, icon: Icon, label, isActive, layoutId }) => {
   return (
     <TooltipProvider delayDuration={0}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link data-tauri-drag-region="false" to={to} onClick={onClick} className="relative group">
+          <Link data-tauri-drag-region="false" to={to} className="relative group">
             {isActive && (
               <motion.div
                 layoutId={layoutId}
@@ -62,14 +60,6 @@ const Sidebar: React.FC = () => {
     { to: '/devices', icon: Monitor, label: t('nav.devices') },
   ]
 
-  // 处理设置按钮点击，打开独立窗口
-  const handleSettingsClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    openSettingsWindow().catch(err => {
-      console.error('Failed to open settings window:', err)
-    })
-  }
-
   return (
     <aside
       data-tauri-drag-region
@@ -100,9 +90,8 @@ const Sidebar: React.FC = () => {
           to="/settings"
           icon={Settings}
           label={t('nav.settings')}
-          isActive={false}
+          isActive={location.pathname.startsWith('/settings')}
           layoutId="sidebar-nav-bottom"
-          onClick={handleSettingsClick}
         />
       </div>
     </aside>
