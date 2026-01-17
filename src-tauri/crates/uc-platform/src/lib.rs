@@ -9,6 +9,7 @@
 pub use tracing;
 
 pub mod adapters;
+pub mod app_dirs;
 pub mod bootstrap;
 pub mod capability;
 pub mod clipboard;

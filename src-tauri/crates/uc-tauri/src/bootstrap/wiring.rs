@@ -36,10 +36,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use uc_app::app_paths::AppPaths;
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ports::*;
+use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_infra::clipboard::ClipboardRepresentationMaterializer;
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -436,96 +438,164 @@ fn create_platform_layer(
     })
 }
 
-/// Wire all dependencies together.
-/// 将所有依赖连接在一起。
+/// Resolves the application's default directories for storing data and configuration.
 ///
-/// This function constructs the complete dependency graph by creating instances
-/// from infrastructure and platform layers, then packaging them into `AppDeps`.
+/// Returns an AppDirs adapter populated with platform-appropriate paths for the application.
 ///
-/// 此函数通过从基础设施层和平台层创建实例，然后将它们打包到 `AppDeps` 中来构建完整的依赖图。
+/// # Errors
 ///
-/// # Arguments / 参数
+/// Returns `WiringError::ConfigInit` if the platform adapter fails to determine the directories.
 ///
-/// * `config` - Application configuration / 应用配置
+/// # Examples
 ///
-/// # Returns / 返回
-///
-/// * `WiringResult<AppDeps>` - The wired dependencies on success / 成功时返回已连接的依赖
-///
-
-/// Get default configuration directory for application data
-/// 获取应用数据的默认配置目录
-///
-/// Returns the system config directory with app-specific subdirectory.
-/// 返回系统配置目录的应用特定子目录。
-///
-/// Uses `dirs` crate to find platform-specific config directory:
-/// 使用 `dirs` crate 查找平台特定的配置目录：
-/// - macOS: `~/Library/Application Support/uniclipboard.dev-dev`
-/// - Linux: `~/.config/uniclipboard.dev-dev`
-/// - Windows: `%APPDATA%\uniclipboard.dev-dev`
-fn get_default_config_dir() -> WiringResult<PathBuf> {
-    let base_dir = dirs::config_dir().ok_or_else(|| {
-        WiringError::ConfigInit("Could not find system config directory".to_string())
-    })?;
-
-    // Use development-specific directory name to avoid conflicts with production
-    // 使用开发特定的目录名称以避免与生产环境冲突
-    let config_dir = base_dir.join("uniclipboard.dev-dev");
-
-    Ok(config_dir)
+/// ```
+/// let dirs = get_default_app_dirs().expect("failed to get app dirs");
+/// // `dirs` contains platform-specific paths such as config, data, and cache roots
+/// assert!(!dirs.app_name.is_empty());
+/// ```
+fn get_default_app_dirs() -> WiringResult<uc_core::app_dirs::AppDirs> {
+    let adapter = DirsAppDirsAdapter::new();
+    adapter
+        .get_app_dirs()
+        .map_err(|e| WiringError::ConfigInit(e.to_string()))
 }
 
-/// Get default data directory for application data (database, vault, etc.)
-/// 获取应用数据的默认数据目录（数据库、vault 等）
-///
-/// Uses `dirs` crate to find platform-specific data directory:
-/// 使用 `dirs` crate 查找平台特定的数据目录：
-/// - macOS: `~/Library/Application Support/uniclipboard`
-/// - Linux: `~/.local/share/uniclipboard`
-/// - Windows: `%LOCALAPPDATA%\uniclipboard`
-fn get_default_data_dir() -> WiringResult<PathBuf> {
-    let base_dir = dirs::data_local_dir().ok_or_else(|| {
-        WiringError::ConfigInit("Could not find system data directory".to_string())
-    })?;
-
-    // Use production directory name
-    // 使用生产环境目录名称
-    let data_dir = base_dir.join("uniclipboard");
-
-    Ok(data_dir)
+#[derive(Debug, Clone)]
+struct DefaultPaths {
+    app_data_root: PathBuf,
+    db_path: PathBuf,
+    vault_dir: PathBuf,
+    settings_path: PathBuf,
 }
 
-/// # Errors / 错误
+/// Compute default application file-system paths from the given configuration.
 ///
-/// Returns `WiringError` if dependency construction fails.
-/// 如果依赖构造失败，返回 `WiringError`。
+/// The returned paths combine platform-specific application directories with any
+/// explicit overrides present in `config`, producing concrete locations for:
+/// - app_data_root: base application data directory
+/// - db_path: path to the SQLite database file
+/// - vault_dir: directory for vault/key material
+/// - settings_path: path to the settings file
 ///
-/// # Phase 3 Implementation Plan / 第3阶段实现计划
+/// # Examples
 ///
-/// When implementing Phase 3, this function will:
-/// 实现第3阶段时，此函数将：
+/// ```
+/// let cfg = AppConfig::default();
+/// let paths = derive_default_paths(&cfg).expect("derive default paths");
+/// assert!(!paths.app_data_root.as_os_str().is_empty());
+/// assert!(!paths.settings_path.as_os_str().is_empty());
+/// ```
+fn derive_default_paths(config: &AppConfig) -> WiringResult<DefaultPaths> {
+    let app_dirs = get_default_app_dirs()?;
+
+    derive_default_paths_from_app_dirs(&app_dirs, config)
+}
+
+/// Derives concrete filesystem paths (database, vault, settings, and app data root)
+/// from platform `AppDirs`, applying any overrides present in `AppConfig`.
 ///
-/// 1. Create infrastructure implementations (database repos, encryption, etc.)
-///    创建基础设施实现（数据库仓库、加密等）
-/// 2. Create platform adapters (clipboard, network, UI, etc.)
-///    创建平台适配器（剪贴板、网络、UI等）
-/// 3. Wrap all in `Arc<dyn Trait>` for shared ownership
-///    将所有内容包装在 `Arc<dyn Trait>` 中以实现共享所有权
-/// 4. Construct `AppDeps` with all dependencies
-///    使用所有依赖构造 `AppDeps`
+/// If `config.database_path` is empty the default database path from `AppDirs` is used;
+/// otherwise `config.database_path` is returned. If `config.vault_key_path` is empty
+/// the default vault directory from `AppDirs` is used; otherwise the parent directory
+/// of `config.vault_key_path` is used as the vault directory.
+///
+/// # Parameters
+///
+/// - `app_dirs`: Platform-specific base directories to derive defaults from.
+/// - `config`: Application configuration that may override the default database path
+///   and vault key path.
+///
+/// # Returns
+///
+/// `DefaultPaths` containing:
+/// - `app_data_root`: the application data root from `AppDirs`.
+/// - `db_path`: the resolved database file path.
+/// - `vault_dir`: the resolved vault directory.
+/// - `settings_path`: the resolved settings file path.
+///
+/// # Examples
+///
+/// ```
+/// use uc_core::app_dirs::AppDirs;
+/// use uniclipboard_wiring::{AppConfig, derive_default_paths_from_app_dirs};
+///
+/// // Assuming `AppDirs` and `AppConfig` implement `Default` in tests/setup.
+/// let app_dirs = AppDirs::default();
+/// let config = AppConfig::default();
+/// let paths = derive_default_paths_from_app_dirs(&app_dirs, &config).unwrap();
+/// // Basic sanity check: returned paths are populated.
+/// assert!(!paths.app_data_root.as_os_str().is_empty());
+/// assert!(!paths.settings_path.as_os_str().is_empty());
+/// ```
+fn derive_default_paths_from_app_dirs(
+    app_dirs: &uc_core::app_dirs::AppDirs,
+    config: &AppConfig,
+) -> WiringResult<DefaultPaths> {
+    let base_paths = AppPaths::from_app_dirs(app_dirs);
+
+    let db_path = if config.database_path.as_os_str().is_empty() {
+        base_paths.db_path
+    } else {
+        config.database_path.clone()
+    };
+
+    let vault_dir = if config.vault_key_path.as_os_str().is_empty() {
+        base_paths.vault_dir
+    } else {
+        config
+            .vault_key_path
+            .parent()
+            .unwrap_or(&config.vault_key_path)
+            .to_path_buf()
+    };
+
+    let settings_path = base_paths.settings_path;
+
+    Ok(DefaultPaths {
+        app_data_root: app_dirs.app_data_root.clone(),
+        db_path,
+        vault_dir,
+        settings_path,
+    })
+}
+
+/// Wires and constructs the application's dependency graph, returning a ready-to-use AppDeps.
+///
+/// On success returns an AppDeps value with all infrastructure and platform components
+/// (database pool, repositories, security, platform adapters, materializers, settings, etc.)
+/// wrapped for shared use.
+///
+/// # Errors
+///
+/// Returns a `WiringError` when any required dependency cannot be constructed, for example:
+/// - `WiringError::DatabaseInit` for database/pool initialization failures
+/// - `WiringError::KeyringInit` for keyring creation failures
+/// - `WiringError::ClipboardInit` for clipboard adapter failures
+/// - `WiringError::NetworkInit` for network adapter failures
+/// - `WiringError::BlobStorageInit` for blob store initialization failures
+/// - `WiringError::SettingsInit` for settings repository failures
+/// - `WiringError::ConfigInit` for application directory / configuration discovery failures
+///
+/// # Examples
+///
+/// ```
+/// // The function will either return fully wired dependencies or a WiringError describing
+/// // what failed during construction.
+/// let config = AppConfig::default();
+/// match wire_dependencies(&config) {
+///     Ok(_deps) => { /* ready to run the application */ }
+///     Err(_err) => { /* handle initialization failure */ }
+/// }
+/// ```
 pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池
     //
     // Defensive: Use system default if database_path is empty
     // 防御性编程：如果 database_path 为空，使用系统默认值
-    let db_path = if config.database_path.as_os_str().is_empty() {
-        let data_dir = get_default_data_dir()?;
-        data_dir.join("uniclipboard.db")
-    } else {
-        config.database_path.clone()
-    };
+    let paths = derive_default_paths(config)?;
+
+    let db_path = paths.db_path;
 
     let db_pool = create_db_pool(&db_path)?;
 
@@ -536,24 +606,14 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
     // If config path is empty, use system config directory as fallback
     // 从配置创建 vault 路径（使用 vault_key_path 的父目录）
     // 如果配置路径为空，使用系统配置目录作为后备
-    let vault_path = if config.vault_key_path.as_os_str().is_empty() {
-        // Use system config directory as default
-        // 使用系统配置目录作为默认值
-        get_default_config_dir()?
-    } else {
-        config
-            .vault_key_path
-            .parent()
-            .unwrap_or(&config.vault_key_path)
-            .to_path_buf()
-    };
+    let vault_path = paths.vault_dir;
 
-    // Create settings path (use same directory as vault for now)
-    // 创建设置路径（目前使用与 vault 相同的目录）
-    let settings_path = vault_path.join("settings.json");
+    let settings_path = paths.settings_path;
 
-    let keyring = uc_platform::secure_storage::create_default_keyring()
-        .map_err(|e| WiringError::KeyringInit(e.to_string()))?;
+    let keyring = uc_platform::secure_storage::create_default_keyring_in_app_data_root(
+        paths.app_data_root.clone(),
+    )
+    .map_err(|e| WiringError::KeyringInit(e.to_string()))?;
 
     let infra = create_infra_layer(db_pool, &vault_path, &settings_path, keyring.clone())?;
 
@@ -899,13 +959,35 @@ The functionality is still validated in development mode when running the app wi
     }
 
     #[test]
-    fn test_get_default_data_dir_returns_expected_path() {
-        // Test that get_default_data_dir returns a valid path
-        // 测试 get_default_data_dir 返回有效路径
-        let result = get_default_data_dir();
+    fn test_get_default_app_dirs_returns_expected_path() {
+        // Test that get_default_app_dirs returns a valid path
+        // 测试 get_default_app_dirs 返回有效路径
+        let result = get_default_app_dirs();
 
         assert!(result.is_ok());
-        let path = result.unwrap();
-        assert!(path.ends_with("uniclipboard"));
+        let dirs = result.unwrap();
+        assert!(dirs.app_data_root.ends_with("uniclipboard"));
+    }
+
+    #[test]
+    fn derive_default_paths_from_empty_config_uses_single_app_data_root() {
+        let config = AppConfig::empty();
+
+        let paths = derive_default_paths(&config).expect("derive_default_paths failed");
+
+        assert!(paths.app_data_root.ends_with("uniclipboard"));
+        assert_eq!(paths.db_path, paths.app_data_root.join("uniclipboard.db"));
+        assert_eq!(paths.vault_dir, paths.app_data_root.join("vault"));
+        assert_eq!(paths.settings_path, paths.app_data_root.join("settings.json"));
+    }
+
+    #[test]
+    fn wiring_derives_paths_from_port_fact() {
+        let dirs = uc_core::app_dirs::AppDirs {
+            app_data_root: std::path::PathBuf::from("/tmp/uniclipboard"),
+        };
+        let paths = derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
+            .expect("derive_default_paths_from_app_dirs failed");
+        assert!(paths.db_path.ends_with("uniclipboard.db"));
     }
 }

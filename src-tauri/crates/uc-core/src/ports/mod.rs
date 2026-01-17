@@ -16,6 +16,7 @@
 //! If all three answers are **yes**, place it in `uc-core/ports`.
 //! Otherwise, place it in the relevant `domain` submodule.
 
+pub mod app_dirs;
 pub mod app_runtime;
 pub mod autostart;
 mod blob_materializer;
@@ -43,12 +44,13 @@ pub use clock::*;
 pub use hash::*;
 
 pub use app_runtime::AppRuntimePort;
+pub use app_dirs::AppDirsPort;
 pub use autostart::AutostartPort;
 pub use clipboard::*;
 pub use clipboard_change_handler::ClipboardChangeHandler;
 pub use device_identity::DeviceIdentityPort;
 pub use device_repository::DeviceRepositoryPort;
-pub use errors::DeviceRepositoryError;
+pub use errors::{AppDirsError, DeviceRepositoryError};
 pub use network::NetworkPort;
 pub use onboarding::OnboardingStatePort;
 pub use security::encryption::EncryptionPort;

@@ -4,7 +4,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use dirs;
 use log::error;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
@@ -15,6 +14,7 @@ use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_platform::ipc::PlatformCommand;
 use uc_platform::ports::PlatformCommandExecutorPort;
+use uc_core::ports::AppDirsPort;
 use uc_platform::runtime::event_bus::{
     PlatformCommandReceiver, PlatformEventReceiver, PlatformEventSender,
 };
@@ -57,7 +57,19 @@ impl PlatformCommandExecutorPort for SimplePlatformCommandExecutor {
     }
 }
 
-/// Main entry point
+/// Starts the application.
+///
+/// Initializes tracing, attempts to load `config.toml` (development mode), falls back to system
+/// defaults using the platform app-data directory when no config file is present, and then runs
+/// the Tauri application. On fatal initialization failures (tracing or app-data resolution) the
+/// process exits with code 1.
+///
+/// # Examples
+///
+/// ```no_run
+/// // Running the application (example; do not run in doctests)
+/// crate::main();
+/// ```
 fn main() {
     // Initialize tracing subscriber FIRST (before any logging)
     // This sets up the tracing infrastructure and enables log-tracing bridge
@@ -80,12 +92,10 @@ fn main() {
         Err(e) => {
             log::debug!("No config.toml found, using system defaults: {}", e);
 
-            // Compute system data directory using dirs crate
-            // 计算系统数据目录，使用 dirs crate
-            let data_dir = match dirs::data_local_dir() {
-                Some(dir) => dir,
-                None => {
-                    error!("Failed to determine system data directory");
+            let app_dirs = match uc_platform::app_dirs::DirsAppDirsAdapter::new().get_app_dirs() {
+                Ok(dirs) => dirs,
+                Err(err) => {
+                    error!("Failed to determine system data directory: {}", err);
                     error!("Please ensure your platform's data directory is accessible");
                     error!("macOS: ~/Library/Application Support/");
                     error!("Linux: ~/.local/share/");
@@ -94,7 +104,7 @@ fn main() {
                 }
             };
 
-            AppConfig::with_system_defaults(data_dir.join("uniclipboard"))
+            AppConfig::with_system_defaults(app_dirs.app_data_root)
         }
     };
 

@@ -5,6 +5,7 @@
 //! This crate contains pure business logic without any infrastructure dependencies.
 
 // Public module exports
+pub mod app_dirs;
 pub mod blob;
 pub mod clipboard;
 pub mod config;
