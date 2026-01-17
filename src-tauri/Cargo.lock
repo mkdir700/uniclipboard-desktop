@@ -9402,6 +9402,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "toml 0.8.23",
+ "tracing",
  "twox-hash",
  "uc-app",
  "uc-core",
