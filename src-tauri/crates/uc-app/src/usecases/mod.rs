@@ -29,6 +29,9 @@ pub mod start_clipboard_watcher;
 pub mod update_settings;
 
 pub use auto_unlock_encryption_session::AutoUnlockEncryptionSession;
+pub use clipboard::list_entry_projections::{
+    EntryProjectionDto, ListClipboardEntryProjections, ListProjectionsError,
+};
 pub use delete_clipboard_entry::DeleteClipboardEntry;
 pub use get_settings::GetSettings;
 pub use initialize_encryption::InitializeEncryption;
