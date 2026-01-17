@@ -145,7 +145,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
                   : type === 'file'
                     ? item.item.file
                     : null,
-        device: item.device_id,
       }
     },
     [t]
