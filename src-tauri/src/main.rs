@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use dirs;
 use log::error;
-use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -171,7 +170,8 @@ fn run_app(config: AppConfig) {
     // The actual startup will be completed in a follow-up task
 
     Builder::default()
-        // NOTE: Runtime will be managed in setup block after AppHandle injection
+        // Register AppRuntime for Tauri commands
+        .manage(runtime_for_tauri)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
