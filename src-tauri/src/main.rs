@@ -224,7 +224,14 @@ fn run_app(config: AppConfig) {
                     }
                     Err(e) => {
                         log::error!("Auto-unlock failed: {:?}", e);
-                        // TODO: Emit error event to frontend for user notification
+                        // Emit error event to frontend for user notification
+                        let app_handle_guard = runtime_for_unlock.app_handle();
+                        if let Some(app) = app_handle_guard.as_ref() {
+                            if let Err(emit_err) = app.emit("encryption-auto-unlock-error", format!("{}", e)) {
+                                log::warn!("Failed to emit encryption-auto-unlock-error event: {}", emit_err);
+                            }
+                        }
+                        drop(app_handle_guard);
                         false
                     }
                 };
