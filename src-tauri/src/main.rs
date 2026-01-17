@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use log::error;
+use tracing::{error as tracing_error, info as tracing_info};
 use tauri::Emitter;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
@@ -215,16 +216,16 @@ fn run_app(config: AppConfig) {
                 let uc = runtime_for_unlock.usecases().auto_unlock_encryption_session();
                 let should_start_watcher = match uc.execute().await {
                     Ok(true) => {
-                        log::info!("Encryption session auto-unlocked successfully");
+                        tracing_info!("Encryption session auto-unlocked successfully");
                         true
                     }
                     Ok(false) => {
-                        log::info!("Encryption not initialized, clipboard watcher will not start");
-                        log::info!("User must set encryption password via onboarding");
+                        tracing_info!("Encryption not initialized, clipboard watcher will not start");
+                        tracing_info!("User must set encryption password via onboarding");
                         false
                     }
                     Err(e) => {
-                        log::error!("Auto-unlock failed: {:?}", e);
+                        tracing_error!("Auto-unlock failed: {:?}", e);
                         // Emit error event to frontend for user notification
                         let app_handle_guard = runtime_for_unlock.app_handle();
                         if let Some(app) = app_handle_guard.as_ref() {
@@ -261,7 +262,15 @@ fn run_app(config: AppConfig) {
                     {
                         Ok(_) => log::info!("StartClipboardWatcher command sent"),
                         Err(e) => {
-                            log::error!("Failed to send StartClipboardWatcher command: {}", e)
+                            log::error!("Failed to send StartClipboardWatcher command: {}", e);
+                            // Emit error event to frontend for user notification
+                            let app_handle_guard = runtime_for_unlock.app_handle();
+                            if let Some(app) = app_handle_guard.as_ref() {
+                                if let Err(emit_err) = app.emit("clipboard-watcher-start-failed", format!("{}", e)) {
+                                    log::warn!("Failed to emit clipboard-watcher-start-failed event: {}", emit_err);
+                                }
+                            }
+                            drop(app_handle_guard);
                         }
                     }
                 }
