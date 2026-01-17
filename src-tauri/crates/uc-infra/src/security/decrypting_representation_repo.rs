@@ -159,11 +159,6 @@ mod tests {
         fn new() -> Self {
             Self { should_fail_decrypt: false }
         }
-
-        fn fail_on_decrypt(mut self) -> Self {
-            self.should_fail_decrypt = true;
-            self
-        }
     }
 
     #[async_trait]

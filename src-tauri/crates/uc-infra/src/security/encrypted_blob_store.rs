@@ -111,10 +111,6 @@ mod tests {
             }
         }
 
-        fn contains(&self, blob_id: &BlobId) -> bool {
-            self.storage.lock().unwrap().contains_key(blob_id)
-        }
-
         fn get_stored(&self, blob_id: &BlobId) -> Option<Vec<u8>> {
             self.storage.lock().unwrap().get(blob_id).cloned()
         }
@@ -153,11 +149,6 @@ mod tests {
 
         fn fail_on_encrypt(mut self) -> Self {
             self.should_fail_encrypt = true;
-            self
-        }
-
-        fn fail_on_decrypt(mut self) -> Self {
-            self.should_fail_decrypt = true;
             self
         }
     }
