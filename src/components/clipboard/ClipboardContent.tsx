@@ -109,8 +109,8 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
       // Get type suitable for UI display
       const type = getDisplayType(item.item)
 
-      // Format time
-      const activeTime = new Date(item.active_time * 1000) // Convert to milliseconds
+      // Format time (active_time is already in milliseconds from backend)
+      const activeTime = new Date(item.active_time)
       const now = new Date()
       const diffMs = now.getTime() - activeTime.getTime()
       const diffMins = Math.round(diffMs / 60000)
@@ -145,7 +145,6 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
                   : type === 'file'
                     ? item.item.file
                     : null,
-        device: item.device_id,
       }
     },
     [t]
@@ -376,6 +375,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
                 time={item.time}
                 device={item.device}
                 content={item.content}
+                entryId={item.id}
                 isSelected={selectedIds.has(item.id)}
                 onSelect={e => handleSelect(item.id, index, e)}
               />

@@ -1,14 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
-import React, { useState, useEffect, ReactNode } from 'react'
 import { listen } from '@tauri-apps/api/event'
+import React, { useState, useEffect, ReactNode } from 'react'
 import i18n, { normalizeLanguage, persistLanguage } from '@/i18n'
+import type { SettingChangedEvent } from '@/types/events'
 import { SettingContext, type SettingContextType, type Setting } from '@/types/setting'
-
-// 设置变更事件数据接口
-interface SettingChangedEvent {
-  settingJson: string
-  timestamp: number
-}
 
 // 设置提供者属性接口
 interface SettingProviderProps {
@@ -25,9 +20,8 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   const loadSetting = async () => {
     try {
       setLoading(true)
-      // 直接获取设置并转换为Setting对象
-      const result = await invoke<string>('get_setting')
-      const settingObj = JSON.parse(result) as Setting
+      // New command returns JSON object directly, no parsing needed
+      const settingObj = await invoke<Setting>('get_settings')
       setSetting(settingObj)
       setError(null)
     } catch (err) {
@@ -42,7 +36,8 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   const saveSetting = async (newSetting: Setting) => {
     try {
       setLoading(true)
-      await invoke('save_setting', { settingJson: JSON.stringify(newSetting) })
+      // New command: update_settings, takes JSON object directly
+      await invoke('update_settings', { settings: newSetting })
       setSetting(newSetting)
       setError(null)
     } catch (err) {

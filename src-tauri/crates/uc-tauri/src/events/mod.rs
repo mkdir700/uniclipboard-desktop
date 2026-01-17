@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter};
 /// Clipboard events emitted to frontend
 /// 发送到前端的剪贴板事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum ClipboardEvent {
     /// New clipboard content captured
     NewContent {

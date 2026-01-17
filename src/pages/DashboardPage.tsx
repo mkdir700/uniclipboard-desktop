@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,6 +9,7 @@ import { useSearch } from '@/contexts/SearchContext'
 import { useShortcutScope } from '@/hooks/useShortcutScope'
 import { useAppDispatch } from '@/store/hooks'
 import { fetchClipboardItems } from '@/store/slices/clipboardSlice'
+import { ClipboardEvent } from '@/types/events'
 
 // Debounce delay in milliseconds
 const DEBOUNCE_DELAY = 500
@@ -98,10 +98,6 @@ const DashboardPage: React.FC = () => {
         globalListenerState.isActive = true
 
         try {
-          console.log(t('dashboard.logs.startingBackendListener'))
-          await invoke('listen_clipboard_new_content')
-          console.log(t('dashboard.logs.backendListenerStarted'))
-
           console.log(t('dashboard.logs.listeningToClipboardEvents'))
           // Clear previously existing listener
           if (globalListenerState.unlisten) {
@@ -110,28 +106,28 @@ const DashboardPage: React.FC = () => {
             globalListenerState.unlisten = undefined
           }
 
-          // Use listen function to listen for global events
-          const unlisten = await listen<{
-            record_id: string
-            timestamp: number
-          }>('clipboard-new-content', event => {
+          // Listen to new clipboard://event format
+          const unlisten = await listen<ClipboardEvent>('clipboard://event', event => {
             console.log(t('dashboard.logs.newClipboardEvent'), event)
 
-            // Check event timestamp to avoid processing duplicate events within short time
-            const currentTime = Date.now()
-            if (
-              globalListenerState.lastEventTimestamp &&
-              currentTime - globalListenerState.lastEventTimestamp < DEBOUNCE_DELAY
-            ) {
-              console.log(t('dashboard.logs.ignoringDuplicateEvent'))
-              return
+            // Check event type
+            if (event.payload.type === 'NewContent' && event.payload.entry_id) {
+              // Check event timestamp to avoid processing duplicate events within short time
+              const currentTime = Date.now()
+              if (
+                globalListenerState.lastEventTimestamp &&
+                currentTime - globalListenerState.lastEventTimestamp < DEBOUNCE_DELAY
+              ) {
+                console.log(t('dashboard.logs.ignoringDuplicateEvent'))
+                return
+              }
+
+              // Update last event timestamp
+              globalListenerState.lastEventTimestamp = currentTime
+
+              // Use debounced function to load data
+              debouncedLoadData(currentFilterRef.current)
             }
-
-            // Update last event timestamp
-            globalListenerState.lastEventTimestamp = currentTime
-
-            // Use debounced function to load data
-            debouncedLoadData(currentFilterRef.current)
           })
 
           // Save unlisten function to global state

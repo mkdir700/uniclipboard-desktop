@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, File, ExternalLink } from 'lucide-react'
+import { ChevronDown, ChevronUp, File, ExternalLink, Loader2 } from 'lucide-react'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -7,7 +7,10 @@ import {
   ClipboardLinkItem,
   ClipboardCodeItem,
   ClipboardFileItem,
+  getClipboardEntryDetail,
+  ClipboardEntryDetail,
 } from '@/api/clipboardItems'
+import { toast } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
 import { formatFileSize } from '@/utils'
 
@@ -23,6 +26,7 @@ interface ClipboardItemProps {
     | ClipboardCodeItem
     | ClipboardFileItem
     | null
+  entryId: string // NEW: need entry ID for detail fetch
   isSelected?: boolean
   onSelect?: (event: React.MouseEvent<HTMLDivElement>) => void
   fileSize?: number
@@ -33,20 +37,27 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   type,
   time,
   content,
+  entryId,
   isSelected = false,
   onSelect,
   fileSize,
 }) => {
   const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
+  const [detailContent, setDetailContent] = useState<string | null>(null)
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false)
 
-  // 判断是否应该显示展开按钮
+  // Determine if expand button should show (based on UI display needs)
   const shouldShowExpandButton = (): boolean => {
     if (!content) return false
 
     switch (type) {
-      case 'text':
-        return (content as ClipboardTextItem).is_truncated === true
+      case 'text': {
+        const textItem = content as ClipboardTextItem
+        // Show expand button if text is long (e.g., more than ~250 chars for 5 lines)
+        // This is a UI decision, not based on has_detail
+        return textItem.display_text.length > 250 || textItem.display_text.split('\n').length > 5
+      }
       case 'image':
         return true
       case 'code':
@@ -55,6 +66,39 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
       case 'file':
       default:
         return false
+    }
+  }
+
+  // Handle expand toggle
+  const handleExpand = async () => {
+    if (isExpanded) {
+      // Already expanded: collapse
+      setIsExpanded(false)
+    } else if (detailContent) {
+      // Have cached detail: expand directly
+      setIsExpanded(true)
+    } else {
+      // First expand: check if we need to fetch from backend
+      const textItem = content as ClipboardTextItem
+      if (textItem?.has_detail) {
+        // has_detail = true: backend has more content, fetch it
+        setIsLoadingDetail(true)
+        try {
+          const detail: ClipboardEntryDetail = await getClipboardEntryDetail(entryId)
+          setDetailContent(detail.content)
+          setIsExpanded(true)
+        } catch (e) {
+          console.error('Failed to load detail:', e)
+          toast.error(t('clipboard.errors.loadDetailFailed'), {
+            description: e instanceof Error ? e.message : t('clipboard.errors.unknown'),
+          })
+        } finally {
+          setIsLoadingDetail(false)
+        }
+      } else {
+        // has_detail = false: display_text is already the full content, just expand
+        setIsExpanded(true)
+      }
     }
   }
 
@@ -80,7 +124,11 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
 
   const renderContent = () => {
     switch (type) {
-      case 'text':
+      case 'text': {
+        const textItem = content as ClipboardTextItem
+        // Use detail content when expanded and available, otherwise use preview
+        const textToShow = isExpanded && detailContent ? detailContent : textItem.display_text
+
         return (
           <p
             className={cn(
@@ -88,9 +136,10 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
               !isExpanded && 'line-clamp-5'
             )}
           >
-            {(content as ClipboardTextItem).display_text}
+            {isLoadingDetail ? t('clipboard.item.loading') : textToShow}
           </p>
         )
+      }
       case 'image':
         return (
           <div className="flex justify-center bg-black/20 rounded-lg overflow-hidden py-4">
@@ -177,11 +226,22 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
             className="flex items-center gap-1 cursor-pointer hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/50"
             onClick={e => {
               e.stopPropagation()
-              setIsExpanded(!isExpanded)
+              void handleExpand() // Call async handler
             }}
           >
-            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            <span>{isExpanded ? t('clipboard.item.collapse') : t('clipboard.item.expand')}</span>
+            {isLoadingDetail ? (
+              <>
+                <Loader2 size={12} className="animate-spin" />
+                <span>{t('clipboard.item.loading')}</span>
+              </>
+            ) : (
+              <>
+                {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                <span>
+                  {isExpanded ? t('clipboard.item.collapse') : t('clipboard.item.expand')}
+                </span>
+              </>
+            )}
           </div>
         )}
 

@@ -251,6 +251,7 @@
     },
     "errors": {
       "copyFailed": "Failed to copy to clipboard",
+      "loadDetailFailed": "Failed to load details",
       "unknown": "An unknown error occurred"
     },
     "item": {
@@ -260,6 +261,7 @@
       "unknownContent": "Unknown content",
       "expand": "Expand",
       "collapse": "Collapse",
+      "loading": "Loading...",
       "actions": {
         "copy": "Copy",
         "favorite": "Favorite",

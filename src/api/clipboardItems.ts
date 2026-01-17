@@ -1,5 +1,30 @@
 import { invoke } from '@tauri-apps/api/core'
 
+// Backend projection type
+interface ClipboardEntryProjection {
+  id: string
+  preview: string // Preview content (may be truncated)
+  has_detail: boolean // Whether full detail is available
+  size_bytes: number
+  captured_at: number
+  content_type: string
+  is_encrypted: boolean
+  is_favorited: boolean
+  updated_at: number
+  active_time: number
+}
+
+// Detail response type (for fetching full content)
+export interface ClipboardEntryDetail {
+  id: string
+  content: string // Full content
+  content_type: string
+  size_bytes: number
+  is_favorited: boolean
+  updated_at: number
+  active_time: number
+}
+
 /**
  * 排序选项枚举
  */
@@ -30,8 +55,8 @@ export enum Filter {
 }
 
 export interface ClipboardTextItem {
-  display_text: string
-  is_truncated: boolean
+  display_text: string // Changed: now always shows preview
+  has_detail: boolean // NEW: replaced is_truncated, indicates if full content is available
   size: number
 }
 
@@ -66,7 +91,6 @@ export interface ClipboardItem {
 
 export interface ClipboardItemResponse {
   id: string
-  device_id: string
   is_downloaded: boolean
   is_favorited: boolean
   created_at: number
@@ -95,24 +119,52 @@ export async function getClipboardStats(): Promise<ClipboardStats> {
 
 /**
  * 获取剪贴板历史记录
- * @param orderBy 排序方式
+ * @param orderBy 排序方式（暂未实现）
  * @param limit 限制返回的条目数
- * @param offset 偏移量，用于分页
+ * @param offset 偏移量，用于分页（暂未实现）
+ * @param filter 过滤选项（暂未实现）
  * @returns Promise，返回剪贴板条目数组
  */
 export async function getClipboardItems(
-  orderBy?: OrderBy,
+  _orderBy?: OrderBy,
   limit?: number,
   offset?: number,
-  filter?: Filter
+  _filter?: Filter
 ): Promise<ClipboardItemResponse[]> {
   try {
-    return await invoke('get_clipboard_items', {
-      orderBy,
-      limit,
-      offset,
-      filter,
+    // Note: orderBy and filter are not yet implemented in the backend command
+    // Map Filter enum to backend format if needed (for future use)
+    // const mappedFilter = filter === Filter.All ? undefined : filter
+
+    // Use new command name: get_clipboard_entries
+    const entries = await invoke<ClipboardEntryProjection[]>('get_clipboard_entries', {
+      limit: limit ?? 50,
+      offset: offset ?? 0,
     })
+
+    // Transform backend projection to frontend response format
+    // TODO: Currently treating all entries as text. Implement proper content type detection
+    // when backend provides accurate content_type values
+    return entries.map(entry => ({
+      id: entry.id,
+      is_downloaded: true, // Default to true for local entries
+      is_favorited: entry.is_favorited,
+      created_at: entry.captured_at,
+      updated_at: entry.updated_at,
+      active_time: entry.active_time,
+      item: {
+        text: {
+          display_text: entry.preview, // Use preview directly from backend
+          has_detail: entry.has_detail, // Use has_detail from backend (indicates expandability)
+          size: entry.size_bytes,
+        },
+        image: null as unknown as ClipboardImageItem,
+        file: null as unknown as ClipboardFileItem,
+        link: null as unknown as ClipboardLinkItem,
+        code: null as unknown as ClipboardCodeItem,
+        unknown: null,
+      },
+    }))
   } catch (error) {
     console.error('获取剪贴板历史记录失败:', error)
     throw error
@@ -138,13 +190,28 @@ export async function getClipboardItem(
 }
 
 /**
+ * Get clipboard entry detail (full content)
+ * 获取剪切板条目详情（完整内容）
+ * @param id Entry ID
+ * @returns Promise with full entry detail
+ */
+export async function getClipboardEntryDetail(id: string): Promise<ClipboardEntryDetail> {
+  try {
+    return await invoke('get_clipboard_entry_detail', { entry_id: id })
+  } catch (error) {
+    console.error('Failed to get clipboard entry detail:', error)
+    throw error
+  }
+}
+
+/**
  * 删除剪贴板条目
  * @param id 剪贴板条目ID
  * @returns Promise，成功返回true
  */
 export async function deleteClipboardItem(id: string): Promise<boolean> {
   try {
-    return await invoke('delete_clipboard_item', { id })
+    return await invoke('delete_clipboard_entry', { entry_id: id })
   } catch (error) {
     console.error('删除剪贴板条目失败:', error)
     throw error

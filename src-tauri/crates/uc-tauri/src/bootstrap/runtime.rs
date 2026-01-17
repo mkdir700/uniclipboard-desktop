@@ -33,6 +33,9 @@ use uc_app::{App, AppDeps};
 use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_core::SystemClipboardSnapshot;
+use tauri::Emitter;
+
+use crate::events::ClipboardEvent;
 
 /// Application runtime with dependencies.
 ///
@@ -68,13 +71,31 @@ use uc_core::SystemClipboardSnapshot;
 pub struct AppRuntime {
     /// Application dependencies
     pub deps: AppDeps,
+    /// Tauri AppHandle for emitting events (optional, set after Tauri setup)
+    /// Uses RwLock for interior mutability since Arc<AppRuntime> is shared
+    app_handle: std::sync::RwLock<Option<tauri::AppHandle>>,
 }
 
 impl AppRuntime {
     /// Create a new AppRuntime from dependencies.
     /// 从依赖创建新的 AppRuntime。
     pub fn new(deps: AppDeps) -> Self {
-        Self { deps }
+        Self {
+            deps,
+            app_handle: std::sync::RwLock::new(None),
+        }
+    }
+
+    /// Set the Tauri AppHandle for event emission.
+    /// This must be called after Tauri setup completes.
+    pub fn set_app_handle(&self, handle: tauri::AppHandle) {
+        let mut app_handle_guard = self.app_handle.write().unwrap();
+        *app_handle_guard = Some(handle);
+    }
+
+    /// Get a reference to the AppHandle, if available.
+    pub fn app_handle(&self) -> std::sync::RwLockReadGuard<'_, Option<tauri::AppHandle>> {
+        self.app_handle.read().unwrap()
     }
 
     /// Get use cases accessor.
@@ -166,6 +187,31 @@ impl<'a> UseCases<'a> {
             self.runtime.deps.clipboard_entry_repo.clone(),
             self.runtime.deps.selection_repo.clone(),
             self.runtime.deps.clipboard_event_repo.clone(),
+        )
+    }
+
+    /// Get the GetEntryDetail use case for fetching full clipboard entry content.
+    ///
+    /// 获取 GetEntryDetail 用例以获取完整剪贴板条目内容。
+    ///
+    /// ## Example / 示例
+    ///
+    /// ```rust,no_run
+    /// # use uc_tauri::bootstrap::AppRuntime;
+    /// # use tauri::State;
+    /// # use uc_core::ids::EntryId;
+    /// # async fn example(runtime: State<'_, AppRuntime>, entry_id: &EntryId) -> Result<uc_app::usecases::clipboard::get_entry_detail::EntryDetailResult, String> {
+    /// let uc = runtime.usecases().get_entry_detail();
+    /// let detail = uc.execute(entry_id).await.map_err(|e| e.to_string())?;
+    /// # Ok(detail)
+    /// # }
+    /// ```
+    pub fn get_entry_detail(&self) -> uc_app::usecases::clipboard::get_entry_detail::GetEntryDetailUseCase {
+        uc_app::usecases::clipboard::get_entry_detail::GetEntryDetailUseCase::new(
+            self.runtime.deps.clipboard_entry_repo.clone(),
+            self.runtime.deps.selection_repo.clone(),
+            self.runtime.deps.representation_repo.clone(),
+            self.runtime.deps.blob_store.clone(),
         )
     }
 
@@ -438,6 +484,25 @@ impl ClipboardChangeHandler for AppRuntime {
         match usecase.execute_with_snapshot(snapshot).await {
             Ok(event_id) => {
                 tracing::debug!("Successfully captured clipboard, event_id: {}", event_id);
+
+                // Emit event to frontend if AppHandle is available
+                let app_handle_guard = self.app_handle.read().unwrap();
+                if let Some(app) = app_handle_guard.as_ref() {
+                    let event = ClipboardEvent::NewContent {
+                        entry_id: event_id.to_string(),
+                        preview: "New clipboard content".to_string(),
+                    };
+
+                    if let Err(e) = app.emit("clipboard://event", event) {
+                        tracing::warn!("Failed to emit clipboard event to frontend: {}", e);
+                    } else {
+                        tracing::debug!("Successfully emitted clipboard://event to frontend");
+                    }
+                } else {
+                    tracing::debug!("AppHandle not available, skipping event emission");
+                }
+                drop(app_handle_guard);
+
                 Ok(())
             }
             Err(e) => {

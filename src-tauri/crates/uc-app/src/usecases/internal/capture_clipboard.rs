@@ -156,7 +156,7 @@ impl CaptureClipboardUseCase {
                 entry_id.clone(),
                 event_id.clone(),
                 created_at_ms,
-                None, // TODO: 暂时为 None
+                Self::generate_title(&snapshot),
                 total_size,
             );
             self.entry_repo
@@ -247,7 +247,7 @@ impl CaptureClipboardUseCase {
                 entry_id.clone(),
                 event_id.clone(),
                 created_at_ms,
-                None, // TODO: 暂时为 None
+                Self::generate_title(&snapshot),
                 total_size,
             );
             self.entry_repo
@@ -259,5 +259,60 @@ impl CaptureClipboardUseCase {
         }
         .instrument(span)
         .await
+    }
+
+    /// Generate a title from the clipboard snapshot for display.
+    /// 从剪贴板快照生成用于显示的标题。
+    ///
+    /// Tries to extract text content from text/plain representations,
+    /// falling back to a size-based description if no text is found.
+    ///
+    /// 尝试从 text/plain 表示中提取文本内容，
+    /// 如果没有找到文本，则回退到基于大小的描述。
+    fn generate_title(snapshot: &SystemClipboardSnapshot) -> Option<String> {
+        const MAX_TITLE_LENGTH: usize = 200;
+
+        // Try to find text/plain representation
+        // 尝试找到 text/plain 表示
+        for rep in &snapshot.representations {
+            if let Some(mime) = &rep.mime {
+                let mime_str = mime.as_str();
+                // Check for text MIME types (text/plain, public.utf8-plain-text, etc.)
+                // 检查文本 MIME 类型
+                if mime_str.eq_ignore_ascii_case("text/plain")
+                    || mime_str.eq_ignore_ascii_case("public.utf8-plain-text")
+                    || mime_str.eq_ignore_ascii_case("text/plain;charset=utf-8")
+                    || mime_str.starts_with("text/")
+                {
+                    // Try to convert bytes to UTF-8 string
+                    // 尝试将字节转换为 UTF-8 字符串
+                    if let Ok(text) = std::str::from_utf8(&rep.bytes) {
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() {
+                            // Truncate if too long and add ellipsis
+                            // 如果太长则截断并添加省略号
+                            // Use char_indices() to find a safe character boundary
+                            // 使用 char_indices() 找到安全的字符边界
+                            let char_count = trimmed.chars().count();
+                            if char_count > MAX_TITLE_LENGTH {
+                                let truncate_at = trimmed
+                                    .char_indices()
+                                    .nth(MAX_TITLE_LENGTH)
+                                    .map(|(idx, _)| idx)
+                                    .unwrap_or(trimmed.len());
+                                let truncated = &trimmed[..truncate_at];
+                                return Some(format!("{}...", truncated));
+                            }
+                            return Some(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: no text representation found
+        // 回退：没有找到文本表示
+        debug!("No text representation found in snapshot, title will be None");
+        None
     }
 }
