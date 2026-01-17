@@ -45,7 +45,7 @@ pub struct SyncSettings {
     pub max_file_size_mb: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncFrequency {
     Realtime,
@@ -82,7 +82,7 @@ pub enum RetentionRule {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RuleEvaluation {
     AnyMatch, // OR（推荐，默认）
@@ -145,4 +145,21 @@ pub struct Settings {
 /// ```
 fn current_schema_version() -> u32 {
     CURRENT_SCHEMA_VERSION
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RuleEvaluation, SyncFrequency};
+
+    #[test]
+    fn test_sync_frequency_equality() {
+        assert_eq!(SyncFrequency::Realtime, SyncFrequency::Realtime);
+        assert_ne!(SyncFrequency::Realtime, SyncFrequency::Interval);
+    }
+
+    #[test]
+    fn test_rule_evaluation_equality() {
+        assert_eq!(RuleEvaluation::AnyMatch, RuleEvaluation::AnyMatch);
+        assert_ne!(RuleEvaluation::AnyMatch, RuleEvaluation::AllMatch);
+    }
 }

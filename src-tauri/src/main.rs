@@ -132,6 +132,10 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::onboarding::get_onboarding_state,
             uc_tauri::commands::onboarding::complete_onboarding,
             uc_tauri::commands::onboarding::initialize_onboarding,
+            // Autostart commands
+            uc_tauri::commands::autostart::enable_autostart,
+            uc_tauri::commands::autostart::disable_autostart,
+            uc_tauri::commands::autostart::is_autostart_enabled,
             // macOS-specific commands (conditionally compiled)
             #[cfg(target_os = "macos")]
             plugins::mac_rounded_corners::enable_rounded_corners,
