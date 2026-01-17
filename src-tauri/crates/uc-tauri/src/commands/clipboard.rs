@@ -27,95 +27,31 @@ pub async fn get_clipboard_entries(
     );
 
     async move {
-        let uc = runtime.usecases().list_clipboard_entries();
-        let entries = uc
+        let uc = runtime.usecases().list_entry_projections();
+        let dtos = uc
             .execute(resolved_limit, resolved_offset)
             .await
             .map_err(|e| {
-                tracing::error!(error = %e, "Failed to get clipboard entries");
+                tracing::error!(error = %e, "Failed to get clipboard entry projections");
                 e.to_string()
             })?;
 
-        let mut projections = Vec::with_capacity(entries.len());
-
-        for entry in entries {
-            let captured_at = entry.created_at_ms;
-
-            // Get selection and representation in one pass
-            let content_type = match runtime
-                .deps
-                .selection_repo
-                .get_selection(&entry.entry_id)
-                .await
-            {
-                Ok(Some(selection)) => {
-                    match runtime
-                        .deps
-                        .representation_repo
-                        .get_representation(&entry.event_id, &selection.selection.preview_rep_id)
-                        .await
-                    {
-                        Ok(Some(rep)) => rep
-                            .mime_type
-                            .as_ref()
-                            .map(|mt| mt.as_str().to_string())
-                            .unwrap_or_else(|| "unknown".to_string()),
-                        _ => "unknown".to_string(),
-                    }
-                }
-                _ => "unknown".to_string(),
-            };
-
-            let (preview, has_detail) = if let Ok(Some(selection)) = runtime
-                .deps
-                .selection_repo
-                .get_selection(&entry.entry_id)
-                .await
-            {
-                // Use preview_rep_id for list display (PlainText preferred for UI preview)
-                if let Ok(Some(rep)) = runtime
-                    .deps
-                    .representation_repo
-                    .get_representation(&entry.event_id, &selection.selection.preview_rep_id)
-                    .await
-                {
-                    let preview_text = if let Some(data) = rep.inline_data {
-                        String::from_utf8_lossy(&data).trim().to_string()
-                    } else {
-                        format!("Image ({} bytes)", rep.size_bytes)
-                    };
-                    let has_detail = rep.blob_id.is_some();
-                    (preview_text, has_detail)
-                } else {
-                    (
-                        entry
-                            .title
-                            .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
-                        false,
-                    )
-                }
-            } else {
-                (
-                    entry
-                        .title
-                        .unwrap_or_else(|| format!("Entry ({} bytes)", entry.total_size)),
-                    false,
-                )
-            };
-
-            projections.push(ClipboardEntryProjection {
-                id: entry.entry_id.to_string(),
-                preview,
-                has_detail,
-                size_bytes: entry.total_size,
-                captured_at,
-                content_type,
-                is_encrypted: false,
-                is_favorited: false,
-                updated_at: captured_at,
-                active_time: captured_at,
-            });
-        }
+        // Map DTOs to command layer models
+        let projections: Vec<ClipboardEntryProjection> = dtos
+            .into_iter()
+            .map(|dto| ClipboardEntryProjection {
+                id: dto.id,
+                preview: dto.preview,
+                has_detail: dto.has_detail,
+                size_bytes: dto.size_bytes,
+                captured_at: dto.captured_at,
+                content_type: dto.content_type,
+                is_encrypted: dto.is_encrypted,
+                is_favorited: dto.is_favorited,
+                updated_at: dto.updated_at,
+                active_time: dto.active_time,
+            })
+            .collect();
 
         tracing::info!(count = projections.len(), "Retrieved clipboard entries");
         Ok(projections)

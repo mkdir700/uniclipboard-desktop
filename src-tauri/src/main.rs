@@ -206,7 +206,6 @@ fn run_app(config: AppConfig) {
 
             // Clone handle for use in async block
             let runtime_for_unlock = runtime_for_handler.clone();
-            let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
 
             tauri::async_runtime::spawn(async move {
@@ -265,13 +264,15 @@ fn run_app(config: AppConfig) {
 
                 // 3. Start watcher if encryption is ready
                 if should_start_watcher {
-                    match platform_cmd_tx_for_spawn
-                        .send(PlatformCommand::StartClipboardWatcher)
+                    match runtime_for_unlock
+                        .usecases()
+                        .start_clipboard_watcher()
+                        .execute()
                         .await
                     {
-                        Ok(_) => log::info!("StartClipboardWatcher command sent"),
+                        Ok(_) => log::info!("Clipboard watcher started successfully"),
                         Err(e) => {
-                            log::error!("Failed to send StartClipboardWatcher command: {}", e);
+                            log::error!("Failed to start clipboard watcher: {}", e);
                             // Emit error event to frontend for user notification
                             let app_handle_guard = runtime_for_unlock.app_handle();
                             if let Some(app) = app_handle_guard.as_ref() {

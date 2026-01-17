@@ -89,13 +89,26 @@ impl AppRuntime {
     /// Set the Tauri AppHandle for event emission.
     /// This must be called after Tauri setup completes.
     pub fn set_app_handle(&self, handle: tauri::AppHandle) {
-        let mut app_handle_guard = self.app_handle.write().unwrap();
-        *app_handle_guard = Some(handle);
+        match self.app_handle.write() {
+            Ok(mut guard) => {
+                *guard = Some(handle);
+            }
+            Err(poisoned) => {
+                tracing::error!(
+                    "RwLock poisoned in set_app_handle, recovering from poisoned state"
+                );
+                let mut guard = poisoned.into_inner();
+                *guard = Some(handle);
+            }
+        }
     }
 
     /// Get a reference to the AppHandle, if available.
     pub fn app_handle(&self) -> std::sync::RwLockReadGuard<'_, Option<tauri::AppHandle>> {
-        self.app_handle.read().unwrap()
+        self.app_handle.read().unwrap_or_else(|poisoned| {
+            tracing::error!("RwLock poisoned in app_handle, recovering from poisoned state");
+            poisoned.into_inner()
+        })
     }
 
     /// Get use cases accessor.
@@ -399,6 +412,27 @@ impl<'a> UseCases<'a> {
         )
     }
 
+    /// List clipboard entry projections (with cross-repo aggregation)
+    ///
+    /// ## Example / 示例
+    ///
+    /// ```rust,no_run
+    /// # use uc_tauri::bootstrap::AppRuntime;
+    /// # use tauri::State;
+    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<Vec<uc_app::usecases::EntryProjectionDto>, String> {
+    /// let uc = runtime.usecases().list_entry_projections();
+    /// let projections = uc.execute(50, 0).await.map_err(|e| e.to_string())?;
+    /// # Ok(projections)
+    /// # }
+    /// ```
+    pub fn list_entry_projections(&self) -> uc_app::usecases::ListClipboardEntryProjections {
+        uc_app::usecases::ListClipboardEntryProjections::new(
+            self.runtime.deps.clipboard_entry_repo.clone(),
+            self.runtime.deps.selection_repo.clone(),
+            self.runtime.deps.representation_repo.clone(),
+        )
+    }
+
     // NOTE: Other use case methods will be added as the use case design evolves
     // to support trait object instantiation. Currently, use cases with generic
     // type parameters cannot be instantiated through this accessor.
@@ -519,7 +553,12 @@ impl ClipboardChangeHandler for AppRuntime {
                 tracing::debug!("Successfully captured clipboard, event_id: {}", event_id);
 
                 // Emit event to frontend if AppHandle is available
-                let app_handle_guard = self.app_handle.read().unwrap();
+                let app_handle_guard = self.app_handle.read().unwrap_or_else(|poisoned| {
+                    tracing::error!(
+                        "RwLock poisoned in on_clipboard_changed, recovering from poisoned state"
+                    );
+                    poisoned.into_inner()
+                });
                 if let Some(app) = app_handle_guard.as_ref() {
                     let event = ClipboardEvent::NewContent {
                         entry_id: event_id.to_string(),

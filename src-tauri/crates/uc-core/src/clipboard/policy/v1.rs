@@ -31,11 +31,10 @@ impl SelectRepresentationPolicyV1 {
 
     fn classify(rep: &ObservedClipboardRepresentation) -> RepKind {
         // 注意：v1 刻意不引入平台特例，只基于 mime_type + 少量 format_id 兜底
-        if rep.mime.is_none() {
-            return RepKind::Unknown;
-        }
-
-        let mime = rep.mime.as_ref().unwrap();
+        let mime = match rep.mime.as_ref() {
+            Some(m) => m,
+            None => return RepKind::Unknown,
+        };
 
         // 文件列表（常见：text/uri-list）
         if mime.eq_ignore_ascii_case("text/uri-list") || mime.starts_with("text/uri-list") {
