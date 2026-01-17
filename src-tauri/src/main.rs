@@ -145,8 +145,16 @@ macro_rules! generate_invoke_handler {
 fn run_app(config: AppConfig) {
     use tauri::Builder;
 
+    // Create event channels for PlatformRuntime
+    let (platform_event_tx, platform_event_rx): (PlatformEventSender, PlatformEventReceiver) =
+        mpsc::channel(100);
+    let (platform_cmd_tx, platform_cmd_rx): (
+        tokio::sync::mpsc::Sender<uc_platform::ipc::PlatformCommand>,
+        PlatformCommandReceiver,
+    ) = mpsc::channel(100);
+
     // Wire all dependencies using the new bootstrap flow
-    let deps = match wire_dependencies(&config) {
+    let deps = match wire_dependencies(&config, platform_cmd_tx.clone()) {
         Ok(deps) => deps,
         Err(e) => {
             error!("Failed to wire dependencies: {}", e);
@@ -162,14 +170,6 @@ fn run_app(config: AppConfig) {
 
     // Clone Arc for Tauri state management (will have app_handle injected in setup)
     let runtime_for_tauri = runtime_for_handler.clone();
-
-    // Create event channels for PlatformRuntime
-    let (platform_event_tx, platform_event_rx): (PlatformEventSender, PlatformEventReceiver) =
-        mpsc::channel(100);
-    let (platform_cmd_tx, platform_cmd_rx): (
-        tokio::sync::mpsc::Sender<uc_platform::ipc::PlatformCommand>,
-        PlatformCommandReceiver,
-    ) = mpsc::channel(100);
 
     // Create clipboard handler from runtime (AppRuntime implements ClipboardChangeHandler)
     let clipboard_handler: Arc<dyn ClipboardChangeHandler> = runtime_for_handler.clone();
@@ -196,7 +196,12 @@ fn run_app(config: AppConfig) {
             })
             .build(),
         )
-        .setup(move |_app_handle| {
+        .setup(move |app| {
+            // Set AppHandle on runtime so it can emit events to frontend
+            // In Tauri 2, use app.handle() to get the AppHandle
+            runtime_for_handler.set_app_handle(app.handle().clone());
+            log::info!("AppHandle set on AppRuntime for event emission");
+
             // Clone handle for use in async block
             let runtime_for_unlock = runtime_for_handler.clone();
             let platform_cmd_tx_for_spawn = platform_cmd_tx.clone();
@@ -207,33 +212,24 @@ fn run_app(config: AppConfig) {
 
                 // 1. Check if encryption initialized and auto-unlock
                 let uc = runtime_for_unlock.usecases().auto_unlock_encryption_session();
-                match uc.execute().await {
+                let should_start_watcher = match uc.execute().await {
                     Ok(true) => {
                         log::info!("Encryption session auto-unlocked successfully");
+                        true
                     }
                     Ok(false) => {
                         log::info!("Encryption not initialized, clipboard watcher will not start");
                         log::info!("User must set encryption password via onboarding");
-                        // Don't start platform runtime - no watcher without encryption
-                        return;
+                        false
                     }
                     Err(e) => {
                         log::error!("Auto-unlock failed: {:?}", e);
                         // TODO: Emit error event to frontend for user notification
-                        return;
+                        false
                     }
-                }
+                };
 
-                // 2. Send StartClipboardWatcher command
-                match platform_cmd_tx_for_spawn
-                    .send(PlatformCommand::StartClipboardWatcher)
-                    .await
-                {
-                    Ok(_) => log::info!("StartClipboardWatcher command sent"),
-                    Err(e) => log::error!("Failed to send StartClipboardWatcher command: {}", e),
-                }
-
-                // 3. Create and start PlatformRuntime
+                // 2. Create PlatformRuntime
                 let executor = Arc::new(SimplePlatformCommandExecutor);
                 let platform_runtime = match PlatformRuntime::new(
                     platform_event_tx_clone,
@@ -248,6 +244,19 @@ fn run_app(config: AppConfig) {
                         return;
                     }
                 };
+
+                // 3. Start watcher if encryption is ready
+                if should_start_watcher {
+                    match platform_cmd_tx_for_spawn
+                        .send(PlatformCommand::StartClipboardWatcher)
+                        .await
+                    {
+                        Ok(_) => log::info!("StartClipboardWatcher command sent"),
+                        Err(e) => {
+                            log::error!("Failed to send StartClipboardWatcher command: {}", e)
+                        }
+                    }
+                }
 
                 platform_runtime.start().await;
                 log::info!("Platform runtime task ended");

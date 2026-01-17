@@ -66,10 +66,12 @@ use uc_infra::security::{
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
 use uc_platform::adapters::{
-    FilesystemBlobStore, InMemoryEncryptionSessionPort, PlaceholderAutostartPort,
-    PlaceholderBlobMaterializerPort, PlaceholderNetworkPort, PlaceholderUiPort,
+    FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
+    PlaceholderAutostartPort, PlaceholderBlobMaterializerPort, PlaceholderNetworkPort,
+    PlaceholderUiPort,
 };
 use uc_platform::clipboard::LocalClipboard;
+use uc_platform::runtime::event_bus::PlatformCommandSender;
 
 /// Result type for wiring operations
 pub type WiringResult<T> = Result<T, WiringError>;
@@ -211,6 +213,9 @@ struct PlatformLayer {
 
     // Encryption session / 加密会话（占位符）
     encryption_session: Arc<dyn EncryptionSessionPort>,
+
+    // Watcher control / 监控器控制
+    watcher_control: Arc<dyn WatcherControlPort>,
 
     // Key scope / 密钥范围
     key_scope: Arc<dyn uc_core::ports::security::key_scope::KeyScopePort>,
@@ -370,6 +375,7 @@ fn create_infra_layer(
 ///
 /// * `keyring` - Keyring created in infra layer / 在 infra 层中创建的密钥环
 /// * `config_dir` - Configuration directory for device identity storage / 用于存储设备身份的配置目录
+/// * `platform_cmd_tx` - Command sender for platform runtime / 平台运行时命令发送器
 ///
 /// # Note / 注意
 ///
@@ -382,6 +388,7 @@ fn create_infra_layer(
 fn create_platform_layer(
     keyring: Arc<dyn KeyringPort>,
     config_dir: &PathBuf,
+    platform_cmd_tx: PlatformCommandSender,
 ) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
@@ -419,6 +426,11 @@ fn create_platform_layer(
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
 
+    // Create watcher control
+    // 创建监控器控制
+    let watcher_control: Arc<dyn WatcherControlPort> =
+        Arc::new(InMemoryWatcherControl::new(platform_cmd_tx));
+
     // Create key scope
     // 创建密钥范围
     let key_scope: Arc<dyn uc_core::ports::security::key_scope::KeyScopePort> =
@@ -435,6 +447,7 @@ fn create_platform_layer(
         blob_materializer,
         blob_store,
         encryption_session,
+        watcher_control,
         key_scope,
     })
 }
@@ -588,7 +601,10 @@ fn derive_default_paths_from_app_dirs(
 ///     Err(_err) => { /* handle initialization failure */ }
 /// }
 /// ```
-pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
+pub fn wire_dependencies(
+    config: &AppConfig,
+    platform_cmd_tx: PlatformCommandSender,
+) -> WiringResult<AppDeps> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池
     //
@@ -620,7 +636,7 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
 
     // Step 3: Create platform layer implementations
     // 步骤 3：创建平台层实现
-    let platform = create_platform_layer(keyring, &vault_path)?;
+    let platform = create_platform_layer(keyring, &vault_path, platform_cmd_tx)?;
 
     // Step 3.5: Wrap ports with encryption decorators
     // 步骤 3.5：用加密装饰器包装端口
@@ -665,6 +681,7 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
         key_scope: platform.key_scope,
         keyring: platform.keyring,
         key_material: infra.key_material,
+        watcher_control: platform.watcher_control,
 
         // Device dependencies / 设备依赖
         device_repo: infra.device_repo,
@@ -699,6 +716,7 @@ pub fn wire_dependencies(config: &AppConfig) -> WiringResult<AppDeps> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::mpsc;
 
     #[test]
     fn test_wiring_error_display() {
@@ -765,7 +783,8 @@ mod tests {
         // Test that wire_dependencies creates a valid AppDeps structure
         // 测试 wire_dependencies 创建有效的 AppDeps 结构
         let config = AppConfig::empty();
-        let result = wire_dependencies(&config);
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let result = wire_dependencies(&config, cmd_tx);
 
         match result {
             Ok(deps) => {
@@ -779,6 +798,7 @@ mod tests {
                 let _ = &deps.encryption_session;
                 let _ = &deps.keyring;
                 let _ = &deps.key_material;
+                let _ = &deps.watcher_control;
                 let _ = &deps.device_repo;
                 let _ = &deps.device_identity;
                 let _ = &deps.network;
@@ -889,7 +909,8 @@ mod tests {
         let keyring: Arc<dyn KeyringPort> = Arc::new(DummyKeyring);
         let temp_dir = std::env::temp_dir().join(format!("uc-wiring-test-{}", std::process::id()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
-        let result = create_platform_layer(keyring, &temp_dir);
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let result = create_platform_layer(keyring, &temp_dir, cmd_tx);
 
         match result {
             Ok(layer) => {
@@ -908,6 +929,7 @@ mod tests {
                 let _blob_store: &Arc<dyn BlobStorePort> = &layer.blob_store;
                 let _encryption_session: &Arc<dyn EncryptionSessionPort> =
                     &layer.encryption_session;
+                let _watcher_control: &Arc<dyn WatcherControlPort> = &layer.watcher_control;
             }
             Err(e) => {
                 // On systems without clipboard support, we might get an error
@@ -945,6 +967,12 @@ mod tests {
             // 此闭包只有在 PlatformLayer 有 `keyring` 字段时才能编译
             unimplemented!()
         };
+
+        let _ = || -> std::sync::Arc<dyn WatcherControlPort> {
+            // This closure should only compile if PlatformLayer has a `watcher_control` field
+            // 此闭包只有在 PlatformLayer 有 `watcher_control` 字段时才能编译
+            unimplemented!()
+        };
     }
 
     #[test]
@@ -962,7 +990,8 @@ The functionality is still validated in development mode when running the app wi
         // Test that wire_dependencies handles empty database_path gracefully
         // 测试 wire_dependencies 优雅地处理空的 database_path
         let empty_config = AppConfig::empty();
-        let result = wire_dependencies(&empty_config);
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let result = wire_dependencies(&empty_config, cmd_tx);
 
         // Should succeed by using fallback default data directory
         // In headless CI environments, clipboard initialization may fail - accept that as expected

@@ -35,6 +35,7 @@ pub mod onboarding;
 pub mod security;
 pub mod settings;
 pub mod ui_port;
+pub mod watcher_control;
 
 pub use blob_materializer::BlobMaterializerPort;
 pub use blob_repository::BlobRepositoryPort;
@@ -59,3 +60,4 @@ pub use security::key_material::KeyMaterialPort;
 pub use security::keyring::KeyringPort;
 pub use settings::{SettingsMigrationPort, SettingsPort};
 pub use ui_port::UiPort;
+pub use watcher_control::{WatcherControlError, WatcherControlPort};

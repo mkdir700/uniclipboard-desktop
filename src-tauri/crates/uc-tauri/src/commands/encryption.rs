@@ -24,9 +24,9 @@ struct OnboardingPasswordSetEvent {
 /// ## Architecture / 架构
 ///
 /// - Commands layer (Driving Adapter) → UseCases accessor → Use Case → Ports
-/// - No direct Port access from commands
+/// - Command triggers watcher start via WatcherControlPort after successful init
 /// - 命令层（驱动适配器）→ UseCases 访问器 → 用例 → 端口
-/// - 命令不直接访问端口
+/// - 加密成功后通过 WatcherControlPort 启动监控器
 #[tauri::command]
 pub async fn initialize_encryption(
     runtime: State<'_, Arc<AppRuntime>>,
@@ -50,6 +50,25 @@ pub async fn initialize_encryption(
         })?;
     tracing::info!("Encryption initialized successfully");
 
+    match runtime.deps.watcher_control.start_watcher().await {
+        Ok(()) => {
+            tracing::info!("Clipboard watcher started after encryption initialization");
+        }
+        Err(e) => {
+            tracing::error!("Failed to start clipboard watcher: {}", e);
+            if let Err(err) = app_handle.emit(
+                "encryption://watcher-start-failed",
+                format!("{}", e),
+            ) {
+                tracing::error!("Failed to emit watcher start failure event: {}", err);
+            }
+            return Err(format!(
+                "Encryption initialized, but failed to start clipboard watcher: {}",
+                e
+            ));
+        }
+    }
+
     // Emit onboarding-password-set event for frontend
     let timestamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -63,12 +82,6 @@ pub async fn initialize_encryption(
 
     tracing::debug!("{} Event emitted successfully", LOG_CONTEXT);
     tracing::info!("Onboarding: encryption password initialized successfully");
-
-    // Note: Watcher start is handled by the platform runtime
-    // which listens for encryption state changes
-    // For now, user needs to restart app after first-time setup
-    // TODO: Implement in-process watcher start via command channel
-    tracing::info!("Note: App restart required to start clipboard watcher after first-time encryption setup");
 
     Ok(())
 }

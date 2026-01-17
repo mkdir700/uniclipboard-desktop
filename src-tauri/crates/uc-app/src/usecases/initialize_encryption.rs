@@ -175,3 +175,305 @@ impl InitializeEncryption {
         .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use uc_core::{
+        ports::security::key_scope::ScopeError,
+        security::model::{KeyScope, Kek, EncryptedBlob, EncryptionFormatVersion, EncryptionAlgo},
+        security::state::EncryptionStateError,
+    };
+    use async_trait::async_trait;
+
+    /// Mock EncryptionStatePort
+    struct MockEncryptionState {
+        state: EncryptionState,
+    }
+
+    impl MockEncryptionState {
+        fn new(state: EncryptionState) -> Self {
+            Self { state }
+        }
+    }
+
+    #[async_trait]
+    impl uc_core::ports::security::encryption_state::EncryptionStatePort for MockEncryptionState {
+        async fn load_state(&self) -> Result<EncryptionState, EncryptionStateError> {
+            Ok(self.state.clone())
+        }
+
+        async fn persist_initialized(&self) -> Result<(), EncryptionStateError> {
+            Ok(())
+        }
+    }
+
+    /// Mock KeyScopePort
+    struct MockKeyScope {
+        scope: Option<KeyScope>,
+    }
+
+    impl MockKeyScope {
+        fn new(scope: Option<KeyScope>) -> Self {
+            Self { scope }
+        }
+
+        fn succeed_with(scope: KeyScope) -> Self {
+            Self::new(Some(scope))
+        }
+    }
+
+    #[async_trait]
+    impl KeyScopePort for MockKeyScope {
+        async fn current_scope(&self) -> Result<KeyScope, ScopeError> {
+            self.scope.clone().ok_or(ScopeError::FailedToGetCurrentScope)
+        }
+    }
+
+    /// Mock KeyMaterialPort
+    struct MockKeyMaterial {
+        kek_stored: Arc<std::sync::atomic::AtomicBool>,
+        keyslot_stored: Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl MockKeyMaterial {
+        fn new() -> Self {
+            Self {
+                kek_stored: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                keyslot_stored: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            }
+        }
+
+        fn was_kek_stored(&self) -> bool {
+            self.kek_stored.load(std::sync::atomic::Ordering::SeqCst)
+        }
+
+        fn was_keyslot_stored(&self) -> bool {
+            self.keyslot_stored.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait]
+    impl KeyMaterialPort for MockKeyMaterial {
+        async fn load_keyslot(&self, _scope: &KeyScope) -> Result<KeySlot, EncryptionError> {
+            Err(EncryptionError::KeyNotFound)
+        }
+
+        async fn store_keyslot(&self, _keyslot: &KeySlot) -> Result<(), EncryptionError> {
+            self.keyslot_stored.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn delete_keyslot(&self, _scope: &KeyScope) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+
+        async fn load_kek(&self, _scope: &KeyScope) -> Result<Kek, EncryptionError> {
+            Err(EncryptionError::KeyNotFound)
+        }
+
+        async fn store_kek(&self, _scope: &KeyScope, _kek: &Kek) -> Result<(), EncryptionError> {
+            self.kek_stored.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn delete_kek(&self, _scope: &KeyScope) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+    }
+
+    /// Mock EncryptionPort
+    struct MockEncryption {
+        should_fail: bool,
+    }
+
+    impl MockEncryption {
+        fn new() -> Self {
+            Self { should_fail: false }
+        }
+    }
+
+    #[async_trait]
+    impl EncryptionPort for MockEncryption {
+        async fn derive_kek(
+            &self,
+            _passphrase: &Passphrase,
+            _salt: &[u8],
+            _kdf_params: &uc_core::security::model::KdfParams,
+        ) -> Result<Kek, EncryptionError> {
+            Ok(Kek([0u8; 32]))
+        }
+
+        async fn wrap_master_key(
+            &self,
+            _kek: &Kek,
+            _master_key: &MasterKey,
+            _aead: EncryptionAlgo,
+        ) -> Result<EncryptedBlob, EncryptionError> {
+            if self.should_fail {
+                return Err(EncryptionError::EncryptFailed);
+            }
+            Ok(EncryptedBlob {
+                version: EncryptionFormatVersion::V1,
+                aead: EncryptionAlgo::XChaCha20Poly1305,
+                nonce: vec![0u8; 24],
+                ciphertext: vec![0u8; 32],
+                aad_fingerprint: None,
+            })
+        }
+
+        async fn unwrap_master_key(
+            &self,
+            _kek: &Kek,
+            _blob: &EncryptedBlob,
+        ) -> Result<MasterKey, EncryptionError> {
+            MasterKey::from_bytes(&[0u8; 32])
+        }
+
+        async fn encrypt_blob(
+            &self,
+            _master_key: &MasterKey,
+            _plaintext: &[u8],
+            _aad: &[u8],
+            _algo: EncryptionAlgo,
+        ) -> Result<EncryptedBlob, EncryptionError> {
+            Ok(EncryptedBlob {
+                version: EncryptionFormatVersion::V1,
+                aead: EncryptionAlgo::XChaCha20Poly1305,
+                nonce: vec![0u8; 24],
+                ciphertext: vec![],
+                aad_fingerprint: None,
+            })
+        }
+
+        async fn decrypt_blob(
+            &self,
+            _master_key: &MasterKey,
+            _blob: &EncryptedBlob,
+            _aad: &[u8],
+        ) -> Result<Vec<u8>, EncryptionError> {
+            Ok(vec![])
+        }
+    }
+
+    /// Mock EncryptionSessionPort
+    struct MockEncryptionSession {
+        master_key_set: Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl MockEncryptionSession {
+        fn new() -> Self {
+            Self {
+                master_key_set: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            }
+        }
+
+        fn was_master_key_set(&self) -> bool {
+            self.master_key_set.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait]
+    impl EncryptionSessionPort for MockEncryptionSession {
+        async fn is_ready(&self) -> bool {
+            self.master_key_set.load(std::sync::atomic::Ordering::SeqCst)
+        }
+
+        async fn get_master_key(&self) -> Result<MasterKey, EncryptionError> {
+            if self.master_key_set.load(std::sync::atomic::Ordering::SeqCst) {
+                MasterKey::from_bytes(&[0u8; 32])
+            } else {
+                Err(EncryptionError::Locked)
+            }
+        }
+
+        async fn set_master_key(&self, _master_key: MasterKey) -> Result<(), EncryptionError> {
+            self.master_key_set.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn clear(&self) -> Result<(), EncryptionError> {
+            self.master_key_set.store(false, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_initialize_encryption_sets_master_key_in_session() {
+        // Test that initialization sets the master key in the session
+        let state = Arc::new(MockEncryptionState::new(EncryptionState::Uninitialized));
+        let scope = Arc::new(MockKeyScope::succeed_with(KeyScope {
+            profile_id: "test".to_string(),
+        }));
+        let key_material = Arc::new(MockKeyMaterial::new());
+        let encryption = Arc::new(MockEncryption::new());
+        let session = Arc::new(MockEncryptionSession::new());
+
+        let use_case = InitializeEncryption::new(
+            encryption,
+            key_material,
+            scope,
+            state,
+            session.clone(),
+        );
+
+        let passphrase = Passphrase("test-password".to_string());
+        let result = use_case.execute(passphrase).await;
+
+        assert!(result.is_ok(), "initialization should succeed");
+        assert!(session.was_master_key_set(), "master key should be set in session");
+    }
+
+    #[tokio::test]
+    async fn test_initialize_encryption_fails_when_already_initialized() {
+        // Test that initialization fails when already initialized
+        let state = Arc::new(MockEncryptionState::new(EncryptionState::Initialized));
+        let scope = Arc::new(MockKeyScope::succeed_with(KeyScope {
+            profile_id: "test".to_string(),
+        }));
+        let key_material = Arc::new(MockKeyMaterial::new());
+        let encryption = Arc::new(MockEncryption::new());
+        let session = Arc::new(MockEncryptionSession::new());
+
+        let use_case = InitializeEncryption::new(
+            encryption,
+            key_material,
+            scope,
+            state,
+            session,
+        );
+
+        let passphrase = Passphrase("test-password".to_string());
+        let result = use_case.execute(passphrase).await;
+
+        assert!(result.is_err(), "initialization should fail");
+        let err = result.unwrap_err();
+        assert!(matches!(err, InitializeEncryptionError::AlreadyInitialized));
+    }
+
+    #[tokio::test]
+    async fn test_initialize_encryption_does_not_set_session_on_failure() {
+        // Test that session is not set when initialization fails
+        let state = Arc::new(MockEncryptionState::new(EncryptionState::Initialized));
+        let scope = Arc::new(MockKeyScope::succeed_with(KeyScope {
+            profile_id: "test".to_string(),
+        }));
+        let key_material = Arc::new(MockKeyMaterial::new());
+        let encryption = Arc::new(MockEncryption::new());
+        let session = Arc::new(MockEncryptionSession::new());
+
+        let use_case = InitializeEncryption::new(
+            encryption,
+            key_material,
+            scope,
+            state,
+            session.clone(),
+        );
+
+        let passphrase = Passphrase("test-password".to_string());
+        let _ = use_case.execute(passphrase).await;
+
+        assert!(!session.was_master_key_set(), "master key should NOT be set when initialization fails");
+    }
+}
