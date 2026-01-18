@@ -133,9 +133,7 @@ const AppContentWithBar = () => {
   useEffect(() => {
     // Timeout protection (30 seconds)
     const timeoutId = setTimeout(() => {
-      if (!backendReady && !fadingOut) {
-        setInitError(t('loading.timeout_error'))
-      }
+      setInitError(t('loading.timeout_error'))
     }, 30000)
 
     let fadeTimerId: ReturnType<typeof setTimeout> | null = null
