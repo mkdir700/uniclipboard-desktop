@@ -15,7 +15,11 @@ pub struct PlaceholderBlobWriterPort;
 
 #[async_trait]
 impl BlobWriterPort for PlaceholderBlobWriterPort {
-    async fn write(&self, _data: &[u8], _content_hash: &ContentHash) -> Result<Blob> {
+    async fn write_if_absent(
+        &self,
+        _content_id: &ContentHash,
+        _encrypted_bytes: &[u8],
+    ) -> Result<Blob> {
         // TODO: Implement actual blob writing
         // 实现实际的 blob 写入
         Err(anyhow::anyhow!("BlobWriterPort not implemented yet"))

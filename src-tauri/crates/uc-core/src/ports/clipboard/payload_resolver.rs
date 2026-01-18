@@ -27,7 +27,7 @@ pub trait ClipboardPayloadResolverPort: Send + Sync {
     /// 3. **Lazy write**: Otherwise:
     ///    - Load raw bytes (from inline_data or temp storage)
     ///    - Calculate `ContentHash`
-    ///    - Call `BlobWriterPort::write()` to persist
+    ///    - Call `BlobWriterPort::write_if_absent()` to persist
     ///    - Write back `representation.blob_id` (idempotent)
     ///    - Return `BlobRef`
     ///

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::debug;
 
 use uc_core::{
-    clipboard::PersistedClipboardRepresentation,
+    clipboard::{PayloadAvailability, PersistedClipboardRepresentation},
     ids::{EventId, RepresentationId},
     ports::{ClipboardRepresentationRepositoryPort, EncryptionPort, EncryptionSessionPort},
     security::aad,
@@ -116,6 +116,22 @@ impl ClipboardRepresentationRepositoryPort for DecryptingClipboardRepresentation
             .update_blob_id_if_none(representation_id, blob_id)
             .await
     }
+
+    async fn update_processing_result(
+        &self,
+        rep_id: &RepresentationId,
+        expected_states: &[PayloadAvailability],
+        blob_id: Option<&BlobId>,
+        new_state: PayloadAvailability,
+        last_error: Option<&str>,
+    ) -> Result<PersistedClipboardRepresentation> {
+        // Delegate to inner repo - this method is for state updates, not data reading
+        // The returned representation may contain encrypted inline_data, which is expected
+        // for update operations. Use get_representation to get decrypted data.
+        self.inner
+            .update_processing_result(rep_id, expected_states, blob_id, new_state, last_error)
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -202,6 +218,43 @@ mod tests {
                 }
             }
             Ok(updated)
+        }
+
+        async fn update_processing_result(
+            &self,
+            rep_id: &RepresentationId,
+            expected_states: &[PayloadAvailability],
+            blob_id: Option<&BlobId>,
+            new_state: PayloadAvailability,
+            last_error: Option<&str>,
+        ) -> Result<PersistedClipboardRepresentation> {
+            // Find and update representation
+            for ((_, id), rep) in self.storage.lock().unwrap().iter_mut() {
+                if id == rep_id {
+                    // Check if current state is in expected_states
+                    let current_state = rep.payload_state();
+                    if !expected_states.contains(&current_state) {
+                        return Err(anyhow::anyhow!(
+                            "CAS update failed: current state {:?} not in expected states {:?}",
+                            current_state,
+                            expected_states
+                        ));
+                    }
+
+                    // Update fields and return new representation with updated state
+                    return Ok(PersistedClipboardRepresentation::new_with_state(
+                        rep.id.clone(),
+                        rep.format_id.clone(),
+                        rep.mime_type.clone(),
+                        rep.size_bytes,
+                        rep.inline_data.clone(),
+                        blob_id.cloned(),
+                        new_state,
+                        last_error.map(|s| s.to_string()),
+                    )?);
+                }
+            }
+            Err(anyhow::anyhow!("Representation not found: {}", rep_id))
         }
     }
 

@@ -5,6 +5,7 @@ mod event;
 mod hash;
 mod mime;
 mod origin;
+mod payload_availability;
 mod policy;
 mod selection;
 mod snapshot;
@@ -25,4 +26,5 @@ pub use decision::{ClipboardContentActionDecision, DuplicationHint, RejectReason
 pub use hash::{ContentHash, HashAlgorithm};
 pub use mime::MimeType;
 pub use origin::ClipboardOrigin;
+pub use payload_availability::PayloadAvailability;
 pub use timestamp::TimestampMs;

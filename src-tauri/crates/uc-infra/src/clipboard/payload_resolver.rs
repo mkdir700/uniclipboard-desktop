@@ -93,7 +93,10 @@ impl ClipboardPayloadResolverPort for ClipboardPayloadResolver {
             let content_hash = self.hasher.hash_bytes(&raw_bytes)?;
 
             // Write to blob store (deduplicated)
-            let blob = self.blob_writer.write(&raw_bytes, &content_hash).await?;
+            let blob = self
+                .blob_writer
+                .write_if_absent(&content_hash, &raw_bytes)
+                .await?;
 
             // Update representation.blob_id (idempotent)
             let updated = self

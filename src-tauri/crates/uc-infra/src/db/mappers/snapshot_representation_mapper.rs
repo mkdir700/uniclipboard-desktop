@@ -4,7 +4,7 @@ use crate::db::models::snapshot_representation::{
 use crate::db::ports::{InsertMapper, RowMapper};
 use anyhow::Result;
 use uc_core::{
-    clipboard::PersistedClipboardRepresentation,
+    clipboard::{PayloadAvailability, PersistedClipboardRepresentation},
     ids::{EventId, FormatId, RepresentationId},
     BlobId, MimeType,
 };
@@ -27,6 +27,11 @@ impl InsertMapper<(PersistedClipboardRepresentation, EventId), NewSnapshotRepres
             size_bytes: rep.size_bytes,
             inline_data: rep.inline_data.clone(),
             blob_id: rep.blob_id.as_ref().map(|id| id.to_string()),
+            payload_state: rep.payload_state.as_str().to_string(),
+            last_error: match &rep.payload_state {
+                PayloadAvailability::Failed { last_error } => Some(last_error.clone()),
+                _ => rep.last_error.clone(),
+            },
         })
     }
 }
@@ -60,14 +65,42 @@ impl RowMapper<SnapshotRepresentationRow, uc_core::clipboard::PersistedClipboard
         &self,
         row: &SnapshotRepresentationRow,
     ) -> Result<uc_core::clipboard::PersistedClipboardRepresentation> {
-        Ok(uc_core::clipboard::PersistedClipboardRepresentation::new(
+        let payload_state = parse_payload_state(row)?;
+        let last_error = match &payload_state {
+            PayloadAvailability::Failed { last_error } => Some(last_error.clone()),
+            _ => row.last_error.clone(),
+        };
+
+        uc_core::clipboard::PersistedClipboardRepresentation::new_with_state(
             RepresentationId::from(row.id.clone()),
             FormatId::from(row.format_id.clone()),
             row.mime_type.as_ref().map(|s| MimeType(s.clone())),
             row.size_bytes,
             row.inline_data.clone(),
             row.blob_id.as_ref().map(|s| BlobId::from(s.clone())),
-        ))
+            payload_state,
+            last_error,
+        )
+    }
+}
+
+fn parse_payload_state(row: &SnapshotRepresentationRow) -> Result<PayloadAvailability> {
+    match row.payload_state.as_str() {
+        "Inline" => Ok(PayloadAvailability::Inline),
+        "BlobReady" => Ok(PayloadAvailability::BlobReady),
+        "Staged" => Ok(PayloadAvailability::Staged),
+        "Processing" => Ok(PayloadAvailability::Processing),
+        "Failed" => {
+            let last_error = row
+                .last_error
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("payload_state Failed requires last_error"))?;
+            Ok(PayloadAvailability::Failed {
+                last_error: last_error.to_string(),
+            })
+        }
+        "Lost" => Ok(PayloadAvailability::Lost),
+        other => Err(anyhow::anyhow!("unknown payload_state: {}", other)),
     }
 }
 
@@ -76,7 +109,7 @@ mod tests {
     use super::*;
     use crate::db::models::snapshot_representation::SnapshotRepresentationRow;
     use uc_core::{
-        clipboard::PersistedClipboardRepresentation,
+        clipboard::{PayloadAvailability, PersistedClipboardRepresentation},
         ids::{EventId, FormatId, RepresentationId},
         BlobId, MimeType,
     };
@@ -92,6 +125,8 @@ mod tests {
             size_bytes: 42,
             inline_data: Some(vec![1, 2, 3]),
             blob_id: None,
+            payload_state: "Inline".to_string(),
+            last_error: None,
         };
 
         let result = mapper.to_domain(&row).unwrap();
@@ -102,6 +137,8 @@ mod tests {
         assert_eq!(result.size_bytes, 42);
         assert_eq!(result.inline_data, Some(vec![1, 2, 3]));
         assert_eq!(result.blob_id, None);
+        assert_eq!(result.payload_state, PayloadAvailability::Inline);
+        assert_eq!(result.last_error, None);
     }
 
     #[test]
@@ -115,6 +152,8 @@ mod tests {
             size_bytes: 1024,
             inline_data: None,
             blob_id: Some("blob-123".to_string()),
+            payload_state: "BlobReady".to_string(),
+            last_error: None,
         };
 
         let result = mapper.to_domain(&row).unwrap();
@@ -123,6 +162,7 @@ mod tests {
         assert_eq!(result.mime_type, None);
         assert_eq!(result.inline_data, None);
         assert_eq!(result.blob_id, Some(BlobId::from("blob-123".to_string())));
+        assert_eq!(result.payload_state, PayloadAvailability::BlobReady);
     }
 
     #[test]
@@ -149,5 +189,7 @@ mod tests {
         assert_eq!(row.size_bytes, 100);
         assert_eq!(row.inline_data, Some(vec![10, 20, 30]));
         assert_eq!(row.blob_id, None);
+        assert_eq!(row.payload_state, "Inline".to_string());
+        assert_eq!(row.last_error, None);
     }
 }

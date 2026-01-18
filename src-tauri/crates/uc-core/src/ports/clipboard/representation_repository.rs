@@ -1,4 +1,4 @@
-use crate::clipboard::PersistedClipboardRepresentation;
+use crate::clipboard::{PayloadAvailability, PersistedClipboardRepresentation};
 use crate::ids::{EventId, RepresentationId};
 use crate::BlobId;
 use anyhow::Result;
@@ -36,4 +36,23 @@ pub trait ClipboardRepresentationRepositoryPort: Send + Sync {
         representation_id: &RepresentationId,
         blob_id: &BlobId,
     ) -> Result<bool>;
+
+    /// Atomically update blob_id and payload_state with CAS semantics.
+    ///
+    /// # Transactional update
+    /// - Single UPDATE statement sets blob_id, payload_state, last_error
+    /// - WHERE clause filters by expected_states
+    /// - Returns updated row or error if no rows matched
+    ///
+    /// # Concurrency safety
+    /// - Only updates if current state is in expected_states
+    /// - Returns error if state changed by another worker
+    async fn update_processing_result(
+        &self,
+        rep_id: &RepresentationId,
+        expected_states: &[PayloadAvailability],
+        blob_id: Option<&BlobId>,
+        new_state: PayloadAvailability,
+        last_error: Option<&str>,
+    ) -> Result<PersistedClipboardRepresentation>;
 }
