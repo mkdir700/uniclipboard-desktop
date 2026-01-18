@@ -109,17 +109,9 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
     await saveSetting(updatedSetting)
   }
 
-  // Wait for backend-ready event before loading settings
-  // This prevents blocking the initial render with an IPC call
+  // Load settings immediately on mount
   useEffect(() => {
-    const unlistenPromise = listen('backend-ready', () => {
-      console.log('Backend ready, loading settings')
-      loadSetting()
-    })
-
-    return () => {
-      unlistenPromise.then(unlisten => unlisten?.()).catch(() => {})
-    }
+    loadSetting()
   }, [])
 
   // 监听来自其他窗口的设置变更事件
@@ -176,6 +168,14 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
 
       // 2. Apply Theme Color
       root.setAttribute('data-theme', themeColor)
+
+      // 3. Sync to localStorage for splashscreen
+      if (theme !== 'system' && theme) {
+        localStorage.setItem('uc-theme', theme)
+      } else {
+        localStorage.removeItem('uc-theme')
+      }
+      localStorage.setItem('uc-theme-color', themeColor)
     }
 
     applyTheme()

@@ -3,7 +3,6 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
@@ -244,31 +243,6 @@ fn run_app(config: AppConfig) {
                 }
             }
 
-            // Ensure the main window becomes visible even if backend-ready is never emitted.
-            let app_handle_for_fallback = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(30)).await;
-
-                if let Some(main_window) = app_handle_for_fallback.get_webview_window("main") {
-                    if let Err(e) = main_window.show() {
-                        warn!("Failed to show main window after splash timeout: {}", e);
-                    }
-                } else {
-                    warn!("Main window not found after splash timeout");
-                }
-
-                if let Some(splash_window) =
-                    app_handle_for_fallback.get_webview_window("splashscreen")
-                {
-                    if let Err(e) = splash_window.close() {
-                        warn!("Failed to close splashscreen after timeout: {}", e);
-                    }
-                }
-            });
-
-            // Clone app handle for the spawn task
-            let app_handle_for_spawn = app.handle().clone();
-
             // Spawn the initialization task immediately (don't wait for frontend)
             let runtime = runtime_for_handler.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
@@ -355,27 +329,29 @@ fn run_app(config: AppConfig) {
                     }
                 }
 
-                // 4. Emit backend-ready event to notify frontend
-                info!("Emitting backend-ready event...");
-                if let Err(e) = app_handle_for_spawn.emit("backend-ready", ()) {
-                    error!("Failed to emit backend-ready event: {}", e);
-                } else {
-                    info!("backend-ready event emitted successfully");
-                }
-
-                if let Some(main_window) = app_handle_for_spawn.get_webview_window("main") {
-                    if let Err(e) = main_window.show() {
-                        warn!("Failed to show main window after backend-ready: {}", e);
-                    }
-                } else {
-                    warn!("Main window not found when backend-ready emitted");
-                }
-
-                if let Some(splash_window) = app_handle_for_spawn.get_webview_window("splashscreen")
+                // 4. Show main window and close splashscreen
                 {
-                    if let Err(e) = splash_window.close() {
-                        warn!("Failed to close splashscreen after backend-ready: {}", e);
+                    let app_handle_guard = runtime.app_handle();
+                    if let Some(app_handle) = app_handle_guard.as_ref() {
+                        if let Some(main_window) = app_handle.get_webview_window("main") {
+                            if let Err(e) = main_window.show() {
+                                warn!("Failed to show main window: {}", e);
+                            } else {
+                                info!("Main window shown");
+                            }
+                        } else {
+                            warn!("Main window not found");
+                        }
+
+                        if let Some(splash_window) = app_handle.get_webview_window("splashscreen") {
+                            if let Err(e) = splash_window.close() {
+                                warn!("Failed to close splashscreen: {}", e);
+                            } else {
+                                info!("Splashscreen closed");
+                            }
+                        }
                     }
+                    // app_handle_guard dropped here
                 }
 
                 // 5. Start platform runtime (this is an infinite loop that runs until app exits)

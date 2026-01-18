@@ -1,10 +1,6 @@
-import { listen } from '@tauri-apps/api/event'
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { TitleBar } from '@/components'
 import GlobalPairingRequestDialog from '@/components/GlobalPairingRequestDialog'
-import { LoadingScreen } from '@/components/LoadingScreen'
 import PairingPinDialog from '@/components/PairingPinDialog'
 import { Toaster } from '@/components/ui/sonner'
 import { OnboardingProvider, useOnboarding } from '@/contexts/OnboardingContext'
@@ -62,27 +58,11 @@ const GlobalOverlays = () => {
 }
 
 // 主应用程序内容
-interface AppContentProps {
-  onStatusLoaded?: () => void
-}
-
-const AppContent: React.FC<AppContentProps> = ({ onStatusLoaded }) => {
+const AppContent = () => {
   const { status, loading } = useOnboarding()
 
-  // Notify parent when status is loaded
-  useEffect(() => {
-    if (status !== null && onStatusLoaded) {
-      onStatusLoaded()
-    }
-  }, [status, onStatusLoaded])
-
-  // Only block if actively loading, not if status is null (which happens briefly before backend-ready)
-  if (loading) {
-    return null // Loading
-  }
-
-  // If status is still null (haven't checked yet), return null so parent's LoadingScreen shows
-  if (status === null) {
+  // Wait for onboarding status to load
+  if (loading || status === null) {
     return null
   }
 
@@ -139,84 +119,12 @@ const TitleBarWithSearch = () => {
 
 // App content with conditional TitleBar
 const AppContentWithBar = () => {
-  const { t } = useTranslation()
-
-  // Backend loading state
-  const [statusLoaded, setStatusLoaded] = useState(false)
-  const [fadingOut, setFadingOut] = useState(false)
-  const [initError, setInitError] = useState<string | null>(null)
-  const statusLoadedRef = useRef(false)
-
-  // Handle status loaded callback
-  const handleStatusLoaded = useCallback(() => {
-    if (statusLoadedRef.current) {
-      return
-    }
-    statusLoadedRef.current = true
-
-    // Trigger fade-out animation first
-    setFadingOut(true)
-
-    // Switch to main app after fade-out completes
-    setTimeout(() => {
-      setStatusLoaded(true)
-    }, 300)
-  }, [])
-
-  // Listen for backend-ready event
-  useEffect(() => {
-    // Timeout protection (30 seconds)
-    const timeoutId = setTimeout(() => {
-      console.error('[AppContentWithBar] 30s timeout - backend-ready not received')
-      setInitError(t('loading.timeout_error'))
-    }, 30000)
-
-    let handshakeCompleted = false
-
-    // Mark backend as ready when event is received
-    const markBackendReady = () => {
-      if (handshakeCompleted) {
-        return
-      }
-      handshakeCompleted = true
-
-      clearTimeout(timeoutId)
-      // Don't set statusLoaded here - wait for onStatusLoaded callback from AppContent
-    }
-
-    // Register backend-ready listener
-    const unlistenPromise = listen('backend-ready', markBackendReady)
-
-    return () => {
-      clearTimeout(timeoutId)
-      unlistenPromise.then(unlisten => unlisten?.()).catch(() => {})
-    }
-  }, [t])
-
-  // Show error screen if initialization failed
-  if (initError) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="text-destructive mb-4">{t('loading.error_title')}</div>
-          <div className="text-muted-foreground text-sm">{initError}</div>
-        </div>
-      </div>
-    )
-  }
-
-  // Show loading screen if status not loaded yet (no TitleBar during loading)
-  if (!statusLoaded) {
-    return (
-      <LoadingScreen className={fadingOut ? 'opacity-0 transition-opacity duration-300' : ''} />
-    )
-  }
-
-  // Status loaded - show TitleBar and main content
+  // Show TitleBar and main content immediately
+  // The splashscreen window will be closed by Tauri when ready
   return (
     <>
       <TitleBarWithSearch />
-      <AppContent onStatusLoaded={handleStatusLoaded} />
+      <AppContent />
     </>
   )
 }

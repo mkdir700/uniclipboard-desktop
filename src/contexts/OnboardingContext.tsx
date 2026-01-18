@@ -34,31 +34,26 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const refreshStatus = async () => {
     try {
+      console.log('[OnboardingContext] Checking onboarding status...')
       setLoading(true)
       const newStatus = await checkOnboardingStatus()
+      console.log('[OnboardingContext] Onboarding status:', newStatus)
       setStatus(newStatus)
       setError(null)
       return newStatus
     } catch (err) {
-      setError(String(err))
-      console.error('Failed to refresh onboarding status:', err)
+      const errorStr = String(err)
+      setError(errorStr)
+      console.error('[OnboardingContext] Failed to refresh onboarding status:', err)
       throw err
     } finally {
       setLoading(false)
     }
   }
 
-  // Wait for backend-ready event before checking onboarding status
-  // This prevents blocking the initial render with an IPC call
+  // Check onboarding status on mount
   useEffect(() => {
-    const unlistenPromise = listen('backend-ready', async () => {
-      // Now that backend is ready, check the onboarding status
-      await refreshStatus()
-    })
-
-    return () => {
-      unlistenPromise.then(unlisten => unlisten?.()).catch(() => {})
-    }
+    refreshStatus()
   }, [])
 
   // 监听后端事件
