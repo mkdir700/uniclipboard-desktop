@@ -1,5 +1,7 @@
 mod materializer;
 mod normalizer;
+mod payload_resolver;
 
 pub use materializer::ClipboardRepresentationMaterializer;
-pub use normalizer::{is_text_mime_type, truncate_to_preview, ClipboardRepresentationNormalizer};
+pub use normalizer::ClipboardRepresentationNormalizer;
+pub use payload_resolver::ClipboardPayloadResolver;
