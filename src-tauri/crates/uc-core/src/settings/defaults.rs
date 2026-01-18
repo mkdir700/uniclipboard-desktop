@@ -17,8 +17,7 @@ impl Default for GeneralSettings {
     /// # Examples
     ///
     /// ```
-    /// use uc_core::settings::defaults::GeneralSettings;
-    /// use uc_core::settings::model::Theme;
+    /// use uc_core::settings::model::{GeneralSettings, Theme};
     ///
     /// let settings = GeneralSettings::default();
     /// assert_eq!(settings.auto_start, false);
@@ -51,6 +50,8 @@ impl Default for SyncSettings {
     /// # Examples
     ///
     /// ```
+    /// use uc_core::settings::model::{SyncSettings, SyncFrequency};
+    ///
     /// let s = SyncSettings::default();
     /// assert!(s.auto_sync);
     /// assert_eq!(s.sync_frequency, SyncFrequency::Realtime);
@@ -76,6 +77,8 @@ impl Default for RetentionPolicy {
     ///
     /// ```
     /// use std::time::Duration;
+    /// use uc_core::settings::model::{RetentionPolicy, RuleEvaluation, RetentionRule};
+    ///
     /// let p = RetentionPolicy::default();
     /// assert!(p.enabled);
     /// assert!(p.skip_pinned);
@@ -112,6 +115,8 @@ impl Default for SecuritySettings {
     /// # Examples
     ///
     /// ```
+    /// use uc_core::settings::model::SecuritySettings;
+    ///
     /// let s = SecuritySettings::default();
     /// assert!(!s.encryption_enabled);
     /// assert!(!s.passphrase_configured);
@@ -133,6 +138,8 @@ impl Default for Settings {
     /// # Examples
     ///
     /// ```
+    /// use uc_core::settings::model::{Settings, CURRENT_SCHEMA_VERSION};
+    ///
     /// let settings = Settings::default();
     /// assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
     /// // Nested defaults are available:

@@ -24,6 +24,7 @@ impl From<&str> for ClipboardOrigin {
     /// # Examples
     ///
     /// ```
+    /// use uc_core::ClipboardOrigin;
     /// let origin = ClipboardOrigin::from("remote");
     /// assert_eq!(origin, ClipboardOrigin::Remote);
     /// ```
@@ -45,7 +46,7 @@ impl From<String> for ClipboardOrigin {
     /// # Examples
     ///
     /// ```
-    /// use crate::clipboard::view::ClipboardOrigin;
+    /// use uc_core::ClipboardOrigin;
     ///
     /// let o1 = ClipboardOrigin::from("local".to_string());
     /// assert_eq!(o1, ClipboardOrigin::Local);

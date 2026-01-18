@@ -34,7 +34,7 @@ impl fmt::Display for MimeType {
     /// # Examples
     ///
     /// ```
-    /// use crate::clipboard::mime::MimeType;
+    /// use uc_core::MimeType;
     /// let m = MimeType("text/plain".to_string());
     /// assert_eq!(format!("{}", m), "text/plain");
     /// ```
@@ -51,6 +51,7 @@ impl FromStr for MimeType {
     /// # Examples
     ///
     /// ```
+    /// use uc_core::MimeType;
     /// let m: MimeType = "text/plain".parse().unwrap();
     /// assert_eq!(m, MimeType("text/plain".to_string()));
     /// ```
