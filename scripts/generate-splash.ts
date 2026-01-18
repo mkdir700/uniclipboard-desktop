@@ -11,8 +11,6 @@ async function generateSplashscreen() {
 
   // 1. 读取并合并所有主题 CSS
   const themeFiles = await glob('src/styles/themes/*.css', { cwd: root })
-  console.log(`Found ${themeFiles.length} theme files:`, themeFiles)
-
   const themesCss = themeFiles
     .map(file => {
       const content = fs.readFileSync(path.join(root, file), 'utf-8')
@@ -21,11 +19,21 @@ async function generateSplashscreen() {
     })
     .join('\n')
 
-  console.log(`Merged CSS length: ${themesCss.length} bytes`)
+  // 2. 读取动画 CSS
+  const animationsCss = fs.readFileSync(path.join(root, 'src/splashscreen/animations.css'), 'utf-8')
 
-  // 2. 输出到临时文件验证
-  fs.writeFileSync(path.join(root, 'public/themes-debug.css'), themesCss)
-  console.log('✓ Wrote public/themes-debug.css for verification')
+  // 3. 读取 HTML 模板
+  const template = fs.readFileSync(path.join(root, 'src/splashscreen/template.html'), 'utf-8')
+
+  // 4. 注入内容
+  const html = template
+    .replace('/* ANIMATIONS_CSS */', animationsCss)
+    .replace('/* THEMES_CSS */', themesCss)
+
+  // 5. 写入输出
+  fs.writeFileSync(path.join(root, 'public/splashscreen.html'), html)
+
+  console.log('✓ Generated public/splashscreen.html')
 }
 
 generateSplashscreen().catch(console.error)
