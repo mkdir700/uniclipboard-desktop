@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "generate:splash": "bun run scripts/generate-splash.ts",
+    "predev": "bun run generate:splash",
+    "prebuild": "bun run generate:splash",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
