@@ -4,13 +4,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use log::error;
 use tauri::Emitter;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
 use tokio::sync::mpsc;
-use tracing::{error as tracing_error, info as tracing_info};
+use tracing::{debug, error, info, warn};
 
 use uc_core::config::AppConfig;
 use uc_core::ports::AppDirsPort;
@@ -40,19 +39,19 @@ impl PlatformCommandExecutorPort for SimplePlatformCommandExecutor {
         // TODO: Implement actual command execution in future tasks
         match command {
             PlatformCommand::StartClipboardWatcher => {
-                log::info!("StartClipboardWatcher command received");
+                info!("StartClipboardWatcher command received");
             }
             PlatformCommand::StopClipboardWatcher => {
-                log::info!("StopClipboardWatcher command received");
+                info!("StopClipboardWatcher command received");
             }
             PlatformCommand::ReadClipboard => {
-                log::info!("ReadClipboard command received (not implemented)");
+                info!("ReadClipboard command received (not implemented)");
             }
             PlatformCommand::WriteClipboard { .. } => {
-                log::info!("WriteClipboard command received (not implemented)");
+                info!("WriteClipboard command received (not implemented)");
             }
             PlatformCommand::Shutdown => {
-                log::info!("Shutdown command received (not implemented)");
+                info!("Shutdown command received (not implemented)");
             }
         }
         Ok(())
@@ -88,11 +87,11 @@ fn main() {
     // Load configuration using the new bootstrap flow
     let config = match load_config(config_path) {
         Ok(config) => {
-            log::info!("Loaded config from config.toml (development mode)");
+            info!("Loaded config from config.toml (development mode)");
             config
         }
         Err(e) => {
-            log::debug!("No config.toml found, using system defaults: {}", e);
+            debug!("No config.toml found, using system defaults: {}", e);
 
             let app_dirs = match uc_platform::app_dirs::DirsAppDirsAdapter::new().get_app_dirs() {
                 Ok(dirs) => dirs,
@@ -180,7 +179,7 @@ fn run_app(config: AppConfig) {
     // Create clipboard handler from runtime (AppRuntime implements ClipboardChangeHandler)
     let clipboard_handler: Arc<dyn ClipboardChangeHandler> = runtime_for_handler.clone();
 
-    log::info!("Creating platform runtime with clipboard callback");
+    info!("Creating platform runtime with clipboard callback");
 
     // Note: PlatformRuntime will be started in setup block
     // The actual startup will be completed in a follow-up task
@@ -206,20 +205,20 @@ fn run_app(config: AppConfig) {
             // Set AppHandle on runtime so it can emit events to frontend
             // In Tauri 2, use app.handle() to get the AppHandle
             runtime_for_handler.set_app_handle(app.handle().clone());
-            log::info!("AppHandle set on AppRuntime for event emission");
+            info!("AppHandle set on AppRuntime for event emission");
 
             // Clone handle for use in async block
             let runtime_for_unlock = runtime_for_handler.clone();
             let platform_event_tx_clone = platform_event_tx.clone();
 
             tauri::async_runtime::spawn(async move {
-                log::info!("Platform runtime task started");
+                info!("Platform runtime task started");
 
                 // 0. Ensure device name is initialized (runs on every startup)
                 if let Err(e) =
                     ensure_default_device_name(runtime_for_unlock.deps.settings.clone()).await
                 {
-                    log::warn!("Failed to initialize default device name: {}", e);
+                    warn!("Failed to initialize default device name: {}", e);
                     // Non-fatal: continue startup even if device name initialization fails
                 }
 
@@ -229,25 +228,23 @@ fn run_app(config: AppConfig) {
                     .auto_unlock_encryption_session();
                 let should_start_watcher = match uc.execute().await {
                     Ok(true) => {
-                        tracing_info!("Encryption session auto-unlocked successfully");
+                        info!("Encryption session auto-unlocked successfully");
                         true
                     }
                     Ok(false) => {
-                        tracing_info!(
-                            "Encryption not initialized, clipboard watcher will not start"
-                        );
-                        tracing_info!("User must set encryption password via onboarding");
+                        info!("Encryption not initialized, clipboard watcher will not start");
+                        info!("User must set encryption password via onboarding");
                         false
                     }
                     Err(e) => {
-                        tracing_error!("Auto-unlock failed: {:?}", e);
+                        error!("Auto-unlock failed: {:?}", e);
                         // Emit error event to frontend for user notification
                         let app_handle_guard = runtime_for_unlock.app_handle();
                         if let Some(app) = app_handle_guard.as_ref() {
                             if let Err(emit_err) =
                                 app.emit("encryption-auto-unlock-error", format!("{}", e))
                             {
-                                log::warn!(
+                                warn!(
                                     "Failed to emit encryption-auto-unlock-error event: {}",
                                     emit_err
                                 );
@@ -269,7 +266,7 @@ fn run_app(config: AppConfig) {
                 ) {
                     Ok(rt) => rt,
                     Err(e) => {
-                        log::error!("Failed to create platform runtime: {}", e);
+                        error!("Failed to create platform runtime: {}", e);
                         return;
                     }
                 };
@@ -282,16 +279,16 @@ fn run_app(config: AppConfig) {
                         .execute()
                         .await
                     {
-                        Ok(_) => log::info!("Clipboard watcher started successfully"),
+                        Ok(_) => info!("Clipboard watcher started successfully"),
                         Err(e) => {
-                            log::error!("Failed to start clipboard watcher: {}", e);
+                            error!("Failed to start clipboard watcher: {}", e);
                             // Emit error event to frontend for user notification
                             let app_handle_guard = runtime_for_unlock.app_handle();
                             if let Some(app) = app_handle_guard.as_ref() {
                                 if let Err(emit_err) =
                                     app.emit("clipboard-watcher-start-failed", format!("{}", e))
                                 {
-                                    log::warn!(
+                                    warn!(
                                         "Failed to emit clipboard-watcher-start-failed event: {}",
                                         emit_err
                                     );
@@ -307,21 +304,21 @@ fn run_app(config: AppConfig) {
                 match runtime_for_unlock.app_handle().as_ref() {
                     Some(app) => {
                         if let Err(e) = app.emit("backend-ready", ()) {
-                            log::error!("Failed to emit backend-ready event: {}", e);
+                            error!("Failed to emit backend-ready event: {}", e);
                         }
                     }
                     None => {
-                        log::warn!("AppHandle not available, cannot emit backend-ready event");
+                        warn!("AppHandle not available, cannot emit backend-ready event");
                     }
                 }
 
                 // 5. Start platform runtime (this is an infinite loop that runs until app exits)
                 platform_runtime.start().await;
 
-                log::info!("Platform runtime task ended");
+                info!("Platform runtime task ended");
             });
 
-            log::info!("App runtime initialized with clipboard capture integration");
+            info!("App runtime initialized with clipboard capture integration");
             Ok(())
         })
         .invoke_handler(generate_invoke_handler!())
