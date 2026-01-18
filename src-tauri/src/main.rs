@@ -3,8 +3,9 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -207,25 +208,81 @@ fn run_app(config: AppConfig) {
             runtime_for_handler.set_app_handle(app.handle().clone());
             info!("AppHandle set on AppRuntime for event emission");
 
-            // Clone handle for use in async block
-            let runtime_for_unlock = runtime_for_handler.clone();
-            let platform_event_tx_clone = platform_event_tx.clone();
+            if app.get_webview_window("splashscreen").is_none() {
+                match WebviewWindowBuilder::new(
+                    app,
+                    "splashscreen",
+                    WebviewUrl::App("/splashscreen.html".into()),
+                )
+                .title("UniClipboard")
+                .inner_size(800.0, 600.0)
+                .resizable(false)
+                .decorations(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .build()
+                {
+                    Ok(window) => {
+                        info!("Splashscreen window created");
 
+                        // Apply rounded corners to splashscreen window (macOS only)
+                        #[cfg(target_os = "macos")]
+                        if let Err(e) = plugins::mac_rounded_corners::apply_modern_window_style(
+                            &window,
+                            plugins::mac_rounded_corners::WindowStyleConfig {
+                                corner_radius: 16.0,
+                                has_shadow: true,
+                                ..Default::default()
+                            },
+                        ) {
+                            warn!("Failed to apply rounded corners to splashscreen: {}", e);
+                        } else {
+                            info!("Applied rounded corners to splashscreen window");
+                        }
+                    }
+                    Err(e) => warn!("Failed to create splashscreen window: {}", e),
+                }
+            }
+
+            // Ensure the main window becomes visible even if backend-ready is never emitted.
+            let app_handle_for_fallback = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                info!("Platform runtime task started");
+                tokio::time::sleep(Duration::from_secs(30)).await;
+
+                if let Some(main_window) = app_handle_for_fallback.get_webview_window("main") {
+                    if let Err(e) = main_window.show() {
+                        warn!("Failed to show main window after splash timeout: {}", e);
+                    }
+                } else {
+                    warn!("Main window not found after splash timeout");
+                }
+
+                if let Some(splash_window) =
+                    app_handle_for_fallback.get_webview_window("splashscreen")
+                {
+                    if let Err(e) = splash_window.close() {
+                        warn!("Failed to close splashscreen after timeout: {}", e);
+                    }
+                }
+            });
+
+            // Clone app handle for the spawn task
+            let app_handle_for_spawn = app.handle().clone();
+
+            // Spawn the initialization task immediately (don't wait for frontend)
+            let runtime = runtime_for_handler.clone();
+            let platform_event_tx_clone = platform_event_tx.clone();
+            tauri::async_runtime::spawn(async move {
+                info!("Starting backend initialization");
 
                 // 0. Ensure device name is initialized (runs on every startup)
-                if let Err(e) =
-                    ensure_default_device_name(runtime_for_unlock.deps.settings.clone()).await
-                {
+                if let Err(e) = ensure_default_device_name(runtime.deps.settings.clone()).await {
                     warn!("Failed to initialize default device name: {}", e);
                     // Non-fatal: continue startup even if device name initialization fails
                 }
 
                 // 1. Check if encryption initialized and auto-unlock
-                let uc = runtime_for_unlock
-                    .usecases()
-                    .auto_unlock_encryption_session();
+                let uc = runtime.usecases().auto_unlock_encryption_session();
                 let should_start_watcher = match uc.execute().await {
                     Ok(true) => {
                         info!("Encryption session auto-unlocked successfully");
@@ -239,10 +296,10 @@ fn run_app(config: AppConfig) {
                     Err(e) => {
                         error!("Auto-unlock failed: {:?}", e);
                         // Emit error event to frontend for user notification
-                        let app_handle_guard = runtime_for_unlock.app_handle();
-                        if let Some(app) = app_handle_guard.as_ref() {
+                        let app_handle_guard = runtime.app_handle();
+                        if let Some(app_handle) = app_handle_guard.as_ref() {
                             if let Err(emit_err) =
-                                app.emit("encryption-auto-unlock-error", format!("{}", e))
+                                app_handle.emit("encryption-auto-unlock-error", format!("{}", e))
                             {
                                 warn!(
                                     "Failed to emit encryption-auto-unlock-error event: {}",
@@ -256,6 +313,7 @@ fn run_app(config: AppConfig) {
                 };
 
                 // 2. Create PlatformRuntime
+                info!("Creating PlatformRuntime...");
                 let executor = Arc::new(SimplePlatformCommandExecutor);
                 let platform_runtime = match PlatformRuntime::new(
                     platform_event_tx_clone,
@@ -264,7 +322,10 @@ fn run_app(config: AppConfig) {
                     executor,
                     Some(clipboard_handler),
                 ) {
-                    Ok(rt) => rt,
+                    Ok(rt) => {
+                        info!("PlatformRuntime created successfully");
+                        rt
+                    }
                     Err(e) => {
                         error!("Failed to create platform runtime: {}", e);
                         return;
@@ -273,20 +334,15 @@ fn run_app(config: AppConfig) {
 
                 // 3. Start watcher if encryption is ready
                 if should_start_watcher {
-                    match runtime_for_unlock
-                        .usecases()
-                        .start_clipboard_watcher()
-                        .execute()
-                        .await
-                    {
+                    match runtime.usecases().start_clipboard_watcher().execute().await {
                         Ok(_) => info!("Clipboard watcher started successfully"),
                         Err(e) => {
                             error!("Failed to start clipboard watcher: {}", e);
                             // Emit error event to frontend for user notification
-                            let app_handle_guard = runtime_for_unlock.app_handle();
-                            if let Some(app) = app_handle_guard.as_ref() {
-                                if let Err(emit_err) =
-                                    app.emit("clipboard-watcher-start-failed", format!("{}", e))
+                            let app_handle_guard = runtime.app_handle();
+                            if let Some(app_handle) = app_handle_guard.as_ref() {
+                                if let Err(emit_err) = app_handle
+                                    .emit("clipboard-watcher-start-failed", format!("{}", e))
                                 {
                                     warn!(
                                         "Failed to emit clipboard-watcher-start-failed event: {}",
@@ -300,15 +356,25 @@ fn run_app(config: AppConfig) {
                 }
 
                 // 4. Emit backend-ready event to notify frontend
-                // This must happen BEFORE platform_runtime.start().await because that is an infinite loop
-                match runtime_for_unlock.app_handle().as_ref() {
-                    Some(app) => {
-                        if let Err(e) = app.emit("backend-ready", ()) {
-                            error!("Failed to emit backend-ready event: {}", e);
-                        }
+                info!("Emitting backend-ready event...");
+                if let Err(e) = app_handle_for_spawn.emit("backend-ready", ()) {
+                    error!("Failed to emit backend-ready event: {}", e);
+                } else {
+                    info!("backend-ready event emitted successfully");
+                }
+
+                if let Some(main_window) = app_handle_for_spawn.get_webview_window("main") {
+                    if let Err(e) = main_window.show() {
+                        warn!("Failed to show main window after backend-ready: {}", e);
                     }
-                    None => {
-                        warn!("AppHandle not available, cannot emit backend-ready event");
+                } else {
+                    warn!("Main window not found when backend-ready emitted");
+                }
+
+                if let Some(splash_window) = app_handle_for_spawn.get_webview_window("splashscreen")
+                {
+                    if let Err(e) = splash_window.close() {
+                        warn!("Failed to close splashscreen after backend-ready: {}", e);
                     }
                 }
 
@@ -318,7 +384,7 @@ fn run_app(config: AppConfig) {
                 info!("Platform runtime task ended");
             });
 
-            info!("App runtime initialized with clipboard capture integration");
+            info!("App runtime initialized, backend initialization started");
             Ok(())
         })
         .invoke_handler(generate_invoke_handler!())

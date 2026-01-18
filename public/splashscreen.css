@@ -1,0 +1,120 @@
+:root {
+  color-scheme: light dark;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.21 0.006 285.885);
+  --primary: oklch(0.21 0.006 285.885);
+  --muted-foreground: oklch(0.552 0.014 285.938);
+  --font-sans: Montserrat, sans-serif;
+  --tracking-wide: 0.025em;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.21 0.006 285.885);
+    --foreground: oklch(0.985 0 0);
+    --primary: oklch(0.985 0 0);
+    --muted-foreground: oklch(0.705 0.015 286.067);
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  letter-spacing: 0em;
+}
+
+#splash-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-brand {
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  font-weight: 300;
+  letter-spacing: var(--tracking-wide);
+  line-height: 1.1;
+  margin-bottom: 2rem;
+}
+
+.splash-letter {
+  display: inline-block;
+  animation: splash-fade-in-up 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.splash-status {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  animation: splash-fade-in 0.6s ease both;
+  animation-delay: 1.35s;
+}
+
+.splash-dots {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.splash-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--primary);
+  opacity: 0.7;
+  animation: splash-pulse-wave 1.2s ease-in-out infinite;
+}
+
+.splash-dot:nth-child(1) {
+  animation-delay: -0.4s;
+}
+
+.splash-dot:nth-child(2) {
+  animation-delay: -0.2s;
+}
+
+.splash-dot:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes splash-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes splash-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes splash-pulse-wave {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}

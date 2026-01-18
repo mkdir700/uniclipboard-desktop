@@ -29,7 +29,7 @@ interface OnboardingCompletedEvent {
 
 export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const refreshStatus = async () => {
@@ -48,9 +48,17 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   }
 
-  // 初始化时检查状态
+  // Wait for backend-ready event before checking onboarding status
+  // This prevents blocking the initial render with an IPC call
   useEffect(() => {
-    refreshStatus()
+    const unlistenPromise = listen('backend-ready', async () => {
+      // Now that backend is ready, check the onboarding status
+      await refreshStatus()
+    })
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten?.()).catch(() => {})
+    }
   }, [])
 
   // 监听后端事件

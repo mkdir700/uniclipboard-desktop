@@ -1,5 +1,5 @@
 import { listen } from '@tauri-apps/api/event'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { TitleBar } from '@/components'
@@ -62,11 +62,28 @@ const GlobalOverlays = () => {
 }
 
 // 主应用程序内容
-const AppContent = () => {
+interface AppContentProps {
+  onStatusLoaded?: () => void
+}
+
+const AppContent: React.FC<AppContentProps> = ({ onStatusLoaded }) => {
   const { status, loading } = useOnboarding()
 
-  if (loading || status === null) {
+  // Notify parent when status is loaded
+  useEffect(() => {
+    if (status !== null && onStatusLoaded) {
+      onStatusLoaded()
+    }
+  }, [status, onStatusLoaded])
+
+  // Only block if actively loading, not if status is null (which happens briefly before backend-ready)
+  if (loading) {
     return null // Loading
+  }
+
+  // If status is still null (haven't checked yet), return null so parent's LoadingScreen shows
+  if (status === null) {
+    return null
   }
 
   if (!status.has_completed) {
@@ -125,37 +142,53 @@ const AppContentWithBar = () => {
   const { t } = useTranslation()
 
   // Backend loading state
-  const [backendReady, setBackendReady] = useState(false)
+  const [statusLoaded, setStatusLoaded] = useState(false)
   const [fadingOut, setFadingOut] = useState(false)
   const [initError, setInitError] = useState<string | null>(null)
+  const statusLoadedRef = useRef(false)
+
+  // Handle status loaded callback
+  const handleStatusLoaded = useCallback(() => {
+    if (statusLoadedRef.current) {
+      return
+    }
+    statusLoadedRef.current = true
+
+    // Trigger fade-out animation first
+    setFadingOut(true)
+
+    // Switch to main app after fade-out completes
+    setTimeout(() => {
+      setStatusLoaded(true)
+    }, 300)
+  }, [])
 
   // Listen for backend-ready event
   useEffect(() => {
     // Timeout protection (30 seconds)
     const timeoutId = setTimeout(() => {
+      console.error('[AppContentWithBar] 30s timeout - backend-ready not received')
       setInitError(t('loading.timeout_error'))
     }, 30000)
 
-    let fadeTimerId: ReturnType<typeof setTimeout> | null = null
+    let handshakeCompleted = false
 
-    // Listen for backend-ready event
-    const unlistenPromise = listen('backend-ready', () => {
+    // Mark backend as ready when event is received
+    const markBackendReady = () => {
+      if (handshakeCompleted) {
+        return
+      }
+      handshakeCompleted = true
+
       clearTimeout(timeoutId)
+      // Don't set statusLoaded here - wait for onStatusLoaded callback from AppContent
+    }
 
-      // Trigger fade-out animation first
-      setFadingOut(true)
-
-      // Switch to main app after fade-out completes
-      fadeTimerId = setTimeout(() => {
-        setBackendReady(true)
-      }, 300)
-    })
+    // Register backend-ready listener
+    const unlistenPromise = listen('backend-ready', markBackendReady)
 
     return () => {
       clearTimeout(timeoutId)
-      if (fadeTimerId) {
-        clearTimeout(fadeTimerId)
-      }
       unlistenPromise.then(unlisten => unlisten?.()).catch(() => {})
     }
   }, [t])
@@ -172,18 +205,18 @@ const AppContentWithBar = () => {
     )
   }
 
-  // Show loading screen if backend not ready (no TitleBar during loading)
-  if (!backendReady) {
+  // Show loading screen if status not loaded yet (no TitleBar during loading)
+  if (!statusLoaded) {
     return (
       <LoadingScreen className={fadingOut ? 'opacity-0 transition-opacity duration-300' : ''} />
     )
   }
 
-  // Backend ready - show TitleBar and main content
+  // Status loaded - show TitleBar and main content
   return (
     <>
       <TitleBarWithSearch />
-      <AppContent />
+      <AppContent onStatusLoaded={handleStatusLoaded} />
     </>
   )
 }

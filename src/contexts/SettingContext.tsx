@@ -109,9 +109,17 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
     await saveSetting(updatedSetting)
   }
 
-  // 初始加载设置
+  // Wait for backend-ready event before loading settings
+  // This prevents blocking the initial render with an IPC call
   useEffect(() => {
-    loadSetting()
+    const unlistenPromise = listen('backend-ready', () => {
+      console.log('Backend ready, loading settings')
+      loadSetting()
+    })
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten?.()).catch(() => {})
+    }
   }, [])
 
   // 监听来自其他窗口的设置变更事件
