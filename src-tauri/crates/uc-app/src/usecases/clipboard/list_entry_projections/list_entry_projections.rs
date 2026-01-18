@@ -250,6 +250,14 @@ mod tests {
         ) -> Result<()> {
             unimplemented!()
         }
+
+        async fn update_blob_id_if_none(
+            &self,
+            _representation_id: &RepresentationId,
+            _blob_id: &uc_core::BlobId,
+        ) -> Result<bool> {
+            unimplemented!()
+        }
     }
 
     #[tokio::test]

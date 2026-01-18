@@ -11,7 +11,7 @@
 //! - Just parameter grouping / 仅用于参数打包
 
 use std::sync::Arc;
-use uc_core::ports::clipboard::{ClipboardRepresentationNormalizerPort, SelectionResolverPort};
+use uc_core::ports::clipboard::ClipboardRepresentationNormalizerPort;
 use uc_core::ports::*;
 
 /// Application dependency grouping (non-Builder, just parameter grouping)

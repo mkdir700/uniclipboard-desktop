@@ -6,7 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
 use uc_core::clipboard::{ClipboardEntry, PersistedClipboardRepresentation};
-use uc_core::ids::{EntryId, EventId, RepresentationId};
+use uc_core::ids::EntryId;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
     ClipboardSelectionRepositoryPort, SelectionResolverPort,

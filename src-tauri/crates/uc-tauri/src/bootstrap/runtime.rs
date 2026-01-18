@@ -543,7 +543,7 @@ impl ClipboardChangeHandler for AppRuntime {
             self.deps.clipboard_entry_repo.clone(),
             self.deps.clipboard_event_repo.clone(),
             self.deps.representation_policy.clone(),
-            self.deps.representation_materializer.clone(),
+            self.deps.representation_normalizer.clone(),
             self.deps.device_identity.clone(),
         );
 

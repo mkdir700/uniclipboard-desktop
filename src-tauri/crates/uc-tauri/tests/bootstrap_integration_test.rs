@@ -279,7 +279,7 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
     let _ = &deps.clipboard;
     let _ = &deps.clipboard_event_repo;
     let _ = &deps.representation_repo;
-    let _ = &deps.representation_materializer;
+    let _ = &deps.representation_normalizer;
     let _ = &deps.encryption;
     let _ = &deps.encryption_session;
     let _ = &deps.keyring;
@@ -290,7 +290,7 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
     let _ = &deps.network;
     let _ = &deps.blob_store;
     let _ = &deps.blob_repository;
-    let _ = &deps.blob_materializer;
+    let _ = &deps.blob_writer;
     let _ = &deps.settings;
     let _ = &deps.ui_port;
     let _ = &deps.autostart;
@@ -659,8 +659,8 @@ fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
     let _autostart = deps.autostart.clone();
     let _network = deps.network.clone();
     let _device_identity = deps.device_identity.clone();
-    let _representation_materializer = deps.representation_materializer.clone();
-    let _blob_materializer = deps.blob_materializer.clone();
+    let _representation_normalizer = deps.representation_normalizer.clone();
+    let _blob_writer = deps.blob_writer.clone();
     let _blob_store = deps.blob_store.clone();
     let _encryption_session = deps.encryption_session.clone();
 }

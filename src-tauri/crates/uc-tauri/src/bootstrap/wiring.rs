@@ -40,12 +40,9 @@ use uc_app::app_paths::AppPaths;
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
-use uc_core::ports::clipboard::{
-    ClipboardPayloadResolverPort, ClipboardRepresentationNormalizerPort, SelectionResolverPort,
-};
+use uc_core::ports::clipboard::ClipboardRepresentationNormalizerPort;
 use uc_core::ports::*;
 use uc_infra::clipboard::ClipboardRepresentationNormalizer;
-use uc_infra::clipboard::{ClipboardPayloadResolver, SelectionResolver};
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
 use uc_infra::db::mappers::{
@@ -809,7 +806,7 @@ mod tests {
                 let _ = &deps.network;
                 let _ = &deps.blob_store;
                 let _ = &deps.blob_repository;
-                let _ = &deps.blob_materializer;
+                let _ = &deps.blob_writer;
                 let _ = &deps.settings;
                 let _ = &deps.ui_port;
                 let _ = &deps.autostart;

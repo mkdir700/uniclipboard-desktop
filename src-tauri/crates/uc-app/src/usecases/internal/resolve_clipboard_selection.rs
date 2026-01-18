@@ -60,6 +60,5 @@ impl ResolveClipboardSelectionPayloadUseCase {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     // Add unit tests with mock ports
 }
