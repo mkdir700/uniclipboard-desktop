@@ -11,32 +11,25 @@ use tracing::{debug, info_span, Instrument};
 use uc_core::clipboard::PersistedClipboardRepresentation;
 use uc_core::ports::clipboard::ResolvedClipboardPayload;
 use uc_core::ports::{
-    BlobRepositoryPort, BlobStorePort, BlobWriterPort, ClipboardPayloadResolverPort,
+    BlobRepositoryPort, BlobWriterPort, ClipboardPayloadResolverPort,
     ClipboardRepresentationRepositoryPort, ContentHashPort,
 };
 
 /// Clipboard payload resolver implementation
-pub struct ClipboardPayloadResolver<R, B, BR, H>
-where
-    R: ClipboardRepresentationRepositoryPort,
-    B: BlobWriterPort,
-    BR: BlobRepositoryPort,
-    H: ContentHashPort,
-{
-    representation_repo: R,
-    blob_writer: B,
-    blob_repo: BR,
-    hasher: H,
+pub struct ClipboardPayloadResolver {
+    representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
+    blob_writer: Arc<dyn BlobWriterPort>,
+    blob_repo: Arc<dyn BlobRepositoryPort>,
+    hasher: Arc<dyn ContentHashPort>,
 }
 
-impl<R, B, BR, H> ClipboardPayloadResolver<R, B, BR, H>
-where
-    R: ClipboardRepresentationRepositoryPort,
-    B: BlobWriterPort,
-    BR: BlobRepositoryPort,
-    H: ContentHashPort,
-{
-    pub fn new(representation_repo: R, blob_writer: B, blob_repo: BR, hasher: H) -> Self {
+impl ClipboardPayloadResolver {
+    pub fn new(
+        representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
+        blob_writer: Arc<dyn BlobWriterPort>,
+        blob_repo: Arc<dyn BlobRepositoryPort>,
+        hasher: Arc<dyn ContentHashPort>,
+    ) -> Self {
         Self {
             representation_repo,
             blob_writer,
@@ -47,13 +40,7 @@ where
 }
 
 #[async_trait]
-impl<R, B, BR, H> ClipboardPayloadResolverPort for ClipboardPayloadResolver<R, B, BR, H>
-where
-    R: ClipboardRepresentationRepositoryPort,
-    B: BlobWriterPort,
-    BR: BlobRepositoryPort,
-    H: ContentHashPort,
-{
+impl ClipboardPayloadResolverPort for ClipboardPayloadResolver {
     async fn resolve(
         &self,
         representation: &PersistedClipboardRepresentation,
@@ -134,13 +121,7 @@ where
     }
 }
 
-impl<R, B, BR, H> ClipboardPayloadResolver<R, B, BR, H>
-where
-    R: ClipboardRepresentationRepositoryPort,
-    B: BlobWriterPort,
-    BR: BlobRepositoryPort,
-    H: ContentHashPort,
-{
+impl ClipboardPayloadResolver {
     /// Load raw bytes for a representation.
     ///
     /// This is a helper for the lazy write case when we need to materialize

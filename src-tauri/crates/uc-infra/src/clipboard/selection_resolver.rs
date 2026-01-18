@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
+use std::sync::Arc;
 use uc_core::clipboard::{ClipboardEntry, PersistedClipboardRepresentation};
 use uc_core::ids::{EntryId, EventId, RepresentationId};
 use uc_core::ports::{
@@ -12,24 +13,18 @@ use uc_core::ports::{
 };
 
 /// Selection resolver implementation
-pub struct SelectionResolver<E, S, R>
-where
-    E: ClipboardEntryRepositoryPort,
-    S: ClipboardSelectionRepositoryPort,
-    R: ClipboardRepresentationRepositoryPort,
-{
-    entry_repo: E,
-    selection_repo: S,
-    representation_repo: R,
+pub struct SelectionResolver {
+    entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
+    selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
+    representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
 }
 
-impl<E, S, R> SelectionResolver<E, S, R>
-where
-    E: ClipboardEntryRepositoryPort,
-    S: ClipboardSelectionRepositoryPort,
-    R: ClipboardRepresentationRepositoryPort,
-{
-    pub fn new(entry_repo: E, selection_repo: S, representation_repo: R) -> Self {
+impl SelectionResolver {
+    pub fn new(
+        entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
+        selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
+        representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
+    ) -> Self {
         Self {
             entry_repo,
             selection_repo,
@@ -39,12 +34,7 @@ where
 }
 
 #[async_trait]
-impl<E, S, R> SelectionResolverPort for SelectionResolver<E, S, R>
-where
-    E: ClipboardEntryRepositoryPort,
-    S: ClipboardSelectionRepositoryPort,
-    R: ClipboardRepresentationRepositoryPort,
-{
+impl SelectionResolverPort for SelectionResolver {
     async fn resolve_selection(
         &self,
         entry_id: &EntryId,
