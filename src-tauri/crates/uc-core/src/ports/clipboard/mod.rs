@@ -8,6 +8,7 @@ mod representation_materializer;
 mod representation_normalizer;
 mod representation_repository;
 mod select_representation_policy;
+mod selection_resolver;
 
 pub use clipboard_entry_repository::ClipboardEntryRepositoryPort;
 pub use clipboard_event_repository::ClipboardEventRepositoryPort;
@@ -19,3 +20,4 @@ pub use representation_materializer::ClipboardRepresentationMaterializerPort;
 pub use representation_normalizer::ClipboardRepresentationNormalizerPort;
 pub use representation_repository::ClipboardRepresentationRepositoryPort;
 pub use select_representation_policy::SelectRepresentationPolicyPort;
+pub use selection_resolver::SelectionResolverPort;
