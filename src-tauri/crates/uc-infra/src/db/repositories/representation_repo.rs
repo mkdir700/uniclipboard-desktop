@@ -104,6 +104,30 @@ where
             Ok(())
         })
     }
+
+    async fn update_blob_id_if_none(
+        &self,
+        representation_id: &RepresentationId,
+        blob_id: &BlobId,
+    ) -> Result<bool> {
+        let rep_id_str = representation_id.to_string();
+        let blob_id_str = blob_id.to_string();
+
+        let updated_rows = self.executor.run(|conn| {
+            let result: diesel::result::QueryResult<usize> = diesel::update(
+                clipboard_snapshot_representation::table.filter(
+                    clipboard_snapshot_representation::id
+                        .eq(&rep_id_str)
+                        .and(clipboard_snapshot_representation::blob_id.is_null()),
+                ),
+            )
+            .set(clipboard_snapshot_representation::blob_id.eq(&blob_id_str))
+            .execute(conn);
+            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
+
+        Ok(updated_rows > 0)
+    }
 }
 
 #[cfg(test)]

@@ -105,6 +105,17 @@ impl ClipboardRepresentationRepositoryPort for DecryptingClipboardRepresentation
         // No encryption needed for blob_id update - just delegate
         self.inner.update_blob_id(representation_id, blob_id).await
     }
+
+    async fn update_blob_id_if_none(
+        &self,
+        representation_id: &RepresentationId,
+        blob_id: &BlobId,
+    ) -> Result<bool> {
+        // No encryption needed for blob_id update - just delegate
+        self.inner
+            .update_blob_id_if_none(representation_id, blob_id)
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -173,6 +184,24 @@ mod tests {
                 }
             }
             Ok(())
+        }
+
+        async fn update_blob_id_if_none(
+            &self,
+            representation_id: &RepresentationId,
+            blob_id: &BlobId,
+        ) -> Result<bool> {
+            // Update blob_id only if it's None
+            let mut updated = false;
+            for (_, rep) in self.storage.lock().unwrap().iter_mut() {
+                if rep.id == *representation_id {
+                    if rep.blob_id.is_none() {
+                        rep.blob_id = Some(blob_id.clone());
+                        updated = true;
+                    }
+                }
+            }
+            Ok(updated)
         }
     }
 
