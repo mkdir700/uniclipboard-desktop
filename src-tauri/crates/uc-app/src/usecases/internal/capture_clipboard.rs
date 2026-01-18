@@ -7,9 +7,8 @@ use tracing::{debug, info, info_span, Instrument};
 
 use uc_core::ids::{EntryId, EventId};
 use uc_core::ports::{
-    ClipboardEntryRepositoryPort, ClipboardEventWriterPort,
-    ClipboardRepresentationMaterializerPort, DeviceIdentityPort, PlatformClipboardPort,
-    SelectRepresentationPolicyPort,
+    ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
+    DeviceIdentityPort, PlatformClipboardPort, SelectRepresentationPolicyPort,
 };
 use uc_core::{
     ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, SystemClipboardSnapshot,
@@ -22,13 +21,13 @@ use uc_core::{
 /// # Behavior / 行为
 /// - 1. Capture raw snapshot from platform clipboard (事实)
 /// - 2. Generate ClipboardEvent with timestamp (时间点)
-/// - 3. Persist snapshot and representations (原始证据)
+/// - 3. Normalize snapshot representations (类型转换)
 /// - 4. Apply representation selection policy (策略决策)
 /// - 5. Create ClipboardEntry for user consumption (用户可见结果)
 ///
 /// - 1. 从平台剪贴板获取原始快照（事实）
 /// - 2. 生成带时间戳的剪贴板事件（时间点）
-/// - 3. 持久化快照和表示形式（原始证据）
+/// - 3. 规范化快照表示形式（类型转换）
 /// - 4. 应用表示形式选择策略（策略决策）
 /// - 5. 为用户消费创建剪贴板条目（用户可见结果）
 ///
@@ -44,7 +43,7 @@ pub struct CaptureClipboardUseCase {
     entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     event_writer: Arc<dyn ClipboardEventWriterPort>,
     representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
-    representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,
+    representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
     device_identity: Arc<dyn DeviceIdentityPort>,
 }
 
@@ -58,21 +57,21 @@ impl CaptureClipboardUseCase {
     /// - `entry_repo`: Clipboard entry persistence
     /// - `event_writer`: Event and representation storage
     /// - `representation_policy`: Selection strategy for optimal representation
-    /// - `representation_materializer`: Binary data materialization
+    /// - `representation_normalizer`: Type conversion from platform to domain
     /// - `device_identity`: Current device identification
     ///
     /// - `platform_clipboard_port`: 平台剪贴板访问
     /// - `entry_repo`: 剪贴板条目持久化
     /// - `event_writer`: 事件和表示形式存储
     /// - `representation_policy`: 最佳表示形式的选择策略
-    /// - `representation_materializer`: 二进制数据物化
+    /// - `representation_normalizer`: 从平台到域的类型转换
     /// - `device_identity`: 当前设备标识
     pub fn new(
         platform_clipboard_port: Arc<dyn PlatformClipboardPort>,
         entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
         event_writer: Arc<dyn ClipboardEventWriterPort>,
         representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
-        representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,
+        representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
         device_identity: Arc<dyn DeviceIdentityPort>,
     ) -> Self {
         Self {
@@ -80,7 +79,7 @@ impl CaptureClipboardUseCase {
             entry_repo,
             event_writer,
             representation_policy,
-            representation_materializer,
+            representation_normalizer,
             device_identity,
         }
     }
@@ -131,15 +130,15 @@ impl CaptureClipboardUseCase {
                 snapshot_hash,
             );
 
-            // 3. event_repo.insert_event
-            let materialized_futures: Vec<_> = snapshot
+            // 3. Normalize representations
+            let normalized_futures: Vec<_> = snapshot
                 .representations
                 .iter()
-                .map(|rep| self.representation_materializer.materialize(rep))
+                .map(|rep| self.representation_normalizer.normalize(rep))
                 .collect();
-            let materialized_reps = try_join_all(materialized_futures).await?;
+            let normalized_reps = try_join_all(normalized_futures).await?;
             self.event_writer
-                .insert_event(&new_event, &materialized_reps)
+                .insert_event(&new_event, &normalized_reps)
                 .await?;
 
             // 4. policy.select(snapshot)
@@ -225,15 +224,15 @@ impl CaptureClipboardUseCase {
                 snapshot_hash,
             );
 
-            // 3. event_repo.insert_event
-            let materialized_futures: Vec<_> = snapshot
+            // 3. Normalize representations
+            let normalized_futures: Vec<_> = snapshot
                 .representations
                 .iter()
-                .map(|rep| self.representation_materializer.materialize(rep))
+                .map(|rep| self.representation_normalizer.normalize(rep))
                 .collect();
-            let materialized_reps = try_join_all(materialized_futures).await?;
+            let normalized_reps = try_join_all(normalized_futures).await?;
             self.event_writer
-                .insert_event(&new_event, &materialized_reps)
+                .insert_event(&new_event, &normalized_reps)
                 .await?;
 
             // 4. policy.select(snapshot)
