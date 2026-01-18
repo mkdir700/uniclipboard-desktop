@@ -76,6 +76,8 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     let filter_directives = [
         if is_dev { "debug" } else { "info" },
         "libp2p_mdns=warn", // Filter noisy proxy errors
+        "wry=off",          // Filter Tauri internal spans (custom_protocol)
+        "ipc::request=off", // Filter Tauri IPC handler spans
         if is_dev {
             "uc_platform=debug"
         } else {
