@@ -4,6 +4,7 @@ mod clipboard_selection_repository;
 mod local_clipboard;
 mod platform_clipboard;
 mod representation_materializer;
+mod representation_normalizer;
 mod representation_repository;
 mod select_representation_policy;
 
@@ -13,5 +14,6 @@ pub use clipboard_selection_repository::ClipboardSelectionRepositoryPort;
 pub use local_clipboard::SystemClipboardPort;
 pub use platform_clipboard::PlatformClipboardPort;
 pub use representation_materializer::ClipboardRepresentationMaterializerPort;
+pub use representation_normalizer::ClipboardRepresentationNormalizerPort;
 pub use representation_repository::ClipboardRepresentationRepositoryPort;
 pub use select_representation_policy::SelectRepresentationPolicyPort;
