@@ -40,8 +40,12 @@ use uc_app::app_paths::AppPaths;
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
+use uc_core::ports::clipboard::{
+    ClipboardPayloadResolverPort, ClipboardRepresentationNormalizerPort, SelectionResolverPort,
+};
 use uc_core::ports::*;
-use uc_infra::clipboard::ClipboardRepresentationMaterializer;
+use uc_infra::clipboard::ClipboardRepresentationNormalizer;
+use uc_infra::clipboard::{ClipboardPayloadResolver, SelectionResolver};
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
 use uc_infra::db::mappers::{
@@ -67,8 +71,7 @@ use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
-    PlaceholderAutostartPort, PlaceholderBlobMaterializerPort, PlaceholderNetworkPort,
-    PlaceholderUiPort,
+    PlaceholderAutostartPort, PlaceholderBlobWriterPort, PlaceholderNetworkPort, PlaceholderUiPort,
 };
 use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::clipboard::LocalClipboard;
@@ -203,11 +206,11 @@ struct PlatformLayer {
     // Device identity / 设备身份（占位符）
     device_identity: Arc<dyn DeviceIdentityPort>,
 
-    // Clipboard representation materializer / 剪贴板表示物化器（占位符）
-    representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,
+    // Clipboard representation normalizer / 剪贴板表示规范化器
+    representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
 
-    // Blob materializer / Blob 物化器（占位符）
-    blob_materializer: Arc<dyn BlobMaterializerPort>,
+    // Blob writer / Blob 写入器（占位符）
+    blob_writer: Arc<dyn BlobWriterPort>,
 
     // Blob store / Blob 存储（占位符）
     blob_store: Arc<dyn BlobStorePort>,
@@ -412,18 +415,17 @@ fn create_platform_layer(
     // Create clipboard storage config
     let storage_config = Arc::new(ClipboardStorageConfig::defaults());
 
-    // Create clipboard representation materializer (real implementation)
-    // 创建剪贴板表示物化器（真实实现）
-    let representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort> =
-        Arc::new(ClipboardRepresentationMaterializer::new(storage_config));
+    // Create clipboard representation normalizer (real implementation)
+    // 创建剪贴板表示规范化器（真实实现）
+    let representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort> =
+        Arc::new(ClipboardRepresentationNormalizer::new(storage_config));
 
     // Create placeholder implementations for unimplemented ports
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
     let network: Arc<dyn NetworkPort> = Arc::new(PlaceholderNetworkPort);
-    let blob_materializer: Arc<dyn BlobMaterializerPort> =
-        Arc::new(PlaceholderBlobMaterializerPort);
+    let blob_writer: Arc<dyn BlobWriterPort> = Arc::new(PlaceholderBlobWriterPort);
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
 
@@ -444,8 +446,8 @@ fn create_platform_layer(
         autostart,
         network,
         device_identity,
-        representation_materializer,
-        blob_materializer,
+        representation_normalizer,
+        blob_writer,
         blob_store,
         encryption_session,
         watcher_control,
@@ -673,7 +675,7 @@ pub fn wire_dependencies(
         clipboard_entry_repo: infra.clipboard_entry_repo,
         clipboard_event_repo: encrypting_event_writer,
         representation_repo: decrypting_rep_repo,
-        representation_materializer: platform.representation_materializer,
+        representation_normalizer: platform.representation_normalizer,
         selection_repo: infra.selection_repo,
         representation_policy: Arc::new(SelectRepresentationPolicyV1::new()),
 
@@ -699,7 +701,7 @@ pub fn wire_dependencies(
         // Storage dependencies / 存储依赖
         blob_store: encrypted_blob_store,
         blob_repository: infra.blob_repository,
-        blob_materializer: platform.blob_materializer,
+        blob_writer: platform.blob_writer,
 
         // Settings dependencies / 设置依赖
         settings: infra.settings_repo,
@@ -796,14 +798,14 @@ mod tests {
                 let _ = &deps.clipboard;
                 let _ = &deps.clipboard_event_repo;
                 let _ = &deps.representation_repo;
-                let _ = &deps.representation_materializer;
+                let _ = &deps.representation_normalizer;
                 let _ = &deps.encryption;
                 let _ = &deps.encryption_session;
                 let _ = &deps.keyring;
                 let _ = &deps.key_material;
                 let _ = &deps.watcher_control;
                 let _ = &deps.device_repo;
-                let _ = &deps.device_identity;
+                let _ = &&deps.device_identity;
                 let _ = &deps.network;
                 let _ = &deps.blob_store;
                 let _ = &deps.blob_repository;
@@ -925,10 +927,9 @@ mod tests {
                 let _autostart: &Arc<dyn AutostartPort> = &layer.autostart;
                 let _network: &Arc<dyn NetworkPort> = &layer.network;
                 let _device_identity: &Arc<dyn DeviceIdentityPort> = &layer.device_identity;
-                let _representation_materializer: &Arc<
-                    dyn ClipboardRepresentationMaterializerPort,
-                > = &layer.representation_materializer;
-                let _blob_materializer: &Arc<dyn BlobMaterializerPort> = &layer.blob_materializer;
+                let _representation_normalizer: &Arc<dyn ClipboardRepresentationNormalizerPort> =
+                    &layer.representation_normalizer;
+                let _blob_writer: &Arc<dyn BlobWriterPort> = &layer.blob_writer;
                 let _blob_store: &Arc<dyn BlobStorePort> = &layer.blob_store;
                 let _encryption_session: &Arc<dyn EncryptionSessionPort> =
                     &layer.encryption_session;
