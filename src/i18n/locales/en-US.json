@@ -2,6 +2,11 @@
   "common": {
     "loading": "Loading..."
   },
+  "loading": {
+    "initializing": "Initializing...",
+    "error_title": "Initialization Failed",
+    "timeout_error": "Initialization timeout. Please restart the application."
+  },
   "nav": {
     "dashboard": "Dashboard",
     "devices": "Devices",

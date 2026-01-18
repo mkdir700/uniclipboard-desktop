@@ -2,6 +2,11 @@
   "common": {
     "loading": "加载中..."
   },
+  "loading": {
+    "initializing": "正在初始化...",
+    "error_title": "初始化失败",
+    "timeout_error": "初始化超时，请重启应用"
+  },
   "nav": {
     "dashboard": "仪表板",
     "devices": "设备管理",
