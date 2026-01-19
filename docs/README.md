@@ -22,7 +22,7 @@ UniClipboard Desktop is a cross-platform clipboard synchronization tool built wi
 
 **For Reference:**
 
-- [DeepWiki Documentation](https://deepwiki.com/mkdir700/uniclipboard-desktop) - Interactive diagrams and flows
+- [DeepWiki Documentation](https://deepwiki.com/UniClipboard/UniClipboard) - Interactive diagrams and flows
 - [Archive](archive/) - Historical planning documents
 
 ## Architecture at a Glance
@@ -154,6 +154,6 @@ When updating documentation:
 
 ## Additional Resources
 
-- **Project DeepWiki**: https://deepwiki.com/mkdir700/uniclipboard-desktop (interactive diagrams)
-- **GitHub Repository**: https://github.com/mkdir700/uniclipboard-desktop
+- **Project DeepWiki**: https://deepwiki.com/UniClipboard/UniClipboard (interactive diagrams)
+- **GitHub Repository**: https://github.com/UniClipboard/UniClipboard
 - **CLAUDE.md**: Project-specific instructions for Claude Code (in repository root)

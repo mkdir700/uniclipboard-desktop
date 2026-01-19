@@ -429,7 +429,7 @@ After each migration phase, use this checklist to verify architectural health:
 
 ### Project Documentation / 项目文档
 
-- **Project DeepWiki**: https://deepwiki.com/mkdir700/uniclipboard-desktop
+- **Project DeepWiki**: https://deepwiki.com/UniClipboard/UniClipboard
 - **Hexagonal Architecture**: Alistair Cockburn's Ports and Adapters pattern
 - **Clean Architecture**: Robert C. Martin's layered architecture principles
 
