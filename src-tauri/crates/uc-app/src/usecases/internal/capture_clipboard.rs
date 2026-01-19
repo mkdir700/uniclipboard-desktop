@@ -6,10 +6,10 @@ use futures::future::try_join_all;
 use tokio::sync::mpsc;
 use tracing::{debug, info, info_span, Instrument};
 
-use uc_core::ids::{EntryId, EventId, RepresentationId};
+use uc_core::ids::{EntryId, EventId};
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
-    DeviceIdentityPort, PlatformClipboardPort, SelectRepresentationPolicyPort,
+    DeviceIdentityPort, SelectRepresentationPolicyPort,
 };
 use uc_core::{
     ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, PayloadAvailability,
@@ -23,13 +23,13 @@ use uc_infra::clipboard::RepresentationCache;
 /// 捕获剪贴板内容并创建持久化条目。
 ///
 /// # Behavior / 行为
-/// - 1. Capture raw snapshot from platform clipboard (事实)
+/// - 1. Use the provided snapshot from the platform layer (事实)
 /// - 2. Generate ClipboardEvent with timestamp (时间点)
 /// - 3. Normalize snapshot representations (类型转换)
 /// - 4. Apply representation selection policy (策略决策)
 /// - 5. Create ClipboardEntry for user consumption (用户可见结果)
 ///
-/// - 1. 从平台剪贴板获取原始快照（事实）
+/// - 1. 使用平台层提供的快照（事实）
 /// - 2. 生成带时间戳的剪贴板事件（时间点）
 /// - 3. 规范化快照表示形式（类型转换）
 /// - 4. 应用表示形式选择策略（策略决策）
@@ -43,7 +43,6 @@ use uc_infra::clipboard::RepresentationCache;
 /// 此用例使用 **trait 对象** (`Arc<dyn Port>`) 而不是泛型类型参数。
 /// 这是 uc-app 层用例的推荐模式。
 pub struct CaptureClipboardUseCase {
-    platform_clipboard_port: Arc<dyn PlatformClipboardPort>,
     entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     event_writer: Arc<dyn ClipboardEventWriterPort>,
     representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
@@ -51,7 +50,6 @@ pub struct CaptureClipboardUseCase {
     device_identity: Arc<dyn DeviceIdentityPort>,
     representation_cache: Arc<RepresentationCache>,
     spool_tx: mpsc::Sender<SpoolRequest>,
-    worker_tx: mpsc::Sender<RepresentationId>,
 }
 
 impl CaptureClipboardUseCase {
@@ -60,7 +58,6 @@ impl CaptureClipboardUseCase {
     /// 创建包含所有必需依赖项的新 CaptureClipboardUseCase 实例。
     ///
     /// # Parameters / 参数
-    /// - `platform_clipboard_port`: Platform clipboard access
     /// - `entry_repo`: Clipboard entry persistence
     /// - `event_writer`: Event and representation storage
     /// - `representation_policy`: Selection strategy for optimal representation
@@ -68,9 +65,7 @@ impl CaptureClipboardUseCase {
     /// - `device_identity`: Current device identification
     /// - `representation_cache`: Cache for representation metadata
     /// - `spool_tx`: Sender for disk spool requests
-    /// - `worker_tx`: Sender for background worker notifications
     ///
-    /// - `platform_clipboard_port`: 平台剪贴板访问
     /// - `entry_repo`: 剪贴板条目持久化
     /// - `event_writer`: 事件和表示形式存储
     /// - `representation_policy`: 最佳表示形式的选择策略
@@ -78,9 +73,7 @@ impl CaptureClipboardUseCase {
     /// - `device_identity`: 当前设备标识
     /// - `representation_cache`: 表示形式元数据缓存
     /// - `spool_tx`: 磁盘假脱机请求发送器
-    /// - `worker_tx`: 后台工作线程通知发送器
     pub fn new(
-        platform_clipboard_port: Arc<dyn PlatformClipboardPort>,
         entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
         event_writer: Arc<dyn ClipboardEventWriterPort>,
         representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
@@ -88,10 +81,8 @@ impl CaptureClipboardUseCase {
         device_identity: Arc<dyn DeviceIdentityPort>,
         representation_cache: Arc<RepresentationCache>,
         spool_tx: mpsc::Sender<SpoolRequest>,
-        worker_tx: mpsc::Sender<RepresentationId>,
     ) -> Self {
         Self {
-            platform_clipboard_port,
             entry_repo,
             event_writer,
             representation_policy,
@@ -99,96 +90,7 @@ impl CaptureClipboardUseCase {
             device_identity,
             representation_cache,
             spool_tx,
-            worker_tx,
         }
-    }
-
-    /// Execute the clipboard capture workflow.
-    ///
-    /// 执行剪贴板捕获工作流。
-    ///
-    /// # Behavior / 行为
-    /// - Captures current clipboard state from platform
-    /// - Creates event and materializes all representations
-    /// - Applies selection policy to determine optimal representation
-    /// - Persists both event evidence and user-facing entry
-    ///
-    /// - 从平台捕获当前剪贴板状态
-    /// - 创建事件并物化所有表示形式
-    /// - 应用选择策略确定最佳表示形式
-    /// - 持久化事件证据和用户可见条目
-    ///
-    /// # Returns / 返回值
-    /// - `EventId` of the created capture event
-    /// - 创建的捕获事件的 `EventId`
-    pub async fn execute(&self) -> Result<EventId> {
-        let span = info_span!(
-            "usecase.capture_clipboard.execute",
-            source = "platform_clipboard",
-        );
-        async {
-            info!("Starting clipboard capture from platform");
-
-            let snapshot = self.platform_clipboard_port.read_snapshot()?;
-
-            debug!(
-                representations = snapshot.representations.len(),
-                "Captured system snapshot"
-            );
-
-            let event_id = EventId::new();
-            let captured_at_ms = snapshot.ts_ms;
-            let source_device = self.device_identity.current_device_id();
-            // NOTE: snapshot_hash hashes raw representation bytes; this is CPU-bound for large payloads.
-            let snapshot_hash = snapshot.snapshot_hash();
-
-            // 1. 生成 event + snapshot representations
-            let new_event = ClipboardEvent::new(
-                event_id.clone(),
-                captured_at_ms,
-                source_device,
-                snapshot_hash,
-            );
-
-            // 3. Normalize representations
-            let normalized_futures: Vec<_> = snapshot
-                .representations
-                .iter()
-                .map(|rep| self.representation_normalizer.normalize(rep))
-                .collect();
-            let normalized_reps = try_join_all(normalized_futures).await?;
-            self.event_writer
-                .insert_event(&new_event, &normalized_reps)
-                .await?;
-
-            // 4. policy.select(snapshot)
-            let entry_id = EntryId::new();
-            let selection = self.representation_policy.select(&snapshot)?;
-            let new_selection = ClipboardSelectionDecision::new(entry_id.clone(), selection);
-
-            // 5. entry_repo.insert_entry
-            let created_at_ms = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .map_err(|e| anyhow::anyhow!("Failed to get system time: {}", e))?
-                .as_millis() as i64;
-            let total_size = snapshot.total_size_bytes();
-
-            let new_entry = ClipboardEntry::new(
-                entry_id.clone(),
-                event_id.clone(),
-                created_at_ms,
-                Self::generate_title(&snapshot),
-                total_size,
-            );
-            self.entry_repo
-                .save_entry_and_selection(&new_entry, &new_selection)
-                .await?;
-
-            info!(event_id = %event_id, "Clipboard capture completed");
-            Ok(event_id)
-        }
-        .instrument(span)
-        .await
     }
 
     /// Execute the clipboard capture workflow with a pre-captured snapshot.
@@ -219,10 +121,7 @@ impl CaptureClipboardUseCase {
     /// - 从剪贴板变化回调调用时（快照已读取）
     /// - Avoids redundant system clipboard reads
     /// - 避免重复读取系统剪贴板
-    pub async fn execute_with_snapshot(
-        &self,
-        snapshot: SystemClipboardSnapshot,
-    ) -> Result<EventId> {
+    pub async fn execute(&self, snapshot: SystemClipboardSnapshot) -> Result<EventId> {
         let span = info_span!(
             "usecase.capture_clipboard.execute",
             source = "callback",
@@ -267,6 +166,13 @@ impl CaptureClipboardUseCase {
                             .await;
 
                         // Queue spool write (try_send, don't await)
+                        // TODO(clipboard-spool): If try_send fails, the request is dropped and the
+                        // staged payload may never be materialized (cache eviction => data loss).
+                        // Decide on a non-blocking backpressure strategy and ensure worker/spool
+                        // notification is guaranteed.
+                        // TODO(clipboard-spool): 若 try_send 失败，请求会被丢弃，
+                        // 暂存数据可能永远无法物化（缓存被驱逐后会丢数据）。
+                        // 需要明确非阻塞背压策略，并确保 worker/spool 通知可达。
                         let _ = self.spool_tx.try_send(SpoolRequest {
                             rep_id: rep.id.clone(),
                             bytes: observed.bytes.clone(),

@@ -20,12 +20,10 @@ use uc_core::ids::{EntryId, EventId, FormatId, RepresentationId};
 use uc_core::ports::BlobWriterPort;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
-    ClipboardRepresentationRepositoryPort, DeviceIdentityPort, PlatformClipboardPort,
-    SelectRepresentationPolicyPort,
+    ClipboardRepresentationRepositoryPort, DeviceIdentityPort, SelectRepresentationPolicyPort,
 };
 use uc_core::DeviceId;
 use uc_core::{Blob, BlobId, ContentHash, MimeType};
-use uc_infra::clipboard::spooler_task::SpoolRequest;
 use uc_infra::clipboard::{
     BackgroundBlobWorker, ClipboardRepresentationNormalizer, RepresentationCache, SpoolManager,
 };
@@ -41,17 +39,6 @@ fn init_tracing() {
             .with_test_writer()
             .try_init();
     });
-}
-
-struct DummyClipboard;
-
-#[async_trait::async_trait]
-impl PlatformClipboardPort for DummyClipboard {
-    fn read_snapshot(&self) -> Result<SystemClipboardSnapshot> {
-        Err(anyhow!(
-            "DummyClipboard should not be used in execute_with_snapshot"
-        ))
-    }
 }
 
 struct InMemoryDeviceIdentity;
@@ -317,7 +304,6 @@ async fn stress_test_100_large_images() -> Result<()> {
     });
 
     let usecase = CaptureClipboardUseCase::new(
-        Arc::new(DummyClipboard),
         entry_repo,
         event_writer,
         policy,
@@ -325,7 +311,6 @@ async fn stress_test_100_large_images() -> Result<()> {
         Arc::new(InMemoryDeviceIdentity),
         rep_cache.clone(),
         spool_tx,
-        worker_tx,
     );
 
     let mut rep_ids = Vec::new();
@@ -341,7 +326,7 @@ async fn stress_test_100_large_images() -> Result<()> {
     let mut total_capture_ms: u128 = 0;
     for (idx, snapshot) in snapshots.into_iter().enumerate() {
         let capture_start = Instant::now();
-        usecase.execute_with_snapshot(snapshot).await?;
+        usecase.execute(snapshot).await?;
         let capture_elapsed = capture_start.elapsed();
         total_capture_ms = total_capture_ms.saturating_add(capture_elapsed.as_millis());
         if (idx + 1) % 5 == 0 {

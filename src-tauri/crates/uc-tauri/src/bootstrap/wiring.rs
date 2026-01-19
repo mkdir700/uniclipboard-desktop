@@ -814,13 +814,13 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
     let hasher = deps.hash.clone();
 
     async_runtime::spawn(async move {
-        let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx);
+        let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx.clone());
         match scanner.scan_and_recover().await {
             Ok(recovered) => info!("Recovered {} representations from spool", recovered),
             Err(err) => warn!(error = %err, "Spool scan failed; continuing startup"),
         }
 
-        let spooler = SpoolerTask::new(spool_rx, spool_manager.clone(), worker_tx.clone());
+        let spooler = SpoolerTask::new(spool_rx, spool_manager.clone(), worker_tx);
         async_runtime::spawn(async move {
             spooler.run().await;
             warn!("SpoolerTask stopped");

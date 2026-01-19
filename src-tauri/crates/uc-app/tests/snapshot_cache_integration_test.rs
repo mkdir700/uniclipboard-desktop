@@ -21,8 +21,7 @@ use uc_core::ids::{EntryId, EventId, FormatId, RepresentationId};
 use uc_core::ports::BlobWriterPort;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
-    ClipboardRepresentationRepositoryPort, DeviceIdentityPort, PlatformClipboardPort,
-    SelectRepresentationPolicyPort,
+    ClipboardRepresentationRepositoryPort, DeviceIdentityPort, SelectRepresentationPolicyPort,
 };
 use uc_core::DeviceId;
 use uc_core::{Blob, BlobId, ContentHash, MimeType};
@@ -32,17 +31,6 @@ use uc_infra::clipboard::{
 };
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::security::Blake3Hasher;
-
-struct DummyClipboard;
-
-#[async_trait::async_trait]
-impl PlatformClipboardPort for DummyClipboard {
-    fn read_snapshot(&self) -> Result<SystemClipboardSnapshot> {
-        Err(anyhow!(
-            "DummyClipboard should not be used in execute_with_snapshot"
-        ))
-    }
-}
 
 struct InMemoryDeviceIdentity;
 
@@ -287,7 +275,6 @@ async fn test_capture_does_not_block_when_queues_full() -> Result<()> {
     worker_tx.try_send(RepresentationId::new())?;
 
     let usecase = CaptureClipboardUseCase::new(
-        Arc::new(DummyClipboard),
         entry_repo,
         event_writer,
         policy,
@@ -295,14 +282,9 @@ async fn test_capture_does_not_block_when_queues_full() -> Result<()> {
         Arc::new(InMemoryDeviceIdentity),
         rep_cache.clone(),
         spool_tx,
-        worker_tx,
     );
 
-    timeout(
-        Duration::from_millis(200),
-        usecase.execute_with_snapshot(snapshot),
-    )
-    .await??;
+    timeout(Duration::from_millis(200), usecase.execute(snapshot)).await??;
 
     let cached = rep_cache.get(&rep_id).await;
     assert_eq!(cached, Some(bytes));
@@ -355,7 +337,6 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
     });
 
     let usecase = CaptureClipboardUseCase::new(
-        Arc::new(DummyClipboard),
         entry_repo,
         event_writer,
         policy,
@@ -363,10 +344,9 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
         Arc::new(InMemoryDeviceIdentity),
         rep_cache.clone(),
         spool_tx,
-        worker_tx,
     );
 
-    usecase.execute_with_snapshot(snapshot).await?;
+    usecase.execute(snapshot).await?;
 
     let deadline = Duration::from_secs(2);
     let mut elapsed = Duration::from_millis(0);
