@@ -264,6 +264,7 @@ async fn stress_test_100_large_images() -> Result<()> {
     init_tracing();
     let config = Arc::new(ClipboardStorageConfig {
         inline_threshold_bytes: 16,
+        ..ClipboardStorageConfig::defaults()
     });
     let normalizer: Arc<dyn ClipboardRepresentationNormalizerPort> =
         Arc::new(ClipboardRepresentationNormalizer::new(config));

@@ -425,6 +425,7 @@ fn create_platform_layer(
     encryption: Arc<dyn EncryptionPort>,
     blob_repository: Arc<dyn BlobRepositoryPort>,
     clock: Arc<dyn ClockPort>,
+    storage_config: Arc<ClipboardStorageConfig>,
 ) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
@@ -443,9 +444,6 @@ fn create_platform_layer(
     // 创建 blob 存储（基于文件系统）
     let blob_store_dir = config_dir.join("blobs");
     let blob_store: Arc<dyn BlobStorePort> = Arc::new(FilesystemBlobStore::new(blob_store_dir));
-
-    // Create clipboard storage config
-    let storage_config = Arc::new(ClipboardStorageConfig::defaults());
 
     // Create clipboard representation normalizer (real implementation)
     // 创建剪贴板表示规范化器（真实实现）
@@ -690,6 +688,7 @@ pub fn wire_dependencies(
 
     // Step 3: Create platform layer implementations
     // 步骤 3：创建平台层实现
+    let storage_config = Arc::new(ClipboardStorageConfig::defaults());
     let platform = create_platform_layer(
         keyring,
         &vault_path,
@@ -697,6 +696,7 @@ pub fn wire_dependencies(
         infra.encryption.clone(),
         infra.blob_repository.clone(),
         infra.clock.clone(),
+        storage_config.clone(),
     )?;
 
     // Step 3.5: Wrap ports with encryption decorators
@@ -722,12 +722,15 @@ pub fn wire_dependencies(
     // 步骤 3.6：创建后台处理组件
 
     // Create representation cache
-    let representation_cache = Arc::new(RepresentationCache::new(1000, 100_000_000));
+    let representation_cache = Arc::new(RepresentationCache::new(
+        storage_config.cache_max_entries,
+        storage_config.cache_max_bytes,
+    ));
 
     // Create spool manager
-    let spool_dir = vault_path.join("spool");
+    let spool_dir = paths.cache_dir.join("spool");
     let spool_manager = Arc::new(
-        SpoolManager::new(spool_dir.clone(), 1_000_000_000)
+        SpoolManager::new(spool_dir.clone(), storage_config.spool_max_bytes)
             .map_err(|e| WiringError::BlobStorageInit(format!("Failed to create spool: {}", e)))?,
     );
 
@@ -1054,6 +1057,7 @@ mod tests {
             BlobRowMapper,
         ));
         let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
+        let storage_config = Arc::new(ClipboardStorageConfig::defaults());
 
         let result = create_platform_layer(
             keyring,
@@ -1062,6 +1066,7 @@ mod tests {
             encryption,
             blob_repository,
             clock,
+            storage_config,
         );
 
         match result {

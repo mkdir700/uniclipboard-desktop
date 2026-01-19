@@ -214,6 +214,7 @@ mod tests {
         let large_image_data = vec![0u8; 20 * 1024]; // 20 KB > 16 KB threshold
         let config = Arc::new(ClipboardStorageConfig {
             inline_threshold_bytes: 16 * 1024, // 16 KB
+            ..ClipboardStorageConfig::defaults()
         });
         let normalizer = ClipboardRepresentationNormalizer::new(config);
 
@@ -253,6 +254,7 @@ mod tests {
         let small_text_data = b"Hello, world!".to_vec();
         let config = Arc::new(ClipboardStorageConfig {
             inline_threshold_bytes: 16 * 1024, // 16 KB
+            ..ClipboardStorageConfig::defaults()
         });
         let normalizer = ClipboardRepresentationNormalizer::new(config);
 

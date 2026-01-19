@@ -253,6 +253,7 @@ async fn test_capture_does_not_block_when_queues_full() -> Result<()> {
 
     let config = Arc::new(ClipboardStorageConfig {
         inline_threshold_bytes: 16,
+        ..ClipboardStorageConfig::defaults()
     });
     let normalizer: Arc<dyn ClipboardRepresentationNormalizerPort> =
         Arc::new(ClipboardRepresentationNormalizer::new(config));
@@ -299,6 +300,7 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
 
     let config = Arc::new(ClipboardStorageConfig {
         inline_threshold_bytes: 16,
+        ..ClipboardStorageConfig::defaults()
     });
     let normalizer: Arc<dyn ClipboardRepresentationNormalizerPort> =
         Arc::new(ClipboardRepresentationNormalizer::new(config));
