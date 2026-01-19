@@ -17,7 +17,7 @@ use uc_core::clipboard::{
     PayloadAvailability, PersistedClipboardRepresentation, SystemClipboardSnapshot,
 };
 use uc_core::ids::{EntryId, EventId, FormatId, RepresentationId};
-use uc_core::ports::clipboard::ProcessingUpdateOutcome;
+use uc_core::ports::clipboard::{ProcessingUpdateOutcome, RepresentationCachePort, SpoolQueuePort};
 use uc_core::ports::BlobWriterPort;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
@@ -26,7 +26,8 @@ use uc_core::ports::{
 use uc_core::DeviceId;
 use uc_core::{Blob, BlobId, ContentHash, MimeType};
 use uc_infra::clipboard::{
-    BackgroundBlobWorker, ClipboardRepresentationNormalizer, RepresentationCache, SpoolManager,
+    BackgroundBlobWorker, ClipboardRepresentationNormalizer, MpscSpoolQueue, RepresentationCache,
+    SpoolManager,
 };
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::security::Blake3Hasher;
@@ -272,6 +273,7 @@ async fn stress_test_100_large_images() -> Result<()> {
         Arc::new(ClipboardRepresentationNormalizer::new(config));
 
     let rep_cache = Arc::new(RepresentationCache::new(10, 20 * 1024 * 1024));
+    let rep_cache_port: Arc<dyn RepresentationCachePort> = rep_cache.clone();
     let rep_repo = Arc::new(InMemoryRepresentationRepo::default());
     let event_writer: Arc<dyn ClipboardEventWriterPort> = Arc::new(InMemoryEventWriter {
         rep_repo: rep_repo.clone(),
@@ -284,6 +286,7 @@ async fn stress_test_100_large_images() -> Result<()> {
     let spool_root: PathBuf = spool_dir.path().to_path_buf();
     let spool = Arc::new(SpoolManager::new(&spool_root, 1_000_000_000)?);
     let (spool_tx, spool_rx) = mpsc::channel(256);
+    let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
     let (worker_tx, worker_rx) = mpsc::channel(256);
 
     let spooler = uc_infra::clipboard::SpoolerTask::new(
@@ -317,8 +320,8 @@ async fn stress_test_100_large_images() -> Result<()> {
         policy,
         normalizer,
         Arc::new(InMemoryDeviceIdentity),
-        rep_cache.clone(),
-        spool_tx,
+        rep_cache_port,
+        spool_queue,
     );
 
     let mut rep_ids = Vec::new();

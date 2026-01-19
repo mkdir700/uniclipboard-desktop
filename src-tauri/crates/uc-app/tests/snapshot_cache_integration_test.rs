@@ -20,7 +20,7 @@ use uc_core::clipboard::{
     PayloadAvailability, PersistedClipboardRepresentation, SystemClipboardSnapshot,
 };
 use uc_core::ids::{EntryId, EventId, FormatId, RepresentationId};
-use uc_core::ports::clipboard::ProcessingUpdateOutcome;
+use uc_core::ports::clipboard::{ProcessingUpdateOutcome, RepresentationCachePort, SpoolQueuePort};
 use uc_core::ports::BlobWriterPort;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
@@ -28,9 +28,9 @@ use uc_core::ports::{
 };
 use uc_core::DeviceId;
 use uc_core::{Blob, BlobId, ContentHash, MimeType};
-use uc_infra::clipboard::spooler_task::SpoolRequest;
 use uc_infra::clipboard::{
-    BackgroundBlobWorker, ClipboardRepresentationNormalizer, RepresentationCache, SpoolManager,
+    BackgroundBlobWorker, ClipboardRepresentationNormalizer, MpscSpoolQueue, RepresentationCache,
+    SpoolManager,
 };
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::security::Blake3Hasher;
@@ -302,7 +302,7 @@ fn build_snapshot(rep_id: RepresentationId, bytes: Vec<u8>, mime: &str) -> Syste
 }
 
 #[tokio::test]
-async fn test_capture_does_not_block_when_queues_full() -> Result<()> {
+async fn test_capture_returns_error_when_spool_queue_closed() -> Result<()> {
     let rep_id = RepresentationId::new();
     let bytes = vec![0u8; 32 * 1024];
     let snapshot = build_snapshot(rep_id.clone(), bytes.clone(), "image/png");
@@ -315,6 +315,7 @@ async fn test_capture_does_not_block_when_queues_full() -> Result<()> {
         Arc::new(ClipboardRepresentationNormalizer::new(config));
 
     let rep_cache = Arc::new(RepresentationCache::new(10, 1_000_000));
+    let rep_cache_port: Arc<dyn RepresentationCachePort> = rep_cache.clone();
     let rep_repo = Arc::new(InMemoryRepresentationRepo::default());
     let event_writer: Arc<dyn ClipboardEventWriterPort> =
         Arc::new(InMemoryEventWriter { rep_repo });
@@ -322,14 +323,11 @@ async fn test_capture_does_not_block_when_queues_full() -> Result<()> {
     let policy: Arc<dyn SelectRepresentationPolicyPort> =
         Arc::new(SelectRepresentationPolicyV1::new());
 
-    let (spool_tx, _spool_rx) = mpsc::channel(1);
+    let (spool_tx, spool_rx) = mpsc::channel(1);
     let (worker_tx, _worker_rx) = mpsc::channel(1);
-
-    spool_tx.try_send(SpoolRequest {
-        rep_id: RepresentationId::new(),
-        bytes: vec![1],
-    })?;
+    drop(spool_rx);
     worker_tx.try_send(RepresentationId::new())?;
+    let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
 
     let usecase = CaptureClipboardUseCase::new(
         entry_repo,
@@ -337,11 +335,11 @@ async fn test_capture_does_not_block_when_queues_full() -> Result<()> {
         policy,
         normalizer,
         Arc::new(InMemoryDeviceIdentity),
-        rep_cache.clone(),
-        spool_tx,
+        rep_cache_port,
+        spool_queue,
     );
-
-    timeout(Duration::from_millis(200), usecase.execute(snapshot)).await??;
+    let result = timeout(Duration::from_millis(200), usecase.execute(snapshot)).await?;
+    assert!(result.is_err(), "expected enqueue failure");
 
     let cached = rep_cache.get(&rep_id).await;
     assert_eq!(cached, Some(bytes));
@@ -349,7 +347,7 @@ async fn test_capture_does_not_block_when_queues_full() -> Result<()> {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn test_capture_logs_on_spool_queue_full() -> Result<()> {
+async fn test_capture_logs_on_spool_queue_closed() -> Result<()> {
     let rep_id = RepresentationId::new();
     let bytes = vec![0u8; 32 * 1024];
     let snapshot = build_snapshot(rep_id.clone(), bytes, "image/png");
@@ -365,6 +363,7 @@ async fn test_capture_logs_on_spool_queue_full() -> Result<()> {
         Arc::new(ClipboardRepresentationNormalizer::new(config));
 
     let rep_cache = Arc::new(RepresentationCache::new(10, 1_000_000));
+    let rep_cache_port: Arc<dyn RepresentationCachePort> = rep_cache.clone();
     let rep_repo = Arc::new(InMemoryRepresentationRepo::default());
     let event_writer: Arc<dyn ClipboardEventWriterPort> =
         Arc::new(InMemoryEventWriter { rep_repo });
@@ -372,11 +371,9 @@ async fn test_capture_logs_on_spool_queue_full() -> Result<()> {
     let policy: Arc<dyn SelectRepresentationPolicyPort> =
         Arc::new(SelectRepresentationPolicyV1::new());
 
-    let (spool_tx, _spool_rx) = mpsc::channel(1);
-    spool_tx.try_send(SpoolRequest {
-        rep_id: RepresentationId::new(),
-        bytes: vec![1],
-    })?;
+    let (spool_tx, spool_rx) = mpsc::channel(1);
+    drop(spool_rx);
+    let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
 
     let usecase = CaptureClipboardUseCase::new(
         entry_repo,
@@ -384,18 +381,18 @@ async fn test_capture_logs_on_spool_queue_full() -> Result<()> {
         policy,
         normalizer,
         Arc::new(InMemoryDeviceIdentity),
-        rep_cache,
-        spool_tx,
+        rep_cache_port,
+        spool_queue,
     );
-
-    usecase.execute(snapshot).await?;
+    let result = usecase.execute(snapshot).await;
+    assert!(result.is_err(), "expected enqueue failure");
 
     let guard = log_buffer.lock().unwrap();
     let (_, new_bytes) = guard.split_at(start_len);
     let output = String::from_utf8_lossy(new_bytes);
     let rep_id_str = rep_id.to_string();
     assert!(
-        output.contains("Spool queue full; cache-only fallback") && output.contains(&rep_id_str),
+        output.contains("Failed to enqueue spool request") && output.contains(&rep_id_str),
         "log output: {output}"
     );
     Ok(())
@@ -473,6 +470,7 @@ async fn test_worker_materializes_after_spool_eviction_with_cache_hit() -> Resul
         Arc::new(ClipboardRepresentationNormalizer::new(config));
 
     let rep_cache = Arc::new(RepresentationCache::new(10, 1024));
+    let rep_cache_port: Arc<dyn RepresentationCachePort> = rep_cache.clone();
     let rep_repo = Arc::new(InMemoryRepresentationRepo::default());
     let event_writer: Arc<dyn ClipboardEventWriterPort> = Arc::new(InMemoryEventWriter {
         rep_repo: rep_repo.clone(),
@@ -485,6 +483,7 @@ async fn test_worker_materializes_after_spool_eviction_with_cache_hit() -> Resul
     let spool_root = spool_dir.path().to_path_buf();
     let spool = Arc::new(SpoolManager::new(&spool_root, 4)?);
     let (spool_tx, spool_rx) = mpsc::channel(8);
+    let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
     let (worker_tx, worker_rx) = mpsc::channel(8);
 
     let spooler = uc_infra::clipboard::SpoolerTask::new(
@@ -503,8 +502,8 @@ async fn test_worker_materializes_after_spool_eviction_with_cache_hit() -> Resul
         policy,
         normalizer,
         Arc::new(InMemoryDeviceIdentity),
-        rep_cache.clone(),
-        spool_tx.clone(),
+        rep_cache_port,
+        spool_queue.clone(),
     );
 
     let rep_id_a = RepresentationId::new();
@@ -517,7 +516,7 @@ async fn test_worker_materializes_after_spool_eviction_with_cache_hit() -> Resul
         .await?;
 
     drop(usecase);
-    drop(spool_tx);
+    drop(spool_queue);
     spooler_handle.await?;
 
     let spool_path_a = spool_root.join(rep_id_a.to_string());
@@ -582,6 +581,7 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
         Arc::new(ClipboardRepresentationNormalizer::new(config));
 
     let rep_cache = Arc::new(RepresentationCache::new(10, 1_000_000));
+    let rep_cache_port: Arc<dyn RepresentationCachePort> = rep_cache.clone();
     let rep_repo = Arc::new(InMemoryRepresentationRepo::default());
     let event_writer: Arc<dyn ClipboardEventWriterPort> = Arc::new(InMemoryEventWriter {
         rep_repo: rep_repo.clone(),
@@ -593,6 +593,7 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
     let spool_dir = tempfile::tempdir()?;
     let spool = Arc::new(SpoolManager::new(spool_dir.path(), 1_000_000)?);
     let (spool_tx, spool_rx) = mpsc::channel(8);
+    let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
     let (worker_tx, worker_rx) = mpsc::channel(8);
 
     let spooler = uc_infra::clipboard::SpoolerTask::new(
@@ -625,8 +626,8 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
         policy,
         normalizer,
         Arc::new(InMemoryDeviceIdentity),
-        rep_cache.clone(),
-        spool_tx,
+        rep_cache_port,
+        spool_queue,
     );
 
     usecase.execute(snapshot).await?;
