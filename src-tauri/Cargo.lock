@@ -9157,6 +9157,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uc-core",
+ "uc-infra",
  "uuid",
 ]
 
@@ -9221,7 +9222,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
- "uc-app",
  "uc-core",
  "uuid",
 ]

@@ -4,7 +4,7 @@ mod payload_resolver;
 mod representation_cache;
 mod selection_resolver;
 mod spool_manager;
-mod spooler_task;
+pub mod spooler_task;
 
 pub use background_blob_worker::BackgroundBlobWorker;
 pub use normalizer::ClipboardRepresentationNormalizer;
