@@ -286,7 +286,12 @@ async fn stress_test_100_large_images() -> Result<()> {
     let (spool_tx, spool_rx) = mpsc::channel(256);
     let (worker_tx, worker_rx) = mpsc::channel(256);
 
-    let spooler = uc_infra::clipboard::SpoolerTask::new(spool_rx, spool.clone(), worker_tx.clone());
+    let spooler = uc_infra::clipboard::SpoolerTask::new(
+        spool_rx,
+        spool.clone(),
+        worker_tx.clone(),
+        rep_cache.clone(),
+    );
     tokio::spawn(async move {
         spooler.run().await;
     });

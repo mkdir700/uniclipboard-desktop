@@ -4,10 +4,10 @@
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uc_core::ids::RepresentationId;
 
-use crate::clipboard::SpoolManager;
+use crate::clipboard::{RepresentationCache, SpoolManager};
 
 /// Spool write request.
 /// 写入磁盘缓存的请求。
@@ -22,6 +22,7 @@ pub struct SpoolerTask {
     spool_rx: mpsc::Receiver<SpoolRequest>,
     spool_manager: Arc<SpoolManager>,
     worker_tx: mpsc::Sender<RepresentationId>,
+    cache: Arc<RepresentationCache>,
 }
 
 impl SpoolerTask {
@@ -29,11 +30,13 @@ impl SpoolerTask {
         spool_rx: mpsc::Receiver<SpoolRequest>,
         spool_manager: Arc<SpoolManager>,
         worker_tx: mpsc::Sender<RepresentationId>,
+        cache: Arc<RepresentationCache>,
     ) -> Self {
         Self {
             spool_rx,
             spool_manager,
             worker_tx,
+            cache,
         }
     }
 
@@ -46,6 +49,7 @@ impl SpoolerTask {
                 bytes = request.bytes.len(),
                 "Spooler received request"
             );
+            self.cache.mark_spooling(&request.rep_id).await;
             if let Err(err) = self
                 .spool_manager
                 .write(&request.rep_id, &request.bytes)
@@ -57,12 +61,13 @@ impl SpoolerTask {
                     "Failed to write spool entry"
                 );
             } else {
+                self.cache.mark_completed(&request.rep_id).await;
                 debug!(
                     representation_id = %request.rep_id,
                     "Spooler wrote spool entry"
                 );
                 if let Err(err) = self.worker_tx.try_send(request.rep_id.clone()) {
-                    error!(
+                    warn!(
                         representation_id = %request.rep_id,
                         error = %err,
                         "Failed to enqueue worker after spool write"
@@ -76,6 +81,7 @@ impl SpoolerTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::clipboard::RepresentationCache;
     use anyhow::Result;
     use tokio::time::{timeout, Duration};
 
@@ -85,11 +91,13 @@ mod tests {
         let spool_manager = Arc::new(SpoolManager::new(temp_dir.path(), 1_000_000)?);
         let (tx, rx) = mpsc::channel(8);
         let (worker_tx, _worker_rx) = mpsc::channel(8);
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
 
         let rep_id = RepresentationId::new();
         let bytes = vec![1, 2, 3];
 
-        let handle = tokio::spawn(SpoolerTask::new(rx, spool_manager.clone(), worker_tx).run());
+        let handle =
+            tokio::spawn(SpoolerTask::new(rx, spool_manager.clone(), worker_tx, cache).run());
         tx.send(SpoolRequest {
             rep_id: rep_id.clone(),
             bytes: bytes.clone(),
@@ -110,8 +118,9 @@ mod tests {
         let spool_manager = Arc::new(SpoolManager::new(temp_dir.path(), 1_000_000)?);
         let (tx, rx) = mpsc::channel(1);
         let (worker_tx, _worker_rx) = mpsc::channel(1);
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
 
-        let _task = SpoolerTask::new(rx, spool_manager, worker_tx);
+        let _task = SpoolerTask::new(rx, spool_manager, worker_tx, cache);
 
         let rep_id_a = RepresentationId::new();
         let rep_id_b = RepresentationId::new();
@@ -139,12 +148,13 @@ mod tests {
         let spool_manager = Arc::new(SpoolManager::new(temp_dir.path(), 1_000_000)?);
         let (spool_tx, spool_rx) = mpsc::channel(8);
         let (worker_tx, mut worker_rx) = mpsc::channel(8);
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
 
         let rep_id = RepresentationId::new();
         let bytes = vec![1, 2, 3];
 
         let handle =
-            tokio::spawn(SpoolerTask::new(spool_rx, spool_manager.clone(), worker_tx).run());
+            tokio::spawn(SpoolerTask::new(spool_rx, spool_manager.clone(), worker_tx, cache).run());
 
         spool_tx
             .send(SpoolRequest {
@@ -161,6 +171,33 @@ mod tests {
 
         let retrieved = spool_manager.read(&rep_id).await?;
         assert_eq!(retrieved, Some(bytes));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_spooler_marks_cache_completed() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let spool_manager = Arc::new(SpoolManager::new(temp_dir.path(), 1_000_000)?);
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
+        let (spool_tx, spool_rx) = mpsc::channel(8);
+        let (worker_tx, _worker_rx) = mpsc::channel(8);
+
+        let rep_id = RepresentationId::new();
+        cache.put(&rep_id, vec![1, 2, 3]).await;
+
+        let handle =
+            tokio::spawn(SpoolerTask::new(spool_rx, spool_manager, worker_tx, cache.clone()).run());
+
+        spool_tx
+            .send(SpoolRequest {
+                rep_id: rep_id.clone(),
+                bytes: vec![1, 2, 3],
+            })
+            .await?;
+        drop(spool_tx);
+        handle.await?;
+
+        assert_eq!(cache.get(&rep_id).await, Some(vec![1, 2, 3]));
         Ok(())
     }
 }

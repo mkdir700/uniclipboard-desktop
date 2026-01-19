@@ -825,7 +825,12 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
             Err(err) => warn!(error = %err, "Spool scan failed; continuing startup"),
         }
 
-        let spooler = SpoolerTask::new(spool_rx, spool_manager.clone(), worker_tx);
+        let spooler = SpoolerTask::new(
+            spool_rx,
+            spool_manager.clone(),
+            worker_tx,
+            representation_cache.clone(),
+        );
         async_runtime::spawn(async move {
             spooler.run().await;
             warn!("SpoolerTask stopped");
