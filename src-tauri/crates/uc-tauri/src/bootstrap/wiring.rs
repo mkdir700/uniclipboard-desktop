@@ -50,8 +50,8 @@ use uc_core::ports::*;
 use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::spooler_task::SpoolRequest;
 use uc_infra::clipboard::{
-    BackgroundBlobWorker, ClipboardRepresentationNormalizer, RepresentationCache, SpoolManager,
-    SpoolScanner, SpoolerTask,
+    BackgroundBlobWorker, ClipboardRepresentationNormalizer, RepresentationCache, SpoolJanitor,
+    SpoolManager, SpoolScanner, SpoolerTask,
 };
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -127,10 +127,12 @@ pub struct BackgroundRuntimeDeps {
     pub spool_rx: mpsc::Receiver<SpoolRequest>,
     pub worker_rx: mpsc::Receiver<RepresentationId>,
     pub spool_dir: PathBuf,
+    pub spool_ttl_days: u64,
 }
 
 const WORKER_RETRY_MAX_ATTEMPTS: u32 = 5;
 const WORKER_RETRY_BACKOFF_MS: u64 = 200;
+const SPOOL_JANITOR_INTERVAL_SECS: u64 = 60 * 60;
 
 /// Create SQLite database connection pool
 /// 创建 SQLite 数据库连接池
@@ -796,6 +798,7 @@ pub fn wire_dependencies(
             spool_rx,
             worker_rx,
             spool_dir,
+            spool_ttl_days: storage_config.spool_ttl_days,
         },
     })
 }
@@ -808,6 +811,7 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
         spool_rx,
         worker_rx,
         spool_dir,
+        spool_ttl_days,
     } = background;
 
     info!("Starting background clipboard spooler and blob worker");
@@ -817,6 +821,7 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
     let representation_cache = deps.representation_cache.clone();
     let blob_writer = deps.blob_writer.clone();
     let hasher = deps.hash.clone();
+    let clock = deps.clock.clone();
 
     async_runtime::spawn(async move {
         let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx.clone());
@@ -839,8 +844,8 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
         let worker = BackgroundBlobWorker::new(
             worker_rx,
             representation_cache,
-            spool_manager,
-            representation_repo,
+            spool_manager.clone(),
+            representation_repo.clone(),
             blob_writer,
             hasher,
             WORKER_RETRY_MAX_ATTEMPTS,
@@ -849,6 +854,30 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
         async_runtime::spawn(async move {
             worker.run().await;
             warn!("BackgroundBlobWorker stopped");
+        });
+
+        let janitor = SpoolJanitor::new(
+            spool_manager.clone(),
+            representation_repo.clone(),
+            clock,
+            spool_ttl_days,
+        );
+        async_runtime::spawn(async move {
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(SPOOL_JANITOR_INTERVAL_SECS));
+            loop {
+                interval.tick().await;
+                match janitor.run_once().await {
+                    Ok(removed) => {
+                        if removed > 0 {
+                            info!("Spool janitor removed {} expired entries", removed);
+                        }
+                    }
+                    Err(err) => {
+                        warn!(error = %err, "Spool janitor run failed");
+                    }
+                }
+            }
         });
     });
 }
