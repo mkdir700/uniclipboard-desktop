@@ -3,6 +3,7 @@
 
 use std::io;
 use std::path::PathBuf;
+use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result};
 use tokio::fs;
@@ -24,6 +25,15 @@ pub struct SpoolEntry {
     pub representation_id: RepresentationId,
     pub file_path: PathBuf,
     pub size: usize,
+}
+
+/// Spool entry metadata with modified time.
+/// 包含修改时间的缓存条目元数据。
+pub struct SpoolEntryMeta {
+    pub representation_id: RepresentationId,
+    pub file_path: PathBuf,
+    pub size: usize,
+    pub modified_ms: i64,
 }
 
 impl SpoolManager {
@@ -84,6 +94,8 @@ impl SpoolManager {
                 })?;
         }
 
+        self.enforce_limits().await?;
+
         Ok(SpoolEntry {
             representation_id: rep_id.clone(),
             file_path,
@@ -120,6 +132,63 @@ impl SpoolManager {
     pub fn max_bytes(&self) -> usize {
         self.max_bytes
     }
+
+    async fn list_entries_by_mtime(&self) -> Result<Vec<SpoolEntryMeta>> {
+        let mut entries = Vec::new();
+        let mut dir = fs::read_dir(&self.spool_dir).await?;
+        while let Some(entry) = dir.next_entry().await? {
+            let meta = entry.metadata().await?;
+            if !meta.is_file() {
+                continue;
+            }
+            let file_name = entry.file_name();
+            let Some(name) = file_name.to_str() else {
+                tracing::warn!("Skipping spool entry with non-utf8 filename");
+                continue;
+            };
+            let modified = meta.modified()?;
+            let modified_ms = modified
+                .duration_since(UNIX_EPOCH)
+                .map_err(|err| anyhow::anyhow!("invalid mtime: {err}"))?
+                .as_millis() as i64;
+            entries.push(SpoolEntryMeta {
+                representation_id: RepresentationId::from_str(name),
+                file_path: entry.path(),
+                size: meta.len() as usize,
+                modified_ms,
+            });
+        }
+        entries.sort_by_key(|entry| entry.modified_ms);
+        Ok(entries)
+    }
+
+    async fn enforce_limits(&self) -> Result<()> {
+        let mut entries = self.list_entries_by_mtime().await?;
+        let mut total_bytes = entries.iter().map(|entry| entry.size).sum::<usize>();
+
+        while total_bytes > self.max_bytes {
+            let Some(oldest) = entries.first() else {
+                break;
+            };
+            fs::remove_file(&oldest.file_path).await?;
+            total_bytes = total_bytes.saturating_sub(oldest.size);
+            entries.remove(0);
+        }
+        Ok(())
+    }
+
+    /// List spool entries expired by TTL.
+    /// 枚举超过 TTL 的缓存条目。
+    pub async fn list_expired(&self, now_ms: i64, ttl_days: u64) -> Result<Vec<SpoolEntryMeta>> {
+        let ttl_ms = (ttl_days as i64) * 24 * 60 * 60 * 1000;
+        let mut expired = Vec::new();
+        for entry in self.list_entries_by_mtime().await? {
+            if now_ms - entry.modified_ms > ttl_ms {
+                expired.push(entry);
+            }
+        }
+        Ok(expired)
+    }
 }
 
 #[cfg(test)]
@@ -153,6 +222,22 @@ mod tests {
 
         let retrieved = spool.read(&rep_id).await?;
         assert!(retrieved.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_spool_evicts_when_over_limit() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let spool = SpoolManager::new(temp_dir.path(), 4)?;
+
+        let rep_id_a = RepresentationId::new();
+        let rep_id_b = RepresentationId::new();
+
+        spool.write(&rep_id_a, &[1, 2, 3]).await?;
+        spool.write(&rep_id_b, &[4, 5, 6]).await?;
+
+        assert!(spool.read(&rep_id_a).await?.is_none());
+        assert!(spool.read(&rep_id_b).await?.is_some());
         Ok(())
     }
 }
