@@ -315,6 +315,13 @@ mod tests {
             Ok(None)
         }
 
+        async fn get_representation_by_id(
+            &self,
+            representation_id: &RepresentationId,
+        ) -> Result<Option<PersistedClipboardRepresentation>> {
+            Ok(self.get(representation_id).await)
+        }
+
         async fn update_blob_id(
             &self,
             _representation_id: &RepresentationId,

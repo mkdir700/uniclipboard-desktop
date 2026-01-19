@@ -86,6 +86,31 @@ where
         }
     }
 
+    async fn get_representation_by_id(
+        &self,
+        representation_id: &RepresentationId,
+    ) -> Result<Option<PersistedClipboardRepresentation>> {
+        let rep_id_str = representation_id.to_string();
+
+        let row: Option<SnapshotRepresentationRow> = self.executor.run(|conn| {
+            let result: Result<Option<SnapshotRepresentationRow>, diesel::result::Error> =
+                clipboard_snapshot_representation::table
+                    .filter(clipboard_snapshot_representation::id.eq(&rep_id_str))
+                    .first::<SnapshotRepresentationRow>(conn)
+                    .optional();
+            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
+
+        match row {
+            Some(r) => {
+                let mapper = RepresentationRowMapper;
+                let rep = mapper.to_domain(&r)?;
+                Ok(Some(rep))
+            }
+            None => Ok(None),
+        }
+    }
+
     async fn update_blob_id(
         &self,
         representation_id: &RepresentationId,

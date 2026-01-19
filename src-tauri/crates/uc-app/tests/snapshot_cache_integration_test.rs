@@ -119,6 +119,13 @@ impl ClipboardRepresentationRepositoryPort for InMemoryRepresentationRepo {
         Ok(self.get_by_id(representation_id))
     }
 
+    async fn get_representation_by_id(
+        &self,
+        representation_id: &RepresentationId,
+    ) -> Result<Option<PersistedClipboardRepresentation>> {
+        Ok(self.get_by_id(representation_id))
+    }
+
     async fn update_blob_id(
         &self,
         representation_id: &RepresentationId,

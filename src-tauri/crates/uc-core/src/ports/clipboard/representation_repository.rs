@@ -12,6 +12,14 @@ pub trait ClipboardRepresentationRepositoryPort: Send + Sync {
         representation_id: &RepresentationId,
     ) -> Result<Option<PersistedClipboardRepresentation>>;
 
+    /// Fetch representation by id without event context.
+    ///
+    /// Used for recovery scans where only representation id is available.
+    async fn get_representation_by_id(
+        &self,
+        representation_id: &RepresentationId,
+    ) -> Result<Option<PersistedClipboardRepresentation>>;
+
     async fn update_blob_id(
         &self,
         representation_id: &RepresentationId,

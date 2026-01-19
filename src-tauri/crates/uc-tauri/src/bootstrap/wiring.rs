@@ -51,7 +51,7 @@ use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::spooler_task::SpoolRequest;
 use uc_infra::clipboard::{
     BackgroundBlobWorker, ClipboardRepresentationNormalizer, RepresentationCache, SpoolManager,
-    SpoolerTask,
+    SpoolScanner, SpoolerTask,
 };
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -126,6 +126,7 @@ pub struct BackgroundRuntimeDeps {
     pub spool_manager: Arc<SpoolManager>,
     pub spool_rx: mpsc::Receiver<SpoolRequest>,
     pub worker_rx: mpsc::Receiver<RepresentationId>,
+    pub spool_dir: PathBuf,
 }
 
 const WORKER_RETRY_MAX_ATTEMPTS: u32 = 5;
@@ -724,7 +725,7 @@ pub fn wire_dependencies(
     // Create spool manager
     let spool_dir = vault_path.join("spool");
     let spool_manager = Arc::new(
-        SpoolManager::new(spool_dir, 1_000_000_000)
+        SpoolManager::new(spool_dir.clone(), 1_000_000_000)
             .map_err(|e| WiringError::BlobStorageInit(format!("Failed to create spool: {}", e)))?,
     );
 
@@ -789,6 +790,7 @@ pub fn wire_dependencies(
             spool_manager,
             spool_rx,
             worker_rx,
+            spool_dir,
         },
     })
 }
@@ -800,29 +802,44 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
         spool_manager,
         spool_rx,
         worker_rx,
+        spool_dir,
     } = background;
 
     info!("Starting background clipboard spooler and blob worker");
 
-    let spooler = SpoolerTask::new(spool_rx, spool_manager.clone());
-    async_runtime::spawn(async move {
-        spooler.run().await;
-        warn!("SpoolerTask stopped");
-    });
+    let representation_repo = deps.representation_repo.clone();
+    let worker_tx = deps.worker_tx.clone();
+    let representation_cache = deps.representation_cache.clone();
+    let blob_writer = deps.blob_writer.clone();
+    let hasher = deps.hash.clone();
 
-    let worker = BackgroundBlobWorker::new(
-        worker_rx,
-        deps.representation_cache.clone(),
-        spool_manager,
-        deps.representation_repo.clone(),
-        deps.blob_writer.clone(),
-        deps.hash.clone(),
-        WORKER_RETRY_MAX_ATTEMPTS,
-        Duration::from_millis(WORKER_RETRY_BACKOFF_MS),
-    );
     async_runtime::spawn(async move {
-        worker.run().await;
-        warn!("BackgroundBlobWorker stopped");
+        let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx);
+        match scanner.scan_and_recover().await {
+            Ok(recovered) => info!("Recovered {} representations from spool", recovered),
+            Err(err) => warn!(error = %err, "Spool scan failed; continuing startup"),
+        }
+
+        let spooler = SpoolerTask::new(spool_rx, spool_manager.clone());
+        async_runtime::spawn(async move {
+            spooler.run().await;
+            warn!("SpoolerTask stopped");
+        });
+
+        let worker = BackgroundBlobWorker::new(
+            worker_rx,
+            representation_cache,
+            spool_manager,
+            representation_repo,
+            blob_writer,
+            hasher,
+            WORKER_RETRY_MAX_ATTEMPTS,
+            Duration::from_millis(WORKER_RETRY_BACKOFF_MS),
+        );
+        async_runtime::spawn(async move {
+            worker.run().await;
+            warn!("BackgroundBlobWorker stopped");
+        });
     });
 }
 
