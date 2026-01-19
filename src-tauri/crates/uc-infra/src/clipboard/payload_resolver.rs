@@ -1,40 +1,38 @@
 //! Clipboard Payload Resolver Implementation
 //!
 //! Resolves persisted clipboard representations into usable payloads.
-//! Supports inline data, blob references, and lazy blob writing.
+//! Read-only: returns inline data, blob references, or cache/spool bytes.
 
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
-use tracing::{debug, info_span, Instrument};
+use tokio::sync::mpsc;
+use tracing::{debug, error, info_span, warn, Instrument};
 
-use uc_core::clipboard::PersistedClipboardRepresentation;
+use uc_core::clipboard::{PayloadAvailability, PersistedClipboardRepresentation};
+use uc_core::ids::RepresentationId;
 use uc_core::ports::clipboard::ResolvedClipboardPayload;
-use uc_core::ports::{
-    BlobRepositoryPort, BlobWriterPort, ClipboardPayloadResolverPort,
-    ClipboardRepresentationRepositoryPort, ContentHashPort,
-};
+use uc_core::ports::ClipboardPayloadResolverPort;
+
+use crate::clipboard::{RepresentationCache, SpoolManager};
 
 /// Clipboard payload resolver implementation
 pub struct ClipboardPayloadResolver {
-    representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
-    blob_writer: Arc<dyn BlobWriterPort>,
-    blob_repo: Arc<dyn BlobRepositoryPort>,
-    hasher: Arc<dyn ContentHashPort>,
+    cache: Arc<RepresentationCache>,
+    spool: Arc<SpoolManager>,
+    worker_tx: mpsc::Sender<RepresentationId>,
 }
 
 impl ClipboardPayloadResolver {
     pub fn new(
-        representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
-        blob_writer: Arc<dyn BlobWriterPort>,
-        blob_repo: Arc<dyn BlobRepositoryPort>,
-        hasher: Arc<dyn ContentHashPort>,
+        cache: Arc<RepresentationCache>,
+        spool: Arc<SpoolManager>,
+        worker_tx: mpsc::Sender<RepresentationId>,
     ) -> Self {
         Self {
-            representation_repo,
-            blob_writer,
-            blob_repo,
-            hasher,
+            cache,
+            spool,
+            worker_tx,
         }
     }
 }
@@ -51,73 +49,101 @@ impl ClipboardPayloadResolverPort for ClipboardPayloadResolver {
             format_id = %representation.format_id,
         );
         async move {
-            // Rule 1: Prefer inline data
-            if let Some(inline_data) = &representation.inline_data {
-                // Check if it's a placeholder (empty) or actual data
-                if !inline_data.is_empty() {
+            let mime = Self::mime_or_default(representation);
+
+            match &representation.payload_state {
+                PayloadAvailability::Inline => {
+                    let inline_data = match representation.inline_data.as_ref() {
+                        Some(bytes) => bytes,
+                        None => {
+                            let err = anyhow::anyhow!(
+                                "payload_state Inline but inline_data is None for {}",
+                                representation.id
+                            );
+                            error!(
+                                representation_id = %representation.id,
+                                error = %err,
+                                "Inline payload is missing inline_data"
+                            );
+                            return Err(err);
+                        }
+                    };
                     debug!("Resolving from inline data");
-                    let mime = representation
-                        .mime_type
-                        .clone()
-                        .map(|m| m.to_string())
-                        .unwrap_or_else(|| "application/octet-stream".to_string());
-                    return Ok(ResolvedClipboardPayload::Inline {
+                    Ok(ResolvedClipboardPayload::Inline {
                         mime,
                         bytes: inline_data.clone(),
-                    });
+                    })
                 }
-                // Empty inline_data means placeholder - continue to blob logic
+                PayloadAvailability::BlobReady => {
+                    let blob_id = match representation.blob_id.as_ref() {
+                        Some(id) => id,
+                        None => {
+                            let err = anyhow::anyhow!(
+                                "payload_state BlobReady but blob_id is None for {}",
+                                representation.id
+                            );
+                            error!(
+                                representation_id = %representation.id,
+                                error = %err,
+                                "BlobReady payload is missing blob_id"
+                            );
+                            return Err(err);
+                        }
+                    };
+                    debug!("Resolving from existing blob reference");
+                    Ok(ResolvedClipboardPayload::BlobRef {
+                        mime,
+                        blob_id: blob_id.clone(),
+                    })
+                }
+                PayloadAvailability::Staged
+                | PayloadAvailability::Processing
+                | PayloadAvailability::Failed { .. } => {
+                    if let Some(bytes) = self.cache.get(&representation.id).await {
+                        debug!("Resolving from cache bytes");
+                        self.try_requeue(&representation.id);
+                        return Ok(ResolvedClipboardPayload::Inline { mime, bytes });
+                    }
+
+                    match self.spool.read(&representation.id).await {
+                        Ok(Some(bytes)) => {
+                            debug!("Resolving from spool bytes");
+                            self.try_requeue(&representation.id);
+                            Ok(ResolvedClipboardPayload::Inline { mime, bytes })
+                        }
+                        Ok(None) => {
+                            warn!(
+                                representation_id = %representation.id,
+                                payload_state = ?&representation.payload_state,
+                                "Bytes not available in cache or spool"
+                            );
+                            Err(anyhow::anyhow!(
+                                "payload bytes not available for {}",
+                                representation.id
+                            ))
+                        }
+                        Err(err) => {
+                            error!(
+                                representation_id = %representation.id,
+                                error = %err,
+                                "Failed to read bytes from spool"
+                            );
+                            Err(err)
+                        }
+                    }
+                }
+                PayloadAvailability::Lost => {
+                    let details = representation
+                        .last_error
+                        .as_deref()
+                        .unwrap_or("payload marked as lost");
+                    Err(anyhow::anyhow!(
+                        "payload is lost for {}: {}",
+                        representation.id,
+                        details
+                    ))
+                }
             }
-
-            // Rule 2: Has blob_id
-            if let Some(blob_id) = &representation.blob_id {
-                debug!("Resolving from existing blob reference");
-                let mime = representation
-                    .mime_type
-                    .clone()
-                    .map(|m| m.to_string())
-                    .unwrap_or_else(|| "application/octet-stream".to_string());
-                return Ok(ResolvedClipboardPayload::BlobRef {
-                    mime,
-                    blob_id: blob_id.clone(),
-                });
-            }
-
-            // Rule 3: Lazy write - load bytes and persist to blob
-            debug!("Lazy writing blob for representation");
-
-            // Load raw bytes (from inline placeholder or other source)
-            let raw_bytes = self.load_raw_bytes(representation).await?;
-
-            // Calculate content hash
-            let content_hash = self.hasher.hash_bytes(&raw_bytes)?;
-
-            // Write to blob store (deduplicated)
-            let blob = self
-                .blob_writer
-                .write_if_absent(&content_hash, &raw_bytes)
-                .await?;
-
-            // Update representation.blob_id (idempotent)
-            let updated = self
-                .representation_repo
-                .update_blob_id_if_none(&representation.id, &blob.blob_id)
-                .await?;
-
-            if updated {
-                debug!("Updated representation with new blob_id");
-            } else {
-                debug!("Representation already had blob_id (concurrent update)");
-            }
-
-            Ok(ResolvedClipboardPayload::BlobRef {
-                mime: representation
-                    .mime_type
-                    .clone()
-                    .map(|m| m.to_string())
-                    .unwrap_or_else(|| "application/octet-stream".to_string()),
-                blob_id: blob.blob_id,
-            })
         }
         .instrument(span)
         .await
@@ -125,30 +151,198 @@ impl ClipboardPayloadResolverPort for ClipboardPayloadResolver {
 }
 
 impl ClipboardPayloadResolver {
-    /// Load raw bytes for a representation.
-    ///
-    /// This is a helper for the lazy write case when we need to materialize
-    /// the original data before writing to blob storage.
-    async fn load_raw_bytes(
-        &self,
-        representation: &PersistedClipboardRepresentation,
-    ) -> Result<Vec<u8>> {
-        // For placeholder representations (empty inline_data, no blob_id),
-        // we need to reload from the original source.
-        //
-        // TODO: This requires access to the original snapshot data.
-        // For now, return an error as this needs to be implemented
-        // with proper temp storage or snapshot caching.
-        Err(anyhow::anyhow!(
-            "Lazy blob writing not yet implemented for placeholders. \
-             Representation {} has no retrievable data.",
-            representation.id
-        ))
+    fn mime_or_default(representation: &PersistedClipboardRepresentation) -> String {
+        representation
+            .mime_type
+            .clone()
+            .map(|m| m.to_string())
+            .unwrap_or_else(|| "application/octet-stream".to_string())
+    }
+
+    fn try_requeue(&self, rep_id: &RepresentationId) {
+        if let Err(err) = self.worker_tx.try_send(rep_id.clone()) {
+            warn!(
+                representation_id = %rep_id,
+                error = %err,
+                "Failed to re-queue representation for background processing"
+            );
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Add tests for inline data, blob reference, and error cases
+    use std::str::FromStr;
+    use std::time::Duration;
+
+    use tempfile::tempdir;
+    use uc_core::ids::{BlobId, FormatId, RepresentationId};
+    use uc_core::MimeType;
+
+    #[tokio::test]
+    async fn test_resolve_inline_returns_inline_payload() -> Result<()> {
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
+        let temp_dir = tempdir()?;
+        let spool = Arc::new(SpoolManager::new(temp_dir.path(), 1024)?);
+        let (worker_tx, _worker_rx) = mpsc::channel(1);
+        let resolver = ClipboardPayloadResolver::new(cache, spool, worker_tx);
+
+        let bytes = b"hello".to_vec();
+        let rep = PersistedClipboardRepresentation::new(
+            RepresentationId::new(),
+            FormatId::from("public.utf8-plain-text"),
+            Some(MimeType::text_plain()),
+            bytes.len() as i64,
+            Some(bytes.clone()),
+            None,
+        );
+
+        let payload = resolver.resolve(&rep).await?;
+        match payload {
+            ResolvedClipboardPayload::Inline { mime, bytes: out } => {
+                assert_eq!(mime, "text/plain");
+                assert_eq!(out, bytes);
+            }
+            _ => panic!("Expected inline payload"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_resolve_blob_ready_returns_blob_ref() -> Result<()> {
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
+        let temp_dir = tempdir()?;
+        let spool = Arc::new(SpoolManager::new(temp_dir.path(), 1024)?);
+        let (worker_tx, _worker_rx) = mpsc::channel(1);
+        let resolver = ClipboardPayloadResolver::new(cache, spool, worker_tx);
+
+        let blob_id = BlobId::new();
+        let rep = PersistedClipboardRepresentation::new(
+            RepresentationId::new(),
+            FormatId::from("public.png"),
+            Some(MimeType::from_str("image/png")?),
+            10,
+            None,
+            Some(blob_id.clone()),
+        );
+
+        let payload = resolver.resolve(&rep).await?;
+        match payload {
+            ResolvedClipboardPayload::BlobRef { mime, blob_id: out } => {
+                assert_eq!(mime, "image/png");
+                assert_eq!(out, blob_id);
+            }
+            _ => panic!("Expected blob reference payload"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_resolve_staged_uses_cache_and_requeues() -> Result<()> {
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
+        let temp_dir = tempdir()?;
+        let spool = Arc::new(SpoolManager::new(temp_dir.path(), 1024)?);
+        let (worker_tx, mut worker_rx) = mpsc::channel(1);
+        let resolver = ClipboardPayloadResolver::new(cache.clone(), spool, worker_tx);
+
+        let rep_id = RepresentationId::new();
+        let bytes = vec![1, 2, 3];
+        cache.put(&rep_id, bytes.clone()).await;
+
+        let rep = PersistedClipboardRepresentation::new_staged(
+            rep_id.clone(),
+            FormatId::from("public.png"),
+            Some(MimeType::from_str("image/png")?),
+            bytes.len() as i64,
+        );
+
+        let payload = resolver.resolve(&rep).await?;
+        match payload {
+            ResolvedClipboardPayload::Inline { bytes: out, .. } => {
+                assert_eq!(out, bytes);
+            }
+            _ => panic!("Expected inline payload from cache"),
+        }
+
+        let requeued = tokio::time::timeout(Duration::from_millis(50), worker_rx.recv()).await?;
+        assert_eq!(requeued, Some(rep_id));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_resolve_staged_uses_spool_and_requeues() -> Result<()> {
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
+        let spool_dir = tempdir()?;
+        let spool = Arc::new(SpoolManager::new(spool_dir.path(), 1024)?);
+        let (worker_tx, mut worker_rx) = mpsc::channel(1);
+        let resolver = ClipboardPayloadResolver::new(cache, spool.clone(), worker_tx);
+
+        let rep_id = RepresentationId::new();
+        let bytes = vec![9, 8, 7];
+        spool.write(&rep_id, &bytes).await?;
+
+        let rep = PersistedClipboardRepresentation::new_staged(
+            rep_id.clone(),
+            FormatId::from("public.png"),
+            Some(MimeType::from_str("image/png")?),
+            bytes.len() as i64,
+        );
+
+        let payload = resolver.resolve(&rep).await?;
+        match payload {
+            ResolvedClipboardPayload::Inline { bytes: out, .. } => {
+                assert_eq!(out, bytes);
+            }
+            _ => panic!("Expected inline payload from spool"),
+        }
+
+        let requeued = tokio::time::timeout(Duration::from_millis(50), worker_rx.recv()).await?;
+        assert_eq!(requeued, Some(rep_id));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_resolve_staged_missing_bytes_returns_error() -> Result<()> {
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
+        let temp_dir = tempdir()?;
+        let spool = Arc::new(SpoolManager::new(temp_dir.path(), 1024)?);
+        let (worker_tx, _worker_rx) = mpsc::channel(1);
+        let resolver = ClipboardPayloadResolver::new(cache, spool, worker_tx);
+
+        let rep = PersistedClipboardRepresentation::new_staged(
+            RepresentationId::new(),
+            FormatId::from("public.png"),
+            Some(MimeType::from_str("image/png")?),
+            10,
+        );
+
+        let result = resolver.resolve(&rep).await;
+        assert!(result.is_err(), "Expected error when bytes missing");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_resolve_lost_returns_error() -> Result<()> {
+        let cache = Arc::new(RepresentationCache::new(10, 1024));
+        let temp_dir = tempdir()?;
+        let spool = Arc::new(SpoolManager::new(temp_dir.path(), 1024)?);
+        let (worker_tx, _worker_rx) = mpsc::channel(1);
+        let resolver = ClipboardPayloadResolver::new(cache, spool, worker_tx);
+
+        let rep = PersistedClipboardRepresentation::new_with_state(
+            RepresentationId::new(),
+            FormatId::from("public.png"),
+            Some(MimeType::from_str("image/png")?),
+            10,
+            None,
+            None,
+            PayloadAvailability::Lost,
+            Some("missing".to_string()),
+        )?;
+
+        let result = resolver.resolve(&rep).await;
+        assert!(result.is_err(), "Expected error when payload is lost");
+        Ok(())
+    }
 }

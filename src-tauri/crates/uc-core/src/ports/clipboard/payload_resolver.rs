@@ -2,7 +2,7 @@
 //!
 //! This port resolves persisted representations into directly usable payloads.
 //!
-//! **Semantic:** "resolve" = on-demand loading with lazy blob write
+//! **Semantic:** "resolve" = read-only access with best-effort availability
 
 use crate::clipboard::PersistedClipboardRepresentation;
 use crate::BlobId;
@@ -22,18 +22,16 @@ pub trait ClipboardPayloadResolverPort: Send + Sync {
     /// Resolve a persisted clipboard representation into a usable payload.
     ///
     /// # Resolution rules
-    /// 1. **Prefer inline**: If `inline_data` available and complete → return `Inline`
-    /// 2. **Has blob**: If `blob_id` exists → return `BlobRef`
-    /// 3. **Lazy write**: Otherwise:
-    ///    - Load raw bytes (from inline_data or temp storage)
-    ///    - Calculate `ContentHash`
-    ///    - Call `BlobWriterPort::write_if_absent()` to persist
-    ///    - Write back `representation.blob_id` (idempotent)
-    ///    - Return `BlobRef`
+    /// 1. **Inline**: If payload state is Inline and inline_data exists → return `Inline`
+    /// 2. **BlobReady**: If payload state is BlobReady and blob_id exists → return `BlobRef`
+    /// 3. **Staged/Processing/Failed**: Best-effort return of bytes from cache/spool
+    ///    - If bytes are available, return `Inline`
+    ///    - Otherwise return an error (data not currently available)
+    /// 4. **Lost**: Return an unrecoverable error
     ///
-    /// # Idempotence guarantee
-    /// - Multiple resolves of same rep yield identical `blob_id`
-    /// - Concurrent resolve: `update_blob_id` only takes effect when `None`
+    /// # Notes
+    /// - Resolver must be read-only; no lazy blob writes here.
+    /// - Background workers are responsible for materializing blobs.
     async fn resolve(
         &self,
         representation: &PersistedClipboardRepresentation,
