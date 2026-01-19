@@ -1041,7 +1041,26 @@ mod tests {
         let temp_dir = std::env::temp_dir().join(format!("uc-wiring-test-{}", std::process::id()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result = create_platform_layer(keyring, &temp_dir, cmd_tx);
+
+        // Create missing dependencies
+        // 创建缺失的依赖
+        let encryption: Arc<dyn EncryptionPort> = Arc::new(EncryptionRepository);
+        let db_pool = init_db_pool(":memory:").expect("create in-memory db pool");
+        let blob_repository: Arc<dyn BlobRepositoryPort> = Arc::new(DieselBlobRepository::new(
+            Arc::new(DieselSqliteExecutor::new(db_pool)),
+            BlobRowMapper,
+            BlobRowMapper,
+        ));
+        let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
+
+        let result = create_platform_layer(
+            keyring,
+            &temp_dir,
+            cmd_tx,
+            encryption,
+            blob_repository,
+            clock,
+        );
 
         match result {
             Ok(layer) => {
