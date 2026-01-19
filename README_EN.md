@@ -31,8 +31,8 @@
         src="https://img.shields.io/github/v/release/mkdir700/uniclipboard-desktop?include_prereleases&style=flat-square"
       />
     </a >
-    <a href="https://codecov.io/gh/mkdir700/uniclipboard-desktop">
-      <img src="https://img.shields.io/codecov/c/github/mkdir700/uniclipboard-desktop/master?style=flat-square" />
+    <a href="https://codecov.io/gh/UniClipboard/UniClipboard" >
+      <img src="https://codecov.io/gh/UniClipboard/UniClipboard/branch/main/graph/badge.svg?token=QZfjXOsQTp"/>
     </a>
   </div>
 
@@ -54,7 +54,7 @@ UniClipboard is a clipboard synchronization tool designed to provide a seamless 
 - **Cross-platform support**: Supports Windows, macOS, and Linux operating systems
 - **Real-time sync**: Instantly share clipboard content between connected devices
 - **Rich content types**: Supports text, images, files, and more
-- **Secure encryption**: Uses AES-GCM encryption algorithm to ensure secure data transmission
+- **Secure encryption**: Uses XChaCha20-Poly1305 AEAD encryption algorithm to ensure secure data transmission
 - **Multi-device management**: Easily add and manage multiple devices
 - **Flexible configuration**: Provides extensive customization options
 
@@ -106,6 +106,20 @@ Supports multiple network connection modes that can be configured based on your 
 ### Security Features
 
 - **End-to-end encryption**: All data transmitted between devices is encrypted
+- **XChaCha20-Poly1305 encryption**: Modern AEAD cipher providing authenticated encryption
+  - 24-byte random nonce effectively reduces nonce reuse risks
+  - 32-byte (256-bit) encryption key
+  - Provides ciphertext integrity and authenticity verification
+- **Argon2id key derivation**: Securely derives encryption keys from user passphrase
+  - Memory cost: 128 MB
+  - Iterations: 3
+  - Parallelism: 4 threads
+  - Resistant to GPU/ASIC cracking attacks
+- **Key management**: Layered key architecture protects data
+  - MasterKey for clipboard content encryption
+  - Key Encryption Key (KEK) derived from passphrase via Argon2id
+  - KEK securely stored in system keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service)
+  - MasterKey encrypted and stored in KeySlot file
 - **Device authorization**: Precise control over each device's access permissions
 
 ## Contributing

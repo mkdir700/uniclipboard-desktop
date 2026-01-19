@@ -40,8 +40,8 @@ UniClipboard 是一个剪切板同步工具，旨在为用户提供无缝的剪�
         src="https://img.shields.io/github/v/release/UniClipboard/UniClipboard?include_prereleases&style=flat-square"
       />
     </a >
-    <a href="https://codecov.io/gh/UniClipboard/UniClipboard">
-      <img src="https://img.shields.io/codecov/c/github/UniClipboard/UniClipboard/master?style=flat-square" />
+    <a href="https://codecov.io/gh/UniClipboard/UniClipboard" >
+      <img src="https://codecov.io/gh/UniClipboard/UniClipboard/branch/main/graph/badge.svg?token=QZfjXOsQTp"/>
     </a>
   </div>
 
@@ -55,7 +55,7 @@ UniClipboard 是一个剪切板同步工具，旨在为用户提供无缝的剪�
 - **跨平台支持**: 支持 Windows、macOS 和 Linux 操作系统
 - **实时同步**: 在连接的设备间即时共享剪切板内容
 - **丰富内容类型**: 支持文本、图片、文件等多种内容类型
-- **安全加密**: 使用 AES-GCM 加密算法确保数据传输安全
+- **安全加密**: 使用 XChaCha20-Poly1305 AEAD 加密算法确保数据传输安全
 - **多设备管理**: 便捷添加和管理多台设备
 - **灵活配置**: 提供丰富的自定义设置选项
 
@@ -107,6 +107,20 @@ bun tauri build
 ### 安全功能
 
 - **端到端加密**: 所有设备间传输的数据都经过加密保护
+- **XChaCha20-Poly1305 加密**: 使用现代 AEAD 加密算法提供认证加密
+  - 24 字节随机 nonce，有效降低 nonce 重用风险
+  - 32 字节（256 位）加密密钥
+  - 提供密文完整性和真实性验证
+- **Argon2id 密钥派生**: 从用户密码安全派生加密密钥
+  - 内存成本：128 MB
+  - 迭代次数：3 次
+  - 并行度：4 线程
+  - 抗 GPU/ASIC 破解攻击
+- **密钥管理**: 分层密钥架构保护数据安全
+  - 主密钥（MasterKey）用于剪贴板内容加密
+  - 密钥加密密钥（KEK）通过 Argon2id 从密码派生
+  - KEK 安全存储于系统密钥环（macOS Keychain、Windows Credential Manager、Linux Secret Service）
+  - 主密钥加密存储于 KeySlot 文件
 - **设备授权**: 精确控制每台设备的访问权限
 
 ## 🤝 参与贡献
