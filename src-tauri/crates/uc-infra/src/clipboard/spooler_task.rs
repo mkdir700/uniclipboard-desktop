@@ -6,15 +6,9 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, error, warn};
 use uc_core::ids::RepresentationId;
+use uc_core::ports::clipboard::SpoolRequest;
 
 use crate::clipboard::{RepresentationCache, SpoolManager};
-
-/// Spool write request.
-/// 写入磁盘缓存的请求。
-pub struct SpoolRequest {
-    pub rep_id: RepresentationId,
-    pub bytes: Vec<u8>,
-}
 
 /// Background task to write spool requests to disk.
 /// 后台任务：将请求写入磁盘缓存。

@@ -18,4 +18,5 @@ pub use spool_janitor::SpoolJanitor;
 pub use spool_manager::{SpoolEntry, SpoolManager};
 pub use spool_queue::MpscSpoolQueue;
 pub use spool_scanner::SpoolScanner;
-pub use spooler_task::{SpoolRequest, SpoolerTask};
+pub use spooler_task::SpoolerTask;
+pub use uc_core::ports::clipboard::SpoolRequest;
