@@ -221,15 +221,13 @@ fn run_app(config: AppConfig) {
             runtime_for_handler.set_app_handle(app.handle().clone());
             info!("AppHandle set on AppRuntime for event emission");
 
-          // Start background spooler and blob worker tasks
+            // Start background spooler and blob worker tasks
             start_background_tasks(background, &runtime_for_handler.deps);
 
             // Clone handles for async blocks
             let app_handle_for_startup = app.handle().clone();
             let startup_barrier_for_backend = startup_barrier.clone();
             let startup_barrier_for_timeout = startup_barrier.clone();
-            let runtime_for_unlock = runtime_for_handler.clone();
-            let platform_event_tx_clone = platform_event_tx.clone();
 
             if app.get_webview_window("splashscreen").is_none() {
                 // Load settings BEFORE creating the window to avoid race condition
