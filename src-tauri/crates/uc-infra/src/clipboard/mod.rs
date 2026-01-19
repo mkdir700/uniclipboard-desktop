@@ -5,6 +5,7 @@ mod representation_cache;
 mod selection_resolver;
 mod spool_janitor;
 mod spool_manager;
+mod spool_queue;
 mod spool_scanner;
 pub mod spooler_task;
 
@@ -15,5 +16,6 @@ pub use representation_cache::{CacheEntryStatus, RepresentationCache};
 pub use selection_resolver::SelectionResolver;
 pub use spool_janitor::SpoolJanitor;
 pub use spool_manager::{SpoolEntry, SpoolManager};
+pub use spool_queue::MpscSpoolQueue;
 pub use spool_scanner::SpoolScanner;
 pub use spooler_task::{SpoolRequest, SpoolerTask};

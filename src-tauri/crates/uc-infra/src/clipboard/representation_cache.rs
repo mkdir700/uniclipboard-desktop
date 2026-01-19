@@ -5,6 +5,7 @@ use std::collections::{HashMap, VecDeque};
 
 use tokio::sync::Mutex;
 use uc_core::ids::RepresentationId;
+use uc_core::ports::clipboard::RepresentationCachePort;
 
 /// Bounded cache for representation raw bytes.
 /// 表示原始字节的有界缓存。
@@ -103,6 +104,29 @@ impl RepresentationCache {
         let mut inner = self.inner.lock().await;
         inner.remove_entry(rep_id);
         inner.queue.retain(|id| id != rep_id);
+    }
+}
+
+#[async_trait::async_trait]
+impl RepresentationCachePort for RepresentationCache {
+    async fn put(&self, rep_id: &RepresentationId, bytes: Vec<u8>) {
+        self.put(rep_id, bytes).await;
+    }
+
+    async fn get(&self, rep_id: &RepresentationId) -> Option<Vec<u8>> {
+        self.get(rep_id).await
+    }
+
+    async fn mark_completed(&self, rep_id: &RepresentationId) {
+        self.mark_completed(rep_id).await;
+    }
+
+    async fn mark_spooling(&self, rep_id: &RepresentationId) {
+        self.mark_spooling(rep_id).await;
+    }
+
+    async fn remove(&self, rep_id: &RepresentationId) {
+        self.remove(rep_id).await;
     }
 }
 
