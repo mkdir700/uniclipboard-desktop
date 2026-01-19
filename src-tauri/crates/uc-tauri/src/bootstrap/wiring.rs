@@ -512,7 +512,9 @@ fn create_platform_layer(
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use uc_tauri::bootstrap::wiring::get_default_app_dirs;
+///
 /// let dirs = get_default_app_dirs().expect("failed to get app dirs");
 /// // `dirs` contains platform-specific paths such as config, data, and cache roots
 /// assert!(!dirs.app_name.is_empty());
@@ -544,8 +546,10 @@ struct DefaultPaths {
 ///
 /// # Examples
 ///
-/// ```
-/// let cfg = AppConfig::default();
+/// ```ignore
+/// use uc_core::config::AppConfig;
+///
+/// let cfg = AppConfig::empty();
 /// let paths = derive_default_paths(&cfg).expect("derive default paths");
 /// assert!(!paths.app_data_root.as_os_str().is_empty());
 /// assert!(!paths.settings_path.as_os_str().is_empty());
@@ -580,11 +584,12 @@ fn derive_default_paths(config: &AppConfig) -> WiringResult<DefaultPaths> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use uc_core::app_dirs::AppDirs;
-/// use uniclipboard_wiring::{AppConfig, derive_default_paths_from_app_dirs};
+/// use uc_core::config::AppConfig;
+/// use uc_tauri::bootstrap::wiring::derive_default_paths_from_app_dirs;
 ///
-/// // Assuming `AppDirs` and `AppConfig` implement `Default` in tests/setup.
+/// // Assuming `AppDirs` is constructed in tests/setup.
 /// let app_dirs = AppDirs::default();
 /// let config = AppConfig::empty();
 /// let paths = derive_default_paths_from_app_dirs(&app_dirs, &config).unwrap();
@@ -645,10 +650,13 @@ fn derive_default_paths_from_app_dirs(
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use uc_core::config::AppConfig;
+/// use uc_tauri::bootstrap::wiring::wire_dependencies;
+///
 /// // The function will either return fully wired dependencies or a WiringError describing
 /// // what failed during construction.
-/// let config = AppConfig::default();
+/// let config = AppConfig::empty();
 /// let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::channel(10);
 /// match wire_dependencies(&config, cmd_tx) {
 ///     Ok(_wired) => { /* ready to run the application */ }

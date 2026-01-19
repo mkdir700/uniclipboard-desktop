@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use anyhow::Result;
 use futures::future::try_join_all;
 use tokio::sync::mpsc;
-use tracing::{debug, info, info_span, Instrument};
+use tracing::{debug, info, info_span, warn, Instrument};
 
 use uc_core::ids::{EntryId, EventId};
 use uc_core::ports::{
@@ -173,10 +173,16 @@ impl CaptureClipboardUseCase {
                         // TODO(clipboard-spool): 若 try_send 失败，请求会被丢弃，
                         // 暂存数据可能永远无法物化（缓存被驱逐后会丢数据）。
                         // 需要明确非阻塞背压策略，并确保 worker/spool 通知可达。
-                        let _ = self.spool_tx.try_send(SpoolRequest {
+                        if let Err(err) = self.spool_tx.try_send(SpoolRequest {
                             rep_id: rep.id.clone(),
                             bytes: observed.bytes.clone(),
-                        });
+                        }) {
+                            warn!(
+                                representation_id = %rep.id,
+                                error = %err,
+                                "Spool queue full; cache-only fallback"
+                            );
+                        }
                     }
                 }
             }

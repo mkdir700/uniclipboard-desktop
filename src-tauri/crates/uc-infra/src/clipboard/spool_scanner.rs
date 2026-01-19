@@ -38,9 +38,13 @@ impl SpoolScanner {
     /// Scan spool directory and recover queued items.
     /// 扫描磁盘缓存并恢复待处理项。
     pub async fn scan_and_recover(&self) -> Result<usize> {
-        let mut entries = fs::read_dir(&self.spool_dir)
+        self.scan_and_recover_dir(&self.spool_dir).await
+    }
+
+    async fn scan_and_recover_dir(&self, spool_dir: &PathBuf) -> Result<usize> {
+        let mut entries = fs::read_dir(spool_dir)
             .await
-            .with_context(|| format!("Failed to read spool dir: {}", self.spool_dir.display()))?;
+            .with_context(|| format!("Failed to read spool dir: {}", spool_dir.display()))?;
 
         let mut recovered = 0usize;
 
@@ -107,7 +111,10 @@ impl SpoolScanner {
             }
         }
 
-        info!("Spool scan completed; recovered {recovered} items");
+        info!(
+            spool_dir = %spool_dir.display(),
+            "Spool scan completed; recovered {recovered} items"
+        );
         Ok(recovered)
     }
 }

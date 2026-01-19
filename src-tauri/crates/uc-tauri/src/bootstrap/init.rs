@@ -28,6 +28,7 @@ use uc_core::ports::SettingsPort;
 ///
 /// ```no_run
 /// use uc_tauri::bootstrap::init::ensure_default_device_name;
+/// use uc_core::ports::SettingsPort;
 /// use std::sync::Arc;
 ///
 /// # async fn example(settings: Arc<dyn SettingsPort>) -> Result<(), Box<dyn std::error::Error>> {

@@ -421,6 +421,16 @@ async fn stress_test_100_large_images() -> Result<()> {
 
     assert_eq!(blob_writer.count(), rep_ids.len(), "blob count mismatch");
 
+    let mut lost = 0;
+    for rep_id in &rep_ids {
+        if let Some(rep) = rep_repo.get_by_id(rep_id) {
+            if rep.payload_state == PayloadAvailability::Lost {
+                lost += 1;
+            }
+        }
+    }
+    assert_eq!(lost, 0, "representations unexpectedly marked Lost");
+
     let mut evicted = 0;
     for rep_id in rep_ids.iter().take(10) {
         if rep_cache.get(rep_id).await.is_none() {
