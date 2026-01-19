@@ -45,13 +45,14 @@ use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ids::RepresentationId;
-use uc_core::ports::clipboard::ClipboardRepresentationNormalizerPort;
+use uc_core::ports::clipboard::{
+    ClipboardRepresentationNormalizerPort, RepresentationCachePort, SpoolQueuePort, SpoolRequest,
+};
 use uc_core::ports::*;
 use uc_infra::blob::BlobWriter;
-use uc_infra::clipboard::spooler_task::SpoolRequest;
 use uc_infra::clipboard::{
-    BackgroundBlobWorker, ClipboardRepresentationNormalizer, RepresentationCache, SpoolJanitor,
-    SpoolManager, SpoolScanner, SpoolerTask,
+    BackgroundBlobWorker, ClipboardRepresentationNormalizer, MpscSpoolQueue, RepresentationCache,
+    SpoolJanitor, SpoolManager, SpoolScanner, SpoolerTask,
 };
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -123,6 +124,7 @@ pub struct WiredDependencies {
 /// Background runtime components that must be started after async runtime is ready.
 /// 需要在异步运行时就绪后启动的后台组件。
 pub struct BackgroundRuntimeDeps {
+    pub representation_cache: Arc<RepresentationCache>,
     pub spool_manager: Arc<SpoolManager>,
     pub spool_rx: mpsc::Receiver<SpoolRequest>,
     pub worker_rx: mpsc::Receiver<RepresentationId>,
@@ -736,6 +738,7 @@ pub fn wire_dependencies(
         storage_config.cache_max_entries,
         storage_config.cache_max_bytes,
     ));
+    let representation_cache_port: Arc<dyn RepresentationCachePort> = representation_cache.clone();
 
     // Create spool manager
     let spool_dir = paths.cache_dir.join("spool");
@@ -746,6 +749,7 @@ pub fn wire_dependencies(
 
     // Create channels for background processing
     let (spool_tx, spool_rx) = mpsc::channel::<SpoolRequest>(100);
+    let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
     let (worker_tx, worker_rx) = mpsc::channel::<RepresentationId>(100);
 
     // Step 4: Construct AppDeps with all dependencies
@@ -759,8 +763,8 @@ pub fn wire_dependencies(
         representation_normalizer: platform.representation_normalizer,
         selection_repo: infra.selection_repo,
         representation_policy: Arc::new(SelectRepresentationPolicyV1::new()),
-        representation_cache,
-        spool_tx,
+        representation_cache: representation_cache_port,
+        spool_queue,
         worker_tx,
 
         // Security dependencies / 安全依赖
@@ -802,6 +806,7 @@ pub fn wire_dependencies(
     Ok(WiredDependencies {
         deps,
         background: BackgroundRuntimeDeps {
+            representation_cache,
             spool_manager,
             spool_rx,
             worker_rx,
@@ -815,6 +820,7 @@ pub fn wire_dependencies(
 /// 启动后台假脱机写入和 blob 物化任务。
 pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps) {
     let BackgroundRuntimeDeps {
+        representation_cache,
         spool_manager,
         spool_rx,
         worker_rx,
@@ -826,7 +832,6 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
 
     let representation_repo = deps.representation_repo.clone();
     let worker_tx = deps.worker_tx.clone();
-    let representation_cache = deps.representation_cache.clone();
     let blob_writer = deps.blob_writer.clone();
     let hasher = deps.hash.clone();
     let clock = deps.clock.clone();

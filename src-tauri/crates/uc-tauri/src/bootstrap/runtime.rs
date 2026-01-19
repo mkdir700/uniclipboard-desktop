@@ -545,7 +545,7 @@ impl ClipboardChangeHandler for AppRuntime {
             self.deps.representation_normalizer.clone(),
             self.deps.device_identity.clone(),
             self.deps.representation_cache.clone(),
-            self.deps.spool_tx.clone(),
+            self.deps.spool_queue.clone(),
         );
 
         // Execute capture with the provided snapshot
