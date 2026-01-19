@@ -3,7 +3,9 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
+use serde::Serialize;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
@@ -135,6 +137,8 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::autostart::enable_autostart,
             uc_tauri::commands::autostart::disable_autostart,
             uc_tauri::commands::autostart::is_autostart_enabled,
+            // Startup commands
+            uc_tauri::commands::startup::frontend_ready,
             // macOS-specific commands (conditionally compiled)
             #[cfg(target_os = "macos")]
             plugins::mac_rounded_corners::enable_rounded_corners,
@@ -176,6 +180,10 @@ fn run_app(config: AppConfig) {
     // Clone Arc for Tauri state management (will have app_handle injected in setup)
     let runtime_for_tauri = runtime_for_handler.clone();
 
+    // Startup barrier used to coordinate splashscreen close timing.
+    // NOTE: Must be managed before startup to be available via tauri::State<T>.
+    let startup_barrier = Arc::new(uc_tauri::commands::startup::StartupBarrier::default());
+
     // Create clipboard handler from runtime (AppRuntime implements ClipboardChangeHandler)
     let clipboard_handler: Arc<dyn ClipboardChangeHandler> = runtime_for_handler.clone();
 
@@ -187,6 +195,7 @@ fn run_app(config: AppConfig) {
     Builder::default()
         // Register AppRuntime for Tauri commands
         .manage(runtime_for_tauri)
+        .manage(startup_barrier.clone())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(
@@ -207,12 +216,73 @@ fn run_app(config: AppConfig) {
             runtime_for_handler.set_app_handle(app.handle().clone());
             info!("AppHandle set on AppRuntime for event emission");
 
+            let app_handle_for_startup = app.handle().clone();
+            let startup_barrier_for_backend = startup_barrier.clone();
+            let startup_barrier_for_timeout = startup_barrier.clone();
+
             if app.get_webview_window("splashscreen").is_none() {
+                // Load settings BEFORE creating the window to avoid race condition
+                info!("=== [LAYER 1] SPLASHSCREEN: Starting settings load ===");
+                let runtime_clone = runtime_for_handler.clone();
+                let (theme_color, theme_mode) = tauri::async_runtime::block_on(async move {
+                    info!("=== [LAYER 1] SPLASHSCREEN: Inside async block, calling settings.load() ===");
+                    let settings_result = runtime_clone.deps.settings.load().await;
+                    info!("=== [LAYER 1] SPLASHSCREEN: Settings load completed, is_ok={} ===", settings_result.is_ok());
+                    match settings_result {
+                        Ok(settings) => {
+                            let color = settings.general.theme_color.as_deref().unwrap_or("zinc").to_string();
+                            let mode = settings.general.theme.clone();
+                            info!("=== [LAYER 1] SPLASHSCREEN: Raw data - theme_color={:?}, theme_mode={:?} ===",
+                                settings.general.theme_color, mode);
+                            info!("=== [LAYER 1] SPLASHSCREEN: Processed - color={}, mode={:?} ===", color, mode);
+                            (color, mode)
+                        }
+                        Err(e) => {
+                            error!("=== [LAYER 1] SPLASHSCREEN: Failed to load settings: {} ===", e);
+                            warn!("Failed to load settings for splashscreen theme: {}", e);
+                            ("zinc".to_string(), uc_core::settings::model::Theme::System)
+                        }
+                    }
+                });
+                info!("=== [LAYER 1] SPLASHSCREEN: block_on completed, theme_color={}, theme_mode={:?} ===", theme_color, theme_mode);
+
                 match WebviewWindowBuilder::new(
                     app,
                     "splashscreen",
                     WebviewUrl::App("/splashscreen.html".into()),
                 )
+                // IMPORTANT: splashscreen.html 在页面脚本里会同步读取 window.__SPLASH_THEME__
+                // 必须在 document 脚本执行前注入，避免退化为默认主题 + 跟随系统深浅色。
+                .initialization_script({
+                    #[derive(Serialize)]
+                    struct SplashTheme<'a> {
+                        theme_color: &'a str,
+                        #[serde(skip_serializing_if = "Option::is_none")]
+                        mode: Option<&'a str>,
+                    }
+
+                    let mode_str = match theme_mode {
+                        uc_core::settings::model::Theme::Light => Some("light"),
+                        uc_core::settings::model::Theme::Dark => Some("dark"),
+                        uc_core::settings::model::Theme::System => None,
+                    };
+
+                    let payload = SplashTheme {
+                        theme_color: theme_color.as_str(),
+                        mode: mode_str,
+                    };
+
+                    match serde_json::to_string(&payload) {
+                        Ok(json) => format!("window.__SPLASH_THEME__ = {};", json),
+                        Err(e) => {
+                            warn!(
+                                "Failed to serialize splashscreen theme payload, falling back to defaults: {}",
+                                e
+                            );
+                            "window.__SPLASH_THEME__ = { theme_color: 'zinc' };".to_string()
+                        }
+                    }
+                })
                 .title("UniClipboard")
                 .inner_size(800.0, 600.0)
                 .resizable(false)
@@ -222,7 +292,12 @@ fn run_app(config: AppConfig) {
                 .build()
                 {
                     Ok(window) => {
-                        info!("Splashscreen window created");
+                        info!("=== [LAYER 2] SPLASHSCREEN: Window created successfully ===");
+
+                        // Ensure splashscreen is visible immediately (explicit is better than implicit).
+                        if let Err(e) = window.show() {
+                            warn!("Failed to show splashscreen window: {}", e);
+                        }
 
                         // Apply rounded corners to splashscreen window (macOS only)
                         #[cfg(target_os = "macos")]
@@ -241,6 +316,23 @@ fn run_app(config: AppConfig) {
                     }
                     Err(e) => warn!("Failed to create splashscreen window: {}", e),
                 }
+            }
+
+            // Dev-only safety net: avoid getting stuck on splashscreen if the frontend handshake doesn't arrive.
+            // In release builds, we prefer strict coordination to avoid showing a blank main window.
+            #[cfg(debug_assertions)]
+            {
+                let app_handle_timeout = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(15)).await;
+                    if app_handle_timeout.get_webview_window("splashscreen").is_some() {
+                        warn!(
+                            "frontend_ready handshake not received in time; forcing startup barrier completion (debug)"
+                        );
+                        startup_barrier_for_timeout.mark_frontend_ready();
+                        startup_barrier_for_timeout.try_finish(&app_handle_timeout);
+                    }
+                });
             }
 
             // Spawn the initialization task immediately (don't wait for frontend)
@@ -329,30 +421,11 @@ fn run_app(config: AppConfig) {
                     }
                 }
 
-                // 4. Show main window and close splashscreen
-                {
-                    let app_handle_guard = runtime.app_handle();
-                    if let Some(app_handle) = app_handle_guard.as_ref() {
-                        if let Some(main_window) = app_handle.get_webview_window("main") {
-                            if let Err(e) = main_window.show() {
-                                warn!("Failed to show main window: {}", e);
-                            } else {
-                                info!("Main window shown");
-                            }
-                        } else {
-                            warn!("Main window not found");
-                        }
-
-                        if let Some(splash_window) = app_handle.get_webview_window("splashscreen") {
-                            if let Err(e) = splash_window.close() {
-                                warn!("Failed to close splashscreen: {}", e);
-                            } else {
-                                info!("Splashscreen closed");
-                            }
-                        }
-                    }
-                    // app_handle_guard dropped here
-                }
+                // Mark backend-side startup tasks completed. We intentionally do NOT close the splashscreen
+                // or show the main window here; that is driven by the frontend via `frontend_ready` to avoid
+                // showing a blank main window when `index.html` does not contain an inline splash.
+                startup_barrier_for_backend.mark_backend_ready();
+                startup_barrier_for_backend.try_finish(&app_handle_for_startup);
 
                 // 5. Start platform runtime (this is an infinite loop that runs until app exits)
                 platform_runtime.start().await;

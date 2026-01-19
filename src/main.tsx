@@ -6,6 +6,33 @@ import App from './App'
 import { store } from './store'
 import './i18n'
 
+const notifyBackendFrontendReady = async () => {
+  try {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const { invoke } = await import('@tauri-apps/api/core')
+    const deadline = Date.now() + 15000
+    let lastError: unknown = null
+
+    while (Date.now() < deadline) {
+      try {
+        await invoke('frontend_ready')
+        console.log('[Startup] frontend_ready sent')
+        return
+      } catch (error) {
+        lastError = error
+        await new Promise<void>(resolve => setTimeout(resolve, 100))
+      }
+    }
+
+    console.warn('[Startup] frontend_ready handshake timed out:', lastError)
+  } catch (error) {
+    console.error('[Startup] Failed to notify backend frontend_ready:', error)
+  }
+}
+
 const applyPlatformTypographyScale = () => {
   if (typeof navigator === 'undefined' || typeof document === 'undefined') {
     return
@@ -53,3 +80,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     </Provider>
   </React.StrictMode>
 )
+
+// Notify backend after initial mount scheduling.
+// React.StrictMode may mount twice in dev; backend side is idempotent.
+queueMicrotask(() => {
+  void notifyBackendFrontendReady()
+})

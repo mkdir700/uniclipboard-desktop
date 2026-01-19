@@ -95,60 +95,101 @@
     </div>
 
     <script>
-      ;(async function () {
+      ;(function () {
         const root = document.documentElement
-        let theme = 'zinc' // 默认主题
-        let mode = null // null = 未设置
 
-        // ========== 1. 尝试 Tauri API ==========
-        if (window.__TAURI__) {
-          try {
-            const { invoke } = await import('@tauri-apps/api/core')
-            const settings = await invoke('get_settings')
+        console.log('=== [LAYER 4] SPLASHSCREEN: Script started ===')
+        console.log(
+          '=== [LAYER 4] SPLASHSCREEN: Initial __SPLASH_THEME__ value:',
+          window.__SPLASH_THEME__,
+          '==='
+        )
 
-            const userTheme = settings?.general?.theme
-            const userThemeColor = settings?.general?.theme_color || 'zinc'
+        // ========== 主题来源优先级 / Theme sources ==========
+        // 1) Rust 初始化脚本注入 window.__SPLASH_THEME__（最可靠，避免竞态）
+        // 2) localStorage（主应用 SettingContext 会写入；用于处理 reload/HMR 或注入缺失场景）
+        // 3) 系统偏好（最后回退）
+        const splashTheme = window.__SPLASH_THEME__ || {}
+        console.log('=== [LAYER 5] SPLASHSCREEN: splashTheme object:', splashTheme, '===')
 
-            theme = userThemeColor
-
-            if (userTheme === 'light') {
-              mode = 'light'
-            } else if (userTheme === 'dark') {
-              mode = 'dark'
-            }
-          } catch (e) {
-            console.warn('无法读取 Tauri 配置:', e)
-          }
+        let savedTheme = null
+        let savedThemeColor = null
+        try {
+          savedTheme = localStorage.getItem('uc-theme')
+          savedThemeColor = localStorage.getItem('uc-theme-color')
+        } catch (e) {
+          console.warn('Failed to read theme from localStorage:', e)
         }
 
-        // ========== 2. 回退到 localStorage ==========
-        if (mode === null) {
-          const savedTheme = localStorage.getItem('uc-theme')
-          const savedThemeColor = localStorage.getItem('uc-theme-color')
+        const theme = splashTheme.theme_color || savedThemeColor || 'zinc'
+        let mode = splashTheme.mode
 
-          if (savedThemeColor) theme = savedThemeColor
+        console.log(
+          '=== [LAYER 5] SPLASHSCREEN: Extracted - theme_color="' +
+            theme +
+            '", mode="' +
+            mode +
+            '" ==='
+        )
+
+        // 如果 Rust 没给出 mode（或无效），尝试从 localStorage 读取
+        if (mode !== 'light' && mode !== 'dark') {
           if (savedTheme === 'light' || savedTheme === 'dark') {
             mode = savedTheme
+            console.log('=== [LAYER 5] SPLASHSCREEN: Mode from localStorage: ' + mode + ' ===')
           }
         }
 
-        // ========== 3. 系统默认 ==========
-        if (mode === null) {
-          mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        // 如果 mode 仍未设置，回退到系统偏好
+        if (mode !== 'light' && mode !== 'dark') {
+          const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          console.log(
+            '=== [LAYER 5] SPLASHSCREEN: Mode not set, using system preference. prefers-dark=' +
+              systemPrefersDark +
+              ' ==='
+          )
+          mode = systemPrefersDark ? 'dark' : 'light'
         }
 
         // ========== 应用主题 ==========
+        console.log(
+          '=== [LAYER 6] SPLASHSCREEN: Applying theme - data-theme="' +
+            theme +
+            '", mode="' +
+            mode +
+            '" ==='
+        )
         root.setAttribute('data-theme', theme)
+        root.classList.remove('dark', 'light')
         if (mode === 'dark') {
           root.classList.add('dark')
+        } else if (mode === 'light') {
+          root.classList.add('light')
         }
 
-        // ========== 监听系统主题变化 ==========
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-          if (!localStorage.getItem('uc-theme')) {
+        console.log(
+          '=== [LAYER 6] SPLASHSCREEN: Final state - data-theme=' +
+            root.getAttribute('data-theme') +
+            ', classList=' +
+            root.className +
+            ' ==='
+        )
+
+        // ========== 监听系统主题变化（仅当使用系统主题时） ==========
+        const explicitMode = splashTheme.mode === 'light' || splashTheme.mode === 'dark'
+        const explicitStoredMode = savedTheme === 'light' || savedTheme === 'dark'
+        if (!explicitMode && !explicitStoredMode) {
+          console.log('=== [LAYER 7] SPLASHSCREEN: Setting up system theme listener ===')
+          window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            console.log(
+              '=== [LAYER 7] SPLASHSCREEN: System theme changed to ' +
+                (e.matches ? 'dark' : 'light') +
+                ' ==='
+            )
             root.classList.toggle('dark', e.matches)
-          }
-        })
+            root.classList.toggle('light', !e.matches)
+          })
+        }
       })()
     </script>
   </body>
