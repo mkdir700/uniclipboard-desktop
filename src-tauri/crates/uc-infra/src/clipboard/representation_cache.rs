@@ -78,6 +78,32 @@ impl RepresentationCache {
             .get(rep_id)
             .map(|entry| entry.raw_bytes.clone())
     }
+
+    /// Mark cache entry as completed.
+    /// 将缓存条目标记为完成。
+    pub async fn mark_completed(&self, rep_id: &RepresentationId) {
+        let mut inner = self.inner.lock().await;
+        if let Some(entry) = inner.entries.get_mut(rep_id) {
+            entry.status = CacheEntryStatus::Completed;
+        }
+    }
+
+    /// Mark cache entry as processing/spooling.
+    /// 将缓存条目标记为处理/写盘中。
+    pub async fn mark_spooling(&self, rep_id: &RepresentationId) {
+        let mut inner = self.inner.lock().await;
+        if let Some(entry) = inner.entries.get_mut(rep_id) {
+            entry.status = CacheEntryStatus::Processing;
+        }
+    }
+
+    /// Remove cache entry explicitly.
+    /// 显式移除缓存条目。
+    pub async fn remove(&self, rep_id: &RepresentationId) {
+        let mut inner = self.inner.lock().await;
+        inner.remove_entry(rep_id);
+        inner.queue.retain(|id| id != rep_id);
+    }
 }
 
 impl Inner {
@@ -89,14 +115,26 @@ impl Inner {
 
     fn evict_if_needed(&mut self) {
         while self.entries.len() > self.max_entries || self.current_bytes > self.max_bytes {
-            let evicted_id = match self.queue.pop_front() {
-                Some(id) => id,
-                None => break,
-            };
-            if let Some(entry) = self.entries.remove(&evicted_id) {
-                self.current_bytes = self.current_bytes.saturating_sub(entry.raw_bytes.len());
+            if let Some(evicted_id) = self.pop_oldest_by_status(CacheEntryStatus::Completed) {
+                self.remove_entry(&evicted_id);
+                continue;
+            }
+            if let Some(evicted_id) = self.queue.pop_front() {
+                self.remove_entry(&evicted_id);
+            } else {
+                break;
             }
         }
+    }
+
+    fn pop_oldest_by_status(&mut self, status: CacheEntryStatus) -> Option<RepresentationId> {
+        let pos = self.queue.iter().position(|id| {
+            self.entries
+                .get(id)
+                .map(|entry| entry.status == status)
+                .unwrap_or(false)
+        })?;
+        self.queue.remove(pos)
     }
 }
 
@@ -142,5 +180,23 @@ mod tests {
 
         assert_eq!(cache.get(&rep_id_a).await, None);
         assert_eq!(cache.get(&rep_id_b).await, Some(vec![4, 5, 6]));
+    }
+
+    #[tokio::test]
+    async fn test_evicts_completed_before_pending() {
+        let cache = RepresentationCache::new(2, 10_000);
+        let rep_id_a = RepresentationId::new();
+        let rep_id_b = RepresentationId::new();
+        let rep_id_c = RepresentationId::new();
+
+        cache.put(&rep_id_a, vec![1]).await;
+        cache.put(&rep_id_b, vec![2]).await;
+        cache.mark_completed(&rep_id_a).await;
+
+        cache.put(&rep_id_c, vec![3]).await;
+
+        assert_eq!(cache.get(&rep_id_a).await, None);
+        assert_eq!(cache.get(&rep_id_b).await, Some(vec![2]));
+        assert_eq!(cache.get(&rep_id_c).await, Some(vec![3]));
     }
 }
