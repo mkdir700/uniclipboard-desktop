@@ -73,6 +73,5 @@ impl SelectionResolverPort for SelectionResolver {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     // Add unit tests with mock repositories
 }
