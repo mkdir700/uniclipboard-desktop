@@ -530,6 +530,7 @@ struct DefaultPaths {
     db_path: PathBuf,
     vault_dir: PathBuf,
     settings_path: PathBuf,
+    cache_dir: PathBuf,
 }
 
 /// Compute default application file-system paths from the given configuration.
@@ -620,6 +621,7 @@ fn derive_default_paths_from_app_dirs(
         db_path,
         vault_dir,
         settings_path,
+        cache_dir: base_paths.cache_dir,
     })
 }
 
@@ -1191,9 +1193,21 @@ The functionality is still validated in development mode when running the app wi
     fn wiring_derives_paths_from_port_fact() {
         let dirs = uc_core::app_dirs::AppDirs {
             app_data_root: std::path::PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: std::path::PathBuf::from("/tmp/uniclipboard-cache"),
         };
         let paths = derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
             .expect("derive_default_paths_from_app_dirs failed");
         assert!(paths.db_path.ends_with("uniclipboard.db"));
+    }
+
+    #[test]
+    fn derive_default_paths_sets_cache_dir() {
+        let dirs = uc_core::app_dirs::AppDirs {
+            app_data_root: PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
+        };
+        let paths = derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
+            .expect("derive_default_paths_from_app_dirs failed");
+        assert_eq!(paths.cache_dir, PathBuf::from("/tmp/uniclipboard-cache"));
     }
 }
