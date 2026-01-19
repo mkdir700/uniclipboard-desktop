@@ -31,7 +31,7 @@ use anyhow::Result;
 use diesel::{BoolExpressionMethods, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl};
 use uc_core::clipboard::{PayloadAvailability, PersistedClipboardRepresentation};
 use uc_core::ids::{EventId, RepresentationId};
-use uc_core::ports::clipboard::ClipboardRepresentationRepositoryPort;
+use uc_core::ports::clipboard::{ClipboardRepresentationRepositoryPort, ProcessingUpdateOutcome};
 use uc_core::BlobId;
 
 pub struct DieselClipboardRepresentationRepository<E>
@@ -161,7 +161,7 @@ where
         blob_id: Option<&BlobId>,
         new_state: PayloadAvailability,
         last_error: Option<&str>,
-    ) -> Result<PersistedClipboardRepresentation> {
+    ) -> Result<ProcessingUpdateOutcome> {
         let rep_id_str = rep_id.to_string();
         let expected_state_strs: Vec<String> = expected_states
             .iter()
@@ -179,8 +179,9 @@ where
             result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
         })?;
 
-        let _event_id_str = event_id_str
-            .ok_or_else(|| anyhow::anyhow!("Representation not found: {}", rep_id_str))?;
+        if event_id_str.is_none() {
+            return Ok(ProcessingUpdateOutcome::NotFound);
+        }
 
         // Perform the CAS update with all fields set in one statement
         let updated_rows = self.executor.run(|conn| {
@@ -212,10 +213,7 @@ where
         })?;
 
         if updated_rows == 0 {
-            return Err(anyhow::anyhow!(
-                "CAS update failed: representation state changed. Expected one of {:?}, but current state differs",
-                expected_states
-            ));
+            return Ok(ProcessingUpdateOutcome::StateMismatch);
         }
 
         // Fetch and return the updated representation
@@ -233,15 +231,45 @@ where
         })?;
 
         let mapper = RepresentationRowMapper;
-        mapper.to_domain(&row)
+        let representation = mapper.to_domain(&row)?;
+        Ok(ProcessingUpdateOutcome::Updated(representation))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uc_core::clipboard::{PayloadAvailability, PersistedClipboardRepresentation};
-    use uc_core::ids::{EventId, FormatId, RepresentationId};
+    use crate::db::models::snapshot_representation::NewSnapshotRepresentationRow;
+    use crate::db::schema::{clipboard_event, clipboard_snapshot_representation};
+    use diesel::RunQueryDsl;
+    use std::sync::Arc;
+    use uc_core::clipboard::PayloadAvailability;
+    use uc_core::ids::RepresentationId;
+
+    /// In-memory test executor for testing repositories
+    #[derive(Clone)]
+    struct TestDbExecutor {
+        pool: Arc<crate::db::pool::DbPool>,
+    }
+
+    impl TestDbExecutor {
+        fn new() -> Self {
+            let pool = Arc::new(
+                crate::db::pool::init_db_pool(":memory:").expect("Failed to create test DB pool"),
+            );
+            Self { pool }
+        }
+    }
+
+    impl DbExecutor for TestDbExecutor {
+        fn run<T>(
+            &self,
+            f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>,
+        ) -> anyhow::Result<T> {
+            let mut conn = self.pool.get()?;
+            f(&mut conn)
+        }
+    }
 
     // Note: This requires a test database setup.
     // For now, we provide the test structure that can be run with proper test DB.
@@ -339,5 +367,53 @@ mod tests {
         // ).await.unwrap_err();
         //
         // assert!(err.to_string().contains("CAS update failed"));
+    }
+
+    #[tokio::test]
+    async fn test_update_processing_result_returns_state_mismatch() -> Result<()> {
+        let executor = TestDbExecutor::new();
+        let repo = DieselClipboardRepresentationRepository::new(executor.clone());
+        let rep_id = RepresentationId::new();
+
+        executor.run(|conn| {
+            diesel::insert_into(clipboard_event::table)
+                .values((
+                    clipboard_event::event_id.eq("test-event-1"),
+                    clipboard_event::captured_at_ms.eq(1704067200000i64),
+                    clipboard_event::source_device.eq("test-device"),
+                    clipboard_event::snapshot_hash.eq("blake3v1:testhash"),
+                ))
+                .execute(conn)?;
+
+            diesel::insert_into(clipboard_snapshot_representation::table)
+                .values(NewSnapshotRepresentationRow {
+                    id: rep_id.to_string(),
+                    event_id: "test-event-1".to_string(),
+                    format_id: "public.text".to_string(),
+                    mime_type: Some("text/plain".to_string()),
+                    size_bytes: 3,
+                    inline_data: None,
+                    blob_id: None,
+                    payload_state: PayloadAvailability::BlobReady.as_str().to_string(),
+                    last_error: None,
+                })
+                .execute(conn)?;
+
+            Ok(())
+        })?;
+
+        let outcome = repo
+            .update_processing_result(
+                &rep_id,
+                &[PayloadAvailability::Staged],
+                None,
+                PayloadAvailability::Lost,
+                Some("state mismatch"),
+            )
+            .await?;
+
+        assert!(matches!(outcome, ProcessingUpdateOutcome::StateMismatch));
+
+        Ok(())
     }
 }

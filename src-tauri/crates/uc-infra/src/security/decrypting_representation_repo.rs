@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::debug;
 
+use uc_core::ports::clipboard::ProcessingUpdateOutcome;
 use uc_core::{
     clipboard::{PayloadAvailability, PersistedClipboardRepresentation},
     ids::{EventId, RepresentationId},
@@ -147,7 +148,7 @@ impl ClipboardRepresentationRepositoryPort for DecryptingClipboardRepresentation
         blob_id: Option<&BlobId>,
         new_state: PayloadAvailability,
         last_error: Option<&str>,
-    ) -> Result<PersistedClipboardRepresentation> {
+    ) -> Result<ProcessingUpdateOutcome> {
         // Delegate to inner repo - this method is for state updates, not data reading
         // The returned representation may contain encrypted inline_data, which is expected
         // for update operations. Use get_representation to get decrypted data.
@@ -268,34 +269,32 @@ mod tests {
             blob_id: Option<&BlobId>,
             new_state: PayloadAvailability,
             last_error: Option<&str>,
-        ) -> Result<PersistedClipboardRepresentation> {
+        ) -> Result<ProcessingUpdateOutcome> {
             // Find and update representation
             for ((_, id), rep) in self.storage.lock().unwrap().iter_mut() {
                 if id == rep_id {
                     // Check if current state is in expected_states
                     let current_state = rep.payload_state();
                     if !expected_states.contains(&current_state) {
-                        return Err(anyhow::anyhow!(
-                            "CAS update failed: current state {:?} not in expected states {:?}",
-                            current_state,
-                            expected_states
-                        ));
+                        return Ok(ProcessingUpdateOutcome::StateMismatch);
                     }
 
                     // Update fields and return new representation with updated state
-                    return Ok(PersistedClipboardRepresentation::new_with_state(
-                        rep.id.clone(),
-                        rep.format_id.clone(),
-                        rep.mime_type.clone(),
-                        rep.size_bytes,
-                        rep.inline_data.clone(),
-                        blob_id.cloned(),
-                        new_state,
-                        last_error.map(|s| s.to_string()),
-                    )?);
+                    return Ok(ProcessingUpdateOutcome::Updated(
+                        PersistedClipboardRepresentation::new_with_state(
+                            rep.id.clone(),
+                            rep.format_id.clone(),
+                            rep.mime_type.clone(),
+                            rep.size_bytes,
+                            rep.inline_data.clone(),
+                            blob_id.cloned(),
+                            new_state,
+                            last_error.map(|s| s.to_string()),
+                        )?,
+                    ));
                 }
             }
-            Err(anyhow::anyhow!("Representation not found: {}", rep_id))
+            Ok(ProcessingUpdateOutcome::NotFound)
         }
     }
 

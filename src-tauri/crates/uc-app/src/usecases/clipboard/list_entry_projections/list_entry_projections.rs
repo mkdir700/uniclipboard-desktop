@@ -273,7 +273,7 @@ mod tests {
             _blob_id: Option<&uc_core::BlobId>,
             _new_state: uc_core::clipboard::PayloadAvailability,
             _last_error: Option<&str>,
-        ) -> Result<uc_core::clipboard::PersistedClipboardRepresentation> {
+        ) -> Result<uc_core::ports::clipboard::ProcessingUpdateOutcome> {
             unimplemented!()
         }
     }

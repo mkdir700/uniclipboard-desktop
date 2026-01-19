@@ -4,6 +4,25 @@ use crate::BlobId;
 use anyhow::Result;
 use async_trait::async_trait;
 
+/// Result of a processing update CAS operation.
+///
+/// 处理结果更新的 CAS 操作结果。
+#[derive(Debug)]
+pub enum ProcessingUpdateOutcome {
+    /// Successfully updated and returned the new representation.
+    ///
+    /// 更新成功并返回新的表示。
+    Updated(PersistedClipboardRepresentation),
+    /// Representation exists but state did not match expected states.
+    ///
+    /// 表示存在但状态不匹配预期。
+    StateMismatch,
+    /// Representation not found.
+    ///
+    /// 表示不存在。
+    NotFound,
+}
+
 #[async_trait]
 pub trait ClipboardRepresentationRepositoryPort: Send + Sync {
     async fn get_representation(
@@ -50,11 +69,11 @@ pub trait ClipboardRepresentationRepositoryPort: Send + Sync {
     /// # Transactional update
     /// - Single UPDATE statement sets blob_id, payload_state, last_error
     /// - WHERE clause filters by expected_states
-    /// - Returns updated row or error if no rows matched
+    /// - Returns updated row or outcome if no rows matched
     ///
     /// # Concurrency safety
     /// - Only updates if current state is in expected_states
-    /// - Returns error if state changed by another worker
+    /// - Returns state mismatch outcome if state changed by another worker
     async fn update_processing_result(
         &self,
         rep_id: &RepresentationId,
@@ -62,5 +81,5 @@ pub trait ClipboardRepresentationRepositoryPort: Send + Sync {
         blob_id: Option<&BlobId>,
         new_state: PayloadAvailability,
         last_error: Option<&str>,
-    ) -> Result<PersistedClipboardRepresentation>;
+    ) -> Result<ProcessingUpdateOutcome>;
 }

@@ -16,6 +16,8 @@ pub use local_clipboard::SystemClipboardPort;
 pub use payload_resolver::{ClipboardPayloadResolverPort, ResolvedClipboardPayload};
 pub use platform_clipboard::PlatformClipboardPort;
 pub use representation_normalizer::ClipboardRepresentationNormalizerPort;
-pub use representation_repository::ClipboardRepresentationRepositoryPort;
+pub use representation_repository::{
+    ClipboardRepresentationRepositoryPort, ProcessingUpdateOutcome,
+};
 pub use select_representation_policy::SelectRepresentationPolicyPort;
 pub use selection_resolver::SelectionResolverPort;

@@ -10,6 +10,7 @@ use tokio::time::sleep;
 use tracing::{error, info_span, warn, Instrument};
 use uc_core::clipboard::PayloadAvailability;
 use uc_core::ids::RepresentationId;
+use uc_core::ports::clipboard::ProcessingUpdateOutcome;
 use uc_core::ports::{BlobWriterPort, ClipboardRepresentationRepositoryPort, ContentHashPort};
 
 use crate::clipboard::{RepresentationCache, SpoolManager};
@@ -95,7 +96,7 @@ impl BackgroundBlobWorker {
 
     async fn process_once(&self, rep_id: &RepresentationId) -> Result<ProcessResult> {
         // Transition to Processing (idempotent for staged/processing).
-        if let Err(err) = self
+        match self
             .repo
             .update_processing_result(
                 rep_id,
@@ -106,12 +107,26 @@ impl BackgroundBlobWorker {
             )
             .await
         {
-            warn!(
-                representation_id = %rep_id,
-                error = %err,
-                "Skipping processing due to state mismatch"
-            );
-            return Ok(ProcessResult::Completed);
+            Ok(ProcessingUpdateOutcome::Updated(_)) => {}
+            Ok(ProcessingUpdateOutcome::StateMismatch) => {
+                warn!(
+                    representation_id = %rep_id,
+                    "Skipping processing due to state mismatch"
+                );
+                return Ok(ProcessResult::Completed);
+            }
+            Ok(ProcessingUpdateOutcome::NotFound) => {
+                warn!(representation_id = %rep_id, "Representation missing");
+                return Ok(ProcessResult::Completed);
+            }
+            Err(err) => {
+                warn!(
+                    representation_id = %rep_id,
+                    error = %err,
+                    "Skipping processing due to update failure"
+                );
+                return Ok(ProcessResult::Completed);
+            }
         }
 
         let cached = self.cache.get(rep_id).await;
@@ -162,7 +177,7 @@ impl BackgroundBlobWorker {
             .await;
 
         match updated {
-            Ok(_) => {
+            Ok(ProcessingUpdateOutcome::Updated(_)) => {
                 if let Err(err) = self.spool.delete(rep_id).await {
                     warn!(
                         representation_id = %rep_id,
@@ -170,6 +185,17 @@ impl BackgroundBlobWorker {
                         "Failed to delete spool entry after blob materialization"
                     );
                 }
+                Ok(ProcessResult::Completed)
+            }
+            Ok(ProcessingUpdateOutcome::StateMismatch) => {
+                warn!(
+                    representation_id = %rep_id,
+                    "Skipping update due to state mismatch"
+                );
+                Ok(ProcessResult::Completed)
+            }
+            Ok(ProcessingUpdateOutcome::NotFound) => {
+                warn!(representation_id = %rep_id, "Representation missing");
                 Ok(ProcessResult::Completed)
             }
             Err(err) => {
@@ -184,7 +210,7 @@ impl BackgroundBlobWorker {
     }
 
     async fn mark_failed(&self, rep_id: &RepresentationId, last_error: &str) -> Result<()> {
-        if let Err(err) = self
+        match self
             .repo
             .update_processing_result(
                 rep_id,
@@ -197,17 +223,29 @@ impl BackgroundBlobWorker {
             )
             .await
         {
-            error!(
-                representation_id = %rep_id,
-                error = %err,
-                "Failed to mark representation as Failed"
-            );
+            Ok(ProcessingUpdateOutcome::Updated(_)) => {}
+            Ok(ProcessingUpdateOutcome::StateMismatch) => {
+                warn!(
+                    representation_id = %rep_id,
+                    "Skipping mark_failed due to state mismatch"
+                );
+            }
+            Ok(ProcessingUpdateOutcome::NotFound) => {
+                warn!(representation_id = %rep_id, "Representation missing");
+            }
+            Err(err) => {
+                error!(
+                    representation_id = %rep_id,
+                    error = %err,
+                    "Failed to mark representation as Failed"
+                );
+            }
         }
         Ok(())
     }
 
     async fn mark_lost(&self, rep_id: &RepresentationId, last_error: &str) -> Result<()> {
-        if let Err(err) = self
+        match self
             .repo
             .update_processing_result(
                 rep_id,
@@ -218,11 +256,23 @@ impl BackgroundBlobWorker {
             )
             .await
         {
-            error!(
-                representation_id = %rep_id,
-                error = %err,
-                "Failed to mark representation as Lost"
-            );
+            Ok(ProcessingUpdateOutcome::Updated(_)) => {}
+            Ok(ProcessingUpdateOutcome::StateMismatch) => {
+                warn!(
+                    representation_id = %rep_id,
+                    "Skipping mark_lost due to state mismatch"
+                );
+            }
+            Ok(ProcessingUpdateOutcome::NotFound) => {
+                warn!(representation_id = %rep_id, "Representation missing");
+            }
+            Err(err) => {
+                error!(
+                    representation_id = %rep_id,
+                    error = %err,
+                    "Failed to mark representation as Lost"
+                );
+            }
         }
         Ok(())
     }
@@ -350,16 +400,17 @@ mod tests {
             blob_id: Option<&BlobId>,
             new_state: PayloadAvailability,
             last_error: Option<&str>,
-        ) -> Result<PersistedClipboardRepresentation> {
+        ) -> Result<ProcessingUpdateOutcome> {
             let mut reps = self.reps.lock().await;
-            let current = reps
-                .get_mut(rep_id)
-                .ok_or_else(|| anyhow::anyhow!("representation not found"))?;
+            let current = match reps.get_mut(rep_id) {
+                Some(rep) => rep,
+                None => return Ok(ProcessingUpdateOutcome::NotFound),
+            };
 
             let expected_state_strs: Vec<&str> =
                 expected_states.iter().map(|s| s.as_str()).collect();
             if !expected_state_strs.contains(&current.payload_state.as_str()) {
-                return Err(anyhow::anyhow!("CAS update failed"));
+                return Ok(ProcessingUpdateOutcome::StateMismatch);
             }
 
             current.payload_state = new_state.clone();
@@ -369,7 +420,7 @@ mod tests {
                 current.blob_id = Some(blob_id.clone());
             }
 
-            Ok(current.clone())
+            Ok(ProcessingUpdateOutcome::Updated(current.clone()))
         }
     }
 

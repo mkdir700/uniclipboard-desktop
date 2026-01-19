@@ -17,6 +17,7 @@ use uc_core::clipboard::{
     PayloadAvailability, PersistedClipboardRepresentation, SystemClipboardSnapshot,
 };
 use uc_core::ids::{EntryId, EventId, FormatId, RepresentationId};
+use uc_core::ports::clipboard::ProcessingUpdateOutcome;
 use uc_core::ports::BlobWriterPort;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
@@ -157,21 +158,22 @@ impl ClipboardRepresentationRepositoryPort for InMemoryRepresentationRepo {
         blob_id: Option<&BlobId>,
         new_state: PayloadAvailability,
         last_error: Option<&str>,
-    ) -> Result<PersistedClipboardRepresentation> {
+    ) -> Result<ProcessingUpdateOutcome> {
         let mut guard = self.representations.lock().unwrap();
-        let rep = guard
-            .get_mut(rep_id)
-            .ok_or_else(|| anyhow!("representation not found"))?;
+        let rep = match guard.get_mut(rep_id) {
+            Some(rep) => rep,
+            None => return Ok(ProcessingUpdateOutcome::NotFound),
+        };
 
         if !expected_states.contains(&rep.payload_state) {
-            return Err(anyhow!("payload_state mismatch"));
+            return Ok(ProcessingUpdateOutcome::StateMismatch);
         }
 
         rep.payload_state = new_state;
         rep.blob_id = blob_id.cloned();
         rep.last_error = last_error.map(|s| s.to_string());
 
-        Ok(rep.clone())
+        Ok(ProcessingUpdateOutcome::Updated(rep.clone()))
     }
 }
 

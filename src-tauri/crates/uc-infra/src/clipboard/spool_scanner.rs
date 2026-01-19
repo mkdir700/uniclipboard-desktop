@@ -122,6 +122,7 @@ mod tests {
     use tokio::time::{timeout, Duration};
     use uc_core::clipboard::{PayloadAvailability, PersistedClipboardRepresentation};
     use uc_core::ids::{FormatId, RepresentationId};
+    use uc_core::ports::clipboard::ProcessingUpdateOutcome;
     use uc_core::ports::ClipboardRepresentationRepositoryPort;
     use uc_core::{BlobId, MimeType};
 
@@ -169,8 +170,8 @@ mod tests {
             _blob_id: Option<&BlobId>,
             _new_state: PayloadAvailability,
             _last_error: Option<&str>,
-        ) -> Result<PersistedClipboardRepresentation> {
-            Err(anyhow::anyhow!("not implemented"))
+        ) -> Result<ProcessingUpdateOutcome> {
+            Ok(ProcessingUpdateOutcome::StateMismatch)
         }
     }
 
