@@ -65,6 +65,13 @@ impl DirsAppDirsAdapter {
         }
         dirs::data_local_dir()
     }
+
+    fn base_cache_dir(&self) -> Option<PathBuf> {
+        if let Some(base) = &self.base_data_local_dir_override {
+            return Some(base.clone());
+        }
+        dirs::cache_dir()
+    }
 }
 
 impl AppDirsPort for DirsAppDirsAdapter {
@@ -84,12 +91,16 @@ impl AppDirsPort for DirsAppDirsAdapter {
     /// assert_eq!(dirs.app_data_root, PathBuf::from("/tmp/uniclipboard"));
     /// ```
     fn get_app_dirs(&self) -> Result<AppDirs, AppDirsError> {
-        let base = self
+        let base_data = self
             .base_data_local_dir()
             .ok_or(AppDirsError::DataLocalDirUnavailable)?;
+        let base_cache = self
+            .base_cache_dir()
+            .ok_or(AppDirsError::CacheDirUnavailable)?;
 
         Ok(AppDirs {
-            app_data_root: base.join(APP_DIR_NAME),
+            app_data_root: base_data.join(APP_DIR_NAME),
+            app_cache_root: base_cache.join(APP_DIR_NAME),
         })
     }
 }
@@ -117,5 +128,12 @@ mod tests {
             dirs.app_data_root,
             std::path::PathBuf::from("/tmp/uniclipboard")
         );
+    }
+
+    #[test]
+    fn adapter_sets_cache_root() {
+        let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
+        let dirs = adapter.get_app_dirs().unwrap();
+        assert!(dirs.app_cache_root.ends_with("uniclipboard"));
     }
 }
