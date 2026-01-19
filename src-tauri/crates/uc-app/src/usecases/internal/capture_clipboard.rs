@@ -3,16 +3,20 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use futures::future::try_join_all;
+use tokio::sync::mpsc;
 use tracing::{debug, info, info_span, Instrument};
 
-use uc_core::ids::{EntryId, EventId};
+use uc_core::ids::{EntryId, EventId, RepresentationId};
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
     DeviceIdentityPort, PlatformClipboardPort, SelectRepresentationPolicyPort,
 };
 use uc_core::{
-    ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, SystemClipboardSnapshot,
+    ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, PayloadAvailability,
+    SystemClipboardSnapshot,
 };
+use uc_infra::clipboard::spooler_task::SpoolRequest;
+use uc_infra::clipboard::RepresentationCache;
 
 /// Capture clipboard content and create persistent entries.
 ///
@@ -45,6 +49,9 @@ pub struct CaptureClipboardUseCase {
     representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
     representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
     device_identity: Arc<dyn DeviceIdentityPort>,
+    representation_cache: Arc<RepresentationCache>,
+    spool_tx: mpsc::Sender<SpoolRequest>,
+    worker_tx: mpsc::Sender<RepresentationId>,
 }
 
 impl CaptureClipboardUseCase {
@@ -59,6 +66,9 @@ impl CaptureClipboardUseCase {
     /// - `representation_policy`: Selection strategy for optimal representation
     /// - `representation_normalizer`: Type conversion from platform to domain
     /// - `device_identity`: Current device identification
+    /// - `representation_cache`: Cache for representation metadata
+    /// - `spool_tx`: Sender for disk spool requests
+    /// - `worker_tx`: Sender for background worker notifications
     ///
     /// - `platform_clipboard_port`: 平台剪贴板访问
     /// - `entry_repo`: 剪贴板条目持久化
@@ -66,6 +76,9 @@ impl CaptureClipboardUseCase {
     /// - `representation_policy`: 最佳表示形式的选择策略
     /// - `representation_normalizer`: 从平台到域的类型转换
     /// - `device_identity`: 当前设备标识
+    /// - `representation_cache`: 表示形式元数据缓存
+    /// - `spool_tx`: 磁盘假脱机请求发送器
+    /// - `worker_tx`: 后台工作线程通知发送器
     pub fn new(
         platform_clipboard_port: Arc<dyn PlatformClipboardPort>,
         entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
@@ -73,6 +86,9 @@ impl CaptureClipboardUseCase {
         representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
         representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
         device_identity: Arc<dyn DeviceIdentityPort>,
+        representation_cache: Arc<RepresentationCache>,
+        spool_tx: mpsc::Sender<SpoolRequest>,
+        worker_tx: mpsc::Sender<RepresentationId>,
     ) -> Self {
         Self {
             platform_clipboard_port,
@@ -81,6 +97,9 @@ impl CaptureClipboardUseCase {
             representation_policy,
             representation_normalizer,
             device_identity,
+            representation_cache,
+            spool_tx,
+            worker_tx,
         }
     }
 
@@ -234,6 +253,29 @@ impl CaptureClipboardUseCase {
             self.event_writer
                 .insert_event(&new_event, &normalized_reps)
                 .await?;
+
+            // Queue large representations for background processing
+            for rep in &normalized_reps {
+                if rep.payload_state() == PayloadAvailability::Staged {
+                    // Find original bytes from snapshot
+                    if let Some(observed) = snapshot.representations.iter().find(|o| o.id == rep.id)
+                    {
+                        // Put in cache
+                        self.representation_cache
+                            .put(&rep.id, observed.bytes.clone())
+                            .await;
+
+                        // Queue spool write (try_send, don't await)
+                        let _ = self.spool_tx.try_send(SpoolRequest {
+                            rep_id: rep.id.clone(),
+                            bytes: observed.bytes.clone(),
+                        });
+
+                        // Queue blob worker (try_send, don't await)
+                        let _ = self.worker_tx.try_send(rep.id.clone());
+                    }
+                }
+            }
 
             // 4. policy.select(snapshot)
             let entry_id = EntryId::new();

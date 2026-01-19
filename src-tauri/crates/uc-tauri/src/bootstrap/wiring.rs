@@ -35,15 +35,18 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 use uc_app::app_paths::AppPaths;
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
+use uc_core::ids::RepresentationId;
 use uc_core::ports::clipboard::ClipboardRepresentationNormalizerPort;
 use uc_core::ports::*;
 use uc_infra::blob::BlobWriter;
-use uc_infra::clipboard::ClipboardRepresentationNormalizer;
+use uc_infra::clipboard::spooler_task::SpoolRequest;
+use uc_infra::clipboard::{ClipboardRepresentationNormalizer, RepresentationCache, SpoolManager};
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
 use uc_infra::db::mappers::{
@@ -686,6 +689,26 @@ pub fn wire_dependencies(
             platform.encryption_session.clone(),
         ));
 
+    // Step 3.6: Create background processing components
+    // 步骤 3.6：创建后台处理组件
+
+    // Create representation cache
+    let representation_cache = Arc::new(RepresentationCache::new(1000, 100_000_000));
+
+    // Create spool manager
+    let spool_dir = vault_path.join("spool");
+    let _spool_manager = Arc::new(
+        SpoolManager::new(spool_dir, 1_000_000_000)
+            .map_err(|e| WiringError::BlobStorageInit(format!("Failed to create spool: {}", e)))?,
+    );
+
+    // Create channels for background processing
+    let (spool_tx, _spool_rx) = mpsc::channel::<SpoolRequest>(100);
+    let (worker_tx, _worker_rx) = mpsc::channel::<RepresentationId>(100);
+
+    // TODO: Start background tasks (SpoolerTask, BackgroundBlobWorker)
+    // These should be started in the async runtime setup, not in wire_dependencies
+
     // Step 4: Construct AppDeps with all dependencies
     // 步骤 4：使用所有依赖构造 AppDeps
     let deps = AppDeps {
@@ -697,6 +720,9 @@ pub fn wire_dependencies(
         representation_normalizer: platform.representation_normalizer,
         selection_repo: infra.selection_repo,
         representation_policy: Arc::new(SelectRepresentationPolicyV1::new()),
+        representation_cache,
+        spool_tx,
+        worker_tx,
 
         // Security dependencies / 安全依赖
         encryption: infra.encryption,
