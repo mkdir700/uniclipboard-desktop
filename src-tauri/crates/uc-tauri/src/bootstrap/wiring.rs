@@ -42,6 +42,7 @@ use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ports::clipboard::ClipboardRepresentationNormalizerPort;
 use uc_core::ports::*;
+use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::ClipboardRepresentationNormalizer;
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -68,7 +69,7 @@ use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
-    PlaceholderAutostartPort, PlaceholderBlobWriterPort, PlaceholderNetworkPort, PlaceholderUiPort,
+    PlaceholderAutostartPort, PlaceholderNetworkPort, PlaceholderUiPort,
 };
 use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::clipboard::LocalClipboard;
@@ -206,10 +207,10 @@ struct PlatformLayer {
     // Clipboard representation normalizer / 剪贴板表示规范化器
     representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
 
-    // Blob writer / Blob 写入器（占位符）
+    // Blob writer / Blob 写入器
     blob_writer: Arc<dyn BlobWriterPort>,
 
-    // Blob store / Blob 存储（占位符）
+    // Blob store / Blob 存储（加密装饰后）
     blob_store: Arc<dyn BlobStorePort>,
 
     // Encryption session / 加密会话（占位符）
@@ -377,6 +378,9 @@ fn create_infra_layer(
 /// * `keyring` - Keyring created in infra layer / 在 infra 层中创建的密钥环
 /// * `config_dir` - Configuration directory for device identity storage / 用于存储设备身份的配置目录
 /// * `platform_cmd_tx` - Command sender for platform runtime / 平台运行时命令发送器
+/// * `encryption` - Encryption service for blob store decorator / Blob 存储加密服务
+/// * `blob_repository` - Blob repository for BlobWriter / BlobWriter 依赖的仓库
+/// * `clock` - Clock service for BlobWriter timestamps / BlobWriter 时间戳服务
 ///
 /// # Note / 注意
 ///
@@ -390,6 +394,9 @@ fn create_platform_layer(
     keyring: Arc<dyn KeyringPort>,
     config_dir: &PathBuf,
     platform_cmd_tx: PlatformCommandSender,
+    encryption: Arc<dyn EncryptionPort>,
+    blob_repository: Arc<dyn BlobRepositoryPort>,
+    clock: Arc<dyn ClockPort>,
 ) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
@@ -422,9 +429,24 @@ fn create_platform_layer(
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
     let network: Arc<dyn NetworkPort> = Arc::new(PlaceholderNetworkPort);
-    let blob_writer: Arc<dyn BlobWriterPort> = Arc::new(PlaceholderBlobWriterPort);
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
+
+    // Wrap blob_store with encryption decorator
+    // 用加密装饰器包装 blob_store
+    let encrypted_blob_store: Arc<dyn BlobStorePort> = Arc::new(EncryptedBlobStore::new(
+        blob_store.clone(),
+        encryption,
+        encryption_session.clone(),
+    ));
+
+    // Create blob writer using encrypted blob store
+    // 使用加密 blob 存储创建 blob 写入器
+    let blob_writer: Arc<dyn BlobWriterPort> = Arc::new(BlobWriter::new(
+        encrypted_blob_store.clone(),
+        blob_repository,
+        clock,
+    ));
 
     // Create watcher control
     // 创建监控器控制
@@ -445,7 +467,7 @@ fn create_platform_layer(
         device_identity,
         representation_normalizer,
         blob_writer,
-        blob_store,
+        blob_store: encrypted_blob_store,
         encryption_session,
         watcher_control,
         key_scope,
@@ -636,17 +658,17 @@ pub fn wire_dependencies(
 
     // Step 3: Create platform layer implementations
     // 步骤 3：创建平台层实现
-    let platform = create_platform_layer(keyring, &vault_path, platform_cmd_tx)?;
+    let platform = create_platform_layer(
+        keyring,
+        &vault_path,
+        platform_cmd_tx,
+        infra.encryption.clone(),
+        infra.blob_repository.clone(),
+        infra.clock.clone(),
+    )?;
 
     // Step 3.5: Wrap ports with encryption decorators
     // 步骤 3.5：用加密装饰器包装端口
-
-    // Wrap blob_store with encryption decorator
-    let encrypted_blob_store: Arc<dyn BlobStorePort> = Arc::new(EncryptedBlobStore::new(
-        platform.blob_store.clone(),
-        infra.encryption.clone(),
-        platform.encryption_session.clone(),
-    ));
 
     // Wrap clipboard_event_repo with encryption decorator
     let encrypting_event_writer: Arc<dyn ClipboardEventWriterPort> =
@@ -696,7 +718,7 @@ pub fn wire_dependencies(
         onboarding_state: infra.onboarding_state,
 
         // Storage dependencies / 存储依赖
-        blob_store: encrypted_blob_store,
+        blob_store: platform.blob_store,
         blob_repository: infra.blob_repository,
         blob_writer: platform.blob_writer,
 
