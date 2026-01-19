@@ -34,6 +34,7 @@ impl BlobStorageLocator {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Blob {
     pub blob_id: BlobId,
     pub locator: BlobStorageLocator,

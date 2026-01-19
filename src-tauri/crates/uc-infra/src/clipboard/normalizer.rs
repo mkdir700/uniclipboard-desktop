@@ -52,13 +52,13 @@ pub(crate) fn truncate_to_preview(bytes: &[u8]) -> Vec<u8> {
 /// Clipboard representation normalizer with owned config
 /// 带有拥有所有权的配置的剪贴板表示规范化器
 ///
-/// Valid states (per database CHECK constraint):
+/// Valid states (per database CHECK constraint after migration 2026-01-18-000001):
 /// 1. inline_data = Some(payload), blob_id = None  -> inline payload (small files)
 /// 2. inline_data = Some(preview), blob_id = None  -> preview (large text files)
-/// 3. inline_data = Some([]), blob_id = None  -> placeholder (large non-text files)
+/// 3. inline_data = None, blob_id = None, payload_state = Staged  -> staged (large non-text files)
 ///
-/// Note: The CHECK constraint requires exactly one of inline_data/blob_id to be non-NULL.
-/// blob_id is reserved for future blob materialization but currently unused.
+/// Note: The CHECK constraint allows both inline_data and blob_id to be NULL for Staged state.
+/// blob_id is populated later by blob materialization worker.
 pub struct ClipboardRepresentationNormalizer {
     config: Arc<ClipboardStorageConfig>,
 }
@@ -80,9 +80,9 @@ impl ClipboardRepresentationNormalizerPort for ClipboardRepresentationNormalizer
         let inline_threshold_bytes = self.config.inline_threshold_bytes;
         let size_bytes = observed.bytes.len() as i64;
 
-        // Decision: inline or blob, with preview for large text
-        // 决策：内联还是 blob，大文本生成预览
-        let inline_data = if size_bytes <= inline_threshold_bytes {
+        // Decision: inline, preview, or staged for blob materialization
+        // 决策：内联、预览还是为 blob 物化创建暂存状态
+        if size_bytes <= inline_threshold_bytes {
             // Small content: store full data inline
             debug!(
                 representation_id = %observed.id,
@@ -92,7 +92,14 @@ impl ClipboardRepresentationNormalizerPort for ClipboardRepresentationNormalizer
                 strategy = "inline",
                 "Normalizing small content inline"
             );
-            Some(observed.bytes.clone())
+            Ok(PersistedClipboardRepresentation::new(
+                observed.id.clone(),
+                observed.format_id.clone(),
+                observed.mime.clone(),
+                size_bytes,
+                Some(observed.bytes.clone()),
+                None, // blob_id
+            ))
         } else {
             // Large content: decide based on type
             if is_text_mime_type(&observed.mime) {
@@ -106,29 +113,32 @@ impl ClipboardRepresentationNormalizerPort for ClipboardRepresentationNormalizer
                     strategy = "preview",
                     "Normalizing large text as preview"
                 );
-                Some(truncate_to_preview(&observed.bytes))
+                Ok(PersistedClipboardRepresentation::new(
+                    observed.id.clone(),
+                    observed.format_id.clone(),
+                    observed.mime.clone(),
+                    size_bytes,
+                    Some(truncate_to_preview(&observed.bytes)),
+                    None, // blob_id
+                ))
             } else {
-                // Non-text (images, etc.): use empty array to satisfy CHECK constraint
+                // Non-text (images, etc.): create staged representation for blob materialization
                 debug!(
                     representation_id = %observed.id,
                     format_id = %observed.format_id,
                     size_bytes,
                     threshold = inline_threshold_bytes,
-                    strategy = "placeholder",
-                    "Normalizing large non-text as placeholder (blob storage pending)"
+                    strategy = "staged",
+                    "Normalizing large non-text as staged (blob materialization pending)"
                 );
-                Some(vec![])
+                Ok(PersistedClipboardRepresentation::new_staged(
+                    observed.id.clone(),
+                    observed.format_id.clone(),
+                    observed.mime.clone(),
+                    size_bytes,
+                ))
             }
-        };
-
-        Ok(PersistedClipboardRepresentation::new(
-            observed.id.clone(),
-            observed.format_id.clone(),
-            observed.mime.clone(),
-            size_bytes,
-            inline_data,
-            None, // blob_id will be set later by resolver
-        ))
+        }
     }
 }
 
@@ -192,5 +202,87 @@ mod tests {
         let result = truncate_to_preview(&input);
         // Fallback to byte truncation
         assert_eq!(result.len(), 3);
+    }
+
+    // Normalizer integration tests
+    use uc_core::clipboard::PayloadAvailability;
+    use uc_core::ids::{FormatId, RepresentationId};
+
+    #[tokio::test]
+    async fn test_normalizer_creates_staged_for_large_content() {
+        // Large image content (> inline_threshold)
+        let large_image_data = vec![0u8; 20 * 1024]; // 20 KB > 16 KB threshold
+        let config = Arc::new(ClipboardStorageConfig {
+            inline_threshold_bytes: 16 * 1024, // 16 KB
+        });
+        let normalizer = ClipboardRepresentationNormalizer::new(config);
+
+        let observed = ObservedClipboardRepresentation {
+            id: RepresentationId::new(),
+            format_id: FormatId::from("public.png"),
+            mime: Some(MimeType::from_str("image/png").unwrap()),
+            bytes: large_image_data,
+        };
+
+        let result = normalizer.normalize(&observed).await.unwrap();
+
+        // Verify Staged state: no inline data, no blob_id
+        assert_eq!(
+            result.payload_state,
+            PayloadAvailability::Staged,
+            "Large non-text content should have Staged state"
+        );
+        assert_eq!(
+            result.inline_data, None,
+            "Staged representation should have inline_data = None"
+        );
+        assert_eq!(
+            result.blob_id, None,
+            "Staged representation should have blob_id = None"
+        );
+        assert_eq!(
+            result.size_bytes,
+            20 * 1024,
+            "Size should reflect original content size"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_normalizer_creates_inline_for_small_content() {
+        // Small text content (< inline_threshold)
+        let small_text_data = b"Hello, world!".to_vec();
+        let config = Arc::new(ClipboardStorageConfig {
+            inline_threshold_bytes: 16 * 1024, // 16 KB
+        });
+        let normalizer = ClipboardRepresentationNormalizer::new(config);
+
+        let observed = ObservedClipboardRepresentation {
+            id: RepresentationId::new(),
+            format_id: FormatId::from("public.utf8-plain-text"),
+            mime: Some(MimeType::text_plain()),
+            bytes: small_text_data.clone(),
+        };
+
+        let result = normalizer.normalize(&observed).await.unwrap();
+
+        // Verify Inline state: inline_data contains actual bytes, no blob_id
+        assert_eq!(
+            result.payload_state,
+            PayloadAvailability::Inline,
+            "Small content should have Inline state"
+        );
+        assert_eq!(
+            result.inline_data,
+            Some(small_text_data),
+            "Inline representation should contain actual data bytes"
+        );
+        assert_eq!(
+            result.blob_id, None,
+            "Inline representation should have blob_id = None"
+        );
+        assert_eq!(
+            result.size_bytes, 13,
+            "Size should match small content size"
+        );
     }
 }
