@@ -35,7 +35,10 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
+use tauri::async_runtime;
 use tokio::sync::mpsc;
+use tracing::{info, warn};
 
 use uc_app::app_paths::AppPaths;
 use uc_app::AppDeps;
@@ -46,7 +49,10 @@ use uc_core::ports::clipboard::ClipboardRepresentationNormalizerPort;
 use uc_core::ports::*;
 use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::spooler_task::SpoolRequest;
-use uc_infra::clipboard::{ClipboardRepresentationNormalizer, RepresentationCache, SpoolManager};
+use uc_infra::clipboard::{
+    BackgroundBlobWorker, ClipboardRepresentationNormalizer, RepresentationCache, SpoolManager,
+    SpoolerTask,
+};
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
 use uc_infra::db::mappers::{
@@ -106,6 +112,24 @@ pub enum WiringError {
     #[error("Configuration initialization failed: {0}")]
     ConfigInit(String),
 }
+
+/// Fully wired dependencies plus background runtime components.
+/// 已完成依赖连接与后台运行组件的组合。
+pub struct WiredDependencies {
+    pub deps: AppDeps,
+    pub background: BackgroundRuntimeDeps,
+}
+
+/// Background runtime components that must be started after async runtime is ready.
+/// 需要在异步运行时就绪后启动的后台组件。
+pub struct BackgroundRuntimeDeps {
+    pub spool_manager: Arc<SpoolManager>,
+    pub spool_rx: mpsc::Receiver<SpoolRequest>,
+    pub worker_rx: mpsc::Receiver<RepresentationId>,
+}
+
+const WORKER_RETRY_MAX_ATTEMPTS: u32 = 5;
+const WORKER_RETRY_BACKOFF_MS: u64 = 200;
 
 /// Create SQLite database connection pool
 /// 创建 SQLite 数据库连接池
@@ -560,7 +584,7 @@ fn derive_default_paths(config: &AppConfig) -> WiringResult<DefaultPaths> {
 ///
 /// // Assuming `AppDirs` and `AppConfig` implement `Default` in tests/setup.
 /// let app_dirs = AppDirs::default();
-/// let config = AppConfig::default();
+/// let config = AppConfig::empty();
 /// let paths = derive_default_paths_from_app_dirs(&app_dirs, &config).unwrap();
 /// // Basic sanity check: returned paths are populated.
 /// assert!(!paths.app_data_root.as_os_str().is_empty());
@@ -598,9 +622,10 @@ fn derive_default_paths_from_app_dirs(
     })
 }
 
-/// Wires and constructs the application's dependency graph, returning a ready-to-use AppDeps.
+/// Wires and constructs the application's dependency graph, returning ready-to-use dependencies.
 ///
-/// On success returns an AppDeps value with all infrastructure and platform components
+/// On success returns `WiredDependencies` containing AppDeps plus background runtime components.
+/// AppDeps includes all infrastructure and platform components
 /// (database pool, repositories, security, platform adapters, materializers, settings, etc.)
 /// wrapped for shared use.
 ///
@@ -621,15 +646,16 @@ fn derive_default_paths_from_app_dirs(
 /// // The function will either return fully wired dependencies or a WiringError describing
 /// // what failed during construction.
 /// let config = AppConfig::default();
-/// match wire_dependencies(&config) {
-///     Ok(_deps) => { /* ready to run the application */ }
+/// let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::channel(10);
+/// match wire_dependencies(&config, cmd_tx) {
+///     Ok(_wired) => { /* ready to run the application */ }
 ///     Err(_err) => { /* handle initialization failure */ }
 /// }
 /// ```
 pub fn wire_dependencies(
     config: &AppConfig,
     platform_cmd_tx: PlatformCommandSender,
-) -> WiringResult<AppDeps> {
+) -> WiringResult<WiredDependencies> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池
     //
@@ -697,17 +723,14 @@ pub fn wire_dependencies(
 
     // Create spool manager
     let spool_dir = vault_path.join("spool");
-    let _spool_manager = Arc::new(
+    let spool_manager = Arc::new(
         SpoolManager::new(spool_dir, 1_000_000_000)
             .map_err(|e| WiringError::BlobStorageInit(format!("Failed to create spool: {}", e)))?,
     );
 
     // Create channels for background processing
-    let (spool_tx, _spool_rx) = mpsc::channel::<SpoolRequest>(100);
-    let (worker_tx, _worker_rx) = mpsc::channel::<RepresentationId>(100);
-
-    // TODO: Start background tasks (SpoolerTask, BackgroundBlobWorker)
-    // These should be started in the async runtime setup, not in wire_dependencies
+    let (spool_tx, spool_rx) = mpsc::channel::<SpoolRequest>(100);
+    let (worker_tx, worker_rx) = mpsc::channel::<RepresentationId>(100);
 
     // Step 4: Construct AppDeps with all dependencies
     // 步骤 4：使用所有依赖构造 AppDeps
@@ -760,7 +783,47 @@ pub fn wire_dependencies(
         hash: infra.hash,
     };
 
-    Ok(deps)
+    Ok(WiredDependencies {
+        deps,
+        background: BackgroundRuntimeDeps {
+            spool_manager,
+            spool_rx,
+            worker_rx,
+        },
+    })
+}
+
+/// Start background spooler and blob worker tasks.
+/// 启动后台假脱机写入和 blob 物化任务。
+pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps) {
+    let BackgroundRuntimeDeps {
+        spool_manager,
+        spool_rx,
+        worker_rx,
+    } = background;
+
+    info!("Starting background clipboard spooler and blob worker");
+
+    let spooler = SpoolerTask::new(spool_rx, spool_manager.clone());
+    async_runtime::spawn(async move {
+        spooler.run().await;
+        warn!("SpoolerTask stopped");
+    });
+
+    let worker = BackgroundBlobWorker::new(
+        worker_rx,
+        deps.representation_cache.clone(),
+        spool_manager,
+        deps.representation_repo.clone(),
+        deps.blob_writer.clone(),
+        deps.hash.clone(),
+        WORKER_RETRY_MAX_ATTEMPTS,
+        Duration::from_millis(WORKER_RETRY_BACKOFF_MS),
+    );
+    async_runtime::spawn(async move {
+        worker.run().await;
+        warn!("BackgroundBlobWorker stopped");
+    });
 }
 
 #[cfg(test)]
@@ -837,7 +900,8 @@ mod tests {
         let result = wire_dependencies(&config, cmd_tx);
 
         match result {
-            Ok(deps) => {
+            Ok(wired) => {
+                let deps = wired.deps;
                 // Verify all dependencies are present by type checking
                 // 通过类型检查验证所有依赖都存在
                 let _ = &deps.clipboard;
