@@ -3,10 +3,10 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use futures::future::try_join_all;
-use tokio::sync::mpsc;
 use tracing::{debug, info, info_span, warn, Instrument};
 
 use uc_core::ids::{EntryId, EventId};
+use uc_core::ports::clipboard::{RepresentationCachePort, SpoolQueuePort, SpoolRequest};
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
     DeviceIdentityPort, SelectRepresentationPolicyPort,
@@ -15,8 +15,6 @@ use uc_core::{
     ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, PayloadAvailability,
     SystemClipboardSnapshot,
 };
-use uc_infra::clipboard::spooler_task::SpoolRequest;
-use uc_infra::clipboard::RepresentationCache;
 
 /// Capture clipboard content and create persistent entries.
 ///
@@ -48,8 +46,8 @@ pub struct CaptureClipboardUseCase {
     representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
     representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
     device_identity: Arc<dyn DeviceIdentityPort>,
-    representation_cache: Arc<RepresentationCache>,
-    spool_tx: mpsc::Sender<SpoolRequest>,
+    representation_cache: Arc<dyn RepresentationCachePort>,
+    spool_queue: Arc<dyn SpoolQueuePort>,
 }
 
 impl CaptureClipboardUseCase {
@@ -64,7 +62,7 @@ impl CaptureClipboardUseCase {
     /// - `representation_normalizer`: Type conversion from platform to domain
     /// - `device_identity`: Current device identification
     /// - `representation_cache`: Cache for representation metadata
-    /// - `spool_tx`: Sender for disk spool requests
+    /// - `spool_queue`: Queue for disk spool requests
     ///
     /// - `entry_repo`: 剪贴板条目持久化
     /// - `event_writer`: 事件和表示形式存储
@@ -72,15 +70,15 @@ impl CaptureClipboardUseCase {
     /// - `representation_normalizer`: 从平台到域的类型转换
     /// - `device_identity`: 当前设备标识
     /// - `representation_cache`: 表示形式元数据缓存
-    /// - `spool_tx`: 磁盘假脱机请求发送器
+    /// - `spool_queue`: 磁盘假脱机请求队列
     pub fn new(
         entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
         event_writer: Arc<dyn ClipboardEventWriterPort>,
         representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
         representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
         device_identity: Arc<dyn DeviceIdentityPort>,
-        representation_cache: Arc<RepresentationCache>,
-        spool_tx: mpsc::Sender<SpoolRequest>,
+        representation_cache: Arc<dyn RepresentationCachePort>,
+        spool_queue: Arc<dyn SpoolQueuePort>,
     ) -> Self {
         Self {
             entry_repo,
@@ -89,7 +87,7 @@ impl CaptureClipboardUseCase {
             representation_normalizer,
             device_identity,
             representation_cache,
-            spool_tx,
+            spool_queue,
         }
     }
 
@@ -165,23 +163,20 @@ impl CaptureClipboardUseCase {
                             .put(&rep.id, observed.bytes.clone())
                             .await;
 
-                        // Queue spool write (try_send, don't await)
-                        // TODO(clipboard-spool): If try_send fails, the request is dropped and the
-                        // staged payload may never be materialized (cache eviction => data loss).
-                        // Decide on a non-blocking backpressure strategy and ensure worker/spool
-                        // notification is guaranteed.
-                        // TODO(clipboard-spool): 若 try_send 失败，请求会被丢弃，
-                        // 暂存数据可能永远无法物化（缓存被驱逐后会丢数据）。
-                        // 需要明确非阻塞背压策略，并确保 worker/spool 通知可达。
-                        if let Err(err) = self.spool_tx.try_send(SpoolRequest {
-                            rep_id: rep.id.clone(),
-                            bytes: observed.bytes.clone(),
-                        }) {
+                        if let Err(err) = self
+                            .spool_queue
+                            .enqueue(SpoolRequest {
+                                rep_id: rep.id.clone(),
+                                bytes: observed.bytes.clone(),
+                            })
+                            .await
+                        {
                             warn!(
                                 representation_id = %rep.id,
                                 error = %err,
-                                "Spool queue full; cache-only fallback"
+                                "Failed to enqueue spool request"
                             );
+                            return Err(err);
                         }
                     }
                 }

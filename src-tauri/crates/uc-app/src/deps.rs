@@ -13,10 +13,10 @@
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use uc_core::ids::RepresentationId;
-use uc_core::ports::clipboard::ClipboardRepresentationNormalizerPort;
+use uc_core::ports::clipboard::{
+    ClipboardRepresentationNormalizerPort, RepresentationCachePort, SpoolQueuePort,
+};
 use uc_core::ports::*;
-use uc_infra::clipboard::spooler_task::SpoolRequest;
-use uc_infra::clipboard::RepresentationCache;
 
 /// Application dependency grouping (non-Builder, just parameter grouping)
 /// 应用依赖分组（非 Builder，仅参数打包）
@@ -35,8 +35,8 @@ pub struct AppDeps {
     pub representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
     pub selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
     pub representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
-    pub representation_cache: Arc<RepresentationCache>,
-    pub spool_tx: mpsc::Sender<SpoolRequest>,
+    pub representation_cache: Arc<dyn RepresentationCachePort>,
+    pub spool_queue: Arc<dyn SpoolQueuePort>,
     pub worker_tx: mpsc::Sender<RepresentationId>,
 
     // Security dependencies / 安全依赖
