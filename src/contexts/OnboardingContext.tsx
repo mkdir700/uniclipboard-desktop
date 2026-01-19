@@ -29,26 +29,29 @@ interface OnboardingCompletedEvent {
 
 export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const refreshStatus = async () => {
     try {
+      console.log('[OnboardingContext] Checking onboarding status...')
       setLoading(true)
       const newStatus = await checkOnboardingStatus()
+      console.log('[OnboardingContext] Onboarding status:', newStatus)
       setStatus(newStatus)
       setError(null)
       return newStatus
     } catch (err) {
-      setError(String(err))
-      console.error('Failed to refresh onboarding status:', err)
+      const errorStr = String(err)
+      setError(errorStr)
+      console.error('[OnboardingContext] Failed to refresh onboarding status:', err)
       throw err
     } finally {
       setLoading(false)
     }
   }
 
-  // 初始化时检查状态
+  // Check onboarding status on mount
   useEffect(() => {
     refreshStatus()
   }, [])

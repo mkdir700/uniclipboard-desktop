@@ -13,6 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
+        "label": "main",
         "title": "UniClipboard",
         "width": 800,
         "height": 600,
@@ -21,6 +22,7 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "transparent": true,
+        "visible": false,
         "devtools": true,
         "windowEffects": {
           "effects": ["hudWindow"],

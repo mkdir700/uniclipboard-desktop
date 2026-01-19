@@ -109,7 +109,7 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
     await saveSetting(updatedSetting)
   }
 
-  // 初始加载设置
+  // Load settings immediately on mount
   useEffect(() => {
     loadSetting()
   }, [])
@@ -168,6 +168,14 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
 
       // 2. Apply Theme Color
       root.setAttribute('data-theme', themeColor)
+
+      // 3. Sync to localStorage for splashscreen
+      if (theme !== 'system' && theme) {
+        localStorage.setItem('uc-theme', theme)
+      } else {
+        localStorage.removeItem('uc-theme')
+      }
+      localStorage.setItem('uc-theme-color', themeColor)
     }
 
     applyTheme()
