@@ -2,7 +2,8 @@
 name: executing-plans
 description: Execute an implementation plan with verification and review checkpoints
 ---
-```
+
+````
 
 # Executing Plans
 
@@ -100,7 +101,7 @@ Before code review, you MUST verify work is actually complete:
    ```bash
    # Run the FULL command, not partial checks
    <verification_command>
-   ```
+````
 
 3. READ and VERIFY output:
    - Exit code is 0 (success)
@@ -116,11 +117,13 @@ Before code review, you MUST verify work is actually complete:
 5. ONLY if all verifications pass, proceed to Step 5
 
 **CRITICAL RULES:**
+
 - NO completion claims without FRESH verification evidence
 - Do NOT skip verification even if "simple"
 - Do NOT proceed with failing tests
 
 **Red Flags - STOP:**
+
 - Using "should pass", "probably works", "seems correct"
 - About to proceed without running verification commands
 
@@ -129,6 +132,7 @@ Before code review, you MUST verify work is actually complete:
 ### Step 5: Code Review (MANDATORY)
 
 1. Get git SHAs for the changes:
+
    ```bash
    BASE_SHA=$(git rev-parse HEAD~<num_tasks>)
    HEAD_SHA=$(git rev-parse HEAD)
@@ -167,10 +171,22 @@ Use superpowers:finishing-a-development-branch
 
 Follow that skill strictly for:
 
-* Final verification
-* Test execution
-* Merge readiness
-* Output formatting
+- Final verification
+- Test execution
+- Merge readiness
+- Output formatting
+
+---
+
+### Step 7: New Session Handoff (MANDATORY)
+
+After Step 6 is complete, prompt the user:
+
+If the user replies "ok", ask for explicit confirmation:
+
+If the user confirms, follow this instruction and output a new-session prompt that includes all necessary context:
+
+If the user replies "no", stop and wait for further instructions.
 
 ---
 
@@ -178,11 +194,11 @@ Follow that skill strictly for:
 
 STOP IMMEDIATELY if:
 
-* You hit a blocker
-* Required dependency is missing
-* Test or verification repeatedly fails
-* Instructions are ambiguous
-* Plan conflicts with architecture constraints
+- You hit a blocker
+- Required dependency is missing
+- Test or verification repeatedly fails
+- Instructions are ambiguous
+- Plan conflicts with architecture constraints
 
 DO NOT guess.
 Request clarification.
@@ -193,9 +209,9 @@ Request clarification.
 
 Return to Step 1 when:
 
-* Plan is updated
-* Architecture direction changes
-* Scope is redefined
+- Plan is updated
+- Architecture direction changes
+- Scope is redefined
 
 ---
 
@@ -203,17 +219,16 @@ Return to Step 1 when:
 
 If ANY of the following happens, execution is INVALID:
 
-* Tasks are skipped
-* Verification steps are ignored
-* Code review checkpoint is skipped
+- Tasks are skipped
+- Verification steps are ignored
+- Code review checkpoint is skipped
 
 ---
 
 ## Remember
 
-* Execute tasks sequentially
-* Always verify before claiming completion
-* Always pause at review checkpoints
-* Stop on blockers
-* Do not improvise beyond plan
-
+- Execute tasks sequentially
+- Always verify before claiming completion
+- Always pause at review checkpoints
+- Stop on blockers
+- Do not improvise beyond plan
