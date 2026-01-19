@@ -145,9 +145,37 @@ impl BackgroundBlobWorker {
                     warn!(
                         representation_id = %rep_id,
                         cache_hit = false,
-                        "Bytes missing in cache and spool; marking representation as Lost"
+                        "Bytes missing in cache and spool; returning representation to Staged"
                     );
-                    self.mark_lost(rep_id, last_error).await?;
+                    match self
+                        .repo
+                        .update_processing_result(
+                            rep_id,
+                            &[PayloadAvailability::Processing],
+                            None,
+                            PayloadAvailability::Staged,
+                            Some(last_error),
+                        )
+                        .await
+                    {
+                        Ok(ProcessingUpdateOutcome::Updated(_)) => {}
+                        Ok(ProcessingUpdateOutcome::StateMismatch) => {
+                            warn!(
+                                representation_id = %rep_id,
+                                "Skipping revert to Staged due to state mismatch"
+                            );
+                        }
+                        Ok(ProcessingUpdateOutcome::NotFound) => {
+                            warn!(representation_id = %rep_id, "Representation missing");
+                        }
+                        Err(err) => {
+                            warn!(
+                                representation_id = %rep_id,
+                                error = %err,
+                                "Failed to revert representation to Staged after cache/spool miss"
+                            );
+                        }
+                    }
                     return Ok(ProcessResult::MissingBytes);
                 }
             }
@@ -238,39 +266,6 @@ impl BackgroundBlobWorker {
                     representation_id = %rep_id,
                     error = %err,
                     "Failed to mark representation as Failed"
-                );
-            }
-        }
-        Ok(())
-    }
-
-    async fn mark_lost(&self, rep_id: &RepresentationId, last_error: &str) -> Result<()> {
-        match self
-            .repo
-            .update_processing_result(
-                rep_id,
-                &[PayloadAvailability::Processing, PayloadAvailability::Staged],
-                None,
-                PayloadAvailability::Lost,
-                Some(last_error),
-            )
-            .await
-        {
-            Ok(ProcessingUpdateOutcome::Updated(_)) => {}
-            Ok(ProcessingUpdateOutcome::StateMismatch) => {
-                warn!(
-                    representation_id = %rep_id,
-                    "Skipping mark_lost due to state mismatch"
-                );
-            }
-            Ok(ProcessingUpdateOutcome::NotFound) => {
-                warn!(representation_id = %rep_id, "Representation missing");
-            }
-            Err(err) => {
-                error!(
-                    representation_id = %rep_id,
-                    error = %err,
-                    "Failed to mark representation as Lost"
                 );
             }
         }
@@ -509,6 +504,47 @@ mod tests {
         let updated = repo.get(&rep_id).await;
         let updated = updated.expect("representation missing");
         assert_eq!(updated.payload_state(), PayloadAvailability::BlobReady);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_worker_does_not_mark_lost_on_cache_miss() -> Result<()> {
+        let rep_id = RepresentationId::new();
+        let rep = create_representation(&rep_id);
+
+        let mut reps = HashMap::new();
+        reps.insert(rep_id.clone(), rep);
+
+        let repo = Arc::new(MockRepresentationRepo::new(reps));
+        let cache = Arc::new(RepresentationCache::new(10, 10_000));
+        let spool = Arc::new(SpoolManager::new(tempfile::tempdir()?.path(), 10_000)?);
+        let blob_writer = Arc::new(MockBlobWriter::new());
+        let hasher = Arc::new(MockHasher);
+
+        let (tx, rx) = mpsc::channel(4);
+        let worker = BackgroundBlobWorker::new(
+            rx,
+            cache,
+            spool,
+            repo.clone(),
+            blob_writer,
+            hasher,
+            3,
+            Duration::from_millis(1),
+        );
+
+        let handle = tokio::spawn(worker.run());
+        tx.send(rep_id.clone()).await?;
+        drop(tx);
+        handle.await?;
+
+        let updated = repo.get(&rep_id).await;
+        let updated = updated.expect("representation missing");
+        assert_eq!(updated.payload_state(), PayloadAvailability::Staged);
+        assert_eq!(
+            updated.last_error.as_deref(),
+            Some("cache/spool miss: bytes not available")
+        );
         Ok(())
     }
 
