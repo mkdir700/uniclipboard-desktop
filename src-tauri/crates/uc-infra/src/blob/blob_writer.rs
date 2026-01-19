@@ -43,11 +43,11 @@ where
     async fn write_if_absent(
         &self,
         content_id: &ContentHash,
-        encrypted_bytes: &[u8],
+        plaintext_bytes: &[u8],
     ) -> Result<Blob> {
         let span = debug_span!(
             "infra.blob.write_if_absent",
-            size_bytes = encrypted_bytes.len(),
+            size_bytes = plaintext_bytes.len(),
             content_hash = %content_id,
         );
         async {
@@ -57,15 +57,15 @@ where
 
             let blob_id = BlobId::new();
 
-            // TODO: Wire encryption before invoking this port; bytes are assumed encrypted here.
-            let storage_path = self.blob_store.put(&blob_id, encrypted_bytes).await?;
+            // Encryption is handled by the injected BlobStorePort decorator (if any).
+            let storage_path = self.blob_store.put(&blob_id, plaintext_bytes).await?;
 
             let created_at_ms = self.clock.now_ms();
             let blob_storage_locator = BlobStorageLocator::new_local_fs(storage_path);
             let result = Blob::new(
                 blob_id,
                 blob_storage_locator,
-                encrypted_bytes.len() as i64,
+                plaintext_bytes.len() as i64,
                 content_id.clone(),
                 created_at_ms,
             );

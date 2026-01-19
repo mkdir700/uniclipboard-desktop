@@ -1,6 +1,11 @@
 //! Blob Writer Port
 //!
-//! This port writes raw bytes to blob store with deduplication.
+//! This port writes plaintext bytes to blob store with deduplication.
+//!
+//! # Encryption boundary
+//! - Callers pass **plaintext** bytes.
+//! - Encryption (if any) is handled by the injected `BlobStorePort`
+//!   decorator (e.g. `EncryptedBlobStore`).
 //!
 //! **Semantic:** "write_if_absent" = atomic write-if-absent with deduplication
 
@@ -8,7 +13,7 @@ use crate::{Blob, ContentHash};
 
 #[async_trait::async_trait]
 pub trait BlobWriterPort: Send + Sync {
-    /// Write bytes to blob store if content_id doesn't already exist.
+    /// Write plaintext bytes to blob store if content_id doesn't already exist.
     ///
     /// # Atomic semantics
     /// - If `content_id` already exists → return existing `Blob`
@@ -20,11 +25,11 @@ pub trait BlobWriterPort: Send + Sync {
     ///
     /// # Parameters
     /// - `content_id`: Hash-based identifier for deduplication (keyed hash)
-    /// - `encrypted_bytes`: Encrypted payload to persist
+    /// - `plaintext_bytes`: Plaintext payload to persist
     async fn write_if_absent(
         &self,
         content_id: &ContentHash,
-        encrypted_bytes: &[u8],
+        plaintext_bytes: &[u8],
     ) -> anyhow::Result<Blob>;
 
     /// Legacy write method (deprecated, use write_if_absent).

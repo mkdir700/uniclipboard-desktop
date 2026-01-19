@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::BlobId;
 
@@ -11,4 +12,15 @@ pub trait BlobStorePort: Send + Sync {
 
     // 从 blob 存储读取 bytes
     async fn get(&self, blob_id: &BlobId) -> Result<Vec<u8>>;
+}
+
+#[async_trait]
+impl<T: BlobStorePort + ?Sized> BlobStorePort for Arc<T> {
+    async fn put(&self, blob_id: &BlobId, data: &[u8]) -> Result<PathBuf> {
+        (**self).put(blob_id, data).await
+    }
+
+    async fn get(&self, blob_id: &BlobId) -> Result<Vec<u8>> {
+        (**self).get(blob_id).await
+    }
 }
