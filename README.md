@@ -1,8 +1,10 @@
+![UniClipboard](https://socialify.git.ci/UniClipboard/UniClipboard/image?custom_description=A+privacy-first%2C+end-to-end+encrypted%2C+cross-device+clipboard+sync+built+with+Rust+and+Tauri.&description=1&font=KoHo&forks=1&issues=1&name=1&owner=1&pattern=Floating+Cogs&pulls=1&stargazers=1&theme=Auto)
+
 ## 📝 项目介绍
 
 [English](./README_EN.md) | 简体中文
 
-UniClipboard 是一个剪切板同步工具，旨在为用户提供无缝的剪切板共享体验，让您在不同设备间即时共享文本、图片和文件。
+UniClipboard 是一款以**隐私优先**为核心理念的跨设备剪贴板同步工具。 它支持在多台设备之间无缝、安全地同步文本、图片与文件，所有数据端到端加密，仅在用户设备本地解密，服务器与网络层永远无法访问明文。
 
 ![Image](./assets/demo.png)
 

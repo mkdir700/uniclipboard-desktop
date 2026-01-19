@@ -1,3 +1,14 @@
+![UniClipboard](https://socialify.git.ci/UniClipboard/UniClipboard/image?custom_description=A+privacy-first%2C+end-to-end+encrypted%2C+cross-device+clipboard+sync+built+with+Rust+and+Tauri.&description=1&font=KoHo&forks=1&issues=1&name=1&owner=1&pattern=Floating+Cogs&pulls=1&stargazers=1&theme=Auto)
+
+## Project Overview
+
+English | [简体中文](./README.md)
+
+UniClipboard is a **privacy-first**, cross-device clipboard synchronization tool.
+It enables seamless and secure syncing of text, images, and files across multiple devices. All data is end-to-end encrypted and decrypted only on the user’s devices—neither servers nor the network layer can ever access plaintext data.
+
+![Image](./assets/demo.png)
+
 <div align="center">
   <br/>
 
@@ -40,14 +51,6 @@
 
 > [!WARNING]
 > UniClipboard is currently under active development and may have unstable or missing features. Feel free to try it out and provide feedback!
-
-English | [简体中文](./README.md)
-
-## Project Overview
-
-UniClipboard is a clipboard synchronization tool designed to provide a seamless clipboard sharing experience, allowing you to instantly share text, images, and files across different devices.
-
-![Image](./assets/demo.png)
 
 ## Features
 
