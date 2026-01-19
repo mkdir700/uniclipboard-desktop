@@ -139,6 +139,7 @@ impl CaptureClipboardUseCase {
             let event_id = EventId::new();
             let captured_at_ms = snapshot.ts_ms;
             let source_device = self.device_identity.current_device_id();
+            // NOTE: snapshot_hash hashes raw representation bytes; this is CPU-bound for large payloads.
             let snapshot_hash = snapshot.snapshot_hash();
 
             // 1. 生成 event + snapshot representations
@@ -270,9 +271,6 @@ impl CaptureClipboardUseCase {
                             rep_id: rep.id.clone(),
                             bytes: observed.bytes.clone(),
                         });
-
-                        // Queue blob worker (try_send, don't await)
-                        let _ = self.worker_tx.try_send(rep.id.clone());
                     }
                 }
             }

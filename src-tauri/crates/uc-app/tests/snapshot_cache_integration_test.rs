@@ -335,7 +335,7 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
     let (spool_tx, spool_rx) = mpsc::channel(8);
     let (worker_tx, worker_rx) = mpsc::channel(8);
 
-    let spooler = uc_infra::clipboard::SpoolerTask::new(spool_rx, spool.clone());
+    let spooler = uc_infra::clipboard::SpoolerTask::new(spool_rx, spool.clone(), worker_tx.clone());
     tokio::spawn(async move {
         spooler.run().await;
     });

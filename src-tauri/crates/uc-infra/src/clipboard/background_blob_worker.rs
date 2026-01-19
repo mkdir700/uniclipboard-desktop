@@ -117,14 +117,19 @@ impl BackgroundBlobWorker {
         let cached = self.cache.get(rep_id).await;
 
         let raw_bytes = if let Some(bytes) = cached {
+            tracing::debug!(representation_id = %rep_id, "Worker cache hit");
             bytes
         } else {
             match self.spool.read(rep_id).await? {
-                Some(bytes) => bytes,
+                Some(bytes) => {
+                    tracing::debug!(representation_id = %rep_id, "Worker spool hit");
+                    bytes
+                }
                 None => {
                     let last_error = "cache/spool miss: bytes not available";
                     warn!(
                         representation_id = %rep_id,
+                        cache_hit = false,
                         "Bytes missing in cache and spool; marking representation as Lost"
                     );
                     self.mark_lost(rep_id, last_error).await?;
