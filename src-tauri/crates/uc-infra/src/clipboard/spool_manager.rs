@@ -94,7 +94,9 @@ impl SpoolManager {
                 })?;
         }
 
-        self.enforce_limits().await?;
+        // Enforce limits AFTER writing, excluding the newly written file from eviction
+        // (count it in total, but don't evict it)
+        self.enforce_limits_excluding(Some(rep_id)).await?;
 
         Ok(SpoolEntry {
             representation_id: rep_id.clone(),
@@ -158,21 +160,47 @@ impl SpoolManager {
                 modified_ms,
             });
         }
-        entries.sort_by_key(|entry| entry.modified_ms);
+        // Sort by mtime, then by representation_id for deterministic ordering
+        // when mtimes are equal (e.g., low-resolution filesystem timestamps)
+        entries.sort_by(|a, b| {
+            a.modified_ms
+                .cmp(&b.modified_ms)
+                .then_with(|| a.representation_id.cmp(&b.representation_id))
+        });
         Ok(entries)
     }
 
-    async fn enforce_limits(&self) -> Result<()> {
+    async fn enforce_limits_excluding(&self, exclude_id: Option<&RepresentationId>) -> Result<()> {
         let mut entries = self.list_entries_by_mtime().await?;
         let mut total_bytes = entries.iter().map(|entry| entry.size).sum::<usize>();
 
         while total_bytes > self.max_bytes {
-            let Some(oldest) = entries.first() else {
+            // Find the oldest entry that is NOT excluded
+            let exclude_idx = entries
+                .iter()
+                .position(|e| exclude_id.map_or(false, |exclude| &e.representation_id == exclude));
+
+            let evict_idx = if exclude_idx == Some(0) {
+                // If the first entry is excluded, try the next one
+                if entries.len() > 1 {
+                    Some(1)
+                } else {
+                    None
+                }
+            } else {
+                // Otherwise, evict the first (oldest) entry
+                exclude_idx
+                    .and_then(|i| if i == 0 { None } else { Some(0) })
+                    .or(Some(0))
+            };
+
+            let Some(idx) = evict_idx else {
                 break;
             };
+            let oldest = &entries[idx];
             fs::remove_file(&oldest.file_path).await?;
             total_bytes = total_bytes.saturating_sub(oldest.size);
-            entries.remove(0);
+            entries.remove(idx);
         }
         Ok(())
     }
