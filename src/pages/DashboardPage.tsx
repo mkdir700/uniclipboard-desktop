@@ -167,8 +167,8 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full relative pt-10">
-      {/* Top search bar */}
-      <Header onFilterChange={handleFilterChange} />
+      {/* Top search bar - Hidden in MVP */}
+      <Header onFilterChange={handleFilterChange} className="hidden" />
 
       {/* Clipboard content area - use flex-1 to make it take remaining space */}
       <div className="flex-1 overflow-hidden relative">

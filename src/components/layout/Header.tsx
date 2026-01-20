@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils'
 
 interface HeaderProps {
   onFilterChange?: (filterId: Filter) => void
+  className?: string
 }
 
-const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
+const Header: React.FC<HeaderProps> = ({ onFilterChange, className }) => {
   const { t } = useTranslation()
 
   const filterTypes = [
@@ -30,7 +31,10 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange }) => {
   }
 
   return (
-    <header data-tauri-drag-region className="shrink-0 px-6 transition-all duration-300">
+    <header
+      data-tauri-drag-region
+      className={cn('shrink-0 px-6 transition-all duration-300', className)}
+    >
       {/* Glass Background */}
       <div
         data-tauri-drag-region
