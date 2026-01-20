@@ -9153,10 +9153,13 @@ dependencies = [
  "mockall 0.13.1",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "uc-core",
+ "uc-infra",
  "uuid",
 ]
 
@@ -9221,7 +9224,6 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
- "uc-app",
  "uc-core",
  "uuid",
 ]

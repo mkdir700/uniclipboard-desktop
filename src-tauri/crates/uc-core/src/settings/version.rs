@@ -15,6 +15,8 @@ impl SettingsVersion {
     /// # Examples
     ///
     /// ```
+    /// use uc_core::settings::version::SettingsVersion;
+    ///
     /// let v = SettingsVersion::V1;
     /// assert_eq!(v.as_u32(), 1);
     /// ```

@@ -272,14 +272,14 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
         "wire_dependencies should succeed with valid config"
     );
 
-    let deps = deps_result.unwrap();
+    let deps = deps_result.unwrap().deps;
 
     // Verify we can access all dependency fields
     // 验证我们可以访问所有依赖字段
     let _ = &deps.clipboard;
     let _ = &deps.clipboard_event_repo;
     let _ = &deps.representation_repo;
-    let _ = &deps.representation_materializer;
+    let _ = &deps.representation_normalizer;
     let _ = &deps.encryption;
     let _ = &deps.encryption_session;
     let _ = &deps.keyring;
@@ -290,7 +290,7 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
     let _ = &deps.network;
     let _ = &deps.blob_store;
     let _ = &deps.blob_repository;
-    let _ = &deps.blob_materializer;
+    let _ = &deps.blob_writer;
     let _ = &deps.settings;
     let _ = &deps.ui_port;
     let _ = &deps.autostart;
@@ -451,7 +451,9 @@ fn test_bootstrap_full_flow() {
     // Step 2: Wire dependencies
     // 步骤 2：连接依赖
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies(&config, cmd_tx).expect("wire_dependencies should succeed");
+    let deps = wire_dependencies(&config, cmd_tx)
+        .expect("wire_dependencies should succeed")
+        .deps;
 
     // Step 3: Create app
     // 步骤 3：创建应用
@@ -584,7 +586,7 @@ fn test_bootstrap_wire_dependencies_with_empty_config() {
         "wire_dependencies should handle empty config"
     );
 
-    let deps = deps_result.unwrap();
+    let deps = deps_result.unwrap().deps;
 
     // Verify all dependencies are present even with empty config
     // 验证即使配置为空，所有依赖都存在
@@ -609,7 +611,9 @@ fn test_bootstrap_wire_dependencies_creates_real_repositories() {
     config.database_path = PathBuf::from(":memory:");
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies(&config, cmd_tx).expect("wire_dependencies should succeed");
+    let deps = wire_dependencies(&config, cmd_tx)
+        .expect("wire_dependencies should succeed")
+        .deps;
 
     // Verify clipboard repositories
     // 验证剪贴板仓库
@@ -643,7 +647,9 @@ fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
     config.database_path = PathBuf::from(":memory:");
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies(&config, cmd_tx).expect("wire_dependencies should succeed");
+    let deps = wire_dependencies(&config, cmd_tx)
+        .expect("wire_dependencies should succeed")
+        .deps;
 
     // Verify system clipboard (platform-specific)
     // 验证系统剪贴板（平台特定）
@@ -659,8 +665,8 @@ fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
     let _autostart = deps.autostart.clone();
     let _network = deps.network.clone();
     let _device_identity = deps.device_identity.clone();
-    let _representation_materializer = deps.representation_materializer.clone();
-    let _blob_materializer = deps.blob_materializer.clone();
+    let _representation_normalizer = deps.representation_normalizer.clone();
+    let _blob_writer = deps.blob_writer.clone();
     let _blob_store = deps.blob_store.clone();
     let _encryption_session = deps.encryption_session.clone();
 }
@@ -684,7 +690,9 @@ fn test_bootstrap_settings_repository_initialization() {
     config.database_path = PathBuf::from(":memory:");
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies(&config, cmd_tx).expect("wire_dependencies should succeed");
+    let deps = wire_dependencies(&config, cmd_tx)
+        .expect("wire_dependencies should succeed")
+        .deps;
 
     // Verify settings repository exists and can be cloned/accessed
     // 验证设置仓库存在并且可以克隆/访问

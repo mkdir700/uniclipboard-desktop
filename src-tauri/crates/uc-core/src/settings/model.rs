@@ -140,10 +140,12 @@ pub struct Settings {
 /// # Examples
 ///
 /// ```
+/// use uc_core::settings::model::{current_schema_version, CURRENT_SCHEMA_VERSION};
+///
 /// let v = current_schema_version();
 /// assert_eq!(v, CURRENT_SCHEMA_VERSION);
 /// ```
-fn current_schema_version() -> u32 {
+pub fn current_schema_version() -> u32 {
     CURRENT_SCHEMA_VERSION
 }
 

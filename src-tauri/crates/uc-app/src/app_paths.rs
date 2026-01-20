@@ -9,6 +9,7 @@ pub struct AppPaths {
     pub settings_path: PathBuf,
     pub keyring_dir: PathBuf,
     pub logs_dir: PathBuf,
+    pub cache_dir: PathBuf,
 }
 
 impl AppPaths {
@@ -21,7 +22,10 @@ impl AppPaths {
     /// use uc_core::app_dirs::AppDirs;
     /// use uc_app::app_paths::AppPaths;
     ///
-    /// let dirs = AppDirs { app_data_root: PathBuf::from("/tmp/uniclipboard") };
+    /// let dirs = AppDirs {
+    ///     app_data_root: PathBuf::from("/tmp/uniclipboard"),
+    ///     app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
+    /// };
     /// let paths = AppPaths::from_app_dirs(&dirs);
     ///
     /// assert_eq!(paths.db_path, PathBuf::from("/tmp/uniclipboard/uniclipboard.db"));
@@ -37,6 +41,7 @@ impl AppPaths {
             settings_path: dirs.app_data_root.join("settings.json"),
             keyring_dir: dirs.app_data_root.join("keyring"),
             logs_dir: dirs.app_data_root.join("logs"),
+            cache_dir: dirs.app_cache_root.clone(),
         }
     }
 }
@@ -51,6 +56,7 @@ mod tests {
     fn app_paths_derives_concrete_locations_from_app_data_root() {
         let dirs = AppDirs {
             app_data_root: PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
         };
 
         let paths = AppPaths::from_app_dirs(&dirs);
@@ -69,5 +75,15 @@ mod tests {
             PathBuf::from("/tmp/uniclipboard/keyring")
         );
         assert_eq!(paths.logs_dir, PathBuf::from("/tmp/uniclipboard/logs"));
+    }
+
+    #[test]
+    fn app_paths_includes_cache_dir() {
+        let dirs = AppDirs {
+            app_data_root: PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
+        };
+        let paths = AppPaths::from_app_dirs(&dirs);
+        assert_eq!(paths.cache_dir, PathBuf::from("/tmp/uniclipboard-cache"));
     }
 }

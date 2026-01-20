@@ -20,13 +20,20 @@ impl DeleteClipboardEntry {
     /// # Examples
     ///
     /// ```
-    /// use std::sync::Arc;
+    /// # use std::sync::Arc;
+    /// # use uc_app::usecases::DeleteClipboardEntry;
+    /// # use uc_core::ports::{
+    /// #     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardSelectionRepositoryPort,
+    /// # };
+    /// # fn doc_example() {
     /// // Assume `entry_repo`, `selection_repo`, and `event_writer` implement the required ports.
-    /// let entry_repo = Arc::new(MockEntryRepo::new());
-    /// let selection_repo = Arc::new(MockSelectionRepo::new());
-    /// let event_writer = Arc::new(MockEventWriter::new());
+    /// let entry_repo: Arc<dyn ClipboardEntryRepositoryPort> = todo!();
+    /// let selection_repo: Arc<dyn ClipboardSelectionRepositoryPort> = todo!();
+    /// let event_writer: Arc<dyn ClipboardEventWriterPort> = todo!();
     ///
     /// let use_case = DeleteClipboardEntry::from_ports(entry_repo, selection_repo, event_writer);
+    /// # let _ = use_case;
+    /// # }
     /// ```
     pub fn from_ports(
         entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
@@ -58,12 +65,20 @@ impl DeleteClipboardEntry {
     ///
     /// ```
     /// # use std::sync::Arc;
-    /// # use tokio_test::block_on;
-    /// # block_on(async {
-    /// // Assume `uc` is a DeleteClipboardEntry instance created with valid ports
-    /// // and `entry_id` is a valid EntryId.
-    /// // uc.execute(&entry_id).await.unwrap();
-    /// # });
+    /// # use uc_app::usecases::DeleteClipboardEntry;
+    /// # use uc_core::ids::EntryId;
+    /// # use uc_core::ports::{
+    /// #     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardSelectionRepositoryPort,
+    /// # };
+    /// # async fn doc_example() -> anyhow::Result<()> {
+    /// let entry_repo: Arc<dyn ClipboardEntryRepositoryPort> = todo!();
+    /// let selection_repo: Arc<dyn ClipboardSelectionRepositoryPort> = todo!();
+    /// let event_writer: Arc<dyn ClipboardEventWriterPort> = todo!();
+    /// let use_case = DeleteClipboardEntry::from_ports(entry_repo, selection_repo, event_writer);
+    /// let entry_id = EntryId::from("entry-id".to_string());
+    /// use_case.execute(&entry_id).await?;
+    /// # Ok(())
+    /// # }
     /// ```
     #[tracing::instrument(
         name = "usecase.delete_clipboard_entry.execute",

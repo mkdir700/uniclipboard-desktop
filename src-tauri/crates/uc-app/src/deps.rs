@@ -11,6 +11,11 @@
 //! - Just parameter grouping / 仅用于参数打包
 
 use std::sync::Arc;
+use tokio::sync::mpsc;
+use uc_core::ids::RepresentationId;
+use uc_core::ports::clipboard::{
+    ClipboardRepresentationNormalizerPort, RepresentationCachePort, SpoolQueuePort,
+};
 use uc_core::ports::*;
 
 /// Application dependency grouping (non-Builder, just parameter grouping)
@@ -27,9 +32,12 @@ pub struct AppDeps {
     pub clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     pub clipboard_event_repo: Arc<dyn ClipboardEventWriterPort>,
     pub representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
-    pub representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,
+    pub representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
     pub selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
     pub representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
+    pub representation_cache: Arc<dyn RepresentationCachePort>,
+    pub spool_queue: Arc<dyn SpoolQueuePort>,
+    pub worker_tx: mpsc::Sender<RepresentationId>,
 
     // Security dependencies / 安全依赖
     pub encryption: Arc<dyn EncryptionPort>,
@@ -53,7 +61,7 @@ pub struct AppDeps {
     // Storage dependencies / 存储依赖
     pub blob_store: Arc<dyn BlobStorePort>,
     pub blob_repository: Arc<dyn BlobRepositoryPort>,
-    pub blob_materializer: Arc<dyn BlobMaterializerPort>,
+    pub blob_writer: Arc<dyn BlobWriterPort>,
 
     // Settings dependencies / 设置依赖
     pub settings: Arc<dyn SettingsPort>,

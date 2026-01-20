@@ -53,6 +53,8 @@ diesel::table! {
         size_bytes -> BigInt,
         inline_data -> Nullable<Binary>,
         blob_id -> Nullable<Text>,
+        payload_state -> Text,
+        last_error -> Nullable<Text>,
     }
 }
 

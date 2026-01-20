@@ -113,9 +113,11 @@ where
     /// # Examples
     ///
     /// ```
-    /// # async fn example(repo: &impl ClipboardEntryRepositoryPort) {
-    /// let entries = repo.list_entries(10, 0).await.unwrap();
+    /// # use uc_core::ports::ClipboardEntryRepositoryPort;
+    /// # async fn example(repo: &impl ClipboardEntryRepositoryPort) -> anyhow::Result<()> {
+    /// let entries = repo.list_entries(10, 0).await?;
     /// assert!(entries.len() <= 10);
+    /// # Ok(())
     /// # }
     /// ```
     async fn list_entries(&self, limit: usize, offset: usize) -> Result<Vec<ClipboardEntry>> {
@@ -148,9 +150,12 @@ where
     /// # Examples
     ///
     /// ```no_run
+    /// # use uc_core::ids::EntryId;
+    /// # use uc_core::ports::ClipboardEntryRepositoryPort;
     /// // Remove an entry by id
-    /// # async fn run(repo: &impl std::marker::Send, id: uc_core::domain::EntryId) {
-    /// // repo.delete_entry(&id).await.unwrap();
+    /// # async fn run(repo: &impl ClipboardEntryRepositoryPort, id: EntryId) -> anyhow::Result<()> {
+    /// repo.delete_entry(&id).await?;
+    /// # Ok(())
     /// # }
     /// ```
     async fn delete_entry(&self, entry_id: &EntryId) -> Result<()> {

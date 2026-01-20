@@ -48,11 +48,15 @@ where
     /// # Examples
     ///
     /// ```
-    /// # use uc_infra::db::repositories::DieselClipboardEventRepository;
     /// # use uc_core::{ClipboardEvent, PersistedClipboardRepresentation};
-    /// # async fn example(repo: &DieselClipboardEventRepository<_, _, _>, event: &ClipboardEvent, reps: &Vec<PersistedClipboardRepresentation>) -> anyhow::Result<()> {
+    /// # use uc_core::ports::ClipboardEventWriterPort;
+    /// # async fn example(
+    /// #     repo: &impl ClipboardEventWriterPort,
+    /// #     event: &ClipboardEvent,
+    /// #     reps: &Vec<PersistedClipboardRepresentation>,
+    /// # ) -> anyhow::Result<()> {
     /// repo.insert_event(event, reps).await?;
-    /// # Ok::<(), anyhow::Error>(())
+    /// # Ok(())
     /// # }
     /// ```
     ///
@@ -114,8 +118,14 @@ where
     /// # Examples
     ///
     /// ```
-    /// # async fn run_example(repo: &impl std::ops::Deref<Target = crate::DieselClipboardEventRepository<impl Send + Sync, _, _>>, event_id: &crate::EventId) {
-    /// repo.delete_event_and_representations(event_id).await.unwrap();
+    /// # use uc_core::ids::EventId;
+    /// # use uc_core::ports::ClipboardEventWriterPort;
+    /// # async fn run_example(
+    /// #     repo: &impl ClipboardEventWriterPort,
+    /// #     event_id: &EventId,
+    /// # ) -> anyhow::Result<()> {
+    /// repo.delete_event_and_representations(event_id).await?;
+    /// # Ok(())
     /// # }
     /// ```
     async fn delete_event_and_representations(&self, event_id: &EventId) -> Result<()> {

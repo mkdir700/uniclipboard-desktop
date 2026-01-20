@@ -539,16 +539,17 @@ impl ClipboardChangeHandler for AppRuntime {
     async fn on_clipboard_changed(&self, snapshot: SystemClipboardSnapshot) -> anyhow::Result<()> {
         // Create CaptureClipboardUseCase with dependencies
         let usecase = uc_app::usecases::internal::capture_clipboard::CaptureClipboardUseCase::new(
-            self.deps.clipboard.clone(),
             self.deps.clipboard_entry_repo.clone(),
             self.deps.clipboard_event_repo.clone(),
             self.deps.representation_policy.clone(),
-            self.deps.representation_materializer.clone(),
+            self.deps.representation_normalizer.clone(),
             self.deps.device_identity.clone(),
+            self.deps.representation_cache.clone(),
+            self.deps.spool_queue.clone(),
         );
 
         // Execute capture with the provided snapshot
-        match usecase.execute_with_snapshot(snapshot).await {
+        match usecase.execute(snapshot).await {
             Ok(event_id) => {
                 tracing::debug!("Successfully captured clipboard, event_id: {}", event_id);
 

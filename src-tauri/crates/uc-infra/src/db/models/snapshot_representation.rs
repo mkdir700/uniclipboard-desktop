@@ -11,6 +11,8 @@ pub struct SnapshotRepresentationRow {
     pub size_bytes: i64,
     pub inline_data: Option<Vec<u8>>,
     pub blob_id: Option<String>,
+    pub payload_state: String,
+    pub last_error: Option<String>,
 }
 
 #[derive(Insertable)]
@@ -23,4 +25,6 @@ pub struct NewSnapshotRepresentationRow {
     pub size_bytes: i64,
     pub inline_data: Option<Vec<u8>>,
     pub blob_id: Option<String>,
+    pub payload_state: String,
+    pub last_error: Option<String>,
 }

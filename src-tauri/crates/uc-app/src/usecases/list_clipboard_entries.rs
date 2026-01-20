@@ -42,10 +42,12 @@ impl ListClipboardEntries {
     ///
     /// ```
     /// # use std::sync::Arc;
+    /// # use uc_app::usecases::ListClipboardEntries;
+    /// # use uc_core::ports::ClipboardEntryRepositoryPort;
     /// # async fn doc_example() -> anyhow::Result<()> {
-    /// // `entry_repo` should implement `ClipboardEntryRepositoryPort`.
-    /// let entry_repo = /* Arc<dyn ClipboardEntryRepositoryPort> */;
-    /// let usecase = ListClipboardEntries::from_arc(Arc::new(entry_repo));
+    /// // `entry_repo` should be a concrete implementation of the port.
+    /// let entry_repo: Arc<dyn ClipboardEntryRepositoryPort> = todo!();
+    /// let usecase = ListClipboardEntries::from_arc(entry_repo);
     /// let entries = usecase.execute(10, 0).await?;
     /// assert!(entries.len() <= 10);
     /// # Ok(()) }

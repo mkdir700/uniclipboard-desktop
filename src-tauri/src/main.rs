@@ -23,7 +23,9 @@ use uc_platform::runtime::event_bus::{
 };
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::tracing as bootstrap_tracing;
-use uc_tauri::bootstrap::{ensure_default_device_name, load_config, wire_dependencies, AppRuntime};
+use uc_tauri::bootstrap::{
+    ensure_default_device_name, load_config, start_background_tasks, wire_dependencies, AppRuntime,
+};
 
 // Platform-specific command modules
 mod plugins;
@@ -163,13 +165,16 @@ fn run_app(config: AppConfig) {
     ) = mpsc::channel(100);
 
     // Wire all dependencies using the new bootstrap flow
-    let deps = match wire_dependencies(&config, platform_cmd_tx.clone()) {
-        Ok(deps) => deps,
+    let wired = match wire_dependencies(&config, platform_cmd_tx.clone()) {
+        Ok(wired) => wired,
         Err(e) => {
             error!("Failed to wire dependencies: {}", e);
             panic!("Dependency wiring failed: {}", e);
         }
     };
+
+    let deps = wired.deps;
+    let background = wired.background;
 
     // Create AppRuntime from dependencies
     let runtime = AppRuntime::new(deps);
@@ -216,6 +221,10 @@ fn run_app(config: AppConfig) {
             runtime_for_handler.set_app_handle(app.handle().clone());
             info!("AppHandle set on AppRuntime for event emission");
 
+            // Start background spooler and blob worker tasks
+            start_background_tasks(background, &runtime_for_handler.deps);
+
+            // Clone handles for async blocks
             let app_handle_for_startup = app.handle().clone();
             let startup_barrier_for_backend = startup_barrier.clone();
             let startup_barrier_for_timeout = startup_barrier.clone();

@@ -22,7 +22,6 @@ pub mod initialize_encryption;
 pub mod internal;
 pub mod is_encryption_initialized;
 pub mod list_clipboard_entries;
-pub mod list_clipboard_entry_previews;
 pub mod onboarding;
 pub mod settings;
 pub mod start_clipboard_watcher;

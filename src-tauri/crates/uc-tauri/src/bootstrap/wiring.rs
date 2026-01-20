@@ -35,13 +35,25 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
+use tauri::async_runtime;
+use tokio::sync::mpsc;
+use tracing::{info, warn};
 
 use uc_app::app_paths::AppPaths;
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
+use uc_core::ids::RepresentationId;
+use uc_core::ports::clipboard::{
+    ClipboardRepresentationNormalizerPort, RepresentationCachePort, SpoolQueuePort, SpoolRequest,
+};
 use uc_core::ports::*;
-use uc_infra::clipboard::ClipboardRepresentationMaterializer;
+use uc_infra::blob::BlobWriter;
+use uc_infra::clipboard::{
+    BackgroundBlobWorker, ClipboardRepresentationNormalizer, MpscSpoolQueue, RepresentationCache,
+    SpoolJanitor, SpoolManager, SpoolScanner, SpoolerTask,
+};
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
 use uc_infra::db::mappers::{
@@ -67,8 +79,7 @@ use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
-    PlaceholderAutostartPort, PlaceholderBlobMaterializerPort, PlaceholderNetworkPort,
-    PlaceholderUiPort,
+    PlaceholderAutostartPort, PlaceholderNetworkPort, PlaceholderUiPort,
 };
 use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::clipboard::LocalClipboard;
@@ -102,6 +113,28 @@ pub enum WiringError {
     #[error("Configuration initialization failed: {0}")]
     ConfigInit(String),
 }
+
+/// Fully wired dependencies plus background runtime components.
+/// 已完成依赖连接与后台运行组件的组合。
+pub struct WiredDependencies {
+    pub deps: AppDeps,
+    pub background: BackgroundRuntimeDeps,
+}
+
+/// Background runtime components that must be started after async runtime is ready.
+/// 需要在异步运行时就绪后启动的后台组件。
+pub struct BackgroundRuntimeDeps {
+    pub representation_cache: Arc<RepresentationCache>,
+    pub spool_manager: Arc<SpoolManager>,
+    pub spool_rx: mpsc::Receiver<SpoolRequest>,
+    pub worker_rx: mpsc::Receiver<RepresentationId>,
+    pub spool_dir: PathBuf,
+    pub spool_ttl_days: u64,
+    pub worker_retry_max_attempts: u32,
+    pub worker_retry_backoff_ms: u64,
+}
+
+const SPOOL_JANITOR_INTERVAL_SECS: u64 = 60 * 60;
 
 /// Create SQLite database connection pool
 /// 创建 SQLite 数据库连接池
@@ -203,13 +236,13 @@ struct PlatformLayer {
     // Device identity / 设备身份（占位符）
     device_identity: Arc<dyn DeviceIdentityPort>,
 
-    // Clipboard representation materializer / 剪贴板表示物化器（占位符）
-    representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort>,
+    // Clipboard representation normalizer / 剪贴板表示规范化器
+    representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort>,
 
-    // Blob materializer / Blob 物化器（占位符）
-    blob_materializer: Arc<dyn BlobMaterializerPort>,
+    // Blob writer / Blob 写入器
+    blob_writer: Arc<dyn BlobWriterPort>,
 
-    // Blob store / Blob 存储（占位符）
+    // Blob store / Blob 存储（加密装饰后）
     blob_store: Arc<dyn BlobStorePort>,
 
     // Encryption session / 加密会话（占位符）
@@ -377,6 +410,9 @@ fn create_infra_layer(
 /// * `keyring` - Keyring created in infra layer / 在 infra 层中创建的密钥环
 /// * `config_dir` - Configuration directory for device identity storage / 用于存储设备身份的配置目录
 /// * `platform_cmd_tx` - Command sender for platform runtime / 平台运行时命令发送器
+/// * `encryption` - Encryption service for blob store decorator / Blob 存储加密服务
+/// * `blob_repository` - Blob repository for BlobWriter / BlobWriter 依赖的仓库
+/// * `clock` - Clock service for BlobWriter timestamps / BlobWriter 时间戳服务
 ///
 /// # Note / 注意
 ///
@@ -390,6 +426,10 @@ fn create_platform_layer(
     keyring: Arc<dyn KeyringPort>,
     config_dir: &PathBuf,
     platform_cmd_tx: PlatformCommandSender,
+    encryption: Arc<dyn EncryptionPort>,
+    blob_repository: Arc<dyn BlobRepositoryPort>,
+    clock: Arc<dyn ClockPort>,
+    storage_config: Arc<ClipboardStorageConfig>,
 ) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
@@ -409,23 +449,34 @@ fn create_platform_layer(
     let blob_store_dir = config_dir.join("blobs");
     let blob_store: Arc<dyn BlobStorePort> = Arc::new(FilesystemBlobStore::new(blob_store_dir));
 
-    // Create clipboard storage config
-    let storage_config = Arc::new(ClipboardStorageConfig::defaults());
-
-    // Create clipboard representation materializer (real implementation)
-    // 创建剪贴板表示物化器（真实实现）
-    let representation_materializer: Arc<dyn ClipboardRepresentationMaterializerPort> =
-        Arc::new(ClipboardRepresentationMaterializer::new(storage_config));
+    // Create clipboard representation normalizer (real implementation)
+    // 创建剪贴板表示规范化器（真实实现）
+    let representation_normalizer: Arc<dyn ClipboardRepresentationNormalizerPort> =
+        Arc::new(ClipboardRepresentationNormalizer::new(storage_config));
 
     // Create placeholder implementations for unimplemented ports
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
     let network: Arc<dyn NetworkPort> = Arc::new(PlaceholderNetworkPort);
-    let blob_materializer: Arc<dyn BlobMaterializerPort> =
-        Arc::new(PlaceholderBlobMaterializerPort);
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
+
+    // Wrap blob_store with encryption decorator
+    // 用加密装饰器包装 blob_store
+    let encrypted_blob_store: Arc<dyn BlobStorePort> = Arc::new(EncryptedBlobStore::new(
+        blob_store.clone(),
+        encryption,
+        encryption_session.clone(),
+    ));
+
+    // Create blob writer using encrypted blob store
+    // 使用加密 blob 存储创建 blob 写入器
+    let blob_writer: Arc<dyn BlobWriterPort> = Arc::new(BlobWriter::new(
+        encrypted_blob_store.clone(),
+        blob_repository,
+        clock,
+    ));
 
     // Create watcher control
     // 创建监控器控制
@@ -444,9 +495,9 @@ fn create_platform_layer(
         autostart,
         network,
         device_identity,
-        representation_materializer,
-        blob_materializer,
-        blob_store,
+        representation_normalizer,
+        blob_writer,
+        blob_store: encrypted_blob_store,
         encryption_session,
         watcher_control,
         key_scope,
@@ -463,7 +514,9 @@ fn create_platform_layer(
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use uc_tauri::bootstrap::wiring::get_default_app_dirs;
+///
 /// let dirs = get_default_app_dirs().expect("failed to get app dirs");
 /// // `dirs` contains platform-specific paths such as config, data, and cache roots
 /// assert!(!dirs.app_name.is_empty());
@@ -481,6 +534,7 @@ struct DefaultPaths {
     db_path: PathBuf,
     vault_dir: PathBuf,
     settings_path: PathBuf,
+    cache_dir: PathBuf,
 }
 
 /// Compute default application file-system paths from the given configuration.
@@ -494,8 +548,10 @@ struct DefaultPaths {
 ///
 /// # Examples
 ///
-/// ```
-/// let cfg = AppConfig::default();
+/// ```ignore
+/// use uc_core::config::AppConfig;
+///
+/// let cfg = AppConfig::empty();
 /// let paths = derive_default_paths(&cfg).expect("derive default paths");
 /// assert!(!paths.app_data_root.as_os_str().is_empty());
 /// assert!(!paths.settings_path.as_os_str().is_empty());
@@ -530,13 +586,14 @@ fn derive_default_paths(config: &AppConfig) -> WiringResult<DefaultPaths> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// use uc_core::app_dirs::AppDirs;
-/// use uniclipboard_wiring::{AppConfig, derive_default_paths_from_app_dirs};
+/// use uc_core::config::AppConfig;
+/// use uc_tauri::bootstrap::wiring::derive_default_paths_from_app_dirs;
 ///
-/// // Assuming `AppDirs` and `AppConfig` implement `Default` in tests/setup.
+/// // Assuming `AppDirs` is constructed in tests/setup.
 /// let app_dirs = AppDirs::default();
-/// let config = AppConfig::default();
+/// let config = AppConfig::empty();
 /// let paths = derive_default_paths_from_app_dirs(&app_dirs, &config).unwrap();
 /// // Basic sanity check: returned paths are populated.
 /// assert!(!paths.app_data_root.as_os_str().is_empty());
@@ -571,12 +628,14 @@ fn derive_default_paths_from_app_dirs(
         db_path,
         vault_dir,
         settings_path,
+        cache_dir: base_paths.cache_dir,
     })
 }
 
-/// Wires and constructs the application's dependency graph, returning a ready-to-use AppDeps.
+/// Wires and constructs the application's dependency graph, returning ready-to-use dependencies.
 ///
-/// On success returns an AppDeps value with all infrastructure and platform components
+/// On success returns `WiredDependencies` containing AppDeps plus background runtime components.
+/// AppDeps includes all infrastructure and platform components
 /// (database pool, repositories, security, platform adapters, materializers, settings, etc.)
 /// wrapped for shared use.
 ///
@@ -593,19 +652,23 @@ fn derive_default_paths_from_app_dirs(
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
+/// use uc_core::config::AppConfig;
+/// use uc_tauri::bootstrap::wiring::wire_dependencies;
+///
 /// // The function will either return fully wired dependencies or a WiringError describing
 /// // what failed during construction.
-/// let config = AppConfig::default();
-/// match wire_dependencies(&config) {
-///     Ok(_deps) => { /* ready to run the application */ }
+/// let config = AppConfig::empty();
+/// let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::channel(10);
+/// match wire_dependencies(&config, cmd_tx) {
+///     Ok(_wired) => { /* ready to run the application */ }
 ///     Err(_err) => { /* handle initialization failure */ }
 /// }
 /// ```
 pub fn wire_dependencies(
     config: &AppConfig,
     platform_cmd_tx: PlatformCommandSender,
-) -> WiringResult<AppDeps> {
+) -> WiringResult<WiredDependencies> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池
     //
@@ -637,17 +700,19 @@ pub fn wire_dependencies(
 
     // Step 3: Create platform layer implementations
     // 步骤 3：创建平台层实现
-    let platform = create_platform_layer(keyring, &vault_path, platform_cmd_tx)?;
+    let storage_config = Arc::new(ClipboardStorageConfig::defaults());
+    let platform = create_platform_layer(
+        keyring,
+        &vault_path,
+        platform_cmd_tx,
+        infra.encryption.clone(),
+        infra.blob_repository.clone(),
+        infra.clock.clone(),
+        storage_config.clone(),
+    )?;
 
     // Step 3.5: Wrap ports with encryption decorators
     // 步骤 3.5：用加密装饰器包装端口
-
-    // Wrap blob_store with encryption decorator
-    let encrypted_blob_store: Arc<dyn BlobStorePort> = Arc::new(EncryptedBlobStore::new(
-        platform.blob_store.clone(),
-        infra.encryption.clone(),
-        platform.encryption_session.clone(),
-    ));
 
     // Wrap clipboard_event_repo with encryption decorator
     let encrypting_event_writer: Arc<dyn ClipboardEventWriterPort> =
@@ -665,6 +730,28 @@ pub fn wire_dependencies(
             platform.encryption_session.clone(),
         ));
 
+    // Step 3.6: Create background processing components
+    // 步骤 3.6：创建后台处理组件
+
+    // Create representation cache
+    let representation_cache = Arc::new(RepresentationCache::new(
+        storage_config.cache_max_entries,
+        storage_config.cache_max_bytes,
+    ));
+    let representation_cache_port: Arc<dyn RepresentationCachePort> = representation_cache.clone();
+
+    // Create spool manager
+    let spool_dir = paths.cache_dir.join("spool");
+    let spool_manager = Arc::new(
+        SpoolManager::new(spool_dir.clone(), storage_config.spool_max_bytes)
+            .map_err(|e| WiringError::BlobStorageInit(format!("Failed to create spool: {}", e)))?,
+    );
+
+    // Create channels for background processing
+    let (spool_tx, spool_rx) = mpsc::channel::<SpoolRequest>(100);
+    let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
+    let (worker_tx, worker_rx) = mpsc::channel::<RepresentationId>(100);
+
     // Step 4: Construct AppDeps with all dependencies
     // 步骤 4：使用所有依赖构造 AppDeps
     let deps = AppDeps {
@@ -673,9 +760,12 @@ pub fn wire_dependencies(
         clipboard_entry_repo: infra.clipboard_entry_repo,
         clipboard_event_repo: encrypting_event_writer,
         representation_repo: decrypting_rep_repo,
-        representation_materializer: platform.representation_materializer,
+        representation_normalizer: platform.representation_normalizer,
         selection_repo: infra.selection_repo,
         representation_policy: Arc::new(SelectRepresentationPolicyV1::new()),
+        representation_cache: representation_cache_port,
+        spool_queue,
+        worker_tx,
 
         // Security dependencies / 安全依赖
         encryption: infra.encryption,
@@ -697,9 +787,9 @@ pub fn wire_dependencies(
         onboarding_state: infra.onboarding_state,
 
         // Storage dependencies / 存储依赖
-        blob_store: encrypted_blob_store,
+        blob_store: platform.blob_store,
         blob_repository: infra.blob_repository,
-        blob_materializer: platform.blob_materializer,
+        blob_writer: platform.blob_writer,
 
         // Settings dependencies / 设置依赖
         settings: infra.settings_repo,
@@ -713,7 +803,100 @@ pub fn wire_dependencies(
         hash: infra.hash,
     };
 
-    Ok(deps)
+    Ok(WiredDependencies {
+        deps,
+        background: BackgroundRuntimeDeps {
+            representation_cache,
+            spool_manager,
+            spool_rx,
+            worker_rx,
+            spool_dir,
+            spool_ttl_days: storage_config.spool_ttl_days,
+            worker_retry_max_attempts: storage_config.worker_retry_max_attempts,
+            worker_retry_backoff_ms: storage_config.worker_retry_backoff_ms,
+        },
+    })
+}
+
+/// Start background spooler and blob worker tasks.
+/// 启动后台假脱机写入和 blob 物化任务。
+pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps) {
+    let BackgroundRuntimeDeps {
+        representation_cache,
+        spool_manager,
+        spool_rx,
+        worker_rx,
+        spool_dir,
+        spool_ttl_days,
+        worker_retry_max_attempts,
+        worker_retry_backoff_ms,
+    } = background;
+
+    info!("Starting background clipboard spooler and blob worker");
+
+    let representation_repo = deps.representation_repo.clone();
+    let worker_tx = deps.worker_tx.clone();
+    let blob_writer = deps.blob_writer.clone();
+    let hasher = deps.hash.clone();
+    let clock = deps.clock.clone();
+
+    async_runtime::spawn(async move {
+        let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx.clone());
+        match scanner.scan_and_recover().await {
+            Ok(recovered) => info!("Recovered {} representations from spool", recovered),
+            Err(err) => warn!(error = %err, "Spool scan failed; continuing startup"),
+        }
+
+        let spooler = SpoolerTask::new(
+            spool_rx,
+            spool_manager.clone(),
+            worker_tx,
+            representation_cache.clone(),
+        );
+        async_runtime::spawn(async move {
+            spooler.run().await;
+            warn!("SpoolerTask stopped");
+        });
+
+        let worker = BackgroundBlobWorker::new(
+            worker_rx,
+            representation_cache,
+            spool_manager.clone(),
+            representation_repo.clone(),
+            blob_writer,
+            hasher,
+            worker_retry_max_attempts,
+            Duration::from_millis(worker_retry_backoff_ms),
+        );
+        async_runtime::spawn(async move {
+            worker.run().await;
+            warn!("BackgroundBlobWorker stopped");
+        });
+
+        let janitor = SpoolJanitor::new(
+            spool_manager.clone(),
+            representation_repo.clone(),
+            clock,
+            spool_ttl_days,
+        );
+        async_runtime::spawn(async move {
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(SPOOL_JANITOR_INTERVAL_SECS));
+            loop {
+                interval.tick().await;
+                match janitor.run_once().await {
+                    Ok(removed) => {
+                        if removed > 0 {
+                            info!("Spool janitor removed {} expired entries", removed);
+                        }
+                    }
+                    Err(err) => {
+                        warn!(error = %err, "Spool janitor run failed");
+                    }
+                }
+            }
+        });
+    });
 }
 
 #[cfg(test)]
@@ -790,24 +973,25 @@ mod tests {
         let result = wire_dependencies(&config, cmd_tx);
 
         match result {
-            Ok(deps) => {
+            Ok(wired) => {
+                let deps = wired.deps;
                 // Verify all dependencies are present by type checking
                 // 通过类型检查验证所有依赖都存在
                 let _ = &deps.clipboard;
                 let _ = &deps.clipboard_event_repo;
                 let _ = &deps.representation_repo;
-                let _ = &deps.representation_materializer;
+                let _ = &deps.representation_normalizer;
                 let _ = &deps.encryption;
                 let _ = &deps.encryption_session;
                 let _ = &deps.keyring;
                 let _ = &deps.key_material;
                 let _ = &deps.watcher_control;
                 let _ = &deps.device_repo;
-                let _ = &deps.device_identity;
+                let _ = &&deps.device_identity;
                 let _ = &deps.network;
                 let _ = &deps.blob_store;
                 let _ = &deps.blob_repository;
-                let _ = &deps.blob_materializer;
+                let _ = &deps.blob_writer;
                 let _ = &deps.settings;
                 let _ = &deps.ui_port;
                 let _ = &deps.autostart;
@@ -913,7 +1097,28 @@ mod tests {
         let temp_dir = std::env::temp_dir().join(format!("uc-wiring-test-{}", std::process::id()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result = create_platform_layer(keyring, &temp_dir, cmd_tx);
+
+        // Create missing dependencies
+        // 创建缺失的依赖
+        let encryption: Arc<dyn EncryptionPort> = Arc::new(EncryptionRepository);
+        let db_pool = init_db_pool(":memory:").expect("create in-memory db pool");
+        let blob_repository: Arc<dyn BlobRepositoryPort> = Arc::new(DieselBlobRepository::new(
+            Arc::new(DieselSqliteExecutor::new(db_pool)),
+            BlobRowMapper,
+            BlobRowMapper,
+        ));
+        let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
+        let storage_config = Arc::new(ClipboardStorageConfig::defaults());
+
+        let result = create_platform_layer(
+            keyring,
+            &temp_dir,
+            cmd_tx,
+            encryption,
+            blob_repository,
+            clock,
+            storage_config,
+        );
 
         match result {
             Ok(layer) => {
@@ -925,10 +1130,9 @@ mod tests {
                 let _autostart: &Arc<dyn AutostartPort> = &layer.autostart;
                 let _network: &Arc<dyn NetworkPort> = &layer.network;
                 let _device_identity: &Arc<dyn DeviceIdentityPort> = &layer.device_identity;
-                let _representation_materializer: &Arc<
-                    dyn ClipboardRepresentationMaterializerPort,
-                > = &layer.representation_materializer;
-                let _blob_materializer: &Arc<dyn BlobMaterializerPort> = &layer.blob_materializer;
+                let _representation_normalizer: &Arc<dyn ClipboardRepresentationNormalizerPort> =
+                    &layer.representation_normalizer;
+                let _blob_writer: &Arc<dyn BlobWriterPort> = &layer.blob_writer;
                 let _blob_store: &Arc<dyn BlobStorePort> = &layer.blob_store;
                 let _encryption_session: &Arc<dyn EncryptionSessionPort> =
                     &layer.encryption_session;
@@ -1045,9 +1249,21 @@ The functionality is still validated in development mode when running the app wi
     fn wiring_derives_paths_from_port_fact() {
         let dirs = uc_core::app_dirs::AppDirs {
             app_data_root: std::path::PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: std::path::PathBuf::from("/tmp/uniclipboard-cache"),
         };
         let paths = derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
             .expect("derive_default_paths_from_app_dirs failed");
         assert!(paths.db_path.ends_with("uniclipboard.db"));
+    }
+
+    #[test]
+    fn derive_default_paths_sets_cache_dir() {
+        let dirs = uc_core::app_dirs::AppDirs {
+            app_data_root: PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
+        };
+        let paths = derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
+            .expect("derive_default_paths_from_app_dirs failed");
+        assert_eq!(paths.cache_dir, PathBuf::from("/tmp/uniclipboard-cache"));
     }
 }

@@ -29,9 +29,9 @@ use crate::db::ports::{DbExecutor, RowMapper};
 use crate::db::schema::clipboard_snapshot_representation;
 use anyhow::Result;
 use diesel::{BoolExpressionMethods, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl};
-use uc_core::clipboard::PersistedClipboardRepresentation;
+use uc_core::clipboard::{PayloadAvailability, PersistedClipboardRepresentation};
 use uc_core::ids::{EventId, RepresentationId};
-use uc_core::ports::clipboard::ClipboardRepresentationRepositoryPort;
+use uc_core::ports::clipboard::{ClipboardRepresentationRepositoryPort, ProcessingUpdateOutcome};
 use uc_core::BlobId;
 
 pub struct DieselClipboardRepresentationRepository<E>
@@ -86,6 +86,31 @@ where
         }
     }
 
+    async fn get_representation_by_id(
+        &self,
+        representation_id: &RepresentationId,
+    ) -> Result<Option<PersistedClipboardRepresentation>> {
+        let rep_id_str = representation_id.to_string();
+
+        let row: Option<SnapshotRepresentationRow> = self.executor.run(|conn| {
+            let result: Result<Option<SnapshotRepresentationRow>, diesel::result::Error> =
+                clipboard_snapshot_representation::table
+                    .filter(clipboard_snapshot_representation::id.eq(&rep_id_str))
+                    .first::<SnapshotRepresentationRow>(conn)
+                    .optional();
+            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
+
+        match row {
+            Some(r) => {
+                let mapper = RepresentationRowMapper;
+                let rep = mapper.to_domain(&r)?;
+                Ok(Some(rep))
+            }
+            None => Ok(None),
+        }
+    }
+
     async fn update_blob_id(
         &self,
         representation_id: &RepresentationId,
@@ -104,19 +129,147 @@ where
             Ok(())
         })
     }
+
+    async fn update_blob_id_if_none(
+        &self,
+        representation_id: &RepresentationId,
+        blob_id: &BlobId,
+    ) -> Result<bool> {
+        let rep_id_str = representation_id.to_string();
+        let blob_id_str = blob_id.to_string();
+
+        let updated_rows = self.executor.run(|conn| {
+            let result: diesel::result::QueryResult<usize> = diesel::update(
+                clipboard_snapshot_representation::table.filter(
+                    clipboard_snapshot_representation::id
+                        .eq(&rep_id_str)
+                        .and(clipboard_snapshot_representation::blob_id.is_null()),
+                ),
+            )
+            .set(clipboard_snapshot_representation::blob_id.eq(&blob_id_str))
+            .execute(conn);
+            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
+
+        Ok(updated_rows > 0)
+    }
+
+    async fn update_processing_result(
+        &self,
+        rep_id: &RepresentationId,
+        expected_states: &[PayloadAvailability],
+        blob_id: Option<&BlobId>,
+        new_state: PayloadAvailability,
+        last_error: Option<&str>,
+    ) -> Result<ProcessingUpdateOutcome> {
+        let rep_id_str = rep_id.to_string();
+        let expected_state_strs: Vec<String> = expected_states
+            .iter()
+            .map(|s| s.as_str().to_string())
+            .collect();
+
+        // First, verify the representation exists and get event_id
+        let event_id_str: Option<String> = self.executor.run(|conn| {
+            let result: Result<Option<String>, diesel::result::Error> =
+                clipboard_snapshot_representation::table
+                    .filter(clipboard_snapshot_representation::id.eq(&rep_id_str))
+                    .select(clipboard_snapshot_representation::event_id)
+                    .first::<String>(conn)
+                    .optional();
+            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
+
+        if event_id_str.is_none() {
+            return Ok(ProcessingUpdateOutcome::NotFound);
+        }
+
+        // Perform the CAS update with all fields set in one statement
+        let updated_rows = self.executor.run(|conn| {
+            let base_filter = clipboard_snapshot_representation::table.filter(
+                clipboard_snapshot_representation::id.eq(&rep_id_str).and(
+                    clipboard_snapshot_representation::payload_state.eq_any(&expected_state_strs),
+                ),
+            );
+
+            // Build the update statement with all fields in one set() call
+            let update_result = if let Some(blob_id) = blob_id {
+                diesel::update(base_filter)
+                    .set((
+                        clipboard_snapshot_representation::payload_state.eq(new_state.as_str()),
+                        clipboard_snapshot_representation::last_error.eq(last_error),
+                        clipboard_snapshot_representation::blob_id.eq(blob_id.to_string()),
+                    ))
+                    .execute(conn)
+            } else {
+                diesel::update(base_filter)
+                    .set((
+                        clipboard_snapshot_representation::payload_state.eq(new_state.as_str()),
+                        clipboard_snapshot_representation::last_error.eq(last_error),
+                    ))
+                    .execute(conn)
+            };
+
+            update_result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
+
+        if updated_rows == 0 {
+            return Ok(ProcessingUpdateOutcome::StateMismatch);
+        }
+
+        // Fetch and return the updated representation
+        let updated: Option<SnapshotRepresentationRow> = self.executor.run(|conn| {
+            let result: Result<Option<SnapshotRepresentationRow>, diesel::result::Error> =
+                clipboard_snapshot_representation::table
+                    .filter(clipboard_snapshot_representation::id.eq(&rep_id_str))
+                    .first::<SnapshotRepresentationRow>(conn)
+                    .optional();
+            result.map_err(|e| anyhow::anyhow!("Database error: {}", e))
+        })?;
+
+        let row = updated.ok_or_else(|| {
+            anyhow::anyhow!("Representation disappeared after update: {}", rep_id_str)
+        })?;
+
+        let mapper = RepresentationRowMapper;
+        let representation = mapper.to_domain(&row)?;
+        Ok(ProcessingUpdateOutcome::Updated(representation))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    // Note: This requires a test database setup.
-    // For now, we provide the test structure that can be run with proper test DB.
-    // Actual execution requires test container or in-memory SQLite setup.
+    use super::*;
+    use crate::db::models::snapshot_representation::NewSnapshotRepresentationRow;
+    use crate::db::schema::{clipboard_event, clipboard_snapshot_representation};
+    use diesel::RunQueryDsl;
+    use std::sync::Arc;
+    use uc_core::clipboard::PayloadAvailability;
+    use uc_core::ids::RepresentationId;
 
-    // Re-add these imports when tests are enabled:
-    // use crate::db::models::snapshot_representation::NewSnapshotRepresentationRow;
-    // use crate::db::schema::clipboard_snapshot_representation;
-    // use diesel::prelude::*;
-    // use uc_core::{clipboard::PersistedClipboardRepresentation, ids::{RepresentationId, EventId, FormatId}, MimeType};
+    /// In-memory test executor for testing repositories
+    #[derive(Clone)]
+    struct TestDbExecutor {
+        pool: Arc<crate::db::pool::DbPool>,
+    }
+
+    impl TestDbExecutor {
+        fn new() -> Self {
+            let pool = Arc::new(
+                crate::db::pool::init_db_pool(":memory:").expect("Failed to create test DB pool"),
+            );
+            Self { pool }
+        }
+    }
+
+    impl DbExecutor for TestDbExecutor {
+        fn run<T>(
+            &self,
+            f: impl FnOnce(&mut diesel::SqliteConnection) -> anyhow::Result<T>,
+        ) -> anyhow::Result<T> {
+            let mut conn = self.pool.get()?;
+            f(&mut conn)
+        }
+    }
 
     // Note: This requires a test database setup.
     // For now, we provide the test structure that can be run with proper test DB.
@@ -141,6 +294,8 @@ mod tests {
         //             size_bytes: 10,
         //             inline_data: Some(vec![1, 2, 3]),
         //             blob_id: None,
+        //             payload_state: "Inline".to_string(),
+        //             last_error: None,
         //         })
         //         .execute(conn)
         //         .unwrap();
@@ -169,5 +324,96 @@ mod tests {
     async fn test_update_blob_id() {
         // TODO: Set up test database
         // Test that blob_id is correctly updated
+    }
+
+    #[tokio::test]
+    async fn test_update_processing_result_cas() {
+        // TODO: Set up test database
+        // Test CAS semantics:
+        // 1. Create representation with state=Staged
+        // 2. Call update_processing_result with expected_states=[Staged, Processing]
+        // 3. Should succeed and return updated representation with new state
+        // 4. Call again with expected_states=[Staged] (but state is now BlobReady)
+        // 5. Should fail with CAS error
+
+        // Example test structure:
+        // let executor = TestDbExecutor::new();
+        // let repo = DieselClipboardRepresentationRepository::new(executor);
+        // let rep_id = RepresentationId::new();
+        // let blob_id = BlobId::new();
+        //
+        // // Insert Staged representation
+        // ...
+        //
+        // // Should succeed - state is Staged
+        // let result = repo.update_processing_result(
+        //     &rep_id,
+        //     &[PayloadAvailability::Staged, PayloadAvailability::Processing],
+        //     Some(&blob_id),
+        //     PayloadAvailability::BlobReady,
+        //     None,
+        // ).await.unwrap();
+        //
+        // assert_eq!(result.payload_state(), PayloadAvailability::BlobReady);
+        // assert_eq!(result.blob_id, Some(blob_id));
+        //
+        // // Should fail - state is now BlobReady, not in expected states
+        // let err = repo.update_processing_result(
+        //     &rep_id,
+        //     &[PayloadAvailability::Staged],
+        //     None,
+        //     PayloadAvailability::Lost,
+        //     Some("test error"),
+        // ).await.unwrap_err();
+        //
+        // assert!(err.to_string().contains("CAS update failed"));
+    }
+
+    #[tokio::test]
+    async fn test_update_processing_result_returns_state_mismatch() -> Result<()> {
+        let executor = TestDbExecutor::new();
+        let repo = DieselClipboardRepresentationRepository::new(executor.clone());
+        let rep_id = RepresentationId::new();
+
+        executor.run(|conn| {
+            diesel::insert_into(clipboard_event::table)
+                .values((
+                    clipboard_event::event_id.eq("test-event-1"),
+                    clipboard_event::captured_at_ms.eq(1704067200000i64),
+                    clipboard_event::source_device.eq("test-device"),
+                    clipboard_event::snapshot_hash.eq("blake3v1:testhash"),
+                ))
+                .execute(conn)?;
+
+            diesel::insert_into(clipboard_snapshot_representation::table)
+                .values(NewSnapshotRepresentationRow {
+                    id: rep_id.to_string(),
+                    event_id: "test-event-1".to_string(),
+                    format_id: "public.text".to_string(),
+                    mime_type: Some("text/plain".to_string()),
+                    size_bytes: 3,
+                    inline_data: None,
+                    blob_id: None,
+                    payload_state: PayloadAvailability::BlobReady.as_str().to_string(),
+                    last_error: None,
+                })
+                .execute(conn)?;
+
+            Ok(())
+        })?;
+
+        let outcome = repo
+            .update_processing_result(
+                &rep_id,
+                &[PayloadAvailability::Staged],
+                None,
+                PayloadAvailability::Lost,
+                Some("state mismatch"),
+            )
+            .await?;
+
+        assert!(matches!(outcome, ProcessingUpdateOutcome::StateMismatch));
+
+        Ok(())
     }
 }

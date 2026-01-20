@@ -13,4 +13,6 @@ pub mod wiring;
 pub use config::load_config;
 pub use init::ensure_default_device_name;
 pub use runtime::{create_app, create_runtime, AppRuntime, UseCases};
-pub use wiring::wire_dependencies;
+pub use wiring::{
+    start_background_tasks, wire_dependencies, BackgroundRuntimeDeps, WiredDependencies,
+};

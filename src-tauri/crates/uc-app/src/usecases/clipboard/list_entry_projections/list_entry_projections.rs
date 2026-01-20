@@ -243,11 +243,37 @@ mod tests {
                 .cloned())
         }
 
+        async fn get_representation_by_id(
+            &self,
+            _representation_id: &RepresentationId,
+        ) -> Result<Option<PersistedClipboardRepresentation>> {
+            Ok(None)
+        }
+
         async fn update_blob_id(
             &self,
             _representation_id: &RepresentationId,
             _blob_id: &uc_core::BlobId,
         ) -> Result<()> {
+            unimplemented!()
+        }
+
+        async fn update_blob_id_if_none(
+            &self,
+            _representation_id: &RepresentationId,
+            _blob_id: &uc_core::BlobId,
+        ) -> Result<bool> {
+            unimplemented!()
+        }
+
+        async fn update_processing_result(
+            &self,
+            _rep_id: &RepresentationId,
+            _expected_states: &[uc_core::clipboard::PayloadAvailability],
+            _blob_id: Option<&uc_core::BlobId>,
+            _new_state: uc_core::clipboard::PayloadAvailability,
+            _last_error: Option<&str>,
+        ) -> Result<uc_core::ports::clipboard::ProcessingUpdateOutcome> {
             unimplemented!()
         }
     }

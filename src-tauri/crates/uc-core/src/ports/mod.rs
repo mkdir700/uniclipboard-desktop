@@ -19,9 +19,9 @@
 pub mod app_dirs;
 pub mod app_runtime;
 pub mod autostart;
-mod blob_materializer;
 pub mod blob_repository;
 mod blob_store;
+mod blob_writer;
 pub mod clipboard;
 mod clipboard_change_handler;
 mod clipboard_event;
@@ -37,9 +37,9 @@ pub mod settings;
 pub mod ui_port;
 pub mod watcher_control;
 
-pub use blob_materializer::BlobMaterializerPort;
 pub use blob_repository::BlobRepositoryPort;
 pub use blob_store::BlobStorePort;
+pub use blob_writer::BlobWriterPort;
 pub use clipboard_event::*;
 pub use clock::*;
 pub use hash::*;
