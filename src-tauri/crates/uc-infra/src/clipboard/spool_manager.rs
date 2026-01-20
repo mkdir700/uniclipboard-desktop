@@ -75,6 +75,16 @@ impl SpoolManager {
     /// Write bytes to spool, returning the entry metadata.
     /// 写入缓存并返回条目元数据。
     pub async fn write(&self, rep_id: &RepresentationId, bytes: &[u8]) -> Result<SpoolEntry> {
+        // Reject entries larger than max_bytes to avoid returning a SpoolEntry
+        // for a file that will be immediately evicted by enforce_limits()
+        if bytes.len() > self.max_bytes {
+            return Err(anyhow::anyhow!(
+                "Spool entry size {} bytes exceeds max_bytes {}",
+                bytes.len(),
+                self.max_bytes
+            ));
+        }
+
         let file_path = self.spool_dir.join(rep_id.to_string());
 
         fs::write(&file_path, bytes)

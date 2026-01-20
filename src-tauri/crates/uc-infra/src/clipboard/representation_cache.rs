@@ -98,6 +98,15 @@ impl RepresentationCache {
         }
     }
 
+    /// Revert cache entry to pending state (e.g., after spool write failure).
+    /// 将缓存条目恢复为挂起状态（例如，写盘失败后）。
+    pub async fn mark_pending(&self, rep_id: &RepresentationId) {
+        let mut inner = self.inner.lock().await;
+        if let Some(entry) = inner.entries.get_mut(rep_id) {
+            entry.status = CacheEntryStatus::Pending;
+        }
+    }
+
     /// Remove cache entry explicitly.
     /// 显式移除缓存条目。
     pub async fn remove(&self, rep_id: &RepresentationId) {

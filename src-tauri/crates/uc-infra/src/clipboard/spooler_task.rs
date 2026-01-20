@@ -54,6 +54,8 @@ impl SpoolerTask {
                     error = %err,
                     "Failed to write spool entry"
                 );
+                // Revert to Pending to allow retry on next resolution
+                self.cache.mark_pending(&request.rep_id).await;
             } else {
                 self.cache.mark_completed(&request.rep_id).await;
                 debug!(

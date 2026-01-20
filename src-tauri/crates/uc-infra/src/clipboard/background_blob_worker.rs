@@ -120,12 +120,8 @@ impl BackgroundBlobWorker {
                 return Ok(ProcessResult::Completed);
             }
             Err(err) => {
-                warn!(
-                    representation_id = %rep_id,
-                    error = %err,
-                    "Skipping processing due to update failure"
-                );
-                return Ok(ProcessResult::Completed);
+                // Propagate error to trigger retry in process_with_retry
+                return Err(err);
             }
         }
 

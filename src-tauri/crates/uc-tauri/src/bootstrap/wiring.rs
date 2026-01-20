@@ -130,10 +130,10 @@ pub struct BackgroundRuntimeDeps {
     pub worker_rx: mpsc::Receiver<RepresentationId>,
     pub spool_dir: PathBuf,
     pub spool_ttl_days: u64,
+    pub worker_retry_max_attempts: u32,
+    pub worker_retry_backoff_ms: u64,
 }
 
-const WORKER_RETRY_MAX_ATTEMPTS: u32 = 5;
-const WORKER_RETRY_BACKOFF_MS: u64 = 200;
 const SPOOL_JANITOR_INTERVAL_SECS: u64 = 60 * 60;
 
 /// Create SQLite database connection pool
@@ -812,6 +812,8 @@ pub fn wire_dependencies(
             worker_rx,
             spool_dir,
             spool_ttl_days: storage_config.spool_ttl_days,
+            worker_retry_max_attempts: storage_config.worker_retry_max_attempts,
+            worker_retry_backoff_ms: storage_config.worker_retry_backoff_ms,
         },
     })
 }
@@ -826,6 +828,8 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
         worker_rx,
         spool_dir,
         spool_ttl_days,
+        worker_retry_max_attempts,
+        worker_retry_backoff_ms,
     } = background;
 
     info!("Starting background clipboard spooler and blob worker");
@@ -861,8 +865,8 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
             representation_repo.clone(),
             blob_writer,
             hasher,
-            WORKER_RETRY_MAX_ATTEMPTS,
-            Duration::from_millis(WORKER_RETRY_BACKOFF_MS),
+            worker_retry_max_attempts,
+            Duration::from_millis(worker_retry_backoff_ms),
         );
         async_runtime::spawn(async move {
             worker.run().await;
