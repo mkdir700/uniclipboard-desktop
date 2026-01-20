@@ -31,3 +31,4 @@ dist-ssr
 **/uniclipboard.db
 src-tauri/uniclipboard.db
 src-tauri/crates/**/target/**
+public/splashscreen.html
