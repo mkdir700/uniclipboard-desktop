@@ -173,8 +173,9 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
             'pr-4',
             // On macOS, add left padding to avoid traffic lights
             // On other platforms, use default padding
-            isMac ? `pl-16` : 'px-3',
-            isDashboardPage ? 'justify-center' : ''
+            isMac
+              ? `pl-16`
+              : 'px-3' /* MVP: justify-center removed - restore with: , isDashboardPage ? 'justify-center' : '' */
           )}
           onDoubleClick={isWindows ? handleToggleMaximize : undefined}
         >
@@ -193,7 +194,8 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
             <div
               className={cn(
                 'relative flex items-center w-64 max-w-xs',
-                'transition-all duration-200'
+                'transition-all duration-200',
+                'opacity-0 pointer-events-none' /* MVP: search hidden - remove this line to restore */
               )}
             >
               <Search
