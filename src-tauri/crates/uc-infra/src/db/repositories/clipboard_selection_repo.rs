@@ -43,11 +43,17 @@ impl ClipboardSelectionRepositoryPort for InMemoryClipboardSelectionRepository {
     /// # Examples
     ///
     /// ```
-    /// # async fn run_example() {
+    /// # use uc_infra::db::repositories::InMemoryClipboardSelectionRepository;
+    /// # use uc_core::clipboard::ClipboardSelectionDecision;
+    /// # use uc_core::ids::EntryId;
+    /// # use uc_core::ports::clipboard::ClipboardSelectionRepositoryPort;
+    /// # async fn run_example() -> anyhow::Result<()> {
     /// let repo = InMemoryClipboardSelectionRepository::new();
-    /// let entry_id = EntryId::new(); // replace with appropriate constructor
-    /// let selection = repo.get_selection(&entry_id).await;
+    /// let entry_id = EntryId::from("test-entry".to_string());
+    /// let selection: Option<ClipboardSelectionDecision> =
+    ///     repo.get_selection(&entry_id).await?;
     /// assert!(selection.is_none());
+    /// # Ok(())
     /// # }
     /// ```
     async fn get_selection(
@@ -66,12 +72,16 @@ impl ClipboardSelectionRepositoryPort for InMemoryClipboardSelectionRepository {
     /// # Examples
     ///
     /// ```
-    /// use futures::executor::block_on;
-    ///
+    /// # use uc_infra::db::repositories::InMemoryClipboardSelectionRepository;
+    /// # use uc_core::ids::EntryId;
+    /// # use uc_core::ports::clipboard::ClipboardSelectionRepositoryPort;
+    /// # async fn run_example() -> anyhow::Result<()> {
     /// let repo = InMemoryClipboardSelectionRepository::new();
-    /// let entry_id = EntryId::from("test-entry");
+    /// let entry_id = EntryId::from("test-entry".to_string());
     /// // Succeeds and leaves the in-memory repository unchanged.
-    /// block_on(repo.delete_selection(&entry_id)).unwrap();
+    /// repo.delete_selection(&entry_id).await?;
+    /// # Ok(())
+    /// # }
     /// ```
     async fn delete_selection(&self, _entry_id: &EntryId) -> Result<()> {
         // Placeholder implementation - no-op
@@ -115,10 +125,15 @@ where
     /// # Examples
     ///
     /// ```
-    /// // Synchronously drive the async method for doc examples.
-    /// # async fn _example(repo: &impl crate::ports::ClipboardSelectionRepositoryPort, entry_id: crate::domain::EntryId) {
-    /// let result = repo.get_selection(&entry_id).await.unwrap();
+    /// # use uc_core::ids::EntryId;
+    /// # use uc_core::ports::clipboard::ClipboardSelectionRepositoryPort;
+    /// # async fn _example(
+    /// #     repo: &impl ClipboardSelectionRepositoryPort,
+    /// #     entry_id: EntryId,
+    /// # ) -> anyhow::Result<()> {
+    /// let result = repo.get_selection(&entry_id).await?;
     /// // `result` is `Some(...)` when a selection exists, otherwise `None`.
+    /// # Ok(())
     /// # }
     /// ```
     async fn get_selection(
@@ -163,8 +178,14 @@ where
     /// # Examples
     ///
     /// ```
-    /// # async fn example(repo: &impl crate::clipboard::ClipboardSelectionRepositoryPort, entry_id: crate::domain::EntryId) {
-    /// repo.delete_selection(&entry_id).await.unwrap();
+    /// # use uc_core::ids::EntryId;
+    /// # use uc_core::ports::clipboard::ClipboardSelectionRepositoryPort;
+    /// # async fn example(
+    /// #     repo: &impl ClipboardSelectionRepositoryPort,
+    /// #     entry_id: EntryId,
+    /// # ) -> anyhow::Result<()> {
+    /// repo.delete_selection(&entry_id).await?;
+    /// # Ok(())
     /// # }
     /// ```
     async fn delete_selection(&self, entry_id: &EntryId) -> Result<()> {
