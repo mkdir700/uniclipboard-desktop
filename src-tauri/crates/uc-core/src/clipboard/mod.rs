@@ -10,6 +10,7 @@ mod policy;
 mod selection;
 mod snapshot;
 mod system;
+mod thumbnail;
 mod timestamp;
 
 pub use entry::*;
@@ -27,4 +28,5 @@ pub use hash::{ContentHash, HashAlgorithm};
 pub use mime::MimeType;
 pub use origin::ClipboardOrigin;
 pub use payload_availability::PayloadAvailability;
+pub use thumbnail::ThumbnailMetadata;
 pub use timestamp::TimestampMs;

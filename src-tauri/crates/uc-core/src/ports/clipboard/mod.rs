@@ -10,6 +10,8 @@ mod representation_repository;
 mod select_representation_policy;
 mod selection_resolver;
 mod spool_queue;
+mod thumbnail_generator;
+mod thumbnail_repository;
 
 pub use clipboard_entry_repository::ClipboardEntryRepositoryPort;
 pub use clipboard_event_repository::ClipboardEventRepositoryPort;
@@ -25,3 +27,5 @@ pub use representation_repository::{
 pub use select_representation_policy::SelectRepresentationPolicyPort;
 pub use selection_resolver::SelectionResolverPort;
 pub use spool_queue::{SpoolQueuePort, SpoolRequest};
+pub use thumbnail_generator::{GeneratedThumbnail, ThumbnailGeneratorPort};
+pub use thumbnail_repository::ThumbnailRepositoryPort;
