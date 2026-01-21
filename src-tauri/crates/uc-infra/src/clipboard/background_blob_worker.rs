@@ -9,9 +9,14 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{error, info_span, warn, Instrument};
 use uc_core::clipboard::PayloadAvailability;
+use uc_core::clipboard::{ThumbnailMetadata, TimestampMs};
 use uc_core::ids::RepresentationId;
-use uc_core::ports::clipboard::ProcessingUpdateOutcome;
-use uc_core::ports::{BlobWriterPort, ClipboardRepresentationRepositoryPort, ContentHashPort};
+use uc_core::ports::clipboard::{
+    ProcessingUpdateOutcome, ThumbnailGeneratorPort, ThumbnailRepositoryPort,
+};
+use uc_core::ports::{
+    BlobWriterPort, ClipboardRepresentationRepositoryPort, ClockPort, ContentHashPort,
+};
 
 use crate::clipboard::{RepresentationCache, SpoolManager};
 
@@ -24,6 +29,9 @@ pub struct BackgroundBlobWorker {
     repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
     blob_writer: Arc<dyn BlobWriterPort>,
     hasher: Arc<dyn ContentHashPort>,
+    thumbnail_repo: Arc<dyn ThumbnailRepositoryPort>,
+    thumbnail_generator: Arc<dyn ThumbnailGeneratorPort>,
+    clock: Arc<dyn ClockPort>,
     retry_max_attempts: u32,
     retry_backoff: Duration,
 }
@@ -37,6 +45,9 @@ impl BackgroundBlobWorker {
         repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
         blob_writer: Arc<dyn BlobWriterPort>,
         hasher: Arc<dyn ContentHashPort>,
+        thumbnail_repo: Arc<dyn ThumbnailRepositoryPort>,
+        thumbnail_generator: Arc<dyn ThumbnailGeneratorPort>,
+        clock: Arc<dyn ClockPort>,
         retry_max_attempts: u32,
         retry_backoff: Duration,
     ) -> Self {
@@ -47,6 +58,9 @@ impl BackgroundBlobWorker {
             repo,
             blob_writer,
             hasher,
+            thumbnail_repo,
+            thumbnail_generator,
+            clock,
             retry_max_attempts,
             retry_backoff,
         }
@@ -209,6 +223,7 @@ impl BackgroundBlobWorker {
                         "Failed to delete spool entry after blob materialization"
                     );
                 }
+                self.try_generate_thumbnail(rep_id, &raw_bytes).await;
                 Ok(ProcessResult::Completed)
             }
             Ok(ProcessingUpdateOutcome::StateMismatch) => {
@@ -267,6 +282,85 @@ impl BackgroundBlobWorker {
         }
         Ok(())
     }
+
+    async fn try_generate_thumbnail(&self, rep_id: &RepresentationId, raw_bytes: &[u8]) {
+        if let Err(err) = self.generate_thumbnail(rep_id, raw_bytes).await {
+            error!(
+                representation_id = %rep_id,
+                error = %err,
+                "Failed to generate thumbnail"
+            );
+        }
+    }
+
+    async fn generate_thumbnail(&self, rep_id: &RepresentationId, raw_bytes: &[u8]) -> Result<()> {
+        let rep = match self.repo.get_representation_by_id(rep_id).await? {
+            Some(rep) => rep,
+            None => {
+                warn!(
+                    representation_id = %rep_id,
+                    "Representation missing while generating thumbnail"
+                );
+                return Ok(());
+            }
+        };
+
+        if rep.inline_data.is_some() {
+            return Ok(());
+        }
+
+        let is_image = rep
+            .mime_type
+            .as_ref()
+            .map(|mime| mime.as_str().starts_with("image/"))
+            .unwrap_or(false);
+        if !is_image {
+            return Ok(());
+        }
+
+        if self
+            .thumbnail_repo
+            .get_by_representation_id(rep_id)
+            .await?
+            .is_some()
+        {
+            return Ok(());
+        }
+
+        let generated = self
+            .thumbnail_generator
+            .generate_thumbnail(raw_bytes)
+            .await
+            .context("failed to generate thumbnail")?;
+
+        let thumbnail_hash = self
+            .hasher
+            .hash_bytes(&generated.thumbnail_bytes)
+            .context("failed to hash thumbnail bytes")?;
+
+        let thumbnail_blob = self
+            .blob_writer
+            .write_if_absent(&thumbnail_hash, &generated.thumbnail_bytes)
+            .await
+            .context("failed to write thumbnail blob")?;
+
+        let created_at_ms = TimestampMs::from_epoch_millis(self.clock.now_ms());
+        let metadata = ThumbnailMetadata::new(
+            rep_id.clone(),
+            thumbnail_blob.blob_id,
+            generated.thumbnail_mime_type,
+            generated.original_width,
+            generated.original_height,
+            rep.size_bytes,
+            Some(created_at_ms),
+        );
+        self.thumbnail_repo
+            .insert_thumbnail(&metadata)
+            .await
+            .context("failed to insert thumbnail metadata")?;
+
+        Ok(())
+    }
 }
 
 enum ProcessResult {
@@ -282,8 +376,12 @@ mod tests {
     use std::path::PathBuf;
     use tokio::sync::Mutex as TokioMutex;
     use uc_core::blob::BlobStorageLocator;
-    use uc_core::clipboard::PersistedClipboardRepresentation;
+    use uc_core::clipboard::{PersistedClipboardRepresentation, ThumbnailMetadata, TimestampMs};
     use uc_core::ids::{FormatId, RepresentationId};
+    use uc_core::ports::clipboard::{
+        GeneratedThumbnail, ThumbnailGeneratorPort, ThumbnailRepositoryPort,
+    };
+    use uc_core::ports::ClockPort;
     use uc_core::{Blob, BlobId, ContentHash, HashAlgorithm, MimeType};
 
     struct MockHasher;
@@ -348,6 +446,121 @@ mod tests {
         async fn get(&self, rep_id: &RepresentationId) -> Option<PersistedClipboardRepresentation> {
             let reps = self.reps.lock().await;
             reps.get(rep_id).cloned()
+        }
+    }
+
+    struct MockThumbnailRepo {
+        thumbnails: TokioMutex<HashMap<RepresentationId, ThumbnailMetadata>>,
+    }
+
+    impl MockThumbnailRepo {
+        fn new() -> Self {
+            Self {
+                thumbnails: TokioMutex::new(HashMap::new()),
+            }
+        }
+
+        fn clone_metadata(metadata: &ThumbnailMetadata) -> ThumbnailMetadata {
+            ThumbnailMetadata::new(
+                metadata.representation_id.clone(),
+                metadata.thumbnail_blob_id.clone(),
+                metadata.thumbnail_mime_type.clone(),
+                metadata.width,
+                metadata.height,
+                metadata.size_bytes,
+                metadata.created_at_ms,
+            )
+        }
+
+        async fn get(&self, rep_id: &RepresentationId) -> Option<ThumbnailMetadata> {
+            let thumbnails = self.thumbnails.lock().await;
+            thumbnails
+                .get(rep_id)
+                .map(|metadata| Self::clone_metadata(metadata))
+        }
+    }
+
+    #[async_trait]
+    impl ThumbnailRepositoryPort for MockThumbnailRepo {
+        async fn get_by_representation_id(
+            &self,
+            representation_id: &RepresentationId,
+        ) -> Result<Option<ThumbnailMetadata>> {
+            Ok(self.get(representation_id).await)
+        }
+
+        async fn insert_thumbnail(&self, metadata: &ThumbnailMetadata) -> Result<()> {
+            let mut thumbnails = self.thumbnails.lock().await;
+            thumbnails.insert(
+                metadata.representation_id.clone(),
+                Self::clone_metadata(metadata),
+            );
+            Ok(())
+        }
+    }
+
+    struct MockThumbnailGenerator {
+        generated: Option<GeneratedThumbnail>,
+        fail: bool,
+        calls: TokioMutex<u32>,
+    }
+
+    impl MockThumbnailGenerator {
+        fn new_success(generated: GeneratedThumbnail) -> Self {
+            Self {
+                generated: Some(generated),
+                fail: false,
+                calls: TokioMutex::new(0),
+            }
+        }
+
+        fn new_failure() -> Self {
+            Self {
+                generated: None,
+                fail: true,
+                calls: TokioMutex::new(0),
+            }
+        }
+
+        async fn call_count(&self) -> u32 {
+            *self.calls.lock().await
+        }
+
+        fn clone_generated(&self) -> Result<GeneratedThumbnail> {
+            let generated = self
+                .generated
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("missing generated thumbnail"))?;
+            Ok(GeneratedThumbnail {
+                thumbnail_bytes: generated.thumbnail_bytes.clone(),
+                thumbnail_mime_type: generated.thumbnail_mime_type.clone(),
+                original_width: generated.original_width,
+                original_height: generated.original_height,
+            })
+        }
+    }
+
+    #[async_trait]
+    impl ThumbnailGeneratorPort for MockThumbnailGenerator {
+        async fn generate_thumbnail(&self, _image_bytes: &[u8]) -> Result<GeneratedThumbnail> {
+            let mut calls = self.calls.lock().await;
+            *calls += 1;
+            drop(calls);
+
+            if self.fail {
+                return Err(anyhow::anyhow!("thumbnail generator failed"));
+            }
+            self.clone_generated()
+        }
+    }
+
+    struct FixedClock {
+        now_ms: i64,
+    }
+
+    impl ClockPort for FixedClock {
+        fn now_ms(&self) -> i64 {
+            self.now_ms
         }
     }
 
@@ -431,6 +644,193 @@ mod tests {
         )
     }
 
+    fn default_thumbnail_deps() -> (
+        Arc<MockThumbnailRepo>,
+        Arc<MockThumbnailGenerator>,
+        Arc<FixedClock>,
+    ) {
+        let repo = Arc::new(MockThumbnailRepo::new());
+        let generator = Arc::new(MockThumbnailGenerator::new_success(GeneratedThumbnail {
+            thumbnail_bytes: vec![1, 2, 3],
+            thumbnail_mime_type: MimeType("image/webp".to_string()),
+            original_width: 1,
+            original_height: 1,
+        }));
+        let clock = Arc::new(FixedClock { now_ms: 1 });
+        (repo, generator, clock)
+    }
+
+    #[tokio::test]
+    async fn test_worker_generates_thumbnail() -> Result<()> {
+        let rep_id = RepresentationId::new();
+        let rep = create_representation(&rep_id);
+
+        let mut reps = HashMap::new();
+        reps.insert(rep_id.clone(), rep);
+
+        let repo = Arc::new(MockRepresentationRepo::new(reps));
+        let cache = Arc::new(RepresentationCache::new(10, 10_000));
+        cache.put(&rep_id, vec![1, 2, 3, 4]).await;
+        let spool = Arc::new(SpoolManager::new(tempfile::tempdir()?.path(), 10_000)?);
+        let blob_writer = Arc::new(MockBlobWriter::new());
+        let hasher = Arc::new(MockHasher);
+        let thumbnail_repo = Arc::new(MockThumbnailRepo::new());
+        let thumbnail_generator =
+            Arc::new(MockThumbnailGenerator::new_success(GeneratedThumbnail {
+                thumbnail_bytes: vec![8, 9, 10],
+                thumbnail_mime_type: MimeType("image/webp".to_string()),
+                original_width: 120,
+                original_height: 80,
+            }));
+        let clock = Arc::new(FixedClock { now_ms: 123 });
+
+        let (tx, rx) = mpsc::channel(4);
+        let worker = BackgroundBlobWorker::new(
+            rx,
+            cache,
+            spool,
+            repo.clone(),
+            blob_writer,
+            hasher,
+            thumbnail_repo.clone(),
+            thumbnail_generator.clone(),
+            clock,
+            3,
+            Duration::from_millis(1),
+        );
+
+        let handle = tokio::spawn(worker.run());
+        tx.send(rep_id.clone()).await?;
+        drop(tx);
+        handle.await?;
+
+        let thumbnail = thumbnail_repo
+            .get(&rep_id)
+            .await
+            .expect("thumbnail missing");
+        assert_eq!(thumbnail.thumbnail_mime_type.as_str(), "image/webp");
+        assert_eq!(thumbnail.width, 120);
+        assert_eq!(thumbnail.height, 80);
+        assert_eq!(thumbnail.size_bytes, 1024);
+        assert_eq!(
+            thumbnail.created_at_ms,
+            Some(TimestampMs::from_epoch_millis(123))
+        );
+        assert_eq!(thumbnail_generator.call_count().await, 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_worker_skips_thumbnail_when_existing() -> Result<()> {
+        let rep_id = RepresentationId::new();
+        let rep = create_representation(&rep_id);
+
+        let mut reps = HashMap::new();
+        reps.insert(rep_id.clone(), rep);
+
+        let repo = Arc::new(MockRepresentationRepo::new(reps));
+        let cache = Arc::new(RepresentationCache::new(10, 10_000));
+        cache.put(&rep_id, vec![1, 2, 3, 4]).await;
+        let spool = Arc::new(SpoolManager::new(tempfile::tempdir()?.path(), 10_000)?);
+        let blob_writer = Arc::new(MockBlobWriter::new());
+        let hasher = Arc::new(MockHasher);
+        let thumbnail_repo = Arc::new(MockThumbnailRepo::new());
+        let existing = ThumbnailMetadata::new(
+            rep_id.clone(),
+            BlobId::new(),
+            MimeType("image/webp".to_string()),
+            120,
+            80,
+            1024,
+            Some(TimestampMs::from_epoch_millis(1)),
+        );
+        thumbnail_repo.insert_thumbnail(&existing).await?;
+        let thumbnail_generator =
+            Arc::new(MockThumbnailGenerator::new_success(GeneratedThumbnail {
+                thumbnail_bytes: vec![8, 9, 10],
+                thumbnail_mime_type: MimeType("image/webp".to_string()),
+                original_width: 120,
+                original_height: 80,
+            }));
+        let clock = Arc::new(FixedClock { now_ms: 123 });
+
+        let (tx, rx) = mpsc::channel(4);
+        let worker = BackgroundBlobWorker::new(
+            rx,
+            cache,
+            spool,
+            repo.clone(),
+            blob_writer,
+            hasher,
+            thumbnail_repo.clone(),
+            thumbnail_generator.clone(),
+            clock,
+            3,
+            Duration::from_millis(1),
+        );
+
+        let handle = tokio::spawn(worker.run());
+        tx.send(rep_id.clone()).await?;
+        drop(tx);
+        handle.await?;
+
+        let thumbnail = thumbnail_repo
+            .get(&rep_id)
+            .await
+            .expect("thumbnail missing");
+        assert_eq!(thumbnail.thumbnail_blob_id, existing.thumbnail_blob_id);
+        assert_eq!(thumbnail_generator.call_count().await, 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_worker_does_not_insert_thumbnail_on_generator_failure() -> Result<()> {
+        let rep_id = RepresentationId::new();
+        let rep = create_representation(&rep_id);
+
+        let mut reps = HashMap::new();
+        reps.insert(rep_id.clone(), rep);
+
+        let repo = Arc::new(MockRepresentationRepo::new(reps));
+        let cache = Arc::new(RepresentationCache::new(10, 10_000));
+        cache.put(&rep_id, vec![1, 2, 3, 4]).await;
+        let spool = Arc::new(SpoolManager::new(tempfile::tempdir()?.path(), 10_000)?);
+        let blob_writer = Arc::new(MockBlobWriter::new());
+        let hasher = Arc::new(MockHasher);
+        let thumbnail_repo = Arc::new(MockThumbnailRepo::new());
+        let thumbnail_generator = Arc::new(MockThumbnailGenerator::new_failure());
+        let clock = Arc::new(FixedClock { now_ms: 123 });
+
+        let (tx, rx) = mpsc::channel(4);
+        let worker = BackgroundBlobWorker::new(
+            rx,
+            cache,
+            spool,
+            repo.clone(),
+            blob_writer,
+            hasher,
+            thumbnail_repo.clone(),
+            thumbnail_generator.clone(),
+            clock,
+            3,
+            Duration::from_millis(1),
+        );
+
+        let handle = tokio::spawn(worker.run());
+        tx.send(rep_id.clone()).await?;
+        drop(tx);
+        handle.await?;
+
+        let thumbnail = thumbnail_repo.get(&rep_id).await;
+        assert!(thumbnail.is_none());
+
+        let updated = repo.get(&rep_id).await;
+        let updated = updated.expect("representation missing");
+        assert_eq!(updated.payload_state(), PayloadAvailability::BlobReady);
+        assert_eq!(thumbnail_generator.call_count().await, 1);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn test_worker_processes_staged_representations() -> Result<()> {
         let rep_id = RepresentationId::new();
@@ -445,6 +845,7 @@ mod tests {
         let spool = Arc::new(SpoolManager::new(tempfile::tempdir()?.path(), 10_000)?);
         let blob_writer = Arc::new(MockBlobWriter::new());
         let hasher = Arc::new(MockHasher);
+        let (thumbnail_repo, thumbnail_generator, clock) = default_thumbnail_deps();
 
         let (tx, rx) = mpsc::channel(4);
         let worker = BackgroundBlobWorker::new(
@@ -454,6 +855,9 @@ mod tests {
             repo.clone(),
             blob_writer,
             hasher,
+            thumbnail_repo,
+            thumbnail_generator,
+            clock,
             3,
             Duration::from_millis(1),
         );
@@ -486,6 +890,7 @@ mod tests {
 
         let blob_writer = Arc::new(MockBlobWriter::new());
         let hasher = Arc::new(MockHasher);
+        let (thumbnail_repo, thumbnail_generator, clock) = default_thumbnail_deps();
 
         let (tx, rx) = mpsc::channel(4);
         let worker = BackgroundBlobWorker::new(
@@ -495,6 +900,9 @@ mod tests {
             repo.clone(),
             blob_writer,
             hasher,
+            thumbnail_repo,
+            thumbnail_generator,
+            clock,
             3,
             Duration::from_millis(1),
         );
@@ -523,6 +931,7 @@ mod tests {
         let spool = Arc::new(SpoolManager::new(tempfile::tempdir()?.path(), 10_000)?);
         let blob_writer = Arc::new(MockBlobWriter::new());
         let hasher = Arc::new(MockHasher);
+        let (thumbnail_repo, thumbnail_generator, clock) = default_thumbnail_deps();
 
         let (tx, rx) = mpsc::channel(4);
         let worker = BackgroundBlobWorker::new(
@@ -532,6 +941,9 @@ mod tests {
             repo.clone(),
             blob_writer,
             hasher,
+            thumbnail_repo,
+            thumbnail_generator,
+            clock,
             3,
             Duration::from_millis(1),
         );
@@ -599,6 +1011,7 @@ mod tests {
         let spool = Arc::new(SpoolManager::new(tempfile::tempdir()?.path(), 10_000)?);
         let blob_writer = Arc::new(FlakyBlobWriter::new());
         let hasher = Arc::new(MockHasher);
+        let (thumbnail_repo, thumbnail_generator, clock) = default_thumbnail_deps();
 
         let (tx, rx) = mpsc::channel(4);
         let worker = BackgroundBlobWorker::new(
@@ -608,6 +1021,9 @@ mod tests {
             repo.clone(),
             blob_writer,
             hasher,
+            thumbnail_repo,
+            thumbnail_generator,
+            clock,
             2,
             Duration::from_millis(1),
         );
