@@ -45,6 +45,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    clipboard_representation_thumbnail (representation_id) {
+        representation_id -> Text,
+        thumbnail_blob_id -> Text,
+        thumbnail_mime_type -> Text,
+        width -> Integer,
+        height -> Integer,
+        size_bytes -> BigInt,
+        created_at_ms -> Nullable<BigInt>,
+    }
+}
+
+diesel::table! {
     clipboard_snapshot_representation (id) {
         id -> Text,
         event_id -> Text,
@@ -78,6 +90,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     clipboard_entry,
     clipboard_event,
     clipboard_selection,
+    clipboard_representation_thumbnail,
     clipboard_snapshot_representation,
     t_device,
 );
