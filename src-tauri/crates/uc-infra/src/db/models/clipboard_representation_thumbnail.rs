@@ -16,10 +16,10 @@ pub struct ClipboardRepresentationThumbnailRow {
 
 #[derive(Debug, Clone, Insertable)]
 #[diesel(table_name = clipboard_representation_thumbnail)]
-pub struct NewClipboardRepresentationThumbnailRow<'a> {
-    pub representation_id: &'a str,
-    pub thumbnail_blob_id: &'a str,
-    pub thumbnail_mime_type: &'a str,
+pub struct NewClipboardRepresentationThumbnailRow {
+    pub representation_id: String,
+    pub thumbnail_blob_id: String,
+    pub thumbnail_mime_type: String,
     pub width: i32,
     pub height: i32,
     pub size_bytes: i64,
