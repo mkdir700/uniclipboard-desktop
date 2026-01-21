@@ -124,6 +124,7 @@ macro_rules! generate_invoke_handler {
             // Clipboard commands
             uc_tauri::commands::clipboard::get_clipboard_entries,
             uc_tauri::commands::clipboard::get_clipboard_entry_detail,
+            uc_tauri::commands::clipboard::get_clipboard_entry_resource,
             uc_tauri::commands::clipboard::delete_clipboard_entry,
             // Encryption commands
             uc_tauri::commands::encryption::initialize_encryption,
