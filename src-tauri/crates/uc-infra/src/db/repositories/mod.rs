@@ -11,3 +11,6 @@ pub use clipboard_event_repo::*;
 pub use clipboard_selection_repo::*;
 pub use device_repo::*;
 pub use representation_repo::*;
+
+#[cfg(test)]
+mod representation_repo_test;
