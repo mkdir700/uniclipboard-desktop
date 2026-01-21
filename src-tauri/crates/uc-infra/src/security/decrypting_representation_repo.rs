@@ -121,6 +121,26 @@ impl ClipboardRepresentationRepositoryPort for DecryptingClipboardRepresentation
         Ok(Some(rep))
     }
 
+    async fn get_representation_by_blob_id(
+        &self,
+        blob_id: &BlobId,
+    ) -> Result<Option<PersistedClipboardRepresentation>> {
+        let rep_opt = self.inner.get_representation_by_blob_id(blob_id).await?;
+
+        let Some(rep) = rep_opt else {
+            return Ok(None);
+        };
+
+        if rep.inline_data.is_some() {
+            debug!(
+                "Skipping inline_data decryption for blob {}: event_id unavailable",
+                blob_id.as_ref()
+            );
+        }
+
+        Ok(Some(rep))
+    }
+
     async fn update_blob_id(
         &self,
         representation_id: &RepresentationId,
@@ -228,6 +248,13 @@ mod tests {
                         None
                     }
                 }))
+        }
+
+        async fn get_representation_by_blob_id(
+            &self,
+            _blob_id: &BlobId,
+        ) -> Result<Option<PersistedClipboardRepresentation>> {
+            Ok(None)
         }
 
         async fn update_blob_id(

@@ -250,6 +250,13 @@ mod tests {
             Ok(None)
         }
 
+        async fn get_representation_by_blob_id(
+            &self,
+            _blob_id: &uc_core::BlobId,
+        ) -> Result<Option<PersistedClipboardRepresentation>> {
+            Ok(None)
+        }
+
         async fn update_blob_id(
             &self,
             _representation_id: &RepresentationId,
@@ -316,5 +323,17 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err, ListProjectionsError::InvalidLimit(_)));
+    }
+
+    #[tokio::test]
+    async fn test_representation_repo_requires_blob_lookup() {
+        // 编译期失败即为预期：新增方法未实现
+        let representation_repo = MockRepresentationRepository {
+            representations: std::collections::HashMap::new(),
+        };
+        let blob_id = uc_core::BlobId::from("test-blob");
+        let _ = representation_repo
+            .get_representation_by_blob_id(&blob_id)
+            .await;
     }
 }

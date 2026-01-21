@@ -39,6 +39,14 @@ pub trait ClipboardRepresentationRepositoryPort: Send + Sync {
         representation_id: &RepresentationId,
     ) -> Result<Option<PersistedClipboardRepresentation>>;
 
+    /// Fetch representation by blob_id when only blob context is available.
+    ///
+    /// Used for resource resolution when mapping blob id back to representation metadata.
+    async fn get_representation_by_blob_id(
+        &self,
+        blob_id: &BlobId,
+    ) -> Result<Option<PersistedClipboardRepresentation>>;
+
     async fn update_blob_id(
         &self,
         representation_id: &RepresentationId,

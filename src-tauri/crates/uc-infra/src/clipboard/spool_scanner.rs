@@ -154,6 +154,13 @@ mod tests {
             Ok(self.reps_by_id.get(representation_id.as_ref()).cloned())
         }
 
+        async fn get_representation_by_blob_id(
+            &self,
+            _blob_id: &BlobId,
+        ) -> Result<Option<PersistedClipboardRepresentation>> {
+            Ok(None)
+        }
+
         async fn update_blob_id(
             &self,
             _representation_id: &RepresentationId,
