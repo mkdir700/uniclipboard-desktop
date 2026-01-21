@@ -91,8 +91,32 @@ mod tests {
         let output = generator.generate_thumbnail(&png_bytes).await.unwrap();
 
         assert_eq!(output.thumbnail_mime_type.as_str(), "image/webp");
+        assert_eq!(output.original_width, 256);
+        assert_eq!(output.original_height, 128);
         let decoded = image::load_from_memory(&output.thumbnail_bytes).unwrap();
         assert_eq!(decoded.width(), 128);
         assert_eq!(decoded.height(), 64);
+    }
+
+    #[tokio::test]
+    async fn test_thumbnail_generator_does_not_upscale_smaller_image() {
+        let image = image::RgbImage::new(64, 32);
+        let mut png_bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(image)
+            .write_to(
+                &mut std::io::Cursor::new(&mut png_bytes),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+
+        let generator = InfraThumbnailGenerator::new(128);
+        let output = generator.generate_thumbnail(&png_bytes).await.unwrap();
+
+        assert_eq!(output.thumbnail_mime_type.as_str(), "image/webp");
+        assert_eq!(output.original_width, 64);
+        assert_eq!(output.original_height, 32);
+        let decoded = image::load_from_memory(&output.thumbnail_bytes).unwrap();
+        assert_eq!(decoded.width(), 64);
+        assert_eq!(decoded.height(), 32);
     }
 }
