@@ -2,12 +2,12 @@
 
 ## Overview
 
-Clipboard entries are stored with preview and detail separation for performance optimization:
+Clipboard entries are stored with preview and resource separation for performance optimization:
 
 - **List view**: Returns only inline preview (no blob reads)
-- **Detail view**: Fetches full content from blob on-demand when user expands
+- **Detail view**: Fetches resource metadata and loads bytes via `uc://blob/{blob_id}` on-demand
 
-This architecture improves list loading performance by avoiding expensive blob reads for large content.
+This architecture improves list loading performance by avoiding expensive blob reads for large content and keeps semantic preview separate from raw bytes.
 
 ## Storage Strategy
 
@@ -83,30 +83,30 @@ impl ClipboardMaterializer {
 
 ### Application Layer (UseCases)
 
-**File**: `src-tauri/crates/uc-app/src/usecases/clipboard/get_entry_detail.rs`
+**File**: `src-tauri/crates/uc-app/src/usecases/clipboard/get_entry_resource.rs`
 
 ```rust
-pub struct GetEntryDetailUseCase<R: ClipboardEntryRepository> {
+pub struct GetEntryResourceUseCase<R: ClipboardEntryRepository> {
     repo: R,
 }
 
-impl<R: ClipboardEntryRepository> GetEntryDetailUseCase<R> {
-    pub async fn execute(&self, entry_id: &EntryId) -> Result<ClipboardEntryDetail> {
+impl<R: ClipboardEntryRepository> GetEntryResourceUseCase<R> {
+    pub async fn execute(&self, entry_id: &EntryId) -> Result<EntryResourceResult> {
         let entry = self.repo.get_entry(entry_id).await?;
         let selection = self.repo.get_selection(entry_id).await?;
         let preview_rep = self.repo.get_representation(...).await?;
 
-        // Determine if we need to read from blob
-        let full_content = if let Some(blob_id) = preview_rep.blob_id {
-            // Read from blob
-            let blob = self.repo.get_blob(&blob_id).await?;
-            String::from_utf8_lossy(&blob.content).to_string()
-        } else {
-            // Use inline data (already full content)
-            String::from_utf8_lossy(&preview_rep.inline_data?).to_string()
-        };
+        let blob_id = preview_rep
+            .blob_id
+            .ok_or_else(|| Error::MissingBlobId)?;
 
-        Ok(ClipboardEntryDetail { content: full_content, ... })
+        Ok(EntryResourceResult {
+            entry_id: entry.id.to_string(),
+            blob_id,
+            mime_type: preview_rep.mime_type,
+            size_bytes: preview_rep.size_bytes,
+            url: format!("uc://blob/{blob_id}"),
+        })
     }
 }
 ```
@@ -126,13 +126,19 @@ pub async fn get_clipboard_entries(
     // Sets has_detail=true when blob exists
 }
 
-/// Get full clipboard entry detail
+/// Get clipboard entry resource metadata
 #[tauri::command]
-pub async fn get_clipboard_entry_detail(
+pub async fn get_clipboard_entry_resource(
     runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
-) -> Result<ClipboardEntryDetail, String> {
-    // Fetches full content from blob if exists
+) -> Result<ClipboardEntryResource, String> {
+    // Returns { blob_id, mime, size_bytes, url }
+}
+
+/// Resolve bytes via custom protocol
+/// 在 `uc://blob/{blob_id}` 上返回 bytes + MIME
+fn register_uc_protocol() {
+    // protocol handler calls ResolveBlobResourceUseCase
 }
 ```
 
@@ -152,11 +158,12 @@ interface ClipboardEntryProjection {
   // ...
 }
 
-// Detail response type
-export interface ClipboardEntryDetail {
-  id: string
-  content: string // Full content
-  // ...
+// Resource metadata type
+export interface ClipboardEntryResource {
+  blob_id: string
+  mime_type: string
+  size_bytes: number
+  url: string
 }
 
 export interface ClipboardTextItem {
@@ -180,8 +187,10 @@ const entries = await getClipboardItems({ limit: 50 })
 
 ```typescript
 if (entry.has_detail) {
-  const detail = await getClipboardEntryDetail(entry.id)
-  // detail.content contains full content
+  const resource = await getClipboardEntryResource(entry.id)
+  const response = await fetch(resource.url)
+  const bytes = await response.arrayBuffer()
+  // decode bytes as needed (text/image)
 }
 ```
 
@@ -202,7 +211,7 @@ const shouldShowExpandButton = (): boolean => {
   // ...
 }
 
-// Handle expand: fetch detail only if has_detail=true
+// Handle expand: fetch resource only if has_detail=true
 const handleExpand = async () => {
   if (isExpanded) {
     setIsExpanded(false) // Collapse
@@ -211,9 +220,11 @@ const handleExpand = async () => {
   } else {
     const textItem = content as ClipboardTextItem
     if (textItem?.has_detail) {
-      // Backend has more content: fetch it
-      const detail = await getClipboardEntryDetail(entryId)
-      setDetailContent(detail.content)
+      // Backend has more content: fetch resource then bytes
+      const resource = await getClipboardEntryResource(entryId)
+      const response = await fetch(resource.url)
+      const bytes = await response.arrayBuffer()
+      setDetailContent(new TextDecoder('utf-8').decode(bytes))
       setIsExpanded(true)
     } else {
       // display_text is already full content: just expand

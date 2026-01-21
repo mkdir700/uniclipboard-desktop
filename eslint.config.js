@@ -16,7 +16,7 @@ const gitignorePath = path.join(__dirname, '.gitignore')
 
 export default tseslint.config(
   includeIgnoreFile(gitignorePath),
-  { ignores: ['dist', 'node_modules', 'src-tauri/target'] },
+  { ignores: ['.claude', 'dist', 'node_modules', 'src-tauri/target'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

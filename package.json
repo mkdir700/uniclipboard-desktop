@@ -11,6 +11,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "test": "vitest",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -77,6 +78,9 @@
     "@tailwindcss/postcss": "^4.1.18",
     "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/cli": "^2.9.6",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.3.27",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
@@ -93,6 +97,7 @@
     "glob": "^10.3.0",
     "globals": "^16.5.0",
     "husky": "^9.1.7",
+    "jsdom": "^27.4.0",
     "lint-staged": "^16.2.7",
     "postcss": "^8.5.6",
     "prettier": "^3.7.4",
@@ -102,6 +107,7 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "~5.6.3",
     "typescript-eslint": "^8.50.1",
-    "vite": "^6.4.1"
+    "vite": "^6.4.1",
+    "vitest": "^4.0.17"
   }
 }
