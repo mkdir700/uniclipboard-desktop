@@ -22,6 +22,9 @@
 //! ```ignore
 //! repo.update_blob_id(&rep_id, &blob_id).await?;
 //! ```
+//!
+//! For concurrent pipelines, prefer `update_blob_id_if_none` to avoid overwriting
+//! an existing blob_id written by another worker.
 
 use crate::db::mappers::snapshot_representation_mapper::RepresentationRowMapper;
 use crate::db::models::snapshot_representation::SnapshotRepresentationRow;
