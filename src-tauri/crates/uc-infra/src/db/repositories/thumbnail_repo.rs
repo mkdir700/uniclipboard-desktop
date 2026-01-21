@@ -99,6 +99,13 @@ mod tests {
             .get_by_representation_id(&metadata.representation_id)
             .await
             .unwrap();
-        assert!(fetched.is_some());
+        let fetched = fetched.expect("expected thumbnail metadata");
+        assert_eq!(fetched.representation_id, metadata.representation_id);
+        assert_eq!(fetched.thumbnail_blob_id, metadata.thumbnail_blob_id);
+        assert_eq!(fetched.thumbnail_mime_type, metadata.thumbnail_mime_type);
+        assert_eq!(fetched.width, metadata.width);
+        assert_eq!(fetched.height, metadata.height);
+        assert_eq!(fetched.size_bytes, metadata.size_bytes);
+        assert_eq!(fetched.created_at_ms, metadata.created_at_ms);
     }
 }
