@@ -165,6 +165,40 @@ const DashboardPage: React.FC = () => {
     }
   }, [debouncedLoadData, t])
 
+  // Listen for encryption session ready event
+  useEffect(() => {
+    const setupEncryptionListener = async () => {
+      console.log('[Dashboard] Setting up encryption session ready listener')
+
+      try {
+        // Listen to encryption://event with type checking
+        const unlisten = await listen<{ type: string }>('encryption://event', event => {
+          console.log('[Dashboard] Received encryption event:', event.payload)
+
+          if (event.payload.type === 'SessionReady') {
+            console.log('[Dashboard] Encryption session ready, reloading clipboard data')
+            loadData(currentFilterRef.current)
+          }
+        })
+
+        return unlisten
+      } catch (err) {
+        console.error('[Dashboard] Failed to setup encryption session listener:', err)
+        return undefined
+      }
+    }
+
+    const unlistenPromise = setupEncryptionListener()
+
+    return () => {
+      unlistenPromise.then(unlisten => {
+        if (unlisten) {
+          unlisten()
+        }
+      })
+    }
+  }, [loadData])
+
   return (
     <div className="flex flex-col h-full relative pt-10">
       {/* Top search bar - Hidden in MVP */}

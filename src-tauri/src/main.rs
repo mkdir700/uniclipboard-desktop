@@ -361,6 +361,21 @@ fn run_app(config: AppConfig) {
                 let should_start_watcher = match uc.execute().await {
                     Ok(true) => {
                         info!("Encryption session auto-unlocked successfully");
+
+                        // Emit event to notify frontend that encryption session is ready
+                        let app_handle_guard = runtime.app_handle();
+                        if let Some(app_handle) = app_handle_guard.as_ref() {
+                            if let Err(e) = uc_tauri::events::forward_encryption_event(
+                                app_handle,
+                                uc_tauri::events::EncryptionEvent::SessionReady,
+                            ) {
+                                warn!("Failed to emit encryption session ready event: {}", e);
+                            } else {
+                                info!("Emitted encryption session ready event to frontend");
+                            }
+                        }
+                        drop(app_handle_guard);
+
                         true
                     }
                     Ok(false) => {
@@ -373,13 +388,13 @@ fn run_app(config: AppConfig) {
                         // Emit error event to frontend for user notification
                         let app_handle_guard = runtime.app_handle();
                         if let Some(app_handle) = app_handle_guard.as_ref() {
-                            if let Err(emit_err) =
-                                app_handle.emit("encryption-auto-unlock-error", format!("{}", e))
-                            {
-                                warn!(
-                                    "Failed to emit encryption-auto-unlock-error event: {}",
-                                    emit_err
-                                );
+                            if let Err(emit_err) = uc_tauri::events::forward_encryption_event(
+                                app_handle,
+                                uc_tauri::events::EncryptionEvent::Failed {
+                                    reason: e.to_string(),
+                                },
+                            ) {
+                                warn!("Failed to emit encryption error event: {}", emit_err);
                             }
                         }
                         drop(app_handle_guard);

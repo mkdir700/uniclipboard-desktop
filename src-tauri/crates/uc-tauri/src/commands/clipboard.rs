@@ -27,6 +27,28 @@ pub async fn get_clipboard_entries(
     );
 
     async move {
+        // Check encryption session readiness to avoid decryption failures during startup
+        let encryption_state = runtime
+            .deps
+            .encryption_state
+            .load_state()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to check encryption state");
+                format!("Failed to check encryption state: {}", e)
+            })?;
+
+        if encryption_state == uc_core::security::state::EncryptionState::Initialized {
+            // Encryption is initialized, check if session is ready
+            if !runtime.deps.encryption_session.is_ready().await {
+                tracing::warn!(
+                    "Encryption initialized but session not ready yet, returning empty list. \
+                     This typically happens during app startup before auto-unlock completes."
+                );
+                return Ok(vec![]);
+            }
+        }
+
         let uc = runtime.usecases().list_entry_projections();
         let dtos = uc
             .execute(resolved_limit, resolved_offset)
