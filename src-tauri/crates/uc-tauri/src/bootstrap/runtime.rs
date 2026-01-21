@@ -232,6 +232,19 @@ impl<'a> UseCases<'a> {
         )
     }
 
+    /// Get the GetEntryResource use case for fetching clipboard resource metadata.
+    ///
+    /// 获取 GetEntryResource 用例以获取剪贴板资源元信息。
+    pub fn get_entry_resource(
+        &self,
+    ) -> uc_app::usecases::clipboard::get_entry_resource::GetEntryResourceUseCase {
+        uc_app::usecases::clipboard::get_entry_resource::GetEntryResourceUseCase::new(
+            self.runtime.deps.clipboard_entry_repo.clone(),
+            self.runtime.deps.selection_repo.clone(),
+            self.runtime.deps.representation_repo.clone(),
+        )
+    }
+
     /// Security use cases / 安全用例
     ///
     /// Get the InitializeEncryption use case for setting up encryption.
