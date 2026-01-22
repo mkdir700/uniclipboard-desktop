@@ -161,7 +161,7 @@ impl ListClipboardEntryProjections {
                     .get_by_representation_id(&selection.selection.preview_rep_id)
                     .await
                 {
-                    Ok(Some(metadata)) => Some(format!("uc://blob/{}", metadata.thumbnail_blob_id)),
+                    Ok(Some(_metadata)) => Some(format!("uc://thumbnail/{}", preview_rep_id)),
                     Ok(None) => None,
                     Err(err) => {
                         tracing::error!(
@@ -483,7 +483,7 @@ mod tests {
 
         assert_eq!(
             projection.thumbnail_url,
-            Some(format!("uc://blob/{}", thumb_blob_id))
+            Some(format!("uc://thumbnail/{}", rep_id.inner()))
         );
     }
 }

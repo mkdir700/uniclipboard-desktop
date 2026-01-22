@@ -22,7 +22,7 @@ describe('getClipboardItems', () => {
         is_favorited: false,
         updated_at: 1,
         active_time: 1,
-        thumbnail_url: 'uc://blob/thumb-1',
+        thumbnail_url: 'uc://thumbnail/rep-1',
       },
     ])
 
@@ -31,6 +31,6 @@ describe('getClipboardItems', () => {
     expect(items).toHaveLength(1)
     expect(items[0].item.image).toBeTruthy()
     expect(items[0].item.text).toBeFalsy()
-    expect(items[0].item.image?.thumbnail).toBe('uc://blob/thumb-1')
+    expect(items[0].item.image?.thumbnail).toBe('uc://thumbnail/rep-1')
   })
 })
