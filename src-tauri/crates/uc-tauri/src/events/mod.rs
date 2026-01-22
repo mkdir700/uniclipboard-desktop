@@ -21,6 +21,8 @@ pub enum ClipboardEvent {
 pub enum EncryptionEvent {
     /// Encryption initialized
     Initialized,
+    /// Encryption session ready (auto-unlock completed)
+    SessionReady,
     /// Encryption failed
     Failed { reason: String },
 }
