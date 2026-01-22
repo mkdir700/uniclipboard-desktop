@@ -345,13 +345,14 @@ impl BackgroundBlobWorker {
             .context("failed to write thumbnail blob")?;
 
         let created_at_ms = TimestampMs::from_epoch_millis(self.clock.now_ms());
+        let thumbnail_size_bytes = thumbnail_blob.size_bytes;
         let metadata = ThumbnailMetadata::new(
             rep_id.clone(),
             thumbnail_blob.blob_id,
             generated.thumbnail_mime_type,
             generated.original_width,
             generated.original_height,
-            rep.size_bytes,
+            thumbnail_size_bytes,
             Some(created_at_ms),
         );
         self.thumbnail_repo
@@ -675,9 +676,10 @@ mod tests {
         let blob_writer = Arc::new(MockBlobWriter::new());
         let hasher = Arc::new(MockHasher);
         let thumbnail_repo = Arc::new(MockThumbnailRepo::new());
+        let thumbnail_bytes = vec![8, 9, 10];
         let thumbnail_generator =
             Arc::new(MockThumbnailGenerator::new_success(GeneratedThumbnail {
-                thumbnail_bytes: vec![8, 9, 10],
+                thumbnail_bytes: thumbnail_bytes.clone(),
                 thumbnail_mime_type: MimeType("image/webp".to_string()),
                 original_width: 120,
                 original_height: 80,
@@ -711,7 +713,7 @@ mod tests {
         assert_eq!(thumbnail.thumbnail_mime_type.as_str(), "image/webp");
         assert_eq!(thumbnail.original_width, 120);
         assert_eq!(thumbnail.original_height, 80);
-        assert_eq!(thumbnail.original_size_bytes, 1024);
+        assert_eq!(thumbnail.original_size_bytes, thumbnail_bytes.len() as i64);
         assert_eq!(
             thumbnail.created_at_ms,
             Some(TimestampMs::from_epoch_millis(123))
