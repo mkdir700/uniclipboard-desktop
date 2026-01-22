@@ -103,9 +103,9 @@ mod tests {
         assert_eq!(fetched.representation_id, metadata.representation_id);
         assert_eq!(fetched.thumbnail_blob_id, metadata.thumbnail_blob_id);
         assert_eq!(fetched.thumbnail_mime_type, metadata.thumbnail_mime_type);
-        assert_eq!(fetched.width, metadata.width);
-        assert_eq!(fetched.height, metadata.height);
-        assert_eq!(fetched.size_bytes, metadata.size_bytes);
+        assert_eq!(fetched.original_width, metadata.original_width);
+        assert_eq!(fetched.original_height, metadata.original_height);
+        assert_eq!(fetched.original_size_bytes, metadata.original_size_bytes);
         assert_eq!(fetched.created_at_ms, metadata.created_at_ms);
     }
 }

@@ -18,9 +18,9 @@ impl InsertMapper<ThumbnailMetadata, NewClipboardRepresentationThumbnailRow>
             representation_id: domain.representation_id.to_string(),
             thumbnail_blob_id: domain.thumbnail_blob_id.to_string(),
             thumbnail_mime_type: domain.thumbnail_mime_type.to_string(),
-            width: domain.width,
-            height: domain.height,
-            size_bytes: domain.size_bytes,
+            original_width: domain.original_width,
+            original_height: domain.original_height,
+            original_size_bytes: domain.original_size_bytes,
             created_at_ms: domain.created_at_ms.map(|ts| ts.as_millis()),
         })
     }
@@ -43,9 +43,9 @@ impl RowMapper<ClipboardRepresentationThumbnailRow, ThumbnailMetadata> for Thumb
             representation_id,
             thumbnail_blob_id,
             thumbnail_mime_type,
-            row.width,
-            row.height,
-            row.size_bytes,
+            row.original_width,
+            row.original_height,
+            row.original_size_bytes,
             created_at_ms,
         ))
     }

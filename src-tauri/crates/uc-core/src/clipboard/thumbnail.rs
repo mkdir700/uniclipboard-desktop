@@ -17,18 +17,18 @@ pub struct ThumbnailMetadata {
     ///
     /// 缩略图字节的 MIME 类型（例如 image/webp）。
     pub thumbnail_mime_type: MimeType,
-    /// Thumbnail width in pixels.
+    /// Original image width in pixels.
     ///
-    /// 缩略图宽度（像素）。
-    pub width: i32,
-    /// Thumbnail height in pixels.
+    /// 原始图像宽度（像素）。
+    pub original_width: i32,
+    /// Original image height in pixels.
     ///
-    /// 缩略图高度（像素）。
-    pub height: i32,
-    /// Logical size in bytes of the thumbnail payload.
+    /// 原始图像高度（像素）。
+    pub original_height: i32,
+    /// Logical size in bytes of the original image payload.
     ///
-    /// 缩略图负载的逻辑大小（字节）。
-    pub size_bytes: i64,
+    /// 原始图像负载的逻辑大小（字节）。
+    pub original_size_bytes: i64,
     /// Optional creation timestamp (epoch millis).
     ///
     /// 可选的创建时间戳（毫秒）。
@@ -40,18 +40,18 @@ impl ThumbnailMetadata {
         representation_id: RepresentationId,
         thumbnail_blob_id: BlobId,
         thumbnail_mime_type: MimeType,
-        width: i32,
-        height: i32,
-        size_bytes: i64,
+        original_width: i32,
+        original_height: i32,
+        original_size_bytes: i64,
         created_at_ms: Option<TimestampMs>,
     ) -> Self {
         Self {
             representation_id,
             thumbnail_blob_id,
             thumbnail_mime_type,
-            width,
-            height,
-            size_bytes,
+            original_width,
+            original_height,
+            original_size_bytes,
             created_at_ms,
         }
     }

@@ -8,9 +8,9 @@ pub struct ClipboardRepresentationThumbnailRow {
     pub representation_id: String,
     pub thumbnail_blob_id: String,
     pub thumbnail_mime_type: String,
-    pub width: i32,
-    pub height: i32,
-    pub size_bytes: i64,
+    pub original_width: i32,
+    pub original_height: i32,
+    pub original_size_bytes: i64,
     pub created_at_ms: Option<i64>,
 }
 
@@ -20,9 +20,9 @@ pub struct NewClipboardRepresentationThumbnailRow {
     pub representation_id: String,
     pub thumbnail_blob_id: String,
     pub thumbnail_mime_type: String,
-    pub width: i32,
-    pub height: i32,
-    pub size_bytes: i64,
+    pub original_width: i32,
+    pub original_height: i32,
+    pub original_size_bytes: i64,
     pub created_at_ms: Option<i64>,
 }
 

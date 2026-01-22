@@ -49,9 +49,9 @@ diesel::table! {
         representation_id -> Text,
         thumbnail_blob_id -> Text,
         thumbnail_mime_type -> Text,
-        width -> Integer,
-        height -> Integer,
-        size_bytes -> BigInt,
+        original_width -> Integer,
+        original_height -> Integer,
+        original_size_bytes -> BigInt,
         created_at_ms -> Nullable<BigInt>,
     }
 }

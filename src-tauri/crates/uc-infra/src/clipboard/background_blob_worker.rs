@@ -465,9 +465,9 @@ mod tests {
                 metadata.representation_id.clone(),
                 metadata.thumbnail_blob_id.clone(),
                 metadata.thumbnail_mime_type.clone(),
-                metadata.width,
-                metadata.height,
-                metadata.size_bytes,
+                metadata.original_width,
+                metadata.original_height,
+                metadata.original_size_bytes,
                 metadata.created_at_ms,
             )
         }
@@ -709,9 +709,9 @@ mod tests {
             .await
             .expect("thumbnail missing");
         assert_eq!(thumbnail.thumbnail_mime_type.as_str(), "image/webp");
-        assert_eq!(thumbnail.width, 120);
-        assert_eq!(thumbnail.height, 80);
-        assert_eq!(thumbnail.size_bytes, 1024);
+        assert_eq!(thumbnail.original_width, 120);
+        assert_eq!(thumbnail.original_height, 80);
+        assert_eq!(thumbnail.original_size_bytes, 1024);
         assert_eq!(
             thumbnail.created_at_ms,
             Some(TimestampMs::from_epoch_millis(123))
