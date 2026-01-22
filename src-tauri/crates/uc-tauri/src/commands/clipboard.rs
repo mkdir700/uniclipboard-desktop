@@ -2,7 +2,7 @@
 //! 剪贴板相关的 Tauri 命令
 
 use crate::bootstrap::AppRuntime;
-use crate::models::{ClipboardEntryDetail, ClipboardEntryProjection};
+use crate::models::{ClipboardEntryDetail, ClipboardEntryProjection, ClipboardEntryResource};
 use std::sync::Arc;
 use tauri::State;
 use tracing::{info_span, Instrument};
@@ -163,4 +163,47 @@ pub async fn get_clipboard_entry_detail(
     }
     .instrument(span)
     .await
+}
+
+/// Get clipboard entry resource metadata
+/// 获取剪贴板条目资源元信息
+#[tauri::command]
+pub async fn get_clipboard_entry_resource(
+    runtime: State<'_, Arc<AppRuntime>>,
+    entry_id: String,
+) -> Result<ClipboardEntryResource, String> {
+    let span = info_span!(
+        "command.clipboard.get_entry_resource",
+        entry_id = %entry_id,
+    );
+
+    async move {
+        let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
+        let use_case = runtime.usecases().get_entry_resource();
+        let result = use_case.execute(&parsed_id).await.map_err(|e| {
+            tracing::error!(
+                error = %e,
+                entry_id = %entry_id,
+                "Failed to get entry resource"
+            );
+            e.to_string()
+        })?;
+
+        let resource = ClipboardEntryResource {
+            blob_id: result.blob_id.to_string(),
+            mime_type: result.mime_type.unwrap_or_else(|| "unknown".to_string()),
+            size_bytes: result.size_bytes,
+            url: result.url,
+        };
+
+        tracing::info!(entry_id = %entry_id, "Retrieved clipboard entry resource");
+        Ok(resource)
+    }
+    .instrument(span)
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    // NOTE: Tauri command layer relies on higher-level integration coverage.
 }

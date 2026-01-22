@@ -55,3 +55,17 @@ pub struct ClipboardEntryDetail {
     /// Timestamp of last access/use
     pub active_time: i64,
 }
+
+/// Clipboard entry resource metadata
+/// 剪贴板条目资源元信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClipboardEntryResource {
+    /// Blob identifier for the entry payload
+    pub blob_id: String,
+    /// MIME type for the payload
+    pub mime_type: String,
+    /// Payload size in bytes
+    pub size_bytes: i64,
+    /// Custom protocol URL for resource fetching
+    pub url: String,
+}

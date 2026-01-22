@@ -25,6 +25,13 @@ export interface ClipboardEntryDetail {
   active_time: number
 }
 
+export interface ClipboardEntryResource {
+  blob_id: string
+  mime_type: string
+  size_bytes: number
+  url: string
+}
+
 /**
  * 排序选项枚举
  */
@@ -200,6 +207,41 @@ export async function getClipboardEntryDetail(id: string): Promise<ClipboardEntr
     return await invoke('get_clipboard_entry_detail', { entryId: id })
   } catch (error) {
     console.error('Failed to get clipboard entry detail:', error)
+    throw error
+  }
+}
+
+/**
+ * Get clipboard entry resource metadata
+ * 获取剪切板条目资源元信息
+ * @param id Entry ID
+ * @returns Promise with resource metadata
+ */
+export async function getClipboardEntryResource(id: string): Promise<ClipboardEntryResource> {
+  try {
+    return await invoke('get_clipboard_entry_resource', { entryId: id })
+  } catch (error) {
+    console.error('Failed to get clipboard entry resource:', error)
+    throw error
+  }
+}
+
+/**
+ * Fetch clipboard entry text content via resource URL
+ * 通过资源 URL 拉取并解码剪贴板文本内容
+ */
+export async function fetchClipboardResourceText(
+  resource: ClipboardEntryResource
+): Promise<string> {
+  try {
+    const response = await fetch(resource.url)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch clipboard resource: ${response.status}`)
+    }
+    const buffer = await response.arrayBuffer()
+    return new TextDecoder('utf-8').decode(buffer)
+  } catch (error) {
+    console.error('Failed to fetch clipboard resource text:', error)
     throw error
   }
 }

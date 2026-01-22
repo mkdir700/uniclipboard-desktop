@@ -6,6 +6,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
+use tauri::http::header::{
+    HeaderValue, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
+};
+use tauri::http::{Request, Response, StatusCode};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
@@ -59,6 +63,173 @@ impl PlatformCommandExecutorPort for SimplePlatformCommandExecutor {
             }
         }
         Ok(())
+    }
+}
+
+fn is_allowed_cors_origin(origin: &str) -> bool {
+    origin == "tauri://localhost"
+        || origin == "http://tauri.localhost"
+        || origin == "https://tauri.localhost"
+        || origin.starts_with("http://localhost:")
+        || origin.starts_with("http://127.0.0.1:")
+        || origin.starts_with("http://[::1]:")
+}
+
+fn set_cors_headers(response: &mut Response<Vec<u8>>, origin: Option<&str>) {
+    let origin = match origin {
+        Some(origin) if is_allowed_cors_origin(origin) => origin,
+        _ => return,
+    };
+
+    match HeaderValue::from_str(origin) {
+        Ok(value) => {
+            response
+                .headers_mut()
+                .insert(ACCESS_CONTROL_ALLOW_ORIGIN, value);
+        }
+        Err(err) => {
+            error!(error = %err, "Invalid origin for CORS response");
+        }
+    }
+
+    if let Ok(value) = HeaderValue::from_str("GET") {
+        response
+            .headers_mut()
+            .insert(ACCESS_CONTROL_ALLOW_METHODS, value);
+    }
+}
+
+fn build_response(
+    status: StatusCode,
+    content_type: Option<&str>,
+    body: Vec<u8>,
+    origin: Option<&str>,
+) -> Response<Vec<u8>> {
+    let mut response = Response::new(body);
+    *response.status_mut() = status;
+
+    if let Some(content_type) = content_type {
+        match HeaderValue::from_str(content_type) {
+            Ok(value) => {
+                response.headers_mut().insert(CONTENT_TYPE, value);
+            }
+            Err(err) => {
+                error!(error = %err, "Invalid content type for response");
+            }
+        }
+    }
+
+    set_cors_headers(&mut response, origin);
+
+    response
+}
+
+fn text_response(status: StatusCode, message: &str, origin: Option<&str>) -> Response<Vec<u8>> {
+    build_response(
+        status,
+        Some("text/plain"),
+        message.as_bytes().to_vec(),
+        origin,
+    )
+}
+
+async fn resolve_uc_blob_request(
+    app_handle: tauri::AppHandle,
+    request: Request<Vec<u8>>,
+) -> Response<Vec<u8>> {
+    let uri = request.uri();
+    let host = uri.host().unwrap_or_default();
+    let path = uri.path();
+    let origin = request
+        .headers()
+        .get("Origin")
+        .and_then(|value| value.to_str().ok());
+
+    if host != "blob" {
+        error!(host = %host, path = %path, "Unsupported uc URI host");
+        return text_response(StatusCode::BAD_REQUEST, "Unsupported uc URI host", origin);
+    }
+
+    let blob_id_str = path.trim_start_matches('/');
+    if blob_id_str.is_empty() {
+        error!("Missing blob id in uc URI");
+        return text_response(StatusCode::BAD_REQUEST, "Missing blob id", origin);
+    }
+
+    if blob_id_str.contains('/') {
+        error!(blob_id = %blob_id_str, "Invalid blob id in uc URI");
+        return text_response(StatusCode::BAD_REQUEST, "Invalid blob id", origin);
+    }
+
+    let runtime = match app_handle.try_state::<Arc<AppRuntime>>() {
+        Some(state) => state,
+        None => {
+            error!("AppRuntime state not managed for uc URI handling");
+            return text_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Runtime not ready",
+                origin,
+            );
+        }
+    };
+
+    let blob_id = uc_core::BlobId::from(blob_id_str);
+    let use_case = runtime.usecases().resolve_blob_resource();
+    match use_case.execute(&blob_id).await {
+        Ok(result) => build_response(
+            StatusCode::OK,
+            Some(
+                result
+                    .mime_type
+                    .as_deref()
+                    .unwrap_or("application/octet-stream"),
+            ),
+            result.bytes,
+            origin,
+        ),
+        Err(err) => {
+            let err_msg = err.to_string();
+            error!(error = %err, blob_id = %blob_id, "Failed to resolve blob resource");
+            let status = if err_msg.contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            text_response(status, "Failed to resolve blob resource", origin)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cors_headers_are_set_for_dev_origin() {
+        let origin = "http://localhost:1420";
+        let response = build_response(StatusCode::OK, None, vec![], Some(origin));
+
+        let headers = response.headers();
+        assert_eq!(
+            headers
+                .get(ACCESS_CONTROL_ALLOW_ORIGIN)
+                .and_then(|value| value.to_str().ok()),
+            Some(origin)
+        );
+        assert_eq!(
+            headers
+                .get(ACCESS_CONTROL_ALLOW_METHODS)
+                .and_then(|value| value.to_str().ok()),
+            Some("GET")
+        );
+    }
+
+    #[test]
+    fn test_cors_headers_not_set_for_untrusted_origin() {
+        let response = build_response(StatusCode::OK, None, vec![], Some("https://example.com"));
+
+        let headers = response.headers();
+        assert!(headers.get(ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
     }
 }
 
@@ -124,6 +295,7 @@ macro_rules! generate_invoke_handler {
             // Clipboard commands
             uc_tauri::commands::clipboard::get_clipboard_entries,
             uc_tauri::commands::clipboard::get_clipboard_entry_detail,
+            uc_tauri::commands::clipboard::get_clipboard_entry_resource,
             uc_tauri::commands::clipboard::delete_clipboard_entry,
             // Encryption commands
             uc_tauri::commands::encryption::initialize_encryption,
@@ -201,6 +373,16 @@ fn run_app(config: AppConfig) {
         // Register AppRuntime for Tauri commands
         .manage(runtime_for_tauri)
         .manage(startup_barrier.clone())
+        .register_asynchronous_uri_scheme_protocol("uc", move |ctx, request, responder| {
+            let app_handle = ctx.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let response = resolve_uc_blob_request(app_handle, request).await;
+                responder.respond(response);
+            });
+        })
+        // Manual verification (dev):
+        // 1) In frontend devtools: fetch("uc://blob/<blob_id>")
+        // 2) Network should show 200 with Access-Control-Allow-Origin matching http://localhost:1420
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(

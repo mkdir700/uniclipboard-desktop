@@ -42,6 +42,8 @@ tokio = { version = "1", features = [
     "fs",
     "rt-multi-thread",
     "macros",
+    "time",
+    "io-util",
 ] }
 
 log = "0.4.29"

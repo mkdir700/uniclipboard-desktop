@@ -7,8 +7,8 @@ import {
   ClipboardLinkItem,
   ClipboardCodeItem,
   ClipboardFileItem,
-  getClipboardEntryDetail,
-  ClipboardEntryDetail,
+  fetchClipboardResourceText,
+  getClipboardEntryResource,
 } from '@/api/clipboardItems'
 import { toast } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
@@ -45,6 +45,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
   const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
   const [detailContent, setDetailContent] = useState<string | null>(null)
+  const [detailImageUrl, setDetailImageUrl] = useState<string | null>(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
 
   // Determine if expand button should show (based on UI display needs)
@@ -74,32 +75,61 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
     if (isExpanded) {
       // Already expanded: collapse
       setIsExpanded(false)
-    } else if (detailContent) {
-      // Have cached detail: expand directly
-      setIsExpanded(true)
-    } else {
-      // First expand: check if we need to fetch from backend
-      const textItem = content as ClipboardTextItem
-      if (textItem?.has_detail) {
-        // has_detail = true: backend has more content, fetch it
-        setIsLoadingDetail(true)
-        try {
-          const detail: ClipboardEntryDetail = await getClipboardEntryDetail(entryId)
-          setDetailContent(detail.content)
-          setIsExpanded(true)
-        } catch (e) {
-          console.error('Failed to load detail:', e)
-          toast.error(t('clipboard.errors.loadDetailFailed'), {
-            description: e instanceof Error ? e.message : t('clipboard.errors.unknown'),
-          })
-        } finally {
-          setIsLoadingDetail(false)
-        }
-      } else {
-        // has_detail = false: display_text is already the full content, just expand
-        setIsExpanded(true)
-      }
+      return
     }
+
+    if (type === 'text') {
+      if (detailContent) {
+        setIsExpanded(true)
+        return
+      }
+
+      const textItem = content as ClipboardTextItem
+      if (!textItem?.has_detail) {
+        setIsExpanded(true)
+        return
+      }
+
+      setIsLoadingDetail(true)
+      try {
+        const resource = await getClipboardEntryResource(entryId)
+        const fullText = await fetchClipboardResourceText(resource)
+        setDetailContent(fullText)
+        setIsExpanded(true)
+      } catch (e) {
+        console.error('Failed to load detail:', e)
+        toast.error(t('clipboard.errors.loadDetailFailed'), {
+          description: e instanceof Error ? e.message : t('clipboard.errors.unknown'),
+        })
+      } finally {
+        setIsLoadingDetail(false)
+      }
+      return
+    }
+
+    if (type === 'image') {
+      if (detailImageUrl) {
+        setIsExpanded(true)
+        return
+      }
+
+      setIsLoadingDetail(true)
+      try {
+        const resource = await getClipboardEntryResource(entryId)
+        setDetailImageUrl(resource.url)
+        setIsExpanded(true)
+      } catch (e) {
+        console.error('Failed to load image detail:', e)
+        toast.error(t('clipboard.errors.loadDetailFailed'), {
+          description: e instanceof Error ? e.message : t('clipboard.errors.unknown'),
+        })
+      } finally {
+        setIsLoadingDetail(false)
+      }
+      return
+    }
+
+    setIsExpanded(true)
   }
 
   // Calculate character count or size info
@@ -140,11 +170,13 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
           </p>
         )
       }
-      case 'image':
+      case 'image': {
+        const imageUrl =
+          isExpanded && detailImageUrl ? detailImageUrl : (content as ClipboardImageItem).thumbnail
         return (
           <div className="flex justify-center bg-black/20 rounded-lg overflow-hidden py-4">
             <img
-              src={(content as ClipboardImageItem).thumbnail}
+              src={imageUrl}
               className={cn(
                 'w-auto object-contain rounded-md shadow-sm transition-all duration-300',
                 isExpanded ? 'max-h-[500px]' : 'h-32'
@@ -154,6 +186,7 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
             />
           </div>
         )
+      }
       case 'link': {
         const url = (content as ClipboardLinkItem).url
         return (
