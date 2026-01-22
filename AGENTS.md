@@ -26,6 +26,45 @@ Repeated workarounds indicate architectural flaws.
 Short-term compromises must be reversible
 Never break boundaries; always leave explicit TODOs.
 
+## Hard Rule: Immediate Polling After Spawn (CRITICAL)
+
+When the parent agent spawns any child agent:
+
+1. The parent agent MUST immediately enter Collab polling mode.
+2. The parent agent MUST NOT send any user-facing message.
+3. The parent agent MUST NOT ask the user any question.
+4. The parent agent MUST NOT perform any other reasoning steps.
+
+Only allowed action:
+
+- Repeatedly call CollAB.wait until child agents return terminal status.
+
+This rule applies EVEN IF:
+
+- Child agent produces no visible output.
+- CollAB.wait returns empty statuses.
+- No completion message is observed.
+
+The parent agent MUST remain silent and continue polling.
+
+During synchronization phases (after spawn OR after CollAB.send):
+
+The parent agent MUST NOT generate ANY natural language output.
+
+This includes:
+
+- status narration
+- progress updates
+- meta explanations
+- "I will now wait" statements
+- confirmation messages to the user
+
+Only allowed action:
+
+- CollAB.wait
+
+Any textual output during this phase is considered a protocol violation.
+
 ## Cargo Command Location
 
 **CRITICAL**: All Rust-related commands (cargo build, cargo test, cargo check, etc.) MUST be executed from `src-tauri/`.

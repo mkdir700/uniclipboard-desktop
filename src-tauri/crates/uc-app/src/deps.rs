@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 use uc_core::ids::RepresentationId;
 use uc_core::ports::clipboard::{
     ClipboardRepresentationNormalizerPort, RepresentationCachePort, SpoolQueuePort,
+    ThumbnailGeneratorPort, ThumbnailRepositoryPort,
 };
 use uc_core::ports::*;
 
@@ -62,6 +63,8 @@ pub struct AppDeps {
     pub blob_store: Arc<dyn BlobStorePort>,
     pub blob_repository: Arc<dyn BlobRepositoryPort>,
     pub blob_writer: Arc<dyn BlobWriterPort>,
+    pub thumbnail_repo: Arc<dyn ThumbnailRepositoryPort>,
+    pub thumbnail_generator: Arc<dyn ThumbnailGeneratorPort>,
 
     // Settings dependencies / 设置依赖
     pub settings: Arc<dyn SettingsPort>,

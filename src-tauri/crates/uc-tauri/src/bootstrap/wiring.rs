@@ -51,8 +51,8 @@ use uc_core::ports::clipboard::{
 use uc_core::ports::*;
 use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::{
-    BackgroundBlobWorker, ClipboardRepresentationNormalizer, MpscSpoolQueue, RepresentationCache,
-    SpoolJanitor, SpoolManager, SpoolScanner, SpoolerTask,
+    BackgroundBlobWorker, ClipboardRepresentationNormalizer, InfraThumbnailGenerator,
+    MpscSpoolQueue, RepresentationCache, SpoolJanitor, SpoolManager, SpoolScanner, SpoolerTask,
 };
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -66,7 +66,7 @@ use uc_infra::db::pool::{init_db_pool, DbPool};
 use uc_infra::db::repositories::{
     DieselBlobRepository, DieselClipboardEntryRepository, DieselClipboardEventRepository,
     DieselClipboardRepresentationRepository, DieselClipboardSelectionRepository,
-    DieselDeviceRepository,
+    DieselDeviceRepository, DieselThumbnailRepository,
 };
 use uc_infra::device::LocalDeviceIdentity;
 use uc_infra::fs::key_slot_store::{JsonKeySlotStore, KeySlotStore};
@@ -112,6 +112,9 @@ pub enum WiringError {
 
     #[error("Configuration initialization failed: {0}")]
     ConfigInit(String),
+
+    #[error("Thumbnail generator initialization failed: {0}")]
+    ThumbnailInit(String),
 }
 
 /// Fully wired dependencies plus background runtime components.
@@ -194,6 +197,8 @@ struct InfraLayer {
 
     // Blob storage / Blob 存储
     blob_repository: Arc<dyn BlobRepositoryPort>,
+    thumbnail_repo: Arc<dyn ThumbnailRepositoryPort>,
+    thumbnail_generator: Arc<dyn ThumbnailGeneratorPort>,
 
     // Security services / 安全服务
     key_material: Arc<dyn KeyMaterialPort>,
@@ -335,6 +340,14 @@ fn create_infra_layer(
     );
     let blob_repository: Arc<dyn BlobRepositoryPort> = Arc::new(blob_repo);
 
+    // Create thumbnail repository and generator
+    // 创建缩略图仓库与生成器
+    let thumbnail_repo_impl = DieselThumbnailRepository::new(Arc::clone(&db_executor));
+    let thumbnail_repo: Arc<dyn ThumbnailRepositoryPort> = Arc::new(thumbnail_repo_impl);
+    let thumbnail_generator =
+        InfraThumbnailGenerator::new(128).map_err(|e| WiringError::ThumbnailInit(e.to_string()))?;
+    let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> = Arc::new(thumbnail_generator);
+
     let keyring_for_key_material = Arc::clone(&keyring);
 
     // Create key slot store
@@ -384,6 +397,8 @@ fn create_infra_layer(
         selection_repo,
         device_repo,
         blob_repository,
+        thumbnail_repo,
+        thumbnail_generator,
         key_material,
         encryption,
         encryption_state,
@@ -790,6 +805,8 @@ pub fn wire_dependencies(
         blob_store: platform.blob_store,
         blob_repository: infra.blob_repository,
         blob_writer: platform.blob_writer,
+        thumbnail_repo: infra.thumbnail_repo,
+        thumbnail_generator: infra.thumbnail_generator,
 
         // Settings dependencies / 设置依赖
         settings: infra.settings_repo,
@@ -839,6 +856,8 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
     let blob_writer = deps.blob_writer.clone();
     let hasher = deps.hash.clone();
     let clock = deps.clock.clone();
+    let thumbnail_repo = deps.thumbnail_repo.clone();
+    let thumbnail_generator = deps.thumbnail_generator.clone();
 
     async_runtime::spawn(async move {
         let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx.clone());
@@ -865,6 +884,9 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
             representation_repo.clone(),
             blob_writer,
             hasher,
+            thumbnail_repo,
+            thumbnail_generator,
+            clock.clone(),
             worker_retry_max_attempts,
             Duration::from_millis(worker_retry_backoff_ms),
         );

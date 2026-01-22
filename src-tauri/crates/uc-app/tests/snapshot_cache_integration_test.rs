@@ -18,10 +18,15 @@ use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::clipboard::{
     ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, ObservedClipboardRepresentation,
     PayloadAvailability, PersistedClipboardRepresentation, SystemClipboardSnapshot,
+    ThumbnailMetadata,
 };
 use uc_core::ids::{EntryId, EventId, FormatId, RepresentationId};
-use uc_core::ports::clipboard::{ProcessingUpdateOutcome, RepresentationCachePort, SpoolQueuePort};
+use uc_core::ports::clipboard::{
+    GeneratedThumbnail, ProcessingUpdateOutcome, RepresentationCachePort, SpoolQueuePort,
+    ThumbnailGeneratorPort, ThumbnailRepositoryPort,
+};
 use uc_core::ports::BlobWriterPort;
+use uc_core::ports::ClockPort;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardEventWriterPort, ClipboardRepresentationNormalizerPort,
     ClipboardRepresentationRepositoryPort, DeviceIdentityPort, SelectRepresentationPolicyPort,
@@ -92,6 +97,77 @@ struct InMemoryDeviceIdentity;
 impl DeviceIdentityPort for InMemoryDeviceIdentity {
     fn current_device_id(&self) -> DeviceId {
         DeviceId::new("device-test")
+    }
+}
+
+struct InMemoryThumbnailRepo {
+    thumbnails: Mutex<HashMap<RepresentationId, ThumbnailMetadata>>,
+}
+
+impl InMemoryThumbnailRepo {
+    fn new() -> Self {
+        Self {
+            thumbnails: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn clone_metadata(metadata: &ThumbnailMetadata) -> ThumbnailMetadata {
+        ThumbnailMetadata::new(
+            metadata.representation_id.clone(),
+            metadata.thumbnail_blob_id.clone(),
+            metadata.thumbnail_mime_type.clone(),
+            metadata.original_width,
+            metadata.original_height,
+            metadata.original_size_bytes,
+            metadata.created_at_ms,
+        )
+    }
+}
+
+#[async_trait::async_trait]
+impl ThumbnailRepositoryPort for InMemoryThumbnailRepo {
+    async fn get_by_representation_id(
+        &self,
+        representation_id: &RepresentationId,
+    ) -> Result<Option<ThumbnailMetadata>> {
+        Ok(self
+            .thumbnails
+            .lock()
+            .unwrap()
+            .get(representation_id)
+            .map(Self::clone_metadata))
+    }
+
+    async fn insert_thumbnail(&self, metadata: &ThumbnailMetadata) -> Result<()> {
+        self.thumbnails.lock().unwrap().insert(
+            metadata.representation_id.clone(),
+            Self::clone_metadata(metadata),
+        );
+        Ok(())
+    }
+}
+
+struct NoopThumbnailGenerator;
+
+#[async_trait::async_trait]
+impl ThumbnailGeneratorPort for NoopThumbnailGenerator {
+    async fn generate_thumbnail(&self, _image_bytes: &[u8]) -> Result<GeneratedThumbnail> {
+        Ok(GeneratedThumbnail {
+            thumbnail_bytes: vec![1],
+            thumbnail_mime_type: MimeType("image/webp".to_string()),
+            original_width: 1,
+            original_height: 1,
+        })
+    }
+}
+
+struct FixedClock {
+    now_ms: i64,
+}
+
+impl ClockPort for FixedClock {
+    fn now_ms(&self) -> i64 {
+        self.now_ms
     }
 }
 
@@ -425,6 +501,9 @@ async fn test_worker_reverts_to_staged_on_cache_spool_miss() -> Result<()> {
     let spool_dir = tempfile::tempdir()?;
     let spool = Arc::new(SpoolManager::new(spool_dir.path(), 1_000_000)?);
     let (worker_tx, worker_rx) = mpsc::channel(4);
+    let thumbnail_repo: Arc<dyn ThumbnailRepositoryPort> = Arc::new(InMemoryThumbnailRepo::new());
+    let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> = Arc::new(NoopThumbnailGenerator);
+    let clock: Arc<dyn ClockPort> = Arc::new(FixedClock { now_ms: 1 });
 
     let worker = BackgroundBlobWorker::new(
         worker_rx,
@@ -433,6 +512,9 @@ async fn test_worker_reverts_to_staged_on_cache_spool_miss() -> Result<()> {
         rep_repo.clone(),
         Arc::new(InMemoryBlobWriter::new()),
         Arc::new(Blake3Hasher),
+        thumbnail_repo,
+        thumbnail_generator,
+        clock,
         1,
         Duration::from_millis(10),
     );
@@ -492,6 +574,9 @@ async fn test_worker_materializes_after_spool_eviction_with_cache_hit() -> Resul
     let (spool_tx, spool_rx) = mpsc::channel(8);
     let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
     let (worker_tx, worker_rx) = mpsc::channel(8);
+    let thumbnail_repo: Arc<dyn ThumbnailRepositoryPort> = Arc::new(InMemoryThumbnailRepo::new());
+    let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> = Arc::new(NoopThumbnailGenerator);
+    let clock: Arc<dyn ClockPort> = Arc::new(FixedClock { now_ms: 1 });
 
     let spooler = uc_infra::clipboard::SpoolerTask::new(
         spool_rx,
@@ -540,6 +625,9 @@ async fn test_worker_materializes_after_spool_eviction_with_cache_hit() -> Resul
         rep_repo.clone(),
         blob_writer,
         Arc::new(Blake3Hasher),
+        thumbnail_repo,
+        thumbnail_generator,
+        clock,
         2,
         Duration::from_millis(50),
     );
@@ -602,6 +690,9 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
     let (spool_tx, spool_rx) = mpsc::channel(8);
     let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
     let (worker_tx, worker_rx) = mpsc::channel(8);
+    let thumbnail_repo: Arc<dyn ThumbnailRepositoryPort> = Arc::new(InMemoryThumbnailRepo::new());
+    let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> = Arc::new(NoopThumbnailGenerator);
+    let clock: Arc<dyn ClockPort> = Arc::new(FixedClock { now_ms: 1 });
 
     let spooler = uc_infra::clipboard::SpoolerTask::new(
         spool_rx,
@@ -620,6 +711,9 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
         rep_repo.clone(),
         Arc::new(InMemoryBlobWriter::new()),
         Arc::new(Blake3Hasher),
+        thumbnail_repo,
+        thumbnail_generator,
+        clock,
         3,
         Duration::from_millis(50),
     );
