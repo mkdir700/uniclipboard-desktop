@@ -72,9 +72,9 @@ impl InMemoryThumbnailRepo {
             metadata.representation_id.clone(),
             metadata.thumbnail_blob_id.clone(),
             metadata.thumbnail_mime_type.clone(),
-            metadata.width,
-            metadata.height,
-            metadata.size_bytes,
+            metadata.original_width,
+            metadata.original_height,
+            metadata.original_size_bytes,
             metadata.created_at_ms,
         )
     }

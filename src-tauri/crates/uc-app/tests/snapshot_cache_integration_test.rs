@@ -116,9 +116,9 @@ impl InMemoryThumbnailRepo {
             metadata.representation_id.clone(),
             metadata.thumbnail_blob_id.clone(),
             metadata.thumbnail_mime_type.clone(),
-            metadata.width,
-            metadata.height,
-            metadata.size_bytes,
+            metadata.original_width,
+            metadata.original_height,
+            metadata.original_size_bytes,
             metadata.created_at_ms,
         )
     }
@@ -618,9 +618,6 @@ async fn test_worker_materializes_after_spool_eviction_with_cache_hit() -> Resul
     }
 
     let blob_writer = Arc::new(InMemoryBlobWriter::new());
-    let thumbnail_repo: Arc<dyn ThumbnailRepositoryPort> = Arc::new(InMemoryThumbnailRepo::new());
-    let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> = Arc::new(NoopThumbnailGenerator);
-    let clock: Arc<dyn ClockPort> = Arc::new(FixedClock { now_ms: 1 });
     let worker = BackgroundBlobWorker::new(
         worker_rx,
         rep_cache,
@@ -693,6 +690,9 @@ async fn test_worker_materializes_blob_from_cache() -> Result<()> {
     let (spool_tx, spool_rx) = mpsc::channel(8);
     let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
     let (worker_tx, worker_rx) = mpsc::channel(8);
+    let thumbnail_repo: Arc<dyn ThumbnailRepositoryPort> = Arc::new(InMemoryThumbnailRepo::new());
+    let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> = Arc::new(NoopThumbnailGenerator);
+    let clock: Arc<dyn ClockPort> = Arc::new(FixedClock { now_ms: 1 });
 
     let spooler = uc_infra::clipboard::SpoolerTask::new(
         spool_rx,
