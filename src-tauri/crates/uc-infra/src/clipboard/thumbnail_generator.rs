@@ -9,8 +9,11 @@ pub struct InfraThumbnailGenerator {
 }
 
 impl InfraThumbnailGenerator {
-    pub fn new(max_edge: u32) -> Self {
-        Self { max_edge }
+    pub fn new(max_edge: u32) -> Result<Self> {
+        if max_edge == 0 {
+            anyhow::bail!("max_edge must be greater than 0, got: {}", max_edge);
+        }
+        Ok(Self { max_edge })
     }
 }
 
@@ -87,7 +90,7 @@ mod tests {
             )
             .unwrap();
 
-        let generator = InfraThumbnailGenerator::new(128);
+        let generator = InfraThumbnailGenerator::new(128).unwrap();
         let output = generator.generate_thumbnail(&png_bytes).await.unwrap();
 
         assert_eq!(output.thumbnail_mime_type.as_str(), "image/webp");
@@ -109,7 +112,7 @@ mod tests {
             )
             .unwrap();
 
-        let generator = InfraThumbnailGenerator::new(128);
+        let generator = InfraThumbnailGenerator::new(128).unwrap();
         let output = generator.generate_thumbnail(&png_bytes).await.unwrap();
 
         assert_eq!(output.thumbnail_mime_type.as_str(), "image/webp");

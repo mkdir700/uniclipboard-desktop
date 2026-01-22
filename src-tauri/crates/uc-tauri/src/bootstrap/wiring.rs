@@ -342,7 +342,7 @@ fn create_infra_layer(
     let thumbnail_repo_impl = DieselThumbnailRepository::new(Arc::clone(&db_executor));
     let thumbnail_repo: Arc<dyn ThumbnailRepositoryPort> = Arc::new(thumbnail_repo_impl);
     let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> =
-        Arc::new(InfraThumbnailGenerator::new(128));
+        Arc::new(InfraThumbnailGenerator::new(128).context("create thumbnail generator")?);
 
     let keyring_for_key_material = Arc::clone(&keyring);
 
