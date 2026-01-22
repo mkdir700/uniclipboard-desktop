@@ -133,6 +133,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
         link: item.item.link,
         code: item.item.code,
         file: item.item.file,
+        unknown: null,
       } as const
 
       return {

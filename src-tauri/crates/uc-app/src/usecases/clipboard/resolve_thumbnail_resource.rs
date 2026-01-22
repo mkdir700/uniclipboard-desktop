@@ -30,6 +30,10 @@ impl ResolveThumbnailResourceUseCase {
         }
     }
 
+    #[tracing::instrument(
+        name = "usecase.clipboard.resolve_thumbnail_resource.execute",
+        skip(self)
+    )]
     pub async fn execute(
         &self,
         representation_id: &RepresentationId,
