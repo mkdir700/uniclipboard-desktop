@@ -112,6 +112,9 @@ pub enum WiringError {
 
     #[error("Configuration initialization failed: {0}")]
     ConfigInit(String),
+
+    #[error("Thumbnail generator initialization failed: {0}")]
+    ThumbnailInit(String),
 }
 
 /// Fully wired dependencies plus background runtime components.
@@ -341,8 +344,9 @@ fn create_infra_layer(
     // 创建缩略图仓库与生成器
     let thumbnail_repo_impl = DieselThumbnailRepository::new(Arc::clone(&db_executor));
     let thumbnail_repo: Arc<dyn ThumbnailRepositoryPort> = Arc::new(thumbnail_repo_impl);
-    let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> =
-        Arc::new(InfraThumbnailGenerator::new(128).context("create thumbnail generator")?);
+    let thumbnail_generator =
+        InfraThumbnailGenerator::new(128).map_err(|e| WiringError::ThumbnailInit(e.to_string()))?;
+    let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> = Arc::new(thumbnail_generator);
 
     let keyring_for_key_material = Arc::clone(&keyring);
 
