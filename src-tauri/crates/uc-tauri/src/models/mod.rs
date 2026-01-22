@@ -26,6 +26,8 @@ pub struct ClipboardEntryProjection {
     pub captured_at: i64,
     /// Content type description
     pub content_type: String,
+    /// Optional thumbnail URL for image entries
+    pub thumbnail_url: Option<String>,
     /// Whether the content is encrypted
     pub is_encrypted: bool,
     /// Whether the entry is favorited

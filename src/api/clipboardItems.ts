@@ -12,6 +12,7 @@ interface ClipboardEntryProjection {
   is_favorited: boolean
   updated_at: number
   active_time: number
+  thumbnail_url?: string | null
 }
 
 // Detail response type (for fetching full content)
@@ -68,7 +69,7 @@ export interface ClipboardTextItem {
 }
 
 export interface ClipboardImageItem {
-  thumbnail: string
+  thumbnail?: string | null
   size: number
   width: number
   height: number
@@ -88,12 +89,12 @@ export interface ClipboardCodeItem {
 }
 
 export interface ClipboardItem {
-  text: ClipboardTextItem
-  image: ClipboardImageItem
-  file: ClipboardFileItem
-  link: ClipboardLinkItem
-  code: ClipboardCodeItem
-  unknown: null
+  text?: ClipboardTextItem | null
+  image?: ClipboardImageItem | null
+  file?: ClipboardFileItem | null
+  link?: ClipboardLinkItem | null
+  code?: ClipboardCodeItem | null
+  unknown?: null
 }
 
 export interface ClipboardItemResponse {
@@ -149,9 +150,8 @@ export async function getClipboardItems(
       offset: offset ?? 0,
     })
 
-    // Transform backend projection to frontend response format
-    // TODO: Currently treating all entries as text. Implement proper content type detection
-    // when backend provides accurate content_type values
+    // Transform backend projection to frontend response format.
+    // We map based on backend `content_type` to support non-text entries (e.g. images).
     return entries.map(entry => ({
       id: entry.id,
       is_downloaded: true, // Default to true for local entries
@@ -159,18 +159,22 @@ export async function getClipboardItems(
       created_at: entry.captured_at,
       updated_at: entry.updated_at,
       active_time: entry.active_time,
-      item: {
-        text: {
-          display_text: entry.preview, // Use preview directly from backend
-          has_detail: entry.has_detail, // Use has_detail from backend (indicates expandability)
-          size: entry.size_bytes,
-        },
-        image: null as unknown as ClipboardImageItem,
-        file: null as unknown as ClipboardFileItem,
-        link: null as unknown as ClipboardLinkItem,
-        code: null as unknown as ClipboardCodeItem,
-        unknown: null,
-      },
+      item: isImageType(entry.content_type)
+        ? {
+            image: {
+              thumbnail: entry.thumbnail_url ?? null,
+              size: entry.size_bytes,
+              width: 0,
+              height: 0,
+            },
+          }
+        : {
+            text: {
+              display_text: entry.preview, // Use preview directly from backend
+              has_detail: entry.has_detail, // Indicates if full content is available via resource
+              size: entry.size_bytes,
+            },
+          },
     }))
   } catch (error) {
     console.error('获取剪贴板历史记录失败:', error)
