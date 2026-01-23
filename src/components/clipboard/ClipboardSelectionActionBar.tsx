@@ -5,6 +5,8 @@ import { Kbd } from '@/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
+const FAVORITES_UI_ENABLED = false
+
 interface ClipboardSelectionActionBarProps {
   selectedCount: number
   favoriteIntent: 'favorite' | 'unfavorite'
@@ -64,31 +66,34 @@ const ClipboardSelectionActionBar: React.FC<ClipboardSelectionActionBarProps> = 
             </TooltipContent>
           </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                className={cn(
-                  'h-8 w-8 p-0 rounded-full transition-all duration-200',
-                  favoriteIntent === 'unfavorite'
-                    ? 'text-amber-500 hover:bg-amber-500/10 hover:text-amber-500'
-                    : 'hover:bg-amber-500/10 hover:text-amber-500'
-                )}
-                onClick={onToggleFavorite}
-              >
-                <Star
-                  className={cn('h-4 w-4', favoriteIntent === 'unfavorite' && 'fill-current')}
-                />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="flex items-center gap-2">
-              <span>
-                {selectedCount > 1 ? `${favoriteTitle}（${selectedCount} 项）` : favoriteTitle}
-              </span>
-              {showHotkeys && <Kbd>S</Kbd>}
-            </TooltipContent>
-          </Tooltip>
+          {/* 后端收藏功能尚未实装：暂时隐藏入口（保留逻辑，后续直接开关启用）。 */}
+          {FAVORITES_UI_ENABLED && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={cn(
+                    'h-8 w-8 p-0 rounded-full transition-all duration-200',
+                    favoriteIntent === 'unfavorite'
+                      ? 'text-amber-500 hover:bg-amber-500/10 hover:text-amber-500'
+                      : 'hover:bg-amber-500/10 hover:text-amber-500'
+                  )}
+                  onClick={onToggleFavorite}
+                >
+                  <Star
+                    className={cn('h-4 w-4', favoriteIntent === 'unfavorite' && 'fill-current')}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="flex items-center gap-2">
+                <span>
+                  {selectedCount > 1 ? `${favoriteTitle}（${selectedCount} 项）` : favoriteTitle}
+                </span>
+                {showHotkeys && <Kbd>S</Kbd>}
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           <Tooltip>
             <TooltipTrigger asChild>

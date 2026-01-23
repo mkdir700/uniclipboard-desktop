@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next'
 import { Filter } from '@/api/clipboardItems'
 import { cn } from '@/lib/utils'
 
+const FAVORITES_UI_ENABLED = false
+
 interface HeaderProps {
   onFilterChange?: (filterId: Filter) => void
   className?: string
@@ -15,7 +17,10 @@ const Header: React.FC<HeaderProps> = ({ onFilterChange, className }) => {
 
   const filterTypes = [
     { id: Filter.All, label: 'header.filters.all', icon: ClipboardCopy },
-    { id: Filter.Favorited, label: 'header.filters.favorited', icon: Star },
+    // 后端收藏功能尚未实装：暂时隐藏“已收藏”筛选入口（保留逻辑，后续直接开关启用）。
+    ...(FAVORITES_UI_ENABLED
+      ? [{ id: Filter.Favorited, label: 'header.filters.favorited', icon: Star }]
+      : []),
     { id: Filter.Text, label: 'header.filters.text', icon: FileText },
     { id: Filter.Image, label: 'header.filters.image', icon: Image },
     { id: Filter.Link, label: 'header.filters.link', icon: LinkIcon },

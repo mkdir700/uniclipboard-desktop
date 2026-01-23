@@ -24,6 +24,9 @@ import {
   toggleFavoriteItem,
 } from '@/store/slices/clipboardSlice'
 
+// 后端收藏功能尚未在新架构中实装（仅保留前端逻辑以便后续快速启用）。
+const FAVORITES_UI_ENABLED = false
+
 interface DisplayClipboardItem {
   id: string
   type: 'text' | 'image' | 'link' | 'code' | 'file' | 'unknown'
@@ -85,7 +88,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
   useShortcut({
     key: 's',
     scope: 'clipboard',
-    enabled: selectedIds.size > 0,
+    enabled: FAVORITES_UI_ENABLED && selectedIds.size > 0,
     handler: () => {
       void handleBatchToggleFavorite()
     },
