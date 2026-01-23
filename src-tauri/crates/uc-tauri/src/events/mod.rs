@@ -18,6 +18,7 @@ pub enum ClipboardEvent {
 /// Encryption events emitted to frontend
 /// 发送到前端的加密事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum EncryptionEvent {
     /// Encryption initialized
     Initialized,
@@ -25,6 +26,26 @@ pub enum EncryptionEvent {
     SessionReady,
     /// Encryption failed
     Failed { reason: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encryption_event_serializes_with_type_tag() {
+        let ready = serde_json::to_value(EncryptionEvent::SessionReady).unwrap();
+        assert_eq!(ready, serde_json::json!({ "type": "SessionReady" }));
+
+        let failed = serde_json::to_value(EncryptionEvent::Failed {
+            reason: "oops".to_string(),
+        })
+        .unwrap();
+        assert_eq!(
+            failed,
+            serde_json::json!({ "type": "Failed", "reason": "oops" })
+        );
+    }
 }
 
 /// Forward clipboard event to frontend

@@ -38,6 +38,19 @@ pub struct ClipboardEntryProjection {
     pub active_time: i64,
 }
 
+/// Clipboard entries response with readiness status
+/// 带就绪状态的剪贴板条目响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ClipboardEntriesResponse {
+    /// Session is ready; entries are available
+    Ready {
+        entries: Vec<ClipboardEntryProjection>,
+    },
+    /// Session not ready yet (e.g., awaiting unlock)
+    NotReady,
+}
+
 /// Full clipboard entry detail
 /// 剪贴板条目完整详情
 #[derive(Debug, Clone, Serialize, Deserialize)]

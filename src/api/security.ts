@@ -1,5 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
 
+export interface EncryptionSessionStatus {
+  initialized: boolean
+  session_ready: boolean
+}
+
 /**
  * 获取加密口令
  * @returns Promise，返回加密口令
@@ -36,6 +41,19 @@ export async function deleteEncryptionPassword(): Promise<boolean> {
     return await invoke('delete_encryption_password')
   } catch (error) {
     console.error('删除加密口令失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取加密会话状态
+ * @returns Promise，返回加密初始化状态与会话就绪状态
+ */
+export async function getEncryptionSessionStatus(): Promise<EncryptionSessionStatus> {
+  try {
+    return await invoke('get_encryption_session_status')
+  } catch (error) {
+    console.error('获取加密会话状态失败:', error)
     throw error
   }
 }

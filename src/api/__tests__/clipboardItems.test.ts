@@ -26,11 +26,53 @@ describe('getClipboardItems', () => {
       },
     ])
 
-    const items = await getClipboardItems(undefined, 50, 0, undefined)
+    const result = (await getClipboardItems()) as unknown as {
+      status: string
+      items?: Array<{ id: string; item: { text: { display_text: string } } }>
+    }
 
-    expect(items).toHaveLength(1)
-    expect(items[0].item.image).toBeTruthy()
-    expect(items[0].item.text).toBeFalsy()
-    expect(items[0].item.image?.thumbnail).toBe('uc://thumbnail/rep-1')
+    expect(result.items).toHaveLength(1)
+    expect(result.items?.[0].item.image).toBeTruthy()
+    expect(result.items?.[0].item.text).toBeFalsy()
+    expect(result.items?.[0].item.image?.thumbnail).toBe('uc://thumbnail/rep-1')
+  })
+})
+
+describe('getClipboardItems', () => {
+  it('returns not_ready when backend is not ready', async () => {
+    vi.mocked(invoke).mockResolvedValue({ status: 'not_ready' })
+
+    const result = (await getClipboardItems()) as unknown as { status: string }
+
+    expect(result).toEqual({ status: 'not_ready' })
+  })
+
+  it('maps backend projections when ready', async () => {
+    vi.mocked(invoke).mockResolvedValue({
+      status: 'ready',
+      entries: [
+        {
+          id: 'entry-1',
+          preview: 'hello',
+          has_detail: true,
+          size_bytes: 12,
+          captured_at: 100,
+          content_type: 'text/plain',
+          is_encrypted: true,
+          is_favorited: false,
+          updated_at: 120,
+          active_time: 130,
+        },
+      ],
+    })
+
+    const result = (await getClipboardItems()) as unknown as {
+      status: string
+      items?: Array<{ id: string; item: { text: { display_text: string } } }>
+    }
+
+    expect(result.status).toBe('ready')
+    expect(result.items?.[0].id).toBe('entry-1')
+    expect(result.items?.[0].item.text.display_text).toBe('hello')
   })
 })

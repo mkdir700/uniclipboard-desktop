@@ -5,6 +5,7 @@ import {
   copyClipboardItem,
   clearClipboardItems,
   ClipboardItemResponse,
+  ClipboardItemsResult,
   OrderBy,
   favoriteClipboardItem,
   unfavoriteClipboardItem,
@@ -15,6 +16,7 @@ import {
 interface ClipboardState {
   items: ClipboardItemResponse[]
   loading: boolean
+  notReady: boolean
   error: string | null
   deleteConfirmId: string | null
 }
@@ -23,6 +25,7 @@ interface ClipboardState {
 const initialState: ClipboardState = {
   items: [],
   loading: false,
+  notReady: false,
   error: null,
   deleteConfirmId: null,
 }
@@ -117,14 +120,25 @@ const clipboardSlice = createSlice({
     builder.addCase(fetchClipboardItems.pending, state => {
       state.loading = true
       state.error = null
+      state.notReady = false
     })
-    builder.addCase(fetchClipboardItems.fulfilled, (state, action) => {
-      state.loading = false
-      state.items = action.payload
-    })
+    builder.addCase(
+      fetchClipboardItems.fulfilled,
+      (state, action: PayloadAction<ClipboardItemsResult>) => {
+        state.loading = false
+        if (action.payload.status === 'not_ready') {
+          state.notReady = true
+          return
+        }
+
+        state.notReady = false
+        state.items = action.payload.items
+      }
+    )
     builder.addCase(fetchClipboardItems.rejected, (state, action) => {
       state.loading = false
       state.error = action.payload as string
+      state.notReady = false
     })
 
     // 处理删除剪贴板内容

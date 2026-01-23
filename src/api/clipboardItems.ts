@@ -15,6 +15,14 @@ interface ClipboardEntryProjection {
   thumbnail_url?: string | null
 }
 
+type ClipboardEntriesResponse =
+  | { status: 'ready'; entries: ClipboardEntryProjection[] }
+  | { status: 'not_ready' }
+
+export type ClipboardItemsResult =
+  | { status: 'ready'; items: ClipboardItemResponse[] }
+  | { status: 'not_ready' }
+
 // Detail response type (for fetching full content)
 export interface ClipboardEntryDetail {
   id: string
@@ -138,44 +146,52 @@ export async function getClipboardItems(
   limit?: number,
   offset?: number,
   _filter?: Filter
-): Promise<ClipboardItemResponse[]> {
+): Promise<ClipboardItemsResult> {
   try {
     // Note: orderBy and filter are not yet implemented in the backend command
     // Map Filter enum to backend format if needed (for future use)
     // const mappedFilter = filter === Filter.All ? undefined : filter
 
     // Use new command name: get_clipboard_entries
-    const entries = await invoke<ClipboardEntryProjection[]>('get_clipboard_entries', {
+    const response = await invoke<ClipboardEntriesResponse>('get_clipboard_entries', {
       limit: limit ?? 50,
       offset: offset ?? 0,
     })
 
-    // Transform backend projection to frontend response format.
-    // We map based on backend `content_type` to support non-text entries (e.g. images).
-    return entries.map(entry => ({
+    if (response.status === 'not_ready') {
+      return { status: 'not_ready' }
+    }
+
+    // Transform backend projection to frontend response format
+    // TODO: Currently treating all entries as text. Implement proper content type detection
+    // when backend provides accurate content_type values
+    const items = response.entries.map(entry => ({
       id: entry.id,
       is_downloaded: true, // Default to true for local entries
       is_favorited: entry.is_favorited,
       created_at: entry.captured_at,
       updated_at: entry.updated_at,
       active_time: entry.active_time,
-      item: isImageType(entry.content_type)
-        ? {
-            image: {
-              thumbnail: entry.thumbnail_url ?? null,
-              size: entry.size_bytes,
-              width: 0,
-              height: 0,
-            },
-          }
-        : {
-            text: {
-              display_text: entry.preview, // Use preview directly from backend
-              has_detail: entry.has_detail, // Indicates if full content is available via resource
-              size: entry.size_bytes,
-            },
-          },
+      item: {
+        image: {
+          thumbnail: entry.thumbnail_url ?? null,
+          size: entry.size_bytes,
+          width: 0, // TODO: 使用原图的宽高信息
+          height: 0,
+        },
+        text: {
+          display_text: entry.preview, // Use preview directly from backend
+          has_detail: entry.has_detail, // Indicates if full content is available via resource
+          size: entry.size_bytes,
+        },
+        file: null as unknown as ClipboardFileItem,
+        link: null as unknown as ClipboardLinkItem,
+        code: null as unknown as ClipboardCodeItem,
+        unknown: null,
+      },
     }))
+
+    return { status: 'ready', items }
   } catch (error) {
     console.error('获取剪贴板历史记录失败:', error)
     throw error
