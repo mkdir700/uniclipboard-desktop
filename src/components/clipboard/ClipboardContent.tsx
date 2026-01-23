@@ -50,7 +50,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
 
   // Use Redux state and dispatch
   const dispatch = useAppDispatch()
-  const { items: reduxItems, loading } = useAppSelector(state => state.clipboard)
+  const { items: reduxItems, loading, notReady } = useAppSelector(state => state.clipboard)
 
   // Local state for converted display items
   const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>([])
@@ -348,7 +348,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
   }
 
   // Skeleton loading state
-  if (loading && clipboardItems.length === 0) {
+  if ((loading || notReady) && clipboardItems.length === 0) {
     return (
       <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
         <div className="flex flex-col gap-1">

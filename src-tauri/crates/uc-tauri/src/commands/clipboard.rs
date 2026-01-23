@@ -2,10 +2,14 @@
 //! 剪贴板相关的 Tauri 命令
 
 use crate::bootstrap::AppRuntime;
-use crate::models::{ClipboardEntryDetail, ClipboardEntryProjection, ClipboardEntryResource};
+use crate::models::{
+    ClipboardEntriesResponse, ClipboardEntryDetail, ClipboardEntryProjection,
+    ClipboardEntryResource,
+};
 use std::sync::Arc;
 use tauri::State;
 use tracing::{info_span, Instrument};
+use uc_core::security::state::EncryptionState;
 
 /// Get clipboard history entries (preview only)
 /// 获取剪贴板历史条目（仅预览）
@@ -14,7 +18,7 @@ pub async fn get_clipboard_entries(
     runtime: State<'_, Arc<AppRuntime>>,
     limit: Option<usize>,
     offset: Option<usize>,
-) -> Result<Vec<ClipboardEntryProjection>, String> {
+) -> Result<ClipboardEntriesResponse, String> {
     let resolved_limit = limit.unwrap_or(50);
     let resolved_offset = offset.unwrap_or(0);
     let device_id = runtime.deps.device_identity.current_device_id();
@@ -38,15 +42,13 @@ pub async fn get_clipboard_entries(
                 format!("Failed to check encryption state: {}", e)
             })?;
 
-        if encryption_state == uc_core::security::state::EncryptionState::Initialized {
-            // Encryption is initialized, check if session is ready
-            if !runtime.deps.encryption_session.is_ready().await {
-                tracing::warn!(
-                    "Encryption initialized but session not ready yet, returning empty list. \
-                     This typically happens during app startup before auto-unlock completes."
-                );
-                return Ok(vec![]);
-            }
+        let session_ready = runtime.deps.encryption_session.is_ready().await;
+        if should_return_not_ready(encryption_state, session_ready) {
+            tracing::warn!(
+                "Encryption initialized but session not ready yet, returning not-ready response. \
+                 This typically happens during app startup before auto-unlock completes."
+            );
+            return Ok(ClipboardEntriesResponse::NotReady);
         }
 
         let uc = runtime.usecases().list_entry_projections();
@@ -77,10 +79,32 @@ pub async fn get_clipboard_entries(
             .collect();
 
         tracing::info!(count = projections.len(), "Retrieved clipboard entries");
-        Ok(projections)
+        Ok(ClipboardEntriesResponse::Ready {
+            entries: projections,
+        })
     }
     .instrument(span)
     .await
+}
+
+fn should_return_not_ready(state: EncryptionState, session_ready: bool) -> bool {
+    matches!(state, EncryptionState::Initialized) && !session_ready
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_return_not_ready;
+    use uc_core::security::state::EncryptionState;
+
+    #[test]
+    fn returns_not_ready_only_when_initialized_and_session_not_ready() {
+        assert!(should_return_not_ready(EncryptionState::Initialized, false));
+        assert!(!should_return_not_ready(EncryptionState::Initialized, true));
+        assert!(!should_return_not_ready(
+            EncryptionState::Uninitialized,
+            false
+        ));
+    }
 }
 
 /// Deletes a clipboard entry identified by `entry_id`.
@@ -202,9 +226,4 @@ pub async fn get_clipboard_entry_resource(
     }
     .instrument(span)
     .await
-}
-
-#[cfg(test)]
-mod tests {
-    // NOTE: Tauri command layer relies on higher-level integration coverage.
 }

@@ -357,6 +357,7 @@ macro_rules! generate_invoke_handler {
             // Encryption commands
             uc_tauri::commands::encryption::initialize_encryption,
             uc_tauri::commands::encryption::is_encryption_initialized,
+            uc_tauri::commands::encryption::get_encryption_session_status,
             // Settings commands
             uc_tauri::commands::settings::get_settings,
             uc_tauri::commands::settings::update_settings,

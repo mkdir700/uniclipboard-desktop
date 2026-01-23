@@ -2,6 +2,7 @@ import { listen } from '@tauri-apps/api/event'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Filter, OrderBy } from '@/api/clipboardItems'
+import { getEncryptionSessionStatus } from '@/api/security'
 import ClipboardContent from '@/components/clipboard/ClipboardContent'
 import Header from '@/components/layout/Header'
 import { toast } from '@/components/ui/sonner'
@@ -38,6 +39,8 @@ const DashboardPage: React.FC = () => {
   const currentFilterRef = useRef<Filter>(currentFilter)
   // Debounce ref
   const debouncedLoadRef = useRef<number | null>(null)
+  const encryptionReadyRef = useRef<boolean | null>(null)
+  const pendingInitialLoadRef = useRef(false)
 
   const handleFilterChange = (filterId: Filter) => {
     setCurrentFilter(filterId)
@@ -85,6 +88,12 @@ const DashboardPage: React.FC = () => {
   useEffect(() => {
     console.log(t('dashboard.logs.filterChanged'), currentFilter)
     currentFilterRef.current = currentFilter
+    if (encryptionReadyRef.current !== true) {
+      pendingInitialLoadRef.current = true
+      console.log('[Dashboard] Encryption not ready, deferring clipboard load')
+      return
+    }
+    pendingInitialLoadRef.current = false
     loadData(currentFilter) // Load directly without debounce
   }, [currentFilter, loadData, t])
 
@@ -172,14 +181,23 @@ const DashboardPage: React.FC = () => {
 
       try {
         // Listen to encryption://event with type checking
-        const unlisten = await listen<{ type: string }>('encryption://event', event => {
-          console.log('[Dashboard] Received encryption event:', event.payload)
+        const unlisten = await listen<'SessionReady' | { type: string }>(
+          'encryption://event',
+          event => {
+            console.log('[Dashboard] Received encryption event:', event.payload)
 
-          if (event.payload.type === 'SessionReady') {
-            console.log('[Dashboard] Encryption session ready, reloading clipboard data')
-            loadData(currentFilterRef.current)
+            const eventType = typeof event.payload === 'string' ? event.payload : event.payload.type
+
+            if (eventType === 'SessionReady') {
+              console.log('[Dashboard] Encryption session ready, reloading clipboard data')
+              encryptionReadyRef.current = true
+              if (pendingInitialLoadRef.current) {
+                pendingInitialLoadRef.current = false
+              }
+              loadData(currentFilterRef.current)
+            }
           }
-        })
+        )
 
         return unlisten
       } catch (err) {
@@ -189,6 +207,33 @@ const DashboardPage: React.FC = () => {
     }
 
     const unlistenPromise = setupEncryptionListener()
+
+    const checkEncryptionStatus = async () => {
+      try {
+        const status = await getEncryptionSessionStatus()
+        if (!status.initialized || status.session_ready) {
+          encryptionReadyRef.current = true
+          if (pendingInitialLoadRef.current) {
+            pendingInitialLoadRef.current = false
+            loadData(currentFilterRef.current)
+          }
+        } else {
+          encryptionReadyRef.current = false
+          console.log(
+            '[Dashboard] Encryption initialized but session not ready; waiting for unlock'
+          )
+        }
+      } catch (err) {
+        console.error('[Dashboard] Failed to check encryption session status:', err)
+        encryptionReadyRef.current = true
+        if (pendingInitialLoadRef.current) {
+          pendingInitialLoadRef.current = false
+          loadData(currentFilterRef.current)
+        }
+      }
+    }
+
+    checkEncryptionStatus()
 
     return () => {
       unlistenPromise.then(unlisten => {

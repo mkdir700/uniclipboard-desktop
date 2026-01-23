@@ -2,9 +2,10 @@
 //! 加密相关的 Tauri 命令
 
 use crate::bootstrap::AppRuntime;
+use crate::events::EncryptionEvent;
 use std::sync::Arc;
 use std::time::SystemTime;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Runtime, State};
 use tracing::{info_span, Instrument}; // NEW
 
 const LOG_CONTEXT: &str = "[initialize_encryption]";
@@ -13,6 +14,14 @@ const LOG_CONTEXT: &str = "[initialize_encryption]";
 #[derive(Debug, Clone, serde::Serialize)]
 struct OnboardingPasswordSetEvent {
     timestamp: u64,
+}
+
+/// Encryption session status payload
+/// 加密会话状态载荷
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EncryptionSessionStatus {
+    initialized: bool,
+    session_ready: bool,
 }
 
 /// Initialize encryption with passphrase
@@ -67,6 +76,10 @@ pub async fn initialize_encryption(
         }
     }
 
+    if let Err(e) = emit_session_ready(&app_handle) {
+        tracing::warn!("Failed to emit encryption session ready event: {}", e);
+    }
+
     // Emit onboarding-password-set event for frontend
     let timestamp = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -82,6 +95,36 @@ pub async fn initialize_encryption(
     tracing::info!("Onboarding: encryption password initialized successfully");
 
     Ok(())
+}
+
+fn emit_session_ready<R: Runtime>(app_handle: &tauri::AppHandle<R>) -> Result<(), String> {
+    app_handle
+        .emit("encryption://event", EncryptionEvent::SessionReady)
+        .map_err(|e| format!("emit session ready event failed: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::emit_session_ready;
+    use serde_json::Value;
+    use tauri::Listener;
+    #[tokio::test]
+    async fn emit_session_ready_emits_event() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
+
+        let tx_clone = tx.clone();
+        app_handle.listen("encryption://event", move |event: tauri::Event| {
+            let _ = tx_clone.try_send(event.payload().to_string());
+        });
+
+        emit_session_ready(&app_handle).expect("emit session ready event");
+
+        let payload = rx.recv().await.expect("event payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+        assert_eq!(value, serde_json::json!({ "type": "SessionReady" }));
+    }
 }
 
 /// Check if encryption is initialized
@@ -106,6 +149,49 @@ pub async fn is_encryption_initialized(
 
         tracing::info!(is_initialized = result, "Encryption status checked");
         Ok(result)
+    }
+    .instrument(span)
+    .await
+}
+
+/// Get encryption session readiness
+/// 获取加密会话就绪状态
+///
+/// This command reports whether encryption is initialized and whether the session is ready.
+/// 此命令返回加密是否已初始化以及会话是否就绪。
+#[tauri::command]
+pub async fn get_encryption_session_status(
+    runtime: State<'_, Arc<AppRuntime>>,
+) -> Result<EncryptionSessionStatus, String> {
+    let span = info_span!(
+        "command.encryption.session_status",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+
+    async {
+        let state = runtime
+            .deps
+            .encryption_state
+            .load_state()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to load encryption state");
+                e.to_string()
+            })?;
+
+        let session_ready = runtime.deps.encryption_session.is_ready().await;
+        let initialized = state == uc_core::security::state::EncryptionState::Initialized;
+
+        tracing::info!(
+            initialized,
+            session_ready,
+            "Encryption session status checked"
+        );
+
+        Ok(EncryptionSessionStatus {
+            initialized,
+            session_ready,
+        })
     }
     .instrument(span)
     .await
