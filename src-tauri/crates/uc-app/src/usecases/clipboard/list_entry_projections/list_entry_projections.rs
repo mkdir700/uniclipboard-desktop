@@ -5,7 +5,7 @@ use anyhow::Result;
 use std::sync::Arc;
 use uc_core::ports::{
     ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
-    ClipboardSelectionRepositoryPort,
+    ClipboardSelectionRepositoryPort, ThumbnailRepositoryPort,
 };
 
 /// DTO for clipboard entry projection (returned to command layer)
@@ -18,6 +18,7 @@ pub struct EntryProjectionDto {
     pub size_bytes: i64,
     pub captured_at: i64,
     pub content_type: String,
+    pub thumbnail_url: Option<String>,
     // TODO: is_encrypted, is_favorited to be implemented later
     pub is_encrypted: bool,
     pub is_favorited: bool,
@@ -46,6 +47,7 @@ pub struct ListClipboardEntryProjections {
     entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
     representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
+    thumbnail_repo: Arc<dyn ThumbnailRepositoryPort>,
     max_limit: usize,
 }
 
@@ -55,11 +57,13 @@ impl ListClipboardEntryProjections {
         entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
         selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
         representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
+        thumbnail_repo: Arc<dyn ThumbnailRepositoryPort>,
     ) -> Self {
         Self {
             entry_repo,
             selection_repo,
             representation_repo,
+            thumbnail_repo,
             max_limit: 1000,
         }
     }
@@ -145,6 +149,33 @@ impl ListClipboardEntryProjections {
                 .map(|mt| mt.as_str().to_string())
                 .unwrap_or_else(|| "unknown".to_string());
 
+            let is_image = representation
+                .mime_type
+                .as_ref()
+                .map(|mt| mt.as_str().starts_with("image/"))
+                .unwrap_or(false);
+
+            let thumbnail_url = if is_image {
+                match self
+                    .thumbnail_repo
+                    .get_by_representation_id(&selection.selection.preview_rep_id)
+                    .await
+                {
+                    Ok(Some(_metadata)) => Some(format!("uc://thumbnail/{}", preview_rep_id)),
+                    Ok(None) => None,
+                    Err(err) => {
+                        tracing::error!(
+                            error = %err,
+                            entry_id = %entry_id_str,
+                            "Failed to fetch thumbnail metadata"
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
             // Check if has detail (blob exists)
             let has_detail = representation.blob_id.is_some();
 
@@ -155,6 +186,7 @@ impl ListClipboardEntryProjections {
                 size_bytes: entry.total_size,
                 captured_at,
                 content_type,
+                thumbnail_url,
                 is_encrypted: false, // TODO: implement later
                 is_favorited: false, // TODO: implement later
                 updated_at: captured_at,
@@ -169,8 +201,13 @@ impl ListClipboardEntryProjections {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uc_core::clipboard::{ClipboardEntry, PersistedClipboardRepresentation};
-    use uc_core::ids::{EntryId, EventId, RepresentationId};
+    use std::collections::HashMap;
+    use uc_core::clipboard::{
+        ClipboardEntry, ClipboardSelection, MimeType, PersistedClipboardRepresentation,
+        SelectionPolicyVersion, ThumbnailMetadata,
+    };
+    use uc_core::ids::{EntryId, EventId, FormatId, RepresentationId};
+    use uc_core::BlobId;
     use uc_core::ClipboardSelectionDecision;
 
     // Mock repositories for testing
@@ -185,6 +222,10 @@ mod tests {
     struct MockRepresentationRepository {
         representations:
             std::collections::HashMap<(String, String), uc_core::PersistedClipboardRepresentation>,
+    }
+
+    struct MockThumbnailRepository {
+        thumbnails: HashMap<String, ThumbnailMetadata>,
     }
 
     #[async_trait::async_trait]
@@ -285,6 +326,30 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
+    impl uc_core::ports::clipboard::ThumbnailRepositoryPort for MockThumbnailRepository {
+        async fn get_by_representation_id(
+            &self,
+            representation_id: &RepresentationId,
+        ) -> Result<Option<ThumbnailMetadata>> {
+            Ok(self.thumbnails.get(representation_id.inner()).map(|meta| {
+                ThumbnailMetadata::new(
+                    meta.representation_id.clone(),
+                    meta.thumbnail_blob_id.clone(),
+                    meta.thumbnail_mime_type.clone(),
+                    meta.original_width,
+                    meta.original_height,
+                    meta.original_size_bytes,
+                    meta.created_at_ms,
+                )
+            }))
+        }
+
+        async fn insert_thumbnail(&self, _metadata: &ThumbnailMetadata) -> Result<()> {
+            unimplemented!()
+        }
+    }
+
     #[tokio::test]
     async fn test_validates_limit_zero() {
         let entry_repo = Arc::new(MockEntryRepository { entries: vec![] });
@@ -294,9 +359,16 @@ mod tests {
         let representation_repo = Arc::new(MockRepresentationRepository {
             representations: std::collections::HashMap::new(),
         });
+        let thumbnail_repo = Arc::new(MockThumbnailRepository {
+            thumbnails: HashMap::new(),
+        });
 
-        let use_case =
-            ListClipboardEntryProjections::new(entry_repo, selection_repo, representation_repo);
+        let use_case = ListClipboardEntryProjections::new(
+            entry_repo,
+            selection_repo,
+            representation_repo,
+            thumbnail_repo,
+        );
 
         let result = use_case.execute(0, 0).await;
 
@@ -314,9 +386,16 @@ mod tests {
         let representation_repo = Arc::new(MockRepresentationRepository {
             representations: std::collections::HashMap::new(),
         });
+        let thumbnail_repo = Arc::new(MockThumbnailRepository {
+            thumbnails: HashMap::new(),
+        });
 
-        let use_case =
-            ListClipboardEntryProjections::new(entry_repo, selection_repo, representation_repo);
+        let use_case = ListClipboardEntryProjections::new(
+            entry_repo,
+            selection_repo,
+            representation_repo,
+            thumbnail_repo,
+        );
 
         let result = use_case.execute(2000, 0).await;
 
@@ -335,5 +414,76 @@ mod tests {
         let _ = representation_repo
             .get_representation_by_blob_id(&blob_id)
             .await;
+    }
+
+    #[tokio::test]
+    async fn test_includes_thumbnail_url_for_image_preview() {
+        let entry_id = EntryId::from("entry-1");
+        let event_id = EventId::from("event-1");
+        let rep_id = RepresentationId::from("rep-1");
+        let thumb_blob_id = BlobId::from("thumb-1");
+
+        let entry = ClipboardEntry::new(entry_id.clone(), event_id.clone(), 123, None, 2048);
+
+        let selection = ClipboardSelectionDecision::new(
+            entry_id.clone(),
+            ClipboardSelection {
+                primary_rep_id: rep_id.clone(),
+                secondary_rep_ids: vec![],
+                preview_rep_id: rep_id.clone(),
+                paste_rep_id: rep_id.clone(),
+                policy_version: SelectionPolicyVersion::V1,
+            },
+        );
+
+        let representation = PersistedClipboardRepresentation::new(
+            rep_id.clone(),
+            FormatId::from("public.png"),
+            Some(MimeType("image/png".to_string())),
+            2048,
+            None,
+            Some(BlobId::from("blob-1")),
+        );
+
+        let thumbnail = ThumbnailMetadata::new(
+            rep_id.clone(),
+            thumb_blob_id.clone(),
+            MimeType("image/webp".to_string()),
+            120,
+            80,
+            1024,
+            None,
+        );
+
+        let entry_repo = Arc::new(MockEntryRepository {
+            entries: vec![entry],
+        });
+        let selection_repo = Arc::new(MockSelectionRepository {
+            selections: HashMap::from([(entry_id.inner().clone(), selection)]),
+        });
+        let representation_repo = Arc::new(MockRepresentationRepository {
+            representations: HashMap::from([(
+                (event_id.inner().clone(), rep_id.inner().clone()),
+                representation,
+            )]),
+        });
+        let thumbnail_repo = Arc::new(MockThumbnailRepository {
+            thumbnails: HashMap::from([(rep_id.inner().clone(), thumbnail)]),
+        });
+
+        let use_case = ListClipboardEntryProjections::new(
+            entry_repo,
+            selection_repo,
+            representation_repo,
+            thumbnail_repo,
+        );
+
+        let result = use_case.execute(50, 0).await.expect("expected projections");
+        let projection = result.first().expect("expected projection");
+
+        assert_eq!(
+            projection.thumbnail_url,
+            Some(format!("uc://thumbnail/{}", rep_id.inner()))
+        );
     }
 }

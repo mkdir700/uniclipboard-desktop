@@ -68,6 +68,7 @@ pub async fn get_clipboard_entries(
                 size_bytes: dto.size_bytes,
                 captured_at: dto.captured_at,
                 content_type: dto.content_type,
+                thumbnail_url: dto.thumbnail_url,
                 is_encrypted: dto.is_encrypted,
                 is_favorited: dto.is_favorited,
                 updated_at: dto.updated_at,

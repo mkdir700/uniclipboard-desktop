@@ -127,24 +127,22 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
       }
 
       // Create display item
+      const contentByType = {
+        text: item.item.text,
+        image: item.item.image,
+        link: item.item.link,
+        code: item.item.code,
+        file: item.item.file,
+        unknown: null,
+      } as const
+
       return {
         id: item.id,
         type,
         time: timeString,
         isDownloaded: item.is_downloaded,
         isFavorited: item.is_favorited,
-        content:
-          type === 'text'
-            ? item.item.text
-            : type === 'image'
-              ? item.item.image
-              : type === 'link'
-                ? item.item.link
-                : type === 'code'
-                  ? item.item.code
-                  : type === 'file'
-                    ? item.item.file
-                    : null,
+        content: contentByType[type] ?? null,
       }
     },
     [t]

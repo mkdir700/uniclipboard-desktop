@@ -1,4 +1,11 @@
-import { ChevronDown, ChevronUp, File, ExternalLink, Loader2 } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  File,
+  ExternalLink,
+  Image as ImageIcon,
+  Loader2,
+} from 'lucide-react'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -171,19 +178,28 @@ const ClipboardItem: React.FC<ClipboardItemProps> = ({
         )
       }
       case 'image': {
-        const imageUrl =
-          isExpanded && detailImageUrl ? detailImageUrl : (content as ClipboardImageItem).thumbnail
+        const thumbnailUrl = (content as ClipboardImageItem | null)?.thumbnail ?? null
+        const imageUrl = isExpanded && detailImageUrl ? detailImageUrl : thumbnailUrl
         return (
           <div className="flex justify-center bg-black/20 rounded-lg overflow-hidden py-4">
-            <img
-              src={imageUrl}
-              className={cn(
-                'w-auto object-contain rounded-md shadow-sm transition-all duration-300',
-                isExpanded ? 'max-h-[500px]' : 'h-32'
-              )}
-              alt={t('clipboard.item.altText.clipboardImage')}
-              loading="lazy"
-            />
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                className={cn(
+                  'w-auto object-contain rounded-md shadow-sm transition-all duration-300',
+                  isExpanded ? 'max-h-[32rem]' : 'h-32'
+                )}
+                alt={t('clipboard.item.altText.clipboardImage')}
+                loading="lazy"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 h-32 w-full rounded-md bg-muted/30 border border-border/30">
+                <ImageIcon className="h-6 w-6 text-muted-foreground/70" />
+                <span className="text-xs text-muted-foreground/70">
+                  {t('clipboard.item.loading')}
+                </span>
+              </div>
+            )}
           </div>
         )
       }

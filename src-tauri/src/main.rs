@@ -30,6 +30,7 @@ use uc_tauri::bootstrap::tracing as bootstrap_tracing;
 use uc_tauri::bootstrap::{
     ensure_default_device_name, load_config, start_background_tasks, wire_dependencies, AppRuntime,
 };
+use uc_tauri::protocol::{parse_uc_request, UcRoute};
 
 // Platform-specific command modules
 mod plugins;
@@ -133,7 +134,7 @@ fn text_response(status: StatusCode, message: &str, origin: Option<&str>) -> Res
     )
 }
 
-async fn resolve_uc_blob_request(
+async fn resolve_uc_request(
     app_handle: tauri::AppHandle,
     request: Request<Vec<u8>>,
 ) -> Response<Vec<u8>> {
@@ -145,22 +146,32 @@ async fn resolve_uc_blob_request(
         .get("Origin")
         .and_then(|value| value.to_str().ok());
 
-    if host != "blob" {
-        error!(host = %host, path = %path, "Unsupported uc URI host");
-        return text_response(StatusCode::BAD_REQUEST, "Unsupported uc URI host", origin);
-    }
+    let route = match parse_uc_request(&request) {
+        Ok(route) => route,
+        Err(err) => {
+            error!(
+                error = %err,
+                host = %host,
+                path = %path,
+                "Failed to parse uc URI request"
+            );
+            return text_response(err.status_code(), err.response_message(), origin);
+        }
+    };
 
-    let blob_id_str = path.trim_start_matches('/');
-    if blob_id_str.is_empty() {
-        error!("Missing blob id in uc URI");
-        return text_response(StatusCode::BAD_REQUEST, "Missing blob id", origin);
+    match route {
+        UcRoute::Blob { blob_id } => resolve_uc_blob_request(app_handle, blob_id, origin).await,
+        UcRoute::Thumbnail { representation_id } => {
+            resolve_uc_thumbnail_request(app_handle, representation_id, origin).await
+        }
     }
+}
 
-    if blob_id_str.contains('/') {
-        error!(blob_id = %blob_id_str, "Invalid blob id in uc URI");
-        return text_response(StatusCode::BAD_REQUEST, "Invalid blob id", origin);
-    }
-
+async fn resolve_uc_blob_request(
+    app_handle: tauri::AppHandle,
+    blob_id: uc_core::BlobId,
+    origin: Option<&str>,
+) -> Response<Vec<u8>> {
     let runtime = match app_handle.try_state::<Arc<AppRuntime>>() {
         Some(state) => state,
         None => {
@@ -173,7 +184,6 @@ async fn resolve_uc_blob_request(
         }
     };
 
-    let blob_id = uc_core::BlobId::from(blob_id_str);
     let use_case = runtime.usecases().resolve_blob_resource();
     match use_case.execute(&blob_id).await {
         Ok(result) => build_response(
@@ -196,6 +206,53 @@ async fn resolve_uc_blob_request(
                 StatusCode::INTERNAL_SERVER_ERROR
             };
             text_response(status, "Failed to resolve blob resource", origin)
+        }
+    }
+}
+
+async fn resolve_uc_thumbnail_request(
+    app_handle: tauri::AppHandle,
+    representation_id: uc_core::ids::RepresentationId,
+    origin: Option<&str>,
+) -> Response<Vec<u8>> {
+    let runtime = match app_handle.try_state::<Arc<AppRuntime>>() {
+        Some(state) => state,
+        None => {
+            error!("AppRuntime state not managed for uc URI handling");
+            return text_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Runtime not ready",
+                origin,
+            );
+        }
+    };
+
+    let use_case = runtime.usecases().resolve_thumbnail_resource();
+    match use_case.execute(&representation_id).await {
+        Ok(result) => build_response(
+            StatusCode::OK,
+            Some(
+                result
+                    .mime_type
+                    .as_deref()
+                    .unwrap_or("application/octet-stream"),
+            ),
+            result.bytes,
+            origin,
+        ),
+        Err(err) => {
+            let err_msg = err.to_string();
+            error!(
+                error = %err,
+                representation_id = %representation_id,
+                "Failed to resolve thumbnail resource"
+            );
+            let status = if err_msg.contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            text_response(status, "Failed to resolve thumbnail resource", origin)
         }
     }
 }
@@ -376,13 +433,14 @@ fn run_app(config: AppConfig) {
         .register_asynchronous_uri_scheme_protocol("uc", move |ctx, request, responder| {
             let app_handle = ctx.app_handle().clone();
             tauri::async_runtime::spawn(async move {
-                let response = resolve_uc_blob_request(app_handle, request).await;
+                let response = resolve_uc_request(app_handle, request).await;
                 responder.respond(response);
             });
         })
         // Manual verification (dev):
         // 1) In frontend devtools: fetch("uc://blob/<blob_id>")
-        // 2) Network should show 200 with Access-Control-Allow-Origin matching http://localhost:1420
+        // 2) In frontend devtools: fetch("uc://thumbnail/<representation_id>")
+        // 3) Network should show 200 with Access-Control-Allow-Origin matching http://localhost:1420
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(

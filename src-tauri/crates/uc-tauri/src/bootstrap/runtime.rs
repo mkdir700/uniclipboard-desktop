@@ -257,6 +257,19 @@ impl<'a> UseCases<'a> {
         )
     }
 
+    /// Resolve thumbnail resource content by representation id.
+    ///
+    /// 通过表示 id 解析缩略图资源内容。
+    pub fn resolve_thumbnail_resource(
+        &self,
+    ) -> uc_app::usecases::clipboard::resolve_thumbnail_resource::ResolveThumbnailResourceUseCase
+    {
+        uc_app::usecases::clipboard::resolve_thumbnail_resource::ResolveThumbnailResourceUseCase::new(
+            self.runtime.deps.thumbnail_repo.clone(),
+            self.runtime.deps.blob_store.clone(),
+        )
+    }
+
     /// Security use cases / 安全用例
     ///
     /// Get the InitializeEncryption use case for setting up encryption.
@@ -455,6 +468,7 @@ impl<'a> UseCases<'a> {
             self.runtime.deps.clipboard_entry_repo.clone(),
             self.runtime.deps.selection_repo.clone(),
             self.runtime.deps.representation_repo.clone(),
+            self.runtime.deps.thumbnail_repo.clone(),
         )
     }
 
