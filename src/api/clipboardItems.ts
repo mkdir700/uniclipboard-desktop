@@ -165,31 +165,41 @@ export async function getClipboardItems(
     // Transform backend projection to frontend response format
     // TODO: Currently treating all entries as text. Implement proper content type detection
     // when backend provides accurate content_type values
-    const items = response.entries.map(entry => ({
-      id: entry.id,
-      is_downloaded: true, // Default to true for local entries
-      is_favorited: entry.is_favorited,
-      created_at: entry.captured_at,
-      updated_at: entry.updated_at,
-      active_time: entry.active_time,
-      item: {
-        image: {
-          thumbnail: entry.thumbnail_url ?? null,
-          size: entry.size_bytes,
-          width: 0, // TODO: 使用原图的宽高信息
-          height: 0,
-        },
-        text: {
-          display_text: entry.preview, // Use preview directly from backend
-          has_detail: entry.has_detail, // Indicates if full content is available via resource
-          size: entry.size_bytes,
-        },
+    const items = response.entries.map(entry => {
+      const isImage = isImageType(entry.content_type)
+
+      const item: ClipboardItem = {
+        image: isImage
+          ? {
+              thumbnail: entry.thumbnail_url ?? null,
+              size: entry.size_bytes,
+              width: 0, // TODO: 使用原图的宽高信息
+              height: 0,
+            }
+          : null,
+        text: !isImage
+          ? {
+              display_text: entry.preview, // Use preview directly from backend
+              has_detail: entry.has_detail, // Indicates if full content is available via resource
+              size: entry.size_bytes,
+            }
+          : null,
         file: null as unknown as ClipboardFileItem,
         link: null as unknown as ClipboardLinkItem,
         code: null as unknown as ClipboardCodeItem,
         unknown: null,
-      },
-    }))
+      }
+
+      return {
+        id: entry.id,
+        is_downloaded: true, // Default to true for local entries
+        is_favorited: entry.is_favorited,
+        created_at: entry.captured_at,
+        updated_at: entry.updated_at,
+        active_time: entry.active_time,
+        item,
+      }
+    })
 
     return { status: 'ready', items }
   } catch (error) {

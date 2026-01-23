@@ -10,25 +10,28 @@ const invokeMock = vi.mocked(invoke)
 
 describe('getClipboardItems', () => {
   it('将 image/* 条目映射为 image 类型，并优先使用后端返回的 thumbnail_url', async () => {
-    invokeMock.mockResolvedValueOnce([
-      {
-        id: 'entry-1',
-        preview: 'Image (123 bytes)',
-        has_detail: true,
-        size_bytes: 123,
-        captured_at: 1,
-        content_type: 'image/png',
-        is_encrypted: false,
-        is_favorited: false,
-        updated_at: 1,
-        active_time: 1,
-        thumbnail_url: 'uc://thumbnail/rep-1',
-      },
-    ])
+    invokeMock.mockResolvedValueOnce({
+      status: 'ready',
+      entries: [
+        {
+          id: 'entry-1',
+          preview: 'Image (123 bytes)',
+          has_detail: true,
+          size_bytes: 123,
+          captured_at: 1,
+          content_type: 'image/png',
+          is_encrypted: false,
+          is_favorited: false,
+          updated_at: 1,
+          active_time: 1,
+          thumbnail_url: 'uc://thumbnail/rep-1',
+        },
+      ],
+    })
 
     const result = (await getClipboardItems()) as unknown as {
       status: string
-      items?: Array<{ id: string; item: { text: { display_text: string } } }>
+      items?: Array<{ id: string; item: { text?: unknown; image?: { thumbnail?: string } } }>
     }
 
     expect(result.items).toHaveLength(1)
@@ -36,9 +39,7 @@ describe('getClipboardItems', () => {
     expect(result.items?.[0].item.text).toBeFalsy()
     expect(result.items?.[0].item.image?.thumbnail).toBe('uc://thumbnail/rep-1')
   })
-})
 
-describe('getClipboardItems', () => {
   it('returns not_ready when backend is not ready', async () => {
     vi.mocked(invoke).mockResolvedValue({ status: 'not_ready' })
 
