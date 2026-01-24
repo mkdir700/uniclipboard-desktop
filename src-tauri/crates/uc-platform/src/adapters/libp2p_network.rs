@@ -97,6 +97,7 @@ pub struct Libp2pNetworkAdapter {
     caches: Arc<RwLock<PeerCaches>>,
     event_tx: mpsc::Sender<NetworkEvent>,
     event_rx: Mutex<Option<mpsc::Receiver<NetworkEvent>>>,
+    clipboard_tx: mpsc::Sender<ClipboardMessage>,
     clipboard_rx: Mutex<Option<mpsc::Receiver<ClipboardMessage>>>,
     keypair: Mutex<Option<identity::Keypair>>,
 }
@@ -107,13 +108,14 @@ impl Libp2pNetworkAdapter {
             .map_err(|e| anyhow!("failed to load libp2p identity: {e}"))?;
         let local_peer_id = PeerId::from(keypair.public()).to_string();
         let (event_tx, event_rx) = mpsc::channel(64);
-        let (_clipboard_tx, clipboard_rx) = mpsc::channel(64);
+        let (clipboard_tx, clipboard_rx) = mpsc::channel(64);
 
         Ok(Self {
             local_peer_id,
             caches: Arc::new(RwLock::new(PeerCaches::new())),
             event_tx,
             event_rx: Mutex::new(Some(event_rx)),
+            clipboard_tx,
             clipboard_rx: Mutex::new(Some(clipboard_rx)),
             keypair: Mutex::new(Some(keypair)),
         })
@@ -574,6 +576,19 @@ mod tests {
             *guard = Some(identity.to_vec());
             Ok(())
         }
+    }
+
+    #[tokio::test]
+    async fn subscribe_clipboard_receiver_is_open() {
+        let adapter = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()))
+            .expect("create adapter");
+
+        let receiver = adapter
+            .subscribe_clipboard()
+            .await
+            .expect("subscribe clipboard");
+
+        assert!(!receiver.is_closed());
     }
 
     async fn wait_for_discovery(
