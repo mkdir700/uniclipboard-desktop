@@ -94,6 +94,7 @@ const SettingsPage: React.FC = () => {
           '--sidebar-width': '20rem',
         } as React.CSSProperties
       }
+      className="min-h-0 h-full"
     >
       <SettingsSidebar activeCategory={activeCategory} onCategoryChange={handleCategoryClick} />
       <SidebarInset>
