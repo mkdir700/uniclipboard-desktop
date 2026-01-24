@@ -27,6 +27,7 @@ pub struct EntryDetailResult {
     pub content: String,
     pub size_bytes: i64,
     pub created_at_ms: i64,
+    pub active_time_ms: i64,
     pub mime_type: Option<String>,
 }
 
@@ -89,6 +90,7 @@ impl GetEntryDetailUseCase {
             content: full_content,
             size_bytes: entry.total_size,
             created_at_ms: entry.created_at_ms,
+            active_time_ms: entry.active_time_ms,
             mime_type: mime_type_str.map(String::from),
         })
     }

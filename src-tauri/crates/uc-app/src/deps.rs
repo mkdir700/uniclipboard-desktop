@@ -14,8 +14,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use uc_core::ids::RepresentationId;
 use uc_core::ports::clipboard::{
-    ClipboardRepresentationNormalizerPort, RepresentationCachePort, SpoolQueuePort,
-    ThumbnailGeneratorPort, ThumbnailRepositoryPort,
+    ClipboardChangeOriginPort, ClipboardRepresentationNormalizerPort, RepresentationCachePort,
+    SpoolQueuePort, SystemClipboardPort, ThumbnailGeneratorPort, ThumbnailRepositoryPort,
 };
 use uc_core::ports::*;
 
@@ -30,6 +30,7 @@ use uc_core::ports::*;
 pub struct AppDeps {
     // Clipboard dependencies / 剪贴板依赖
     pub clipboard: Arc<dyn PlatformClipboardPort>,
+    pub system_clipboard: Arc<dyn SystemClipboardPort>,
     pub clipboard_entry_repo: Arc<dyn ClipboardEntryRepositoryPort>,
     pub clipboard_event_repo: Arc<dyn ClipboardEventWriterPort>,
     pub representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
@@ -38,6 +39,7 @@ pub struct AppDeps {
     pub representation_policy: Arc<dyn SelectRepresentationPolicyPort>,
     pub representation_cache: Arc<dyn RepresentationCachePort>,
     pub spool_queue: Arc<dyn SpoolQueuePort>,
+    pub clipboard_change_origin: Arc<dyn ClipboardChangeOriginPort>,
     pub worker_tx: mpsc::Sender<RepresentationId>,
 
     // Security dependencies / 安全依赖

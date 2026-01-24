@@ -323,7 +323,7 @@ export async function syncClipboardItems(): Promise<boolean> {
  */
 export async function copyClipboardItem(id: string): Promise<boolean> {
   try {
-    return await invoke('copy_clipboard_item', { id })
+    return await invoke('restore_clipboard_entry', { entryId: id })
   } catch (error) {
     console.error('复制剪贴板记录失败:', error)
     throw error

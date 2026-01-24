@@ -46,13 +46,15 @@ use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ids::RepresentationId;
 use uc_core::ports::clipboard::{
-    ClipboardRepresentationNormalizerPort, RepresentationCachePort, SpoolQueuePort, SpoolRequest,
+    ClipboardChangeOriginPort, ClipboardRepresentationNormalizerPort, RepresentationCachePort,
+    SpoolQueuePort, SpoolRequest,
 };
 use uc_core::ports::*;
 use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::{
-    BackgroundBlobWorker, ClipboardRepresentationNormalizer, InfraThumbnailGenerator,
-    MpscSpoolQueue, RepresentationCache, SpoolJanitor, SpoolManager, SpoolScanner, SpoolerTask,
+    BackgroundBlobWorker, ClipboardRepresentationNormalizer, InMemoryClipboardChangeOrigin,
+    InfraThumbnailGenerator, MpscSpoolQueue, RepresentationCache, SpoolJanitor, SpoolManager,
+    SpoolScanner, SpoolerTask,
 };
 use uc_infra::config::ClipboardStorageConfig;
 use uc_infra::db::executor::DieselSqliteExecutor;
@@ -225,6 +227,7 @@ struct InfraLayer {
 struct PlatformLayer {
     // System clipboard / 系统剪贴板
     clipboard: Arc<dyn PlatformClipboardPort>,
+    system_clipboard: Arc<dyn SystemClipboardPort>,
 
     // Keyring for secure storage / 密钥环用于安全存储
     keyring: Arc<dyn KeyringPort>,
@@ -448,9 +451,11 @@ fn create_platform_layer(
 ) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
-    let clipboard = LocalClipboard::new()
+    let clipboard_impl = LocalClipboard::new()
         .map_err(|e| WiringError::ClipboardInit(format!("Failed to create clipboard: {}", e)))?;
-    let clipboard: Arc<dyn PlatformClipboardPort> = Arc::new(clipboard);
+    let clipboard_impl = Arc::new(clipboard_impl);
+    let clipboard: Arc<dyn PlatformClipboardPort> = clipboard_impl.clone();
+    let system_clipboard: Arc<dyn SystemClipboardPort> = clipboard_impl;
 
     // Create device identity (filesystem-backed UUID)
     // 创建设备身份（基于文件系统的 UUID）
@@ -505,6 +510,7 @@ fn create_platform_layer(
 
     Ok(PlatformLayer {
         clipboard,
+        system_clipboard,
         keyring,
         ui,
         autostart,
@@ -767,11 +773,15 @@ pub fn wire_dependencies(
     let spool_queue: Arc<dyn SpoolQueuePort> = Arc::new(MpscSpoolQueue::new(spool_tx));
     let (worker_tx, worker_rx) = mpsc::channel::<RepresentationId>(100);
 
+    let clipboard_change_origin: Arc<dyn ClipboardChangeOriginPort> =
+        Arc::new(InMemoryClipboardChangeOrigin::new());
+
     // Step 4: Construct AppDeps with all dependencies
     // 步骤 4：使用所有依赖构造 AppDeps
     let deps = AppDeps {
         // Clipboard dependencies / 剪贴板依赖
         clipboard: platform.clipboard,
+        system_clipboard: platform.system_clipboard,
         clipboard_entry_repo: infra.clipboard_entry_repo,
         clipboard_event_repo: encrypting_event_writer,
         representation_repo: decrypting_rep_repo,
@@ -780,6 +790,7 @@ pub fn wire_dependencies(
         representation_policy: Arc::new(SelectRepresentationPolicyV1::new()),
         representation_cache: representation_cache_port,
         spool_queue,
+        clipboard_change_origin,
         worker_tx,
 
         // Security dependencies / 安全依赖
@@ -1008,6 +1019,7 @@ mod tests {
                 let _ = &deps.keyring;
                 let _ = &deps.key_material;
                 let _ = &deps.watcher_control;
+                let _ = &deps.clipboard_change_origin;
                 let _ = &deps.device_repo;
                 let _ = &&deps.device_identity;
                 let _ = &deps.network;

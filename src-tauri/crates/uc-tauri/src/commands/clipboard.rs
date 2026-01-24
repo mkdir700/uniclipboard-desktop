@@ -7,9 +7,11 @@ use crate::models::{
     ClipboardEntryResource,
 };
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::State;
 use tracing::{info_span, Instrument};
 use uc_core::security::state::EncryptionState;
+use uc_core::{ids::EntryId, ClipboardChangeOrigin};
 
 /// Get clipboard history entries (preview only)
 /// 获取剪贴板历史条目（仅预览）
@@ -180,7 +182,7 @@ pub async fn get_clipboard_entry_detail(
             content_type: result.mime_type.unwrap_or_else(|| "unknown".to_string()),
             is_favorited: false,
             updated_at: result.created_at_ms,
-            active_time: result.created_at_ms,
+            active_time: result.active_time_ms,
         };
 
         tracing::info!(entry_id = %entry_id, "Retrieved clipboard entry detail");
@@ -223,6 +225,71 @@ pub async fn get_clipboard_entry_resource(
 
         tracing::info!(entry_id = %entry_id, "Retrieved clipboard entry resource");
         Ok(resource)
+    }
+    .instrument(span)
+    .await
+}
+
+/// Restore clipboard entry to system clipboard.
+/// 将历史剪贴板条目恢复到系统剪贴板。
+#[tauri::command]
+pub async fn restore_clipboard_entry(
+    runtime: State<'_, Arc<AppRuntime>>,
+    entry_id: String,
+) -> Result<bool, String> {
+    let span = info_span!(
+        "command.clipboard.restore_entry",
+        entry_id = %entry_id,
+    );
+
+    async move {
+        let parsed_id = EntryId::from(entry_id.clone());
+
+        let restore_uc = runtime.usecases().restore_clipboard_selection();
+        let snapshot = restore_uc.build_snapshot(&parsed_id).await.map_err(|e| {
+            tracing::error!(error = %e, entry_id = %entry_id, "Failed to build restore snapshot");
+            e.to_string()
+        })?;
+
+        runtime
+            .deps
+            .clipboard_change_origin
+            .set_next_origin(ClipboardChangeOrigin::LocalRestore, Duration::from_secs(2))
+            .await;
+
+        if let Err(err) = runtime.deps.system_clipboard.write_snapshot(snapshot) {
+            tracing::error!(error = %err, entry_id = %entry_id, "Failed to write restore snapshot");
+            return Err(err.to_string());
+        }
+
+        let touch_uc = runtime.usecases().touch_clipboard_entry();
+        let touched = touch_uc.execute(&parsed_id).await.map_err(|e| {
+            tracing::error!(error = %e, entry_id = %entry_id, "Failed to update entry active time");
+            e.to_string()
+        })?;
+
+        if !touched {
+            tracing::warn!(entry_id = %entry_id, "Entry not found when touching active time");
+            return Err("Entry not found".to_string());
+        }
+
+        // TODO(sync): emit restore-originated event to remote peers when sync is implemented.
+
+        if let Some(app) = runtime.app_handle().as_ref() {
+            if let Err(err) = crate::events::forward_clipboard_event(
+                app,
+                crate::events::ClipboardEvent::NewContent {
+                    entry_id: entry_id.clone(),
+                    preview: "Clipboard restored".to_string(),
+                },
+            ) {
+                tracing::warn!(error = %err, entry_id = %entry_id, "Failed to emit restore event");
+            }
+        } else {
+            tracing::debug!("AppHandle not available, skipping restore event emission");
+        }
+
+        Ok(true)
     }
     .instrument(span)
     .await

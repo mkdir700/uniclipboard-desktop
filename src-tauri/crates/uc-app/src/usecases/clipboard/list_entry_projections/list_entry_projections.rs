@@ -102,6 +102,7 @@ impl ListClipboardEntryProjections {
             let entry_id_str = entry.entry_id.inner().clone();
             let event_id_str = entry.event_id.inner().clone();
             let captured_at = entry.created_at_ms;
+            let active_time = entry.active_time_ms;
 
             // Get selection for this entry
             let selection = self
@@ -190,7 +191,7 @@ impl ListClipboardEntryProjections {
                 is_encrypted: false, // TODO: implement later
                 is_favorited: false, // TODO: implement later
                 updated_at: captured_at,
-                active_time: captured_at,
+                active_time,
             });
         }
 

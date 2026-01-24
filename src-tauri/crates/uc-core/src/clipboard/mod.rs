@@ -1,4 +1,5 @@
 //! Clipboard domain models.
+mod change;
 mod decision;
 mod entry;
 mod event;
@@ -13,6 +14,7 @@ mod system;
 mod thumbnail;
 mod timestamp;
 
+pub use change::*;
 pub use entry::*;
 pub use event::*;
 pub use policy::ClipboardSelection;

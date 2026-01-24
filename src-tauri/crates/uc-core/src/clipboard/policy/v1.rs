@@ -181,3 +181,69 @@ enum RepKind {
     Uri,
     Unknown,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::clipboard::MimeType;
+    use crate::ids::{FormatId, RepresentationId};
+
+    fn rep(
+        id: &str,
+        format_id: &str,
+        mime: Option<MimeType>,
+        bytes: &[u8],
+    ) -> ObservedClipboardRepresentation {
+        ObservedClipboardRepresentation {
+            id: RepresentationId::from(id),
+            format_id: FormatId::from(format_id),
+            mime,
+            bytes: bytes.to_vec(),
+        }
+    }
+
+    #[test]
+    fn select_prefers_plain_text_for_preview_over_rich_text() {
+        let policy = SelectRepresentationPolicyV1::new();
+        let snapshot = SystemClipboardSnapshot {
+            ts_ms: 0,
+            representations: vec![
+                rep("rep-plain", "text", Some(MimeType::text_plain()), b"plain"),
+                rep(
+                    "rep-rich",
+                    "html",
+                    Some(MimeType::text_html()),
+                    b"<b>rich</b>",
+                ),
+            ],
+        };
+
+        let selection = policy.select(&snapshot).unwrap();
+
+        assert_eq!(
+            selection.preview_rep_id,
+            RepresentationId::from("rep-plain")
+        );
+    }
+
+    #[test]
+    fn select_prefers_rich_text_for_paste_over_plain_text() {
+        let policy = SelectRepresentationPolicyV1::new();
+        let snapshot = SystemClipboardSnapshot {
+            ts_ms: 0,
+            representations: vec![
+                rep("rep-plain", "text", Some(MimeType::text_plain()), b"plain"),
+                rep(
+                    "rep-rich",
+                    "html",
+                    Some(MimeType::text_html()),
+                    b"<b>rich</b>",
+                ),
+            ],
+        };
+
+        let selection = policy.select(&snapshot).unwrap();
+
+        assert_eq!(selection.paste_rep_id, RepresentationId::from("rep-rich"));
+    }
+}

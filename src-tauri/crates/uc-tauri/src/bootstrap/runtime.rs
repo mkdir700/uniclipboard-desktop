@@ -33,7 +33,7 @@ use tauri::Emitter;
 use uc_app::{App, AppDeps};
 use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
-use uc_core::SystemClipboardSnapshot;
+use uc_core::{ClipboardChangeOrigin, SystemClipboardSnapshot};
 
 use crate::events::ClipboardEvent;
 
@@ -472,6 +472,33 @@ impl<'a> UseCases<'a> {
         )
     }
 
+    /// Restore clipboard selection to system clipboard.
+    ///
+    /// 将历史剪贴板条目恢复到系统剪贴板。
+    pub fn restore_clipboard_selection(
+        &self,
+    ) -> uc_app::usecases::clipboard::restore_clipboard_selection::RestoreClipboardSelectionUseCase
+    {
+        uc_app::usecases::clipboard::restore_clipboard_selection::RestoreClipboardSelectionUseCase::new(
+            self.runtime.deps.clipboard_entry_repo.clone(),
+            self.runtime.deps.system_clipboard.clone(),
+            self.runtime.deps.selection_repo.clone(),
+            self.runtime.deps.representation_repo.clone(),
+            self.runtime.deps.blob_store.clone(),
+        )
+    }
+
+    /// Touch clipboard entry active time.
+    ///
+    /// 更新剪贴板条目活跃时间。
+    pub fn touch_clipboard_entry(
+        &self,
+    ) -> uc_app::usecases::clipboard::touch_clipboard_entry::TouchClipboardEntryUseCase {
+        uc_app::usecases::clipboard::touch_clipboard_entry::TouchClipboardEntryUseCase::new(
+            self.runtime.deps.clipboard_entry_repo.clone(),
+        )
+    }
+
     // NOTE: Other use case methods will be added as the use case design evolves
     // to support trait object instantiation. Currently, use cases with generic
     // type parameters cannot be instantiated through this accessor.
@@ -576,6 +603,12 @@ pub fn create_app(deps: AppDeps) -> App {
 #[async_trait::async_trait]
 impl ClipboardChangeHandler for AppRuntime {
     async fn on_clipboard_changed(&self, snapshot: SystemClipboardSnapshot) -> anyhow::Result<()> {
+        let origin = self
+            .deps
+            .clipboard_change_origin
+            .consume_origin_or_default(ClipboardChangeOrigin::LocalCapture)
+            .await;
+
         // Create CaptureClipboardUseCase with dependencies
         let usecase = uc_app::usecases::internal::capture_clipboard::CaptureClipboardUseCase::new(
             self.deps.clipboard_entry_repo.clone(),
@@ -588,7 +621,7 @@ impl ClipboardChangeHandler for AppRuntime {
         );
 
         // Execute capture with the provided snapshot
-        match usecase.execute(snapshot).await {
+        match usecase.execute_with_origin(snapshot, origin).await {
             Ok(event_id) => {
                 tracing::debug!("Successfully captured clipboard, event_id: {}", event_id);
 
@@ -622,5 +655,689 @@ impl ClipboardChangeHandler for AppRuntime {
                 Err(e)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+    use uc_core::clipboard::PolicyError;
+    use uc_core::ports::clipboard::{RepresentationCachePort, SpoolQueuePort, SpoolRequest};
+    use uc_core::ports::security::encryption_state::EncryptionStatePort;
+    use uc_core::ports::security::key_scope::KeyScopePort;
+    use uc_core::ports::*;
+    use uc_core::security::model::{
+        EncryptedBlob, EncryptionAlgo, EncryptionError, KdfParams, Kek, KeyScope, KeySlot,
+        MasterKey, Passphrase,
+    };
+    use uc_core::security::state::{EncryptionState, EncryptionStateError};
+    use uc_core::{Blob, BlobId, ClipboardChangeOrigin, ContentHash, DeviceId};
+    use uc_infra::clipboard::InMemoryClipboardChangeOrigin;
+
+    struct MockEntryRepository {
+        save_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockEventWriter {
+        insert_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockRepresentationPolicy {
+        select_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockNormalizer {
+        normalize_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockRepresentationCache {
+        put_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockSpoolQueue {
+        enqueue_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockDeviceIdentity;
+
+    struct NoopClipboard;
+    struct NoopPort;
+
+    #[async_trait]
+    impl ClipboardEntryRepositoryPort for MockEntryRepository {
+        async fn save_entry_and_selection(
+            &self,
+            _entry: &uc_core::ClipboardEntry,
+            _selection: &uc_core::ClipboardSelectionDecision,
+        ) -> anyhow::Result<()> {
+            self.save_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn get_entry(
+            &self,
+            _entry_id: &uc_core::ids::EntryId,
+        ) -> anyhow::Result<Option<uc_core::ClipboardEntry>> {
+            Ok(None)
+        }
+
+        async fn list_entries(
+            &self,
+            _limit: usize,
+            _offset: usize,
+        ) -> anyhow::Result<Vec<uc_core::ClipboardEntry>> {
+            Ok(vec![])
+        }
+
+        async fn delete_entry(&self, _entry_id: &uc_core::ids::EntryId) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl ClipboardEventWriterPort for MockEventWriter {
+        async fn insert_event(
+            &self,
+            _event: &uc_core::ClipboardEvent,
+            _representations: &Vec<uc_core::PersistedClipboardRepresentation>,
+        ) -> anyhow::Result<()> {
+            self.insert_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn delete_event_and_representations(
+            &self,
+            _event_id: &uc_core::ids::EventId,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SelectRepresentationPolicyPort for MockRepresentationPolicy {
+        fn select(
+            &self,
+            _snapshot: &SystemClipboardSnapshot,
+        ) -> std::result::Result<uc_core::clipboard::ClipboardSelection, PolicyError> {
+            self.select_calls.fetch_add(1, Ordering::SeqCst);
+            Err(PolicyError::NoUsableRepresentation)
+        }
+    }
+
+    #[async_trait]
+    impl ClipboardRepresentationNormalizerPort for MockNormalizer {
+        async fn normalize(
+            &self,
+            _observed: &uc_core::clipboard::ObservedClipboardRepresentation,
+        ) -> anyhow::Result<uc_core::PersistedClipboardRepresentation> {
+            self.normalize_calls.fetch_add(1, Ordering::SeqCst);
+            Err(anyhow::anyhow!("normalize should not be called"))
+        }
+    }
+
+    impl DeviceIdentityPort for MockDeviceIdentity {
+        fn current_device_id(&self) -> DeviceId {
+            DeviceId::new("device-test")
+        }
+    }
+
+    #[async_trait]
+    impl RepresentationCachePort for MockRepresentationCache {
+        async fn put(&self, _rep_id: &uc_core::ids::RepresentationId, _bytes: Vec<u8>) {
+            self.put_calls.fetch_add(1, Ordering::SeqCst);
+        }
+
+        async fn get(&self, _rep_id: &uc_core::ids::RepresentationId) -> Option<Vec<u8>> {
+            None
+        }
+
+        async fn mark_completed(&self, _rep_id: &uc_core::ids::RepresentationId) {}
+
+        async fn mark_spooling(&self, _rep_id: &uc_core::ids::RepresentationId) {}
+
+        async fn remove(&self, _rep_id: &uc_core::ids::RepresentationId) {}
+    }
+
+    #[async_trait]
+    impl SpoolQueuePort for MockSpoolQueue {
+        async fn enqueue(&self, _request: SpoolRequest) -> anyhow::Result<()> {
+            self.enqueue_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    impl SystemClipboardPort for NoopClipboard {
+        fn read_snapshot(&self) -> anyhow::Result<SystemClipboardSnapshot> {
+            Ok(SystemClipboardSnapshot {
+                ts_ms: 0,
+                representations: vec![],
+            })
+        }
+
+        fn write_snapshot(&self, _snapshot: SystemClipboardSnapshot) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl ClipboardSelectionRepositoryPort for NoopPort {
+        async fn get_selection(
+            &self,
+            _entry_id: &uc_core::ids::EntryId,
+        ) -> anyhow::Result<Option<uc_core::ClipboardSelectionDecision>> {
+            Ok(None)
+        }
+
+        async fn delete_selection(&self, _entry_id: &uc_core::ids::EntryId) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl ClipboardRepresentationRepositoryPort for NoopPort {
+        async fn get_representation(
+            &self,
+            _event_id: &uc_core::ids::EventId,
+            _representation_id: &uc_core::ids::RepresentationId,
+        ) -> anyhow::Result<Option<uc_core::PersistedClipboardRepresentation>> {
+            Ok(None)
+        }
+
+        async fn get_representation_by_id(
+            &self,
+            _representation_id: &uc_core::ids::RepresentationId,
+        ) -> anyhow::Result<Option<uc_core::PersistedClipboardRepresentation>> {
+            Ok(None)
+        }
+
+        async fn get_representation_by_blob_id(
+            &self,
+            _blob_id: &BlobId,
+        ) -> anyhow::Result<Option<uc_core::PersistedClipboardRepresentation>> {
+            Ok(None)
+        }
+
+        async fn update_blob_id(
+            &self,
+            _representation_id: &uc_core::ids::RepresentationId,
+            _blob_id: &BlobId,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn update_blob_id_if_none(
+            &self,
+            _representation_id: &uc_core::ids::RepresentationId,
+            _blob_id: &BlobId,
+        ) -> anyhow::Result<bool> {
+            Ok(false)
+        }
+
+        async fn update_processing_result(
+            &self,
+            _rep_id: &uc_core::ids::RepresentationId,
+            _expected_states: &[uc_core::clipboard::PayloadAvailability],
+            _blob_id: Option<&BlobId>,
+            _new_state: uc_core::clipboard::PayloadAvailability,
+            _last_error: Option<&str>,
+        ) -> anyhow::Result<uc_core::ports::clipboard::ProcessingUpdateOutcome> {
+            Ok(uc_core::ports::clipboard::ProcessingUpdateOutcome::NotFound)
+        }
+    }
+
+    #[async_trait]
+    impl EncryptionPort for NoopPort {
+        async fn derive_kek(
+            &self,
+            _passphrase: &Passphrase,
+            _salt: &[u8],
+            _kdf: &KdfParams,
+        ) -> Result<Kek, EncryptionError> {
+            Err(EncryptionError::NotInitialized)
+        }
+
+        async fn wrap_master_key(
+            &self,
+            _kek: &Kek,
+            _master_key: &MasterKey,
+            _aead: EncryptionAlgo,
+        ) -> Result<EncryptedBlob, EncryptionError> {
+            Err(EncryptionError::NotInitialized)
+        }
+
+        async fn unwrap_master_key(
+            &self,
+            _kek: &Kek,
+            _wrapped: &EncryptedBlob,
+        ) -> Result<MasterKey, EncryptionError> {
+            Err(EncryptionError::NotInitialized)
+        }
+
+        async fn encrypt_blob(
+            &self,
+            _master_key: &MasterKey,
+            _plaintext: &[u8],
+            _aad: &[u8],
+            _aead: EncryptionAlgo,
+        ) -> Result<EncryptedBlob, EncryptionError> {
+            Err(EncryptionError::NotInitialized)
+        }
+
+        async fn decrypt_blob(
+            &self,
+            _master_key: &MasterKey,
+            _encrypted: &EncryptedBlob,
+            _aad: &[u8],
+        ) -> Result<Vec<u8>, EncryptionError> {
+            Err(EncryptionError::NotInitialized)
+        }
+    }
+
+    #[async_trait]
+    impl EncryptionSessionPort for NoopPort {
+        async fn is_ready(&self) -> bool {
+            false
+        }
+
+        async fn get_master_key(&self) -> Result<MasterKey, EncryptionError> {
+            Err(EncryptionError::NotInitialized)
+        }
+
+        async fn set_master_key(&self, _master_key: MasterKey) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+
+        async fn clear(&self) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl EncryptionStatePort for NoopPort {
+        async fn load_state(&self) -> Result<EncryptionState, EncryptionStateError> {
+            Err(EncryptionStateError::LoadError("noop".to_string()))
+        }
+
+        async fn persist_initialized(&self) -> Result<(), EncryptionStateError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl KeyScopePort for NoopPort {
+        async fn current_scope(
+            &self,
+        ) -> Result<KeyScope, uc_core::ports::security::key_scope::ScopeError> {
+            Err(uc_core::ports::security::key_scope::ScopeError::FailedToGetCurrentScope)
+        }
+    }
+
+    #[async_trait]
+    impl KeyringPort for NoopPort {
+        fn load_kek(&self, _scope: &KeyScope) -> Result<Kek, EncryptionError> {
+            Err(EncryptionError::KeyNotFound)
+        }
+
+        fn store_kek(&self, _scope: &KeyScope, _kek: &Kek) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+
+        fn delete_kek(&self, _scope: &KeyScope) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl KeyMaterialPort for NoopPort {
+        async fn load_kek(&self, _scope: &KeyScope) -> Result<Kek, EncryptionError> {
+            Err(EncryptionError::KeyNotFound)
+        }
+
+        async fn store_kek(&self, _scope: &KeyScope, _kek: &Kek) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+
+        async fn delete_kek(&self, _scope: &KeyScope) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+
+        async fn load_keyslot(&self, _scope: &KeyScope) -> Result<KeySlot, EncryptionError> {
+            Err(EncryptionError::KeyNotFound)
+        }
+
+        async fn store_keyslot(&self, _keyslot: &KeySlot) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+
+        async fn delete_keyslot(&self, _scope: &KeyScope) -> Result<(), EncryptionError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl WatcherControlPort for NoopPort {
+        async fn start_watcher(&self) -> Result<(), WatcherControlError> {
+            Ok(())
+        }
+
+        async fn stop_watcher(&self) -> Result<(), WatcherControlError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl DeviceRepositoryPort for NoopPort {
+        async fn find_by_id(
+            &self,
+            _id: &uc_core::device::DeviceId,
+        ) -> Result<Option<uc_core::device::Device>, uc_core::ports::errors::DeviceRepositoryError>
+        {
+            Ok(None)
+        }
+
+        async fn save(
+            &self,
+            _device: uc_core::device::Device,
+        ) -> Result<(), uc_core::ports::errors::DeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn delete(
+            &self,
+            _id: &uc_core::device::DeviceId,
+        ) -> Result<(), uc_core::ports::errors::DeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn list_all(
+            &self,
+        ) -> Result<Vec<uc_core::device::Device>, uc_core::ports::errors::DeviceRepositoryError>
+        {
+            Ok(vec![])
+        }
+    }
+
+    #[async_trait]
+    impl NetworkPort for NoopPort {
+        async fn send_clipboard(
+            &self,
+            _peer_id: &str,
+            _encrypted_data: Vec<u8>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn broadcast_clipboard(&self, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_clipboard(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<uc_core::network::ClipboardMessage>>
+        {
+            let (_tx, rx) = mpsc::channel(1);
+            Ok(rx)
+        }
+
+        async fn get_discovered_peers(
+            &self,
+        ) -> anyhow::Result<Vec<uc_core::network::DiscoveredPeer>> {
+            Ok(vec![])
+        }
+
+        async fn get_connected_peers(
+            &self,
+        ) -> anyhow::Result<Vec<uc_core::network::ConnectedPeer>> {
+            Ok(vec![])
+        }
+
+        fn local_peer_id(&self) -> String {
+            "noop".to_string()
+        }
+
+        async fn initiate_pairing(
+            &self,
+            _peer_id: String,
+            _device_name: String,
+        ) -> anyhow::Result<String> {
+            Ok("session".to_string())
+        }
+
+        async fn send_pin_response(
+            &self,
+            _session_id: String,
+            _pin_match: bool,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_rejection(
+            &self,
+            _session_id: String,
+            _peer_id: String,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn accept_pairing(&self, _session_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn unpair_device(&self, _peer_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_events(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<uc_core::network::NetworkEvent>> {
+            let (_tx, rx) = mpsc::channel(1);
+            Ok(rx)
+        }
+    }
+
+    #[async_trait]
+    impl OnboardingStatePort for NoopPort {
+        async fn get_state(&self) -> anyhow::Result<uc_core::onboarding::OnboardingState> {
+            Ok(uc_core::onboarding::OnboardingState::default())
+        }
+
+        async fn set_state(
+            &self,
+            _state: &uc_core::onboarding::OnboardingState,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn reset(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl BlobStorePort for NoopPort {
+        async fn put(&self, _blob_id: &BlobId, _data: &[u8]) -> anyhow::Result<std::path::PathBuf> {
+            Ok(std::path::PathBuf::from("/tmp/noop"))
+        }
+
+        async fn get(&self, _blob_id: &BlobId) -> anyhow::Result<Vec<u8>> {
+            Ok(vec![])
+        }
+    }
+
+    #[async_trait]
+    impl BlobRepositoryPort for NoopPort {
+        async fn insert_blob(&self, _blob: &Blob) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn find_by_hash(&self, _content_hash: &ContentHash) -> anyhow::Result<Option<Blob>> {
+            Ok(None)
+        }
+    }
+
+    #[async_trait]
+    impl BlobWriterPort for NoopPort {
+        async fn write_if_absent(
+            &self,
+            _content_id: &ContentHash,
+            _plaintext_bytes: &[u8],
+        ) -> anyhow::Result<Blob> {
+            Err(anyhow::anyhow!("noop blob writer"))
+        }
+    }
+
+    #[async_trait]
+    impl ThumbnailRepositoryPort for NoopPort {
+        async fn get_by_representation_id(
+            &self,
+            _representation_id: &uc_core::ids::RepresentationId,
+        ) -> anyhow::Result<Option<uc_core::clipboard::ThumbnailMetadata>> {
+            Ok(None)
+        }
+
+        async fn insert_thumbnail(
+            &self,
+            _metadata: &uc_core::clipboard::ThumbnailMetadata,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl ThumbnailGeneratorPort for NoopPort {
+        async fn generate_thumbnail(
+            &self,
+            _image_bytes: &[u8],
+        ) -> anyhow::Result<uc_core::ports::clipboard::GeneratedThumbnail> {
+            Err(anyhow::anyhow!("noop thumbnail generator"))
+        }
+    }
+
+    #[async_trait]
+    impl SettingsPort for NoopPort {
+        async fn load(&self) -> anyhow::Result<uc_core::settings::model::Settings> {
+            Err(anyhow::anyhow!("noop settings"))
+        }
+
+        async fn save(&self, _settings: &uc_core::settings::model::Settings) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl UiPort for NoopPort {
+        async fn open_settings(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl AutostartPort for NoopPort {
+        fn is_enabled(&self) -> anyhow::Result<bool> {
+            Ok(false)
+        }
+
+        fn enable(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        fn disable(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl ClockPort for NoopPort {
+        fn now_ms(&self) -> i64 {
+            0
+        }
+    }
+
+    impl ContentHashPort for NoopPort {
+        fn hash_bytes(&self, _bytes: &[u8]) -> anyhow::Result<ContentHash> {
+            Err(anyhow::anyhow!("noop hash"))
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_consumes_origin() {
+        let save_calls = Arc::new(AtomicUsize::new(0));
+        let insert_calls = Arc::new(AtomicUsize::new(0));
+        let select_calls = Arc::new(AtomicUsize::new(0));
+        let normalize_calls = Arc::new(AtomicUsize::new(0));
+        let cache_put_calls = Arc::new(AtomicUsize::new(0));
+        let enqueue_calls = Arc::new(AtomicUsize::new(0));
+
+        let origin_port = Arc::new(InMemoryClipboardChangeOrigin::new());
+        origin_port
+            .set_next_origin(ClipboardChangeOrigin::LocalRestore, Duration::from_secs(1))
+            .await;
+
+        let (worker_tx, _worker_rx) = mpsc::channel(1);
+
+        let deps = AppDeps {
+            clipboard: Arc::new(NoopClipboard),
+            system_clipboard: Arc::new(NoopClipboard),
+            clipboard_entry_repo: Arc::new(MockEntryRepository {
+                save_calls: save_calls.clone(),
+            }),
+            clipboard_event_repo: Arc::new(MockEventWriter {
+                insert_calls: insert_calls.clone(),
+            }),
+            representation_repo: Arc::new(NoopPort),
+            representation_normalizer: Arc::new(MockNormalizer {
+                normalize_calls: normalize_calls.clone(),
+            }),
+            selection_repo: Arc::new(NoopPort),
+            representation_policy: Arc::new(MockRepresentationPolicy {
+                select_calls: select_calls.clone(),
+            }),
+            representation_cache: Arc::new(MockRepresentationCache {
+                put_calls: cache_put_calls.clone(),
+            }),
+            spool_queue: Arc::new(MockSpoolQueue {
+                enqueue_calls: enqueue_calls.clone(),
+            }),
+            worker_tx,
+            encryption: Arc::new(NoopPort),
+            encryption_session: Arc::new(NoopPort),
+            encryption_state: Arc::new(NoopPort),
+            key_scope: Arc::new(NoopPort),
+            keyring: Arc::new(NoopPort),
+            key_material: Arc::new(NoopPort),
+            watcher_control: Arc::new(NoopPort),
+            device_repo: Arc::new(NoopPort),
+            device_identity: Arc::new(MockDeviceIdentity),
+            network: Arc::new(NoopPort),
+            onboarding_state: Arc::new(NoopPort),
+            blob_store: Arc::new(NoopPort),
+            blob_repository: Arc::new(NoopPort),
+            blob_writer: Arc::new(NoopPort),
+            thumbnail_repo: Arc::new(NoopPort),
+            thumbnail_generator: Arc::new(NoopPort),
+            settings: Arc::new(NoopPort),
+            ui_port: Arc::new(NoopPort),
+            autostart: Arc::new(NoopPort),
+            clock: Arc::new(NoopPort),
+            hash: Arc::new(NoopPort),
+            clipboard_change_origin: origin_port,
+        };
+
+        let runtime = AppRuntime::new(deps);
+        let snapshot = SystemClipboardSnapshot {
+            ts_ms: 0,
+            representations: vec![],
+        };
+
+        let result = runtime.on_clipboard_changed(snapshot).await;
+        assert!(result.is_ok());
+        assert_eq!(save_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(insert_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(select_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(normalize_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(cache_put_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(enqueue_calls.load(Ordering::SeqCst), 0);
     }
 }
