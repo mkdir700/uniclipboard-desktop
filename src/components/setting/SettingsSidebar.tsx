@@ -1,9 +1,20 @@
-import { Settings, Palette, RefreshCw, Shield, Wifi, HardDrive, Info } from 'lucide-react'
+import {
+  Settings,
+  Palette,
+  RefreshCw,
+  Shield,
+  Wifi,
+  HardDrive,
+  Info,
+  ArrowLeft,
+} from 'lucide-react'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
@@ -17,6 +28,15 @@ interface SettingsSidebarProps {
 
 const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeCategory, onCategoryChange }) => {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+
+  const handleBack = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1)
+    } else {
+      navigate('/')
+    }
+  }
 
   const settingsNavItems = [
     {
@@ -69,6 +89,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeCategory, onCat
                 return (
                   <SidebarMenuItem key={item.id}>
                     <button
+                      type="button"
                       onClick={() => onCategoryChange(item.id)}
                       className={`flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 ${
                         isActive
@@ -86,6 +107,24 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeCategory, onCat
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>{t('nav.back')}</span>
+                </button>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarFooter>
     </Sidebar>
   )
 }
