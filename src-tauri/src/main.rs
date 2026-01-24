@@ -598,11 +598,13 @@ fn run_app(config: AppConfig) {
                     // Non-fatal: continue startup even if device name initialization fails
                 }
 
-                // 1. Check if encryption initialized and auto-unlock
+                // 1. Check if encryption initialized and keyring unlock
+                info!("[Startup] Starting keyring unlock for encryption session");
                 let uc = runtime.usecases().auto_unlock_encryption_session();
                 let should_start_watcher = match uc.execute().await {
                     Ok(true) => {
-                        info!("Encryption session auto-unlocked successfully");
+                        info!("[Startup] Keyring unlock completed: session ready");
+                        info!("Encryption session unlocked via keyring");
 
                         // Emit event to notify frontend that encryption session is ready
                         let app_handle_guard = runtime.app_handle();
@@ -621,12 +623,14 @@ fn run_app(config: AppConfig) {
                         true
                     }
                     Ok(false) => {
+                        info!("[Startup] Keyring unlock skipped: encryption not initialized");
                         info!("Encryption not initialized, clipboard watcher will not start");
                         info!("User must set encryption password via onboarding");
                         false
                     }
                     Err(e) => {
-                        error!("Auto-unlock failed: {:?}", e);
+                        error!("[Startup] Keyring unlock failed: {}", e);
+                        error!("Keyring unlock failed: {:?}", e);
                         // Emit error event to frontend for user notification
                         let app_handle_guard = runtime.app_handle();
                         if let Some(app_handle) = app_handle_guard.as_ref() {
@@ -690,6 +694,7 @@ fn run_app(config: AppConfig) {
                 // Mark backend-side startup tasks completed. We intentionally do NOT close the splashscreen
                 // or show the main window here; that is driven by the frontend via `frontend_ready` to avoid
                 // showing a blank main window when `index.html` does not contain an inline splash.
+                info!("[Startup] Backend startup tasks completed, marking backend_ready");
                 startup_barrier_for_backend.mark_backend_ready();
                 startup_barrier_for_backend.try_finish(&app_handle_for_startup);
 

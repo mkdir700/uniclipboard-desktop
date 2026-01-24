@@ -86,7 +86,7 @@ impl AutoUnlockEncryptionSession {
         )
     }
 
-    /// Execute the auto-unlock flow.
+    /// Execute the keyring unlock flow.
     ///
     /// # Returns
     ///
@@ -97,7 +97,7 @@ impl AutoUnlockEncryptionSession {
         let span = info_span!("usecase.auto_unlock_encryption_session.execute");
 
         async {
-            info!("Checking encryption state for auto-unlock");
+            info!("Checking encryption state for keyring unlock");
 
             // 1. Check encryption state
             let state = self
@@ -107,11 +107,11 @@ impl AutoUnlockEncryptionSession {
                 .map_err(|e| AutoUnlockError::StateCheckFailed(e.to_string()))?;
 
             if state == EncryptionState::Uninitialized {
-                info!("Encryption not initialized, skipping auto-unlock");
+                info!("Encryption not initialized, skipping keyring unlock");
                 return Ok(false);
             }
 
-            info!("Encryption initialized, attempting auto-unlock");
+            info!("Encryption initialized, attempting keyring unlock");
 
             // 2. Get key scope
             let scope = self
@@ -152,7 +152,7 @@ impl AutoUnlockEncryptionSession {
                 .await
                 .map_err(AutoUnlockError::SessionSetFailed)?;
 
-            info!("Auto-unlock completed successfully");
+            info!("Keyring unlock completed successfully");
             Ok(true)
         }
         .instrument(span)

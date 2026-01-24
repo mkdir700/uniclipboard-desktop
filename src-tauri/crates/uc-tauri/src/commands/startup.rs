@@ -68,6 +68,18 @@ impl StartupBarrier {
             } else {
                 info!("Main window shown (startup barrier)");
             }
+
+            if let Err(e) = main_window.set_focus() {
+                warn!("Failed to focus main window: {}", e);
+            } else {
+                info!("Main window focused (startup barrier)");
+            }
+
+            if let Err(e) = main_window.unminimize() {
+                warn!("Failed to unminimize main window: {}", e);
+            } else {
+                info!("Main window unminimized (startup barrier)");
+            }
         } else {
             warn!("Main window not found (startup barrier)");
         }

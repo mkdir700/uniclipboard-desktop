@@ -47,7 +47,7 @@ pub async fn get_clipboard_entries(
         if should_return_not_ready(encryption_state, session_ready) {
             tracing::warn!(
                 "Encryption initialized but session not ready yet, returning not-ready response. \
-                 This typically happens during app startup before auto-unlock completes."
+                 This typically happens during app startup before keyring unlock completes."
             );
             return Ok(ClipboardEntriesResponse::NotReady);
         }

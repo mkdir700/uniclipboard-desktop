@@ -13,6 +13,7 @@ const notifyBackendFrontendReady = async () => {
     }
 
     const { invoke } = await import('@tauri-apps/api/core')
+    console.log('[Startup] Attempting frontend_ready handshake')
     const deadline = Date.now() + 15000
     let lastError: unknown = null
 
