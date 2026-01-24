@@ -485,6 +485,7 @@ impl<'a> UseCases<'a> {
             self.runtime.deps.selection_repo.clone(),
             self.runtime.deps.representation_repo.clone(),
             self.runtime.deps.blob_store.clone(),
+            self.runtime.deps.clipboard_change_origin.clone(),
         )
     }
 
@@ -496,6 +497,7 @@ impl<'a> UseCases<'a> {
     ) -> uc_app::usecases::clipboard::touch_clipboard_entry::TouchClipboardEntryUseCase {
         uc_app::usecases::clipboard::touch_clipboard_entry::TouchClipboardEntryUseCase::new(
             self.runtime.deps.clipboard_entry_repo.clone(),
+            self.runtime.deps.clock.clone(),
         )
     }
 

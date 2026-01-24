@@ -269,16 +269,10 @@ async fn restore_clipboard_entry_impl(
             return Err("Entry not found".to_string());
         }
 
-        runtime
-            .deps
-            .clipboard_change_origin
-            .set_next_origin(ClipboardChangeOrigin::LocalRestore, Duration::from_secs(2))
-            .await;
-
-        if let Err(err) = runtime.deps.system_clipboard.write_snapshot(snapshot) {
+        restore_uc.restore_snapshot(snapshot).await.map_err(|err| {
             tracing::error!(error = %err, entry_id = %entry_id, "Failed to write restore snapshot");
-            return Err(err.to_string());
-        }
+            err.to_string()
+        })?;
 
         // TODO(sync): emit restore-originated event to remote peers when sync is implemented.
 

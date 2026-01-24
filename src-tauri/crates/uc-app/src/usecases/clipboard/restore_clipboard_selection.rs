@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
+use std::time::Duration;
 
 use uc_core::{
     clipboard::{
@@ -7,9 +8,11 @@ use uc_core::{
     },
     ids::{EntryId, EventId, RepresentationId},
     ports::{
-        BlobStorePort, ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort,
-        ClipboardSelectionRepositoryPort, SystemClipboardPort,
+        BlobStorePort, ClipboardChangeOriginPort, ClipboardEntryRepositoryPort,
+        ClipboardRepresentationRepositoryPort, ClipboardSelectionRepositoryPort,
+        SystemClipboardPort,
     },
+    ClipboardChangeOrigin,
 };
 
 /// Reconstructs a system clipboard state from a historical clipboard entry,
@@ -20,6 +23,7 @@ pub struct RestoreClipboardSelectionUseCase {
     selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
     representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
     blob_store: Arc<dyn BlobStorePort>,
+    clipboard_change_origin: Arc<dyn ClipboardChangeOriginPort>,
 }
 
 impl RestoreClipboardSelectionUseCase {
@@ -30,7 +34,7 @@ impl RestoreClipboardSelectionUseCase {
     /// ```no_run
     /// use std::sync::Arc;
     /// use uc_app::usecases::clipboard::restore_clipboard_selection::RestoreClipboardSelectionUseCase;
-    /// use uc_core::ports::{BlobStorePort, ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort, ClipboardSelectionRepositoryPort, SystemClipboardPort};
+    /// use uc_core::ports::{BlobStorePort, ClipboardChangeOriginPort, ClipboardEntryRepositoryPort, ClipboardRepresentationRepositoryPort, ClipboardSelectionRepositoryPort, SystemClipboardPort};
     /// // All parameters must implement their respective ports
     /// // let use_case = RestoreClipboardSelectionUseCase::new(
     /// //     Arc::new(clipboard_repo),
@@ -38,6 +42,7 @@ impl RestoreClipboardSelectionUseCase {
     /// //     Arc::new(selection_repo),
     /// //     Arc::new(representation_repo),
     /// //     Arc::new(blob_store),
+    /// //     Arc::new(clipboard_change_origin),
     /// // );
     /// ```
     pub fn new(
@@ -46,6 +51,7 @@ impl RestoreClipboardSelectionUseCase {
         selection_repo: Arc<dyn ClipboardSelectionRepositoryPort>,
         representation_repo: Arc<dyn ClipboardRepresentationRepositoryPort>,
         blob_store: Arc<dyn BlobStorePort>,
+        clipboard_change_origin: Arc<dyn ClipboardChangeOriginPort>,
     ) -> Self {
         Self {
             clipboard_repo,
@@ -53,6 +59,7 @@ impl RestoreClipboardSelectionUseCase {
             selection_repo,
             representation_repo,
             blob_store,
+            clipboard_change_origin,
         }
     }
 
@@ -167,10 +174,24 @@ impl RestoreClipboardSelectionUseCase {
             || format_id.eq_ignore_ascii_case("NSStringPboardType")
     }
 
+    pub async fn restore_snapshot(&self, snapshot: SystemClipboardSnapshot) -> Result<()> {
+        self.clipboard_change_origin
+            .set_next_origin(ClipboardChangeOrigin::LocalRestore, Duration::from_secs(2))
+            .await;
+
+        if let Err(err) = self.local_clipboard.write_snapshot(snapshot) {
+            self.clipboard_change_origin
+                .consume_origin_or_default(ClipboardChangeOrigin::LocalCapture)
+                .await;
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
     pub async fn execute(&self, entry_id: &EntryId) -> Result<()> {
         let snapshot = self.build_snapshot(entry_id).await?;
-        self.local_clipboard.write_snapshot(snapshot)?;
-        Ok(())
+        self.restore_snapshot(snapshot).await
     }
 }
 
@@ -179,12 +200,16 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
     use uc_core::clipboard::{
         ClipboardEntry, ClipboardSelection, ClipboardSelectionDecision, MimeType,
         PersistedClipboardRepresentation, SelectionPolicyVersion,
     };
     use uc_core::ids::{EventId, FormatId, RepresentationId};
+    use uc_core::ports::clipboard::ClipboardChangeOriginPort;
     use uc_core::ports::clipboard::ProcessingUpdateOutcome;
+    use uc_core::ClipboardChangeOrigin;
 
     struct MockEntryRepository {
         entry: Option<ClipboardEntry>,
@@ -201,6 +226,12 @@ mod tests {
     struct MockBlobStore;
 
     struct MockSystemClipboard;
+
+    struct MockClipboardChangeOrigin {
+        calls: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    struct NoopClipboardChangeOrigin;
 
     #[async_trait]
     impl ClipboardEntryRepositoryPort for MockEntryRepository {
@@ -319,6 +350,57 @@ mod tests {
         }
     }
 
+    struct FailingSystemClipboard {
+        calls: Arc<Mutex<Vec<&'static str>>>,
+    }
+
+    impl SystemClipboardPort for FailingSystemClipboard {
+        fn read_snapshot(&self) -> Result<SystemClipboardSnapshot> {
+            Ok(SystemClipboardSnapshot {
+                ts_ms: 0,
+                representations: vec![],
+            })
+        }
+
+        fn write_snapshot(&self, _snapshot: SystemClipboardSnapshot) -> Result<()> {
+            if let Ok(mut calls) = self.calls.lock() {
+                calls.push("write_snapshot");
+            }
+            Err(anyhow::anyhow!("write failed"))
+        }
+    }
+
+    #[async_trait]
+    impl ClipboardChangeOriginPort for MockClipboardChangeOrigin {
+        async fn set_next_origin(&self, _origin: ClipboardChangeOrigin, _ttl: Duration) {
+            if let Ok(mut calls) = self.calls.lock() {
+                calls.push("set_origin");
+            }
+        }
+
+        async fn consume_origin_or_default(
+            &self,
+            default_origin: ClipboardChangeOrigin,
+        ) -> ClipboardChangeOrigin {
+            if let Ok(mut calls) = self.calls.lock() {
+                calls.push("consume_origin");
+            }
+            default_origin
+        }
+    }
+
+    #[async_trait]
+    impl ClipboardChangeOriginPort for NoopClipboardChangeOrigin {
+        async fn set_next_origin(&self, _origin: ClipboardChangeOrigin, _ttl: Duration) {}
+
+        async fn consume_origin_or_default(
+            &self,
+            default_origin: ClipboardChangeOrigin,
+        ) -> ClipboardChangeOrigin {
+            default_origin
+        }
+    }
+
     #[tokio::test]
     async fn build_snapshot_returns_only_paste_representation() {
         let entry_id = EntryId::from("entry-1");
@@ -367,6 +449,7 @@ mod tests {
                 ]),
             }),
             Arc::new(MockBlobStore),
+            Arc::new(NoopClipboardChangeOrigin),
         );
 
         let snapshot = uc.build_snapshot(&entry_id).await.unwrap();
@@ -423,11 +506,45 @@ mod tests {
                 ]),
             }),
             Arc::new(MockBlobStore),
+            Arc::new(NoopClipboardChangeOrigin),
         );
 
         let snapshot = uc.build_snapshot(&entry_id).await.unwrap();
 
         assert_eq!(snapshot.representations.len(), 1);
         assert_eq!(snapshot.representations[0].id, plain_rep_id);
+    }
+
+    #[tokio::test]
+    async fn restore_snapshot_clears_origin_on_write_error() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let uc = RestoreClipboardSelectionUseCase::new(
+            Arc::new(MockEntryRepository { entry: None }),
+            Arc::new(FailingSystemClipboard {
+                calls: calls.clone(),
+            }),
+            Arc::new(MockSelectionRepository { selection: None }),
+            Arc::new(MockRepresentationRepository {
+                reps: HashMap::new(),
+            }),
+            Arc::new(MockBlobStore),
+            Arc::new(MockClipboardChangeOrigin {
+                calls: calls.clone(),
+            }),
+        );
+
+        let snapshot = SystemClipboardSnapshot {
+            ts_ms: 0,
+            representations: vec![],
+        };
+
+        let result = uc.restore_snapshot(snapshot).await;
+
+        assert!(result.is_err());
+        let calls = calls.lock().unwrap().clone();
+        assert_eq!(
+            calls,
+            vec!["set_origin", "write_snapshot", "consume_origin"]
+        );
     }
 }
