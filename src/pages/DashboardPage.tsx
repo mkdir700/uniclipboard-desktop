@@ -245,7 +245,7 @@ const DashboardPage: React.FC = () => {
   }, [loadData])
 
   return (
-    <div className="flex flex-col h-full relative pt-10">
+    <div className="flex flex-col h-full relative">
       {/* Top search bar - Hidden in MVP */}
       <Header onFilterChange={handleFilterChange} className="hidden" />
 

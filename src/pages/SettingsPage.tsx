@@ -96,7 +96,7 @@ const SettingsPage: React.FC = () => {
       }
     >
       <SettingsSidebar activeCategory={activeCategory} onCategoryChange={handleCategoryClick} />
-      <SidebarInset className="pt-10">
+      <SidebarInset>
         <ScrollArea className="flex-1">
           <div className="flex-1 p-8">{renderActiveSection()}</div>
         </ScrollArea>

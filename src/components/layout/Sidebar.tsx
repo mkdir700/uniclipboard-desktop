@@ -42,7 +42,7 @@ const NavButton: React.FC<{
             </div>
           </Link>
         </TooltipTrigger>
-        <TooltipContent side="right" className="ml-2 font-medium">
+        <TooltipContent side="right" align="center" className="font-medium">
           <p>{label}</p>
         </TooltipContent>
       </Tooltip>
@@ -63,11 +63,7 @@ const Sidebar: React.FC = () => {
     <aside
       data-tauri-drag-region
       className={cn(
-        // Content-level sidebar - sits below titlebar in WindowShell
-        // No h-screen/sticky needed - height controlled by parent flex container
-        // No platform-specific top padding - titlebar already provides spacing
-        'w-16 h-full flex-shrink-0 flex flex-col items-center',
-        'py-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl'
+        'w-16 h-full flex flex-col items-center py-4 bg-muted/40 border-r border-border/40 backdrop-blur-xl shrink-0'
       )}
     >
       {/* Main Navigation */}
@@ -84,7 +80,7 @@ const Sidebar: React.FC = () => {
         ))}
       </div>
 
-      <div data-tauri-drag-region className="flex-1 w-full" />
+      <div data-tauri-drag-region className="flex-1 w-full min-h-0" />
 
       {/* Bottom Navigation */}
       <div className="flex flex-col gap-3 w-full items-center">
