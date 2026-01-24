@@ -436,6 +436,8 @@ fn create_infra_layer(
 /// * `encryption` - Encryption service for blob store decorator / Blob 存储加密服务
 /// * `blob_repository` - Blob repository for BlobWriter / BlobWriter 依赖的仓库
 /// * `clock` - Clock service for BlobWriter timestamps / BlobWriter 时间戳服务
+/// * `storage_config` - Clipboard storage configuration / 剪贴板存储配置
+/// * `identity_store` - Identity store for libp2p keypair persistence / libp2p 身份持久化存储
 ///
 /// # Note / 注意
 ///
@@ -453,6 +455,7 @@ fn create_platform_layer(
     blob_repository: Arc<dyn BlobRepositoryPort>,
     clock: Arc<dyn ClockPort>,
     storage_config: Arc<ClipboardStorageConfig>,
+    identity_store: Arc<dyn IdentityStorePort>,
 ) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
@@ -483,10 +486,9 @@ fn create_platform_layer(
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
-    let identity_store = SystemIdentityStore::new();
-    let libp2p_network = Arc::new(Libp2pNetworkAdapter::new(Arc::new(identity_store)).map_err(
-        |e| WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}")),
-    )?);
+    let libp2p_network = Arc::new(Libp2pNetworkAdapter::new(identity_store).map_err(|e| {
+        WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}"))
+    })?);
     info!(peer_id = %libp2p_network.local_peer_id(), "Loaded libp2p identity");
     let network: Arc<dyn NetworkPort> = libp2p_network.clone();
     let encryption_session: Arc<dyn EncryptionSessionPort> =
@@ -701,6 +703,18 @@ pub fn wire_dependencies(
     config: &AppConfig,
     platform_cmd_tx: PlatformCommandSender,
 ) -> WiringResult<WiredDependencies> {
+    let identity_store: Arc<dyn IdentityStorePort> = Arc::new(SystemIdentityStore::new());
+    wire_dependencies_with_identity_store(config, platform_cmd_tx, identity_store)
+}
+
+/// Wires dependencies with a caller-provided identity store.
+///
+/// This is primarily intended for tests or environments without a system keyring.
+pub fn wire_dependencies_with_identity_store(
+    config: &AppConfig,
+    platform_cmd_tx: PlatformCommandSender,
+    identity_store: Arc<dyn IdentityStorePort>,
+) -> WiringResult<WiredDependencies> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池
     //
@@ -741,6 +755,7 @@ pub fn wire_dependencies(
         infra.blob_repository.clone(),
         infra.clock.clone(),
         storage_config.clone(),
+        identity_store,
     )?;
 
     // Step 3.5: Wrap ports with encryption decorators
@@ -954,6 +969,7 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tokio::sync::mpsc;
 
     #[test]
@@ -1022,7 +1038,7 @@ mod tests {
         // 测试 wire_dependencies 创建有效的 AppDeps 结构
         let config = AppConfig::empty();
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result = wire_dependencies(&config, cmd_tx);
+        let result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
         match result {
             Ok(wired) => {
@@ -1142,6 +1158,34 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct MemoryIdentityStore {
+        identity: Mutex<Option<Vec<u8>>>,
+    }
+
+    impl IdentityStorePort for MemoryIdentityStore {
+        fn load_identity(&self) -> Result<Option<Vec<u8>>, IdentityStoreError> {
+            let guard = self
+                .identity
+                .lock()
+                .map_err(|_| IdentityStoreError::Store("identity store poisoned".to_string()))?;
+            Ok(guard.clone())
+        }
+
+        fn store_identity(&self, identity: &[u8]) -> Result<(), IdentityStoreError> {
+            let mut guard = self
+                .identity
+                .lock()
+                .map_err(|_| IdentityStoreError::Store("identity store poisoned".to_string()))?;
+            *guard = Some(identity.to_vec());
+            Ok(())
+        }
+    }
+
+    fn test_identity_store() -> Arc<dyn IdentityStorePort> {
+        Arc::new(MemoryIdentityStore::default())
+    }
+
     #[test]
     fn test_create_platform_layer_returns_expected_types() {
         // Test that platform layer creates the correct types
@@ -1171,6 +1215,7 @@ mod tests {
             blob_repository,
             clock,
             storage_config,
+            test_identity_store(),
         );
 
         match result {
@@ -1251,7 +1296,8 @@ The functionality is still validated in development mode when running the app wi
         // 测试 wire_dependencies 优雅地处理空的 database_path
         let empty_config = AppConfig::empty();
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result = wire_dependencies(&empty_config, cmd_tx);
+        let result =
+            wire_dependencies_with_identity_store(&empty_config, cmd_tx, test_identity_store());
 
         // Should succeed by using fallback default data directory
         // In headless CI environments, clipboard initialization may fail - accept that as expected
