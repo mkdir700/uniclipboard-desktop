@@ -85,6 +85,7 @@ use uc_platform::adapters::{
 };
 use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::clipboard::LocalClipboard;
+use uc_platform::identity_store::SystemIdentityStore;
 use uc_platform::runtime::event_bus::PlatformCommandSender;
 
 /// Result type for wiring operations
@@ -478,7 +479,12 @@ fn create_platform_layer(
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
-    let network: Arc<dyn NetworkPort> = Arc::new(PlaceholderNetworkPort);
+    let identity_store = SystemIdentityStore::new();
+    let network = PlaceholderNetworkPort::new(Arc::new(identity_store)).map_err(|e| {
+        WiringError::NetworkInit(format!("Failed to initialize network identity: {e}"))
+    })?;
+    info!(peer_id = %network.local_peer_id(), "Loaded libp2p identity");
+    let network: Arc<dyn NetworkPort> = Arc::new(network);
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
 

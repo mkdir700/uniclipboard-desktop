@@ -9245,6 +9245,7 @@ dependencies = [
  "image",
  "iota_stronghold",
  "keyring",
+ "libp2p",
  "log",
  "once_cell",
  "png 0.18.0",

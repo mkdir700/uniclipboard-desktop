@@ -59,6 +59,19 @@ keyring = { version = "3.6.3", features = [
   "windows-native",
   "linux-native-sync-persistent",
 ] }
+libp2p = { version = "0.56", features = [
+  "tokio",
+  "tcp",
+  "noise",
+  "yamux",
+  "mdns",
+  "gossipsub",
+  "request-response",
+  "identify",
+  "macros",
+  "quic",
+  "ping",
+] }
 thiserror = "2.0.17"
 iota_stronghold = "2.1"
 
