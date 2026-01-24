@@ -9,7 +9,7 @@ import { SearchProvider, useSearch } from '@/contexts/SearchContext'
 import { SettingProvider } from '@/contexts/SettingContext'
 import { ShortcutProvider } from '@/contexts/ShortcutContext'
 import { useP2P } from '@/hooks/useP2P'
-import { MainLayout, SettingsFullLayout } from '@/layouts'
+import { MainLayout, SettingsFullLayout, WindowShell } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
 import DevicesPage from '@/pages/DevicesPage'
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -117,14 +117,14 @@ const TitleBarWithSearch = () => {
   return <TitleBar searchValue={searchValue} onSearchChange={setSearchValue} />
 }
 
-// App content with conditional TitleBar
+// App content with WindowShell structure
 const AppContentWithBar = () => {
-  // Show TitleBar and main content immediately
-  // The splashscreen window will be closed by Tauri when ready
+  // WindowShell provides the correct window-level structure:
+  // - TitleBar: Window chrome layer (full-width, drag region)
+  // - Content: App layout layer (Sidebar + Main via routes)
   return (
-    <>
-      <TitleBarWithSearch />
+    <WindowShell titleBar={<TitleBarWithSearch />}>
       <AppContent />
-    </>
+    </WindowShell>
   )
 }

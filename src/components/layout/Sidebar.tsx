@@ -4,7 +4,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn, isMacPlatform } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 const NavButton: React.FC<{
   to: string
@@ -53,7 +53,6 @@ const NavButton: React.FC<{
 const Sidebar: React.FC = () => {
   const { t } = useTranslation()
   const location = useLocation()
-  const isMac = isMacPlatform()
 
   const navItems = [
     { to: '/', icon: Home, label: t('nav.dashboard') },
@@ -64,8 +63,11 @@ const Sidebar: React.FC = () => {
     <aside
       data-tauri-drag-region
       className={cn(
-        'w-16 h-screen sticky top-0 z-100 flex flex-col items-center pb-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl shrink-0',
-        isMac ? 'pt-12' : 'pt-4'
+        // Content-level sidebar - sits below titlebar in WindowShell
+        // No h-screen/sticky needed - height controlled by parent flex container
+        // No platform-specific top padding - titlebar already provides spacing
+        'w-16 h-full flex-shrink-0 flex flex-col items-center',
+        'py-6 bg-muted/40 border-r border-border/40 backdrop-blur-xl'
       )}
     >
       {/* Main Navigation */}
