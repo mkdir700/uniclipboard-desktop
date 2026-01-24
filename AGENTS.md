@@ -26,7 +26,9 @@ Repeated workarounds indicate architectural flaws.
 Short-term compromises must be reversible
 Never break boundaries; always leave explicit TODOs.
 
-## Hard Rule: Immediate Polling After Spawn (CRITICAL)
+## Hard Rule: Immediate Polling After Spawn (CRITICAL, Codex Only)
+
+**This rule applies ONLY to Codex agents.** Other agents (Claude Code, etc.) should follow their respective protocols.
 
 When the parent agent spawns any child agent:
 
