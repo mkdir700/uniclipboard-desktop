@@ -1,4 +1,5 @@
 mod background_blob_worker;
+mod change_origin;
 mod normalizer;
 mod payload_resolver;
 mod representation_cache;
@@ -11,6 +12,7 @@ pub mod spooler_task;
 mod thumbnail_generator;
 
 pub use background_blob_worker::BackgroundBlobWorker;
+pub use change_origin::InMemoryClipboardChangeOrigin;
 pub use normalizer::ClipboardRepresentationNormalizer;
 pub use payload_resolver::ClipboardPayloadResolver;
 pub use representation_cache::{CacheEntryStatus, RepresentationCache};

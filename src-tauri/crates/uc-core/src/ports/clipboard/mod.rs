@@ -1,3 +1,4 @@
+mod clipboard_change_origin;
 mod clipboard_entry_repository;
 mod clipboard_event_repository;
 mod clipboard_selection_repository;
@@ -13,6 +14,7 @@ mod spool_queue;
 mod thumbnail_generator;
 mod thumbnail_repository;
 
+pub use clipboard_change_origin::ClipboardChangeOriginPort;
 pub use clipboard_entry_repository::ClipboardEntryRepositoryPort;
 pub use clipboard_event_repository::ClipboardEventRepositoryPort;
 pub use clipboard_selection_repository::ClipboardSelectionRepositoryPort;

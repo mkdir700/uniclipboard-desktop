@@ -99,7 +99,7 @@ where
         })
     }
 
-    /// Lists clipboard entries ordered by creation time (newest first) with pagination.
+    /// Lists clipboard entries ordered by active time (newest first) with pagination.
     ///
     /// # Parameters
     ///
@@ -108,7 +108,7 @@ where
     ///
     /// # Returns
     ///
-    /// A `Vec<ClipboardEntry>` containing entries ordered by `created_at_ms` descending.
+    /// A `Vec<ClipboardEntry>` containing entries ordered by `active_time_ms` descending.
     ///
     /// # Examples
     ///
@@ -130,7 +130,7 @@ where
         span.in_scope(|| {
             self.executor.run(|conn| {
                 let entry_rows = clipboard_entry::table
-                    .order(clipboard_entry::created_at_ms.desc())
+                    .order(clipboard_entry::active_time_ms.desc())
                     .limit(limit as i64)
                     .offset(offset as i64)
                     .load::<ClipboardEntryRow>(conn)?;
@@ -139,6 +139,28 @@ where
                     .into_iter()
                     .map(|row| self.row_entry_mapper.to_domain(&row))
                     .collect()
+            })
+        })
+    }
+
+    async fn touch_entry(&self, entry_id: &EntryId, active_time_ms: i64) -> Result<bool> {
+        let span = debug_span!(
+            "infra.sqlite.touch_clipboard_entry",
+            table = "clipboard_entry",
+            entry_id = %entry_id,
+            active_time_ms = active_time_ms,
+        );
+
+        span.in_scope(|| {
+            self.executor.run(|conn| {
+                use crate::db::schema::clipboard_entry::dsl;
+
+                let affected = diesel::update(dsl::clipboard_entry)
+                    .filter(dsl::entry_id.eq(entry_id.to_string()))
+                    .set(dsl::active_time_ms.eq(active_time_ms))
+                    .execute(conn)?;
+
+                Ok(affected > 0)
             })
         })
     }

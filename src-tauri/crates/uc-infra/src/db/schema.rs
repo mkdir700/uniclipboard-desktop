@@ -17,6 +17,7 @@ diesel::table! {
         entry_id -> Text,
         event_id -> Text,
         created_at_ms -> BigInt,
+        active_time_ms -> BigInt,
         title -> Nullable<Text>,
         total_size -> BigInt,
         pinned -> Bool,

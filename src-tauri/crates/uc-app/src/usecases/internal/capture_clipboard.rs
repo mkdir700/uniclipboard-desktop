@@ -12,8 +12,8 @@ use uc_core::ports::{
     DeviceIdentityPort, SelectRepresentationPolicyPort,
 };
 use uc_core::{
-    ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision, PayloadAvailability,
-    SystemClipboardSnapshot,
+    ClipboardChangeOrigin, ClipboardEntry, ClipboardEvent, ClipboardSelectionDecision,
+    PayloadAvailability, SystemClipboardSnapshot,
 };
 
 /// Capture clipboard content and create persistent entries.
@@ -120,12 +120,26 @@ impl CaptureClipboardUseCase {
     /// - Avoids redundant system clipboard reads
     /// - 避免重复读取系统剪贴板
     pub async fn execute(&self, snapshot: SystemClipboardSnapshot) -> Result<EventId> {
+        self.execute_with_origin(snapshot, ClipboardChangeOrigin::LocalCapture)
+            .await
+    }
+
+    pub async fn execute_with_origin(
+        &self,
+        snapshot: SystemClipboardSnapshot,
+        origin: ClipboardChangeOrigin,
+    ) -> Result<EventId> {
         let span = info_span!(
             "usecase.capture_clipboard.execute",
             source = "callback",
+            origin = ?origin,
             representations = snapshot.representations.len(),
         );
         async move {
+            if origin == ClipboardChangeOrigin::LocalRestore {
+                info!(origin = ?origin, "Skipping clipboard capture");
+                return Ok(EventId::new());
+            }
             info!("Starting clipboard capture with provided snapshot");
 
             let event_id = EventId::new();
@@ -265,5 +279,195 @@ impl CaptureClipboardUseCase {
         // 回退：没有找到文本表示
         debug!("No text representation found in snapshot, title will be None");
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use uc_core::clipboard::PolicyError;
+    use uc_core::ids::EntryId;
+    use uc_core::ports::clipboard::{RepresentationCachePort, SpoolQueuePort, SpoolRequest};
+    use uc_core::ports::{
+        ClipboardEntryRepositoryPort, ClipboardEventWriterPort,
+        ClipboardRepresentationNormalizerPort, DeviceIdentityPort, SelectRepresentationPolicyPort,
+    };
+    use uc_core::{ClipboardChangeOrigin, ClipboardSelectionDecision, DeviceId};
+
+    struct MockEntryRepository {
+        save_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockEventWriter {
+        insert_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockRepresentationPolicy {
+        select_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockNormalizer {
+        normalize_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockDeviceIdentity;
+
+    struct MockRepresentationCache {
+        put_calls: Arc<AtomicUsize>,
+    }
+
+    struct MockSpoolQueue {
+        enqueue_calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl ClipboardEntryRepositoryPort for MockEntryRepository {
+        async fn save_entry_and_selection(
+            &self,
+            _entry: &uc_core::ClipboardEntry,
+            _selection: &ClipboardSelectionDecision,
+        ) -> Result<()> {
+            self.save_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn get_entry(&self, _entry_id: &EntryId) -> Result<Option<uc_core::ClipboardEntry>> {
+            Ok(None)
+        }
+
+        async fn list_entries(
+            &self,
+            _limit: usize,
+            _offset: usize,
+        ) -> Result<Vec<uc_core::ClipboardEntry>> {
+            Ok(vec![])
+        }
+
+        async fn delete_entry(&self, _entry_id: &EntryId) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl ClipboardEventWriterPort for MockEventWriter {
+        async fn insert_event(
+            &self,
+            _event: &uc_core::ClipboardEvent,
+            _representations: &Vec<uc_core::PersistedClipboardRepresentation>,
+        ) -> Result<()> {
+            self.insert_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn delete_event_and_representations(
+            &self,
+            _event_id: &uc_core::ids::EventId,
+        ) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SelectRepresentationPolicyPort for MockRepresentationPolicy {
+        fn select(
+            &self,
+            _snapshot: &SystemClipboardSnapshot,
+        ) -> std::result::Result<uc_core::clipboard::ClipboardSelection, PolicyError> {
+            self.select_calls.fetch_add(1, Ordering::SeqCst);
+            Err(PolicyError::NoUsableRepresentation)
+        }
+    }
+
+    #[async_trait]
+    impl ClipboardRepresentationNormalizerPort for MockNormalizer {
+        async fn normalize(
+            &self,
+            _observed: &uc_core::clipboard::ObservedClipboardRepresentation,
+        ) -> Result<uc_core::PersistedClipboardRepresentation> {
+            self.normalize_calls.fetch_add(1, Ordering::SeqCst);
+            Err(anyhow::anyhow!("normalize should not be called"))
+        }
+    }
+
+    impl DeviceIdentityPort for MockDeviceIdentity {
+        fn current_device_id(&self) -> DeviceId {
+            DeviceId::new("device-test")
+        }
+    }
+
+    #[async_trait]
+    impl RepresentationCachePort for MockRepresentationCache {
+        async fn put(&self, _rep_id: &uc_core::ids::RepresentationId, _bytes: Vec<u8>) {
+            self.put_calls.fetch_add(1, Ordering::SeqCst);
+        }
+
+        async fn get(&self, _rep_id: &uc_core::ids::RepresentationId) -> Option<Vec<u8>> {
+            None
+        }
+
+        async fn mark_completed(&self, _rep_id: &uc_core::ids::RepresentationId) {}
+
+        async fn mark_spooling(&self, _rep_id: &uc_core::ids::RepresentationId) {}
+
+        async fn remove(&self, _rep_id: &uc_core::ids::RepresentationId) {}
+    }
+
+    #[async_trait]
+    impl SpoolQueuePort for MockSpoolQueue {
+        async fn enqueue(&self, _request: SpoolRequest) -> anyhow::Result<()> {
+            self.enqueue_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn capture_skips_local_restore() {
+        let save_calls = Arc::new(AtomicUsize::new(0));
+        let insert_calls = Arc::new(AtomicUsize::new(0));
+        let select_calls = Arc::new(AtomicUsize::new(0));
+        let normalize_calls = Arc::new(AtomicUsize::new(0));
+        let cache_put_calls = Arc::new(AtomicUsize::new(0));
+        let enqueue_calls = Arc::new(AtomicUsize::new(0));
+
+        let use_case = CaptureClipboardUseCase::new(
+            Arc::new(MockEntryRepository {
+                save_calls: save_calls.clone(),
+            }),
+            Arc::new(MockEventWriter {
+                insert_calls: insert_calls.clone(),
+            }),
+            Arc::new(MockRepresentationPolicy {
+                select_calls: select_calls.clone(),
+            }),
+            Arc::new(MockNormalizer {
+                normalize_calls: normalize_calls.clone(),
+            }),
+            Arc::new(MockDeviceIdentity),
+            Arc::new(MockRepresentationCache {
+                put_calls: cache_put_calls.clone(),
+            }),
+            Arc::new(MockSpoolQueue {
+                enqueue_calls: enqueue_calls.clone(),
+            }),
+        );
+
+        let snapshot = SystemClipboardSnapshot {
+            ts_ms: 0,
+            representations: vec![],
+        };
+
+        let _ = use_case
+            .execute_with_origin(snapshot, ClipboardChangeOrigin::LocalRestore)
+            .await
+            .expect("expected ok result");
+
+        assert_eq!(save_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(insert_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(select_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(normalize_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(cache_put_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(enqueue_calls.load(Ordering::SeqCst), 0);
     }
 }
