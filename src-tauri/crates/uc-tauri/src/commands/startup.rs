@@ -46,12 +46,19 @@ impl StartupBarrier {
 
         let frontend_ready = self.frontend_ready.load(Ordering::SeqCst);
         let backend_ready = self.backend_ready.load(Ordering::SeqCst);
-        if !frontend_ready || !backend_ready {
+        if !backend_ready {
             info!(
                 frontend_ready,
                 backend_ready, "StartupBarrier not ready to finish yet"
             );
             return;
+        }
+
+        if !frontend_ready {
+            info!(
+                frontend_ready,
+                backend_ready, "StartupBarrier finishing without frontend_ready"
+            );
         }
 
         if self
