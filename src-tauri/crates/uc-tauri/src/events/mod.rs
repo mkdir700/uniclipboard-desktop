@@ -28,9 +28,20 @@ pub enum EncryptionEvent {
     Failed { reason: String },
 }
 
+/// Forward libp2p startup error to frontend
+/// 将 libp2p 启动错误转发到前端
+pub fn forward_libp2p_start_failed<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    message: String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    app.emit("libp2p://start-failed", message)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::Listener;
 
     #[test]
     fn encryption_event_serializes_with_type_tag() {
@@ -45,6 +56,24 @@ mod tests {
             failed,
             serde_json::json!({ "type": "Failed", "reason": "oops" })
         );
+    }
+
+    #[tokio::test]
+    async fn forward_libp2p_start_failed_emits_event() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(1);
+
+        let tx_clone = tx.clone();
+        app_handle.listen("libp2p://start-failed", move |event: tauri::Event| {
+            let _ = tx_clone.try_send(event.payload().to_string());
+        });
+
+        forward_libp2p_start_failed(&app_handle, "boom".to_string())
+            .expect("emit libp2p start failed event");
+
+        let payload = rx.recv().await.expect("event payload");
+        assert!(payload.contains("boom"));
     }
 }
 

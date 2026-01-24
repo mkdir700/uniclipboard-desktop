@@ -36,7 +36,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::async_runtime;
+use tauri::{async_runtime, AppHandle, Runtime};
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
@@ -79,6 +79,8 @@ use uc_infra::security::{
 };
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
+
+use crate::events::forward_libp2p_start_failed;
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
     Libp2pNetworkAdapter, PlaceholderAutostartPort, PlaceholderUiPort,
@@ -875,7 +877,11 @@ pub fn wire_dependencies_with_identity_store(
 
 /// Start background spooler and blob worker tasks.
 /// 启动后台假脱机写入和 blob 物化任务。
-pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps) {
+pub fn start_background_tasks<R: Runtime>(
+    background: BackgroundRuntimeDeps,
+    deps: &AppDeps,
+    app_handle: Option<AppHandle<R>>,
+) {
     let BackgroundRuntimeDeps {
         libp2p_network,
         representation_cache,
@@ -890,9 +896,15 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
 
     info!("Starting background clipboard spooler and blob worker");
 
+    let libp2p_app_handle = app_handle.clone();
     async_runtime::spawn(async move {
         if let Err(err) = libp2p_network.spawn_swarm() {
             warn!(error = %err, "Failed to start libp2p swarm");
+            if let Some(app_handle) = libp2p_app_handle {
+                if let Err(emit_err) = forward_libp2p_start_failed(&app_handle, err.to_string()) {
+                    warn!("Failed to emit libp2p start failed event: {emit_err}");
+                }
+            }
         }
     });
 

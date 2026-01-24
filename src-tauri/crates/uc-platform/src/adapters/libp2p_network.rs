@@ -139,17 +139,13 @@ impl Libp2pNetworkAdapter {
             .map_err(|e| anyhow!("failed to attach mdns behaviour: {e}"))?
             .build();
 
-        if let Err(e) = swarm.listen_on(
+        listen_on_swarm(
+            &mut swarm,
             "/ip4/0.0.0.0/tcp/0"
                 .parse()
                 .map_err(|e| anyhow!("failed to parse listen address: {e}"))?,
-        ) {
-            let message = format!("failed to listen on tcp: {e}");
-            warn!("{message}");
-            if let Err(err) = self.event_tx.try_send(NetworkEvent::Error(message)) {
-                warn!("failed to publish network error event: {err}");
-            }
-        }
+            &self.event_tx,
+        )?;
 
         let caches = self.caches.clone();
         let event_tx = self.event_tx.clone();
@@ -257,9 +253,7 @@ async fn run_swarm(
                     };
 
                     for event in events {
-                        if let Err(err) = event_tx.send(event).await {
-                            warn!("failed to send PeerDiscovered event: {err}");
-                        }
+                        let _ = try_send_event(&event_tx, event, "PeerDiscovered");
                     }
                 }
                 mdns::Event::Expired(peers) => {
@@ -270,9 +264,7 @@ async fn run_swarm(
                     };
 
                     for event in events {
-                        if let Err(err) = event_tx.send(event).await {
-                            warn!("failed to send PeerLost event: {err}");
-                        }
+                        let _ = try_send_event(&event_tx, event, "PeerLost");
                     }
                 }
             },
@@ -284,9 +276,7 @@ async fn run_swarm(
                 };
 
                 if let Some(event) = event {
-                    if let Err(err) = event_tx.send(event).await {
-                        warn!("failed to send PeerReady event: {err}");
-                    }
+                    let _ = try_send_event(&event_tx, event, "PeerReady");
                 } else {
                     debug!("connection established for unknown peer {peer_id}");
                 }
@@ -299,9 +289,7 @@ async fn run_swarm(
                 };
 
                 if let Some(event) = event {
-                    if let Err(err) = event_tx.send(event).await {
-                        warn!("failed to send PeerNotReady event: {err}");
-                    }
+                    let _ = try_send_event(&event_tx, event, "PeerNotReady");
                 }
             }
             SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
@@ -335,6 +323,34 @@ async fn run_swarm(
             _ => {}
         }
     }
+}
+
+fn listen_on_swarm(
+    swarm: &mut Swarm<MdnsBehaviour>,
+    listen_addr: Multiaddr,
+    event_tx: &mpsc::Sender<NetworkEvent>,
+) -> Result<()> {
+    if let Err(e) = swarm.listen_on(listen_addr) {
+        let message = format!("failed to listen on tcp: {e}");
+        warn!("{message}");
+        if let Err(err) = event_tx.try_send(NetworkEvent::Error(message.clone())) {
+            warn!("failed to publish network error event: {err}");
+        }
+        return Err(anyhow!(message));
+    }
+
+    Ok(())
+}
+
+fn try_send_event(
+    event_tx: &mpsc::Sender<NetworkEvent>,
+    event: NetworkEvent,
+    label: &str,
+) -> Result<(), mpsc::error::TrySendError<NetworkEvent>> {
+    event_tx.try_send(event).map_err(|err| {
+        warn!("failed to send {label} event: {err}");
+        err
+    })
 }
 
 fn collect_mdns_discovered(
@@ -639,5 +655,50 @@ mod tests {
             ),
             Err(_) => panic!("mdns discovery timed out"),
         }
+    }
+
+    #[test]
+    fn try_send_event_reports_backpressure() {
+        let (event_tx, _event_rx) = mpsc::channel(1);
+        event_tx
+            .try_send(NetworkEvent::PeerLost("peer-1".to_string()))
+            .expect("fill channel");
+
+        let result = try_send_event(
+            &event_tx,
+            NetworkEvent::PeerLost("peer-2".to_string()),
+            "PeerLost",
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn listen_on_failure_emits_error_event_and_returns_err() {
+        let keypair = identity::Keypair::generate_ed25519();
+        let local_peer_id = PeerId::from(keypair.public());
+        let mdns_behaviour = MdnsBehaviour::new(local_peer_id).expect("mdns behaviour");
+        let mut swarm = SwarmBuilder::with_existing_identity(keypair)
+            .with_tokio()
+            .with_tcp(
+                tcp::Config::default().nodelay(true),
+                noise::Config::new,
+                yamux::Config::default,
+            )
+            .expect("tcp config")
+            .with_behaviour(move |_| mdns_behaviour)
+            .expect("attach mdns behaviour")
+            .build();
+
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+        let bad_addr: Multiaddr = "/ip4/127.0.0.1/udp/0".parse().expect("bad addr");
+
+        let result = listen_on_swarm(&mut swarm, bad_addr, &event_tx);
+        assert!(result.is_err());
+
+        let event = event_rx.recv().await.expect("error event");
+        assert!(
+            matches!(event, NetworkEvent::Error(message) if message.contains("failed to listen on tcp"))
+        );
     }
 }

@@ -464,7 +464,11 @@ fn run_app(config: AppConfig) {
             info!("AppHandle set on AppRuntime for event emission");
 
             // Start background spooler and blob worker tasks
-            start_background_tasks(background, &runtime_for_handler.deps);
+            start_background_tasks(
+                background,
+                &runtime_for_handler.deps,
+                Some(app.handle().clone()),
+            );
 
             // Clone handles for async blocks
             let app_handle_for_startup = app.handle().clone();
