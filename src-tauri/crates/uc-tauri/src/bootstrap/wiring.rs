@@ -81,7 +81,7 @@ use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
-    PlaceholderAutostartPort, PlaceholderNetworkPort, PlaceholderUiPort,
+    Libp2pNetworkAdapter, PlaceholderAutostartPort, PlaceholderUiPort,
 };
 use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::clipboard::LocalClipboard;
@@ -130,6 +130,7 @@ pub struct WiredDependencies {
 /// Background runtime components that must be started after async runtime is ready.
 /// 需要在异步运行时就绪后启动的后台组件。
 pub struct BackgroundRuntimeDeps {
+    pub libp2p_network: Arc<Libp2pNetworkAdapter>,
     pub representation_cache: Arc<RepresentationCache>,
     pub spool_manager: Arc<SpoolManager>,
     pub spool_rx: mpsc::Receiver<SpoolRequest>,
@@ -241,6 +242,9 @@ struct PlatformLayer {
 
     // Network operations / 网络操作（占位符）
     network: Arc<dyn NetworkPort>,
+
+    // libp2p network adapter (concrete)
+    libp2p_network: Arc<Libp2pNetworkAdapter>,
 
     // Device identity / 设备身份（占位符）
     device_identity: Arc<dyn DeviceIdentityPort>,
@@ -480,11 +484,11 @@ fn create_platform_layer(
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
     let identity_store = SystemIdentityStore::new();
-    let network = PlaceholderNetworkPort::new(Arc::new(identity_store)).map_err(|e| {
-        WiringError::NetworkInit(format!("Failed to initialize network identity: {e}"))
-    })?;
-    info!(peer_id = %network.local_peer_id(), "Loaded libp2p identity");
-    let network: Arc<dyn NetworkPort> = Arc::new(network);
+    let libp2p_network = Arc::new(Libp2pNetworkAdapter::new(Arc::new(identity_store)).map_err(
+        |e| WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}")),
+    )?);
+    info!(peer_id = %libp2p_network.local_peer_id(), "Loaded libp2p identity");
+    let network: Arc<dyn NetworkPort> = libp2p_network.clone();
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
 
@@ -521,6 +525,7 @@ fn create_platform_layer(
         ui,
         autostart,
         network,
+        libp2p_network,
         device_identity,
         representation_normalizer,
         blob_writer,
@@ -840,6 +845,7 @@ pub fn wire_dependencies(
     Ok(WiredDependencies {
         deps,
         background: BackgroundRuntimeDeps {
+            libp2p_network: platform.libp2p_network,
             representation_cache,
             spool_manager,
             spool_rx,
@@ -856,6 +862,7 @@ pub fn wire_dependencies(
 /// 启动后台假脱机写入和 blob 物化任务。
 pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps) {
     let BackgroundRuntimeDeps {
+        libp2p_network,
         representation_cache,
         spool_manager,
         spool_rx,
@@ -867,6 +874,12 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
     } = background;
 
     info!("Starting background clipboard spooler and blob worker");
+
+    async_runtime::spawn(async move {
+        if let Err(err) = libp2p_network.spawn_swarm() {
+            warn!(error = %err, "Failed to start libp2p swarm");
+        }
+    });
 
     let representation_repo = deps.representation_repo.clone();
     let worker_tx = deps.worker_tx.clone();
