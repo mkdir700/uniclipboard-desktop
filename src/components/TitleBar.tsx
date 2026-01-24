@@ -160,7 +160,9 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
   return (
     <div
       className={cn(
-        'fixed top-0 left-0 right-0 h-10 z-50 select-none',
+        // Window chrome layer - sits in normal document flow (not fixed)
+        // No z-index needed - proper layering via DOM hierarchy
+        'h-10 w-full flex-shrink-0 select-none',
         'bg-background/70 backdrop-blur border-b border-border/60',
         className
       )}

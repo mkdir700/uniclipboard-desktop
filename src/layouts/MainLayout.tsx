@@ -5,18 +5,25 @@ interface MainLayoutProps {
   children: ReactNode
 }
 
+/**
+ * Main content layout with sidebar navigation
+ *
+ * Structure (within WindowShell):
+ * - Sidebar: Fixed-width navigation (w-16)
+ * - Main: Flexible content area (flex-1)
+ *
+ * Note: This is a content-level layout, not window-level.
+ * Window chrome (TitleBar) is handled by WindowShell parent.
+ */
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
-    <div className="h-screen flex overflow-hidden bg-background text-foreground transition-colors duration-200">
-      {/* 侧边栏导航 */}
+    <>
+      {/* Sidebar Navigation */}
       <Sidebar />
 
-      {/* 主内容区域 */}
-      <main className="flex-1 flex flex-col overflow-hidden relative">
-        {/* Window Drag Region handled by TitleBar */}
-        {children}
-      </main>
-    </div>
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col overflow-hidden relative">{children}</main>
+    </>
   )
 }
 
