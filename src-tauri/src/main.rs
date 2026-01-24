@@ -10,6 +10,7 @@ use tauri::http::header::{
     HeaderValue, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
 };
 use tauri::http::{Request, Response, StatusCode};
+use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
@@ -432,6 +433,23 @@ fn run_app(config: AppConfig) {
         // Register AppRuntime for Tauri commands
         .manage(runtime_for_tauri)
         .manage(startup_barrier.clone())
+        .on_page_load(|webview, payload| {
+            if webview.label() != "main" {
+                return;
+            }
+
+            let event_label = match payload.event() {
+                PageLoadEvent::Started => "started",
+                PageLoadEvent::Finished => "finished",
+            };
+
+            info!(
+                window_label = webview.label(),
+                event = event_label,
+                url = %payload.url(),
+                "[StartupTiming] main webview page load"
+            );
+        })
         .register_asynchronous_uri_scheme_protocol("uc", move |ctx, request, responder| {
             let app_handle = ctx.app_handle().clone();
             tauri::async_runtime::spawn(async move {

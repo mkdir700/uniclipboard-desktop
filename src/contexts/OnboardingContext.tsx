@@ -35,8 +35,15 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   const refreshStatus = async () => {
     try {
       console.log('[OnboardingContext] Checking onboarding status...')
+      const startedAt = Date.now()
+      console.log(
+        `[StartupTiming] onboarding status fetch start ts=${new Date(startedAt).toISOString()}`
+      )
       setLoading(true)
       const newStatus = await checkOnboardingStatus()
+      console.log(
+        `[StartupTiming] onboarding status fetch end duration=${Date.now() - startedAt}ms`
+      )
       console.log('[OnboardingContext] Onboarding status:', newStatus)
       setStatus(newStatus)
       setError(null)

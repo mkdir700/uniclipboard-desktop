@@ -6,13 +6,39 @@ import App from './App'
 import { store } from './store'
 import './i18n'
 
+const startupTimingOrigin = Date.now()
+const logStartupTiming = (label: string) => {
+  const elapsed = Date.now() - startupTimingOrigin
+  console.log(`[StartupTiming] ${label} t=${elapsed}ms`)
+}
+
+logStartupTiming('main.tsx module init')
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => {
+    logStartupTiming('DOMContentLoaded')
+  })
+  window.addEventListener('load', () => {
+    logStartupTiming('window load')
+  })
+}
+
 const notifyBackendFrontendReady = async () => {
   try {
     if (typeof window === 'undefined') {
       return
     }
 
+    const importStartedAt = Date.now()
+    console.log(
+      `[StartupTiming] frontend_ready import start ts=${new Date(importStartedAt).toISOString()}`
+    )
     const { invoke } = await import('@tauri-apps/api/core')
+    console.log(
+      `[StartupTiming] frontend_ready import end duration=${Date.now() - importStartedAt}ms`
+    )
+    const startAt = Date.now()
+    console.log(`[StartupTiming] frontend_ready start ts=${new Date(startAt).toISOString()}`)
     console.log('[Startup] Attempting frontend_ready handshake')
     const deadline = Date.now() + 15000
     let lastError: unknown = null
@@ -21,6 +47,7 @@ const notifyBackendFrontendReady = async () => {
       try {
         await invoke('frontend_ready')
         console.log('[Startup] frontend_ready sent')
+        console.log(`[StartupTiming] frontend_ready success duration=${Date.now() - startAt}ms`)
         return
       } catch (error) {
         lastError = error
@@ -29,8 +56,10 @@ const notifyBackendFrontendReady = async () => {
     }
 
     console.warn('[Startup] frontend_ready handshake timed out:', lastError)
+    console.warn(`[StartupTiming] frontend_ready timeout duration=${Date.now() - startAt}ms`)
   } catch (error) {
     console.error('[Startup] Failed to notify backend frontend_ready:', error)
+    console.error('[StartupTiming] frontend_ready failed')
   }
 }
 
@@ -82,8 +111,11 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   </React.StrictMode>
 )
 
+logStartupTiming('ReactDOM.render invoked')
+
 // Notify backend after initial mount scheduling.
 // React.StrictMode may mount twice in dev; backend side is idempotent.
 queueMicrotask(() => {
+  logStartupTiming('frontend_ready microtask executing')
   void notifyBackendFrontendReady()
 })
