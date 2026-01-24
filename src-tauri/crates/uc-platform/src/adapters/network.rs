@@ -14,18 +14,18 @@ use crate::identity_store::load_or_create_identity;
 /// 占位符网络端口实现
 #[derive(Debug, Clone)]
 pub struct PlaceholderNetworkPort {
-    local_peer_id: String,
+    local_peer_id: PeerId,
 }
 
 impl PlaceholderNetworkPort {
     pub fn new(identity_store: std::sync::Arc<dyn IdentityStorePort>) -> Result<Self> {
         let keypair = load_or_create_identity(identity_store.as_ref())
             .map_err(|e| anyhow::anyhow!("failed to load libp2p identity: {e}"))?;
-        let local_peer_id = PeerId::from(keypair.public()).to_string();
+        let local_peer_id = PeerId::from(keypair.public());
         Ok(Self { local_peer_id })
     }
 
-    pub fn local_peer_id(&self) -> &str {
+    pub fn local_peer_id(&self) -> &PeerId {
         &self.local_peer_id
     }
 }
@@ -62,7 +62,7 @@ impl NetworkPort for PlaceholderNetworkPort {
     }
 
     fn local_peer_id(&self) -> String {
-        self.local_peer_id.clone()
+        self.local_peer_id.to_string()
     }
 
     // === Pairing operations ===
@@ -102,5 +102,42 @@ impl NetworkPort for PlaceholderNetworkPort {
     async fn subscribe_events(&self) -> Result<tokio::sync::mpsc::Receiver<NetworkEvent>> {
         let (_tx, rx) = tokio::sync::mpsc::channel(1);
         Ok(rx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct TestIdentityStore {
+        data: Mutex<Option<Vec<u8>>>,
+    }
+
+    impl IdentityStorePort for TestIdentityStore {
+        fn load_identity(&self) -> Result<Option<Vec<u8>>, uc_core::ports::IdentityStoreError> {
+            let guard = self.data.lock().expect("lock test identity store");
+            Ok(guard.clone())
+        }
+
+        fn store_identity(
+            &self,
+            identity: &[u8],
+        ) -> Result<(), uc_core::ports::IdentityStoreError> {
+            let mut guard = self.data.lock().expect("lock test identity store");
+            *guard = Some(identity.to_vec());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn local_peer_id_returns_typed_peer_id() {
+        let adapter = PlaceholderNetworkPort::new(Arc::new(TestIdentityStore::default()))
+            .expect("create placeholder network port");
+
+        let peer_id: &PeerId = adapter.local_peer_id();
+
+        assert!(!peer_id.to_string().is_empty());
     }
 }
