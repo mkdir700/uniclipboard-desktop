@@ -46,11 +46,18 @@ interface DisplayClipboardItem {
 interface ClipboardContentProps {
   filter: Filter
   searchQuery?: string
+  hasMore?: boolean
+  onLoadMore?: () => void
 }
 
 const SKELETON_KEYS = Array.from({ length: 12 }, (_, index) => `clipboard-skeleton-${index}`)
 
-const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery = '' }) => {
+const ClipboardContent: React.FC<ClipboardContentProps> = ({
+  filter,
+  searchQuery = '',
+  hasMore = true,
+  onLoadMore,
+}) => {
   const { t } = useTranslation()
 
   // Use Redux state and dispatch
@@ -357,10 +364,25 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
     setLastSelectedIndex(null)
   }
 
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      if (!onLoadMore || !hasMore || loading || notReady) return
+      const target = event.currentTarget
+      const remaining = target.scrollHeight - target.scrollTop - target.clientHeight
+      if (remaining <= 200) {
+        onLoadMore()
+      }
+    },
+    [hasMore, loading, notReady, onLoadMore]
+  )
+
   // Skeleton loading state
   if (notReady || (loading && clipboardItems.length === 0)) {
     return (
-      <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
+      <div
+        className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2"
+        onScroll={handleScroll}
+      >
         <div className="flex flex-col gap-1">
           {SKELETON_KEYS.map(key => (
             <Skeleton key={key} className="h-12 w-full rounded-lg" />

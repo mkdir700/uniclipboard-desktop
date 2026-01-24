@@ -14,6 +14,7 @@ import { ClipboardEvent } from '@/types/events'
 
 // Debounce delay in milliseconds
 const DEBOUNCE_DELAY = 500
+const PAGE_SIZE = 20
 
 // Global listener state management
 interface ListenerState {
@@ -41,6 +42,10 @@ const DashboardPage: React.FC = () => {
   const debouncedLoadRef = useRef<number | null>(null)
   const encryptionReadyRef = useRef<boolean | null>(null)
   const pendingInitialLoadRef = useRef(false)
+  const loadInFlightRef = useRef(false)
+  const offsetRef = useRef(0)
+  const hasMoreRef = useRef(true)
+  const [hasMore, setHasMore] = useState(true)
 
   const handleFilterChange = (filterId: Filter) => {
     setCurrentFilter(filterId)
@@ -48,22 +53,51 @@ const DashboardPage: React.FC = () => {
 
   // Load clipboard records and statistics
   const loadData = useCallback(
-    async (specificFilter?: Filter) => {
+    async ({
+      specificFilter,
+      reset = false,
+    }: { specificFilter?: Filter; reset?: boolean } = {}) => {
+      if (loadInFlightRef.current) return
+      if (!reset && !hasMoreRef.current) return
+
+      if (reset) {
+        offsetRef.current = 0
+        hasMoreRef.current = true
+        setHasMore(true)
+      }
+
       const filterToUse = specificFilter || currentFilterRef.current
       console.log(t('dashboard.logs.loadingClipboard'), filterToUse)
 
+      loadInFlightRef.current = true
       try {
-        await dispatch(
+        const result = await dispatch(
           fetchClipboardItems({
             orderBy: OrderBy.ActiveTimeDesc,
             filter: filterToUse,
+            limit: PAGE_SIZE,
+            offset: offsetRef.current,
           })
         ).unwrap()
+
+        if (result.status === 'not_ready') {
+          hasMoreRef.current = false
+          setHasMore(false)
+          return
+        }
+
+        const fetchedCount = result.items.length
+        offsetRef.current += fetchedCount
+        const nextHasMore = fetchedCount === PAGE_SIZE
+        hasMoreRef.current = nextHasMore
+        setHasMore(nextHasMore)
       } catch (error) {
         console.error('加载剪贴板数据失败:', error)
         toast.error(t('dashboard.errors.loadFailed'), {
           description: error instanceof Error ? error.message : t('dashboard.errors.unknown'),
         })
+      } finally {
+        loadInFlightRef.current = false
       }
     },
     [dispatch, t]
@@ -77,7 +111,7 @@ const DashboardPage: React.FC = () => {
       }
 
       debouncedLoadRef.current = setTimeout(() => {
-        loadData(specificFilter)
+        loadData({ specificFilter, reset: true })
         debouncedLoadRef.current = null
       }, DEBOUNCE_DELAY)
     },
@@ -94,7 +128,7 @@ const DashboardPage: React.FC = () => {
       return
     }
     pendingInitialLoadRef.current = false
-    loadData(currentFilter) // Load directly without debounce
+    loadData({ specificFilter: currentFilter, reset: true })
   }, [currentFilter, loadData, t])
 
   // Setup clipboard content listener
@@ -195,7 +229,7 @@ const DashboardPage: React.FC = () => {
               if (pendingInitialLoadRef.current) {
                 pendingInitialLoadRef.current = false
               }
-              loadData(currentFilterRef.current)
+              loadData({ specificFilter: currentFilterRef.current, reset: true })
             }
           }
         )
@@ -217,7 +251,7 @@ const DashboardPage: React.FC = () => {
           dispatch(setNotReady(false))
           if (pendingInitialLoadRef.current) {
             pendingInitialLoadRef.current = false
-            loadData(currentFilterRef.current)
+            loadData({ specificFilter: currentFilterRef.current, reset: true })
           }
         } else {
           encryptionReadyRef.current = false
@@ -232,7 +266,7 @@ const DashboardPage: React.FC = () => {
         dispatch(setNotReady(false))
         if (pendingInitialLoadRef.current) {
           pendingInitialLoadRef.current = false
-          loadData(currentFilterRef.current)
+          loadData({ specificFilter: currentFilterRef.current, reset: true })
         }
       }
     }
@@ -248,6 +282,11 @@ const DashboardPage: React.FC = () => {
     }
   }, [dispatch, loadData])
 
+  const handleLoadMore = useCallback(() => {
+    if (encryptionReadyRef.current !== true) return
+    void loadData()
+  }, [loadData])
+
   return (
     <div className="flex flex-col h-full relative">
       {/* Top search bar - Hidden in MVP */}
@@ -255,7 +294,12 @@ const DashboardPage: React.FC = () => {
 
       {/* Clipboard content area - use flex-1 to make it take remaining space */}
       <div className="flex-1 overflow-hidden relative">
-        <ClipboardContent filter={currentFilter} searchQuery={searchValue} />
+        <ClipboardContent
+          filter={currentFilter}
+          searchQuery={searchValue}
+          hasMore={hasMore}
+          onLoadMore={handleLoadMore}
+        />
       </div>
     </div>
   )

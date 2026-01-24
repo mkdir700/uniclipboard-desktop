@@ -4,13 +4,12 @@ import {
   deleteClipboardItem,
   copyClipboardItem,
   clearClipboardItems,
-  ClipboardItemResponse,
-  ClipboardItemsResult,
   OrderBy,
   favoriteClipboardItem,
   unfavoriteClipboardItem,
   Filter,
 } from '@/api/clipboardItems'
+import type { ClipboardItemResponse, ClipboardItemsResult } from '@/api/clipboardItems'
 
 // 定义状态接口
 interface ClipboardState {
@@ -39,17 +38,30 @@ interface FetchClipboardItemsParams {
   filter?: Filter
 }
 
+type ClipboardItemsResultWithOffset = ClipboardItemsResult & { offset: number }
+type FetchClipboardItemsAction = {
+  payload: ClipboardItemsResultWithOffset
+  type: string
+  meta: { arg?: FetchClipboardItemsParams }
+}
+
 // 异步 Thunk Actions
-export const fetchClipboardItems = createAsyncThunk(
-  'clipboard/fetchItems',
-  async (params: FetchClipboardItemsParams = {}, { rejectWithValue }) => {
-    try {
-      return await getClipboardItems(params.orderBy, params.limit, params.offset, params.filter)
-    } catch {
-      return rejectWithValue('获取剪贴板内容失败')
-    }
+export const fetchClipboardItems = createAsyncThunk<
+  ClipboardItemsResultWithOffset,
+  FetchClipboardItemsParams | undefined
+>('clipboard/fetchItems', async (params = {}, { rejectWithValue }) => {
+  try {
+    const result = await getClipboardItems(
+      params.orderBy,
+      params.limit,
+      params.offset,
+      params.filter
+    )
+    return { ...result, offset: params.offset ?? 0 }
+  } catch {
+    return rejectWithValue('获取剪贴板内容失败')
   }
-)
+})
 
 export const removeClipboardItem = createAsyncThunk(
   'clipboard/removeItem',
@@ -129,19 +141,26 @@ const clipboardSlice = createSlice({
       state.error = null
       state.notReady = false
     })
-    builder.addCase(
-      fetchClipboardItems.fulfilled,
-      (state, action: PayloadAction<ClipboardItemsResult>) => {
-        state.loading = false
-        if (action.payload.status === 'not_ready') {
-          state.notReady = true
-          return
-        }
+    builder.addCase(fetchClipboardItems.fulfilled, (state, action: FetchClipboardItemsAction) => {
+      state.loading = false
+      if (action.payload.status === 'not_ready') {
+        state.notReady = true
+        return
+      }
 
-        state.notReady = false
+      state.notReady = false
+      const pageOffset = action.payload.offset
+      if (pageOffset > 0 && state.items.length > 0) {
+        const existingIds = new Set(state.items.map(item => item.id))
+        for (const item of action.payload.items) {
+          if (!existingIds.has(item.id)) {
+            state.items.push(item)
+          }
+        }
+      } else {
         state.items = action.payload.items
       }
-    )
+    })
     builder.addCase(fetchClipboardItems.rejected, (state, action) => {
       state.loading = false
       state.error = action.payload as string
