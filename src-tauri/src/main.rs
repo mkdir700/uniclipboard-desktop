@@ -691,9 +691,8 @@ fn run_app(config: AppConfig) {
                     }
                 }
 
-                // Mark backend-side startup tasks completed. We intentionally do NOT close the splashscreen
-                // or show the main window here; that is driven by the frontend via `frontend_ready` to avoid
-                // showing a blank main window when `index.html` does not contain an inline splash.
+                // Mark backend-side startup tasks completed. We now finish startup based on backend readiness
+                // to avoid deadlocks when the main window is hidden; frontend handles its own loading state.
                 info!("[Startup] Backend startup tasks completed, marking backend_ready");
                 startup_barrier_for_backend.mark_backend_ready();
                 startup_barrier_for_backend.try_finish(&app_handle_for_startup);

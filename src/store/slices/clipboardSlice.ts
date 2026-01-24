@@ -111,6 +111,13 @@ const clipboardSlice = createSlice({
     setDeleteConfirmId: (state, action: PayloadAction<string | null>) => {
       state.deleteConfirmId = action.payload
     },
+    setNotReady: (state, action: PayloadAction<boolean>) => {
+      state.notReady = action.payload
+      if (action.payload) {
+        state.loading = false
+        state.error = null
+      }
+    },
     clearError: state => {
       state.error = null
     },
@@ -178,7 +185,7 @@ const clipboardSlice = createSlice({
 })
 
 // 导出 Actions
-export const { setDeleteConfirmId, clearError } = clipboardSlice.actions
+export const { setDeleteConfirmId, setNotReady, clearError } = clipboardSlice.actions
 
 // 导出 Reducer
 export default clipboardSlice.reducer
