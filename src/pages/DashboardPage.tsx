@@ -9,7 +9,7 @@ import { toast } from '@/components/ui/sonner'
 import { useSearch } from '@/contexts/SearchContext'
 import { useShortcutScope } from '@/hooks/useShortcutScope'
 import { useAppDispatch } from '@/store/hooks'
-import { fetchClipboardItems } from '@/store/slices/clipboardSlice'
+import { fetchClipboardItems, setNotReady } from '@/store/slices/clipboardSlice'
 import { ClipboardEvent } from '@/types/events'
 
 // Debounce delay in milliseconds
@@ -191,6 +191,7 @@ const DashboardPage: React.FC = () => {
             if (eventType === 'SessionReady') {
               console.log('[Dashboard] Encryption session ready, reloading clipboard data')
               encryptionReadyRef.current = true
+              dispatch(setNotReady(false))
               if (pendingInitialLoadRef.current) {
                 pendingInitialLoadRef.current = false
               }
@@ -213,12 +214,14 @@ const DashboardPage: React.FC = () => {
         const status = await getEncryptionSessionStatus()
         if (!status.initialized || status.session_ready) {
           encryptionReadyRef.current = true
+          dispatch(setNotReady(false))
           if (pendingInitialLoadRef.current) {
             pendingInitialLoadRef.current = false
             loadData(currentFilterRef.current)
           }
         } else {
           encryptionReadyRef.current = false
+          dispatch(setNotReady(true))
           console.log(
             '[Dashboard] Encryption initialized but session not ready; waiting for unlock'
           )
@@ -226,6 +229,7 @@ const DashboardPage: React.FC = () => {
       } catch (err) {
         console.error('[Dashboard] Failed to check encryption session status:', err)
         encryptionReadyRef.current = true
+        dispatch(setNotReady(false))
         if (pendingInitialLoadRef.current) {
           pendingInitialLoadRef.current = false
           loadData(currentFilterRef.current)
@@ -242,7 +246,7 @@ const DashboardPage: React.FC = () => {
         }
       })
     }
-  }, [loadData])
+  }, [dispatch, loadData])
 
   return (
     <div className="flex flex-col h-full relative pt-10">

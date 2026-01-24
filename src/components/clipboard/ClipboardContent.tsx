@@ -48,15 +48,14 @@ interface ClipboardContentProps {
   searchQuery?: string
 }
 
+const SKELETON_KEYS = Array.from({ length: 12 }, (_, index) => `clipboard-skeleton-${index}`)
+
 const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery = '' }) => {
   const { t } = useTranslation()
 
   // Use Redux state and dispatch
   const dispatch = useAppDispatch()
   const { items: reduxItems, loading, notReady } = useAppSelector(state => state.clipboard)
-
-  // Local state for converted display items
-  const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>([])
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null)
@@ -150,6 +149,14 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
     },
     [t]
   )
+
+  // Local state for converted display items
+  const [clipboardItems, setClipboardItems] = useState<DisplayClipboardItem[]>(() => {
+    if (reduxItems && reduxItems.length > 0) {
+      return reduxItems.map(convertToDisplayItem)
+    }
+    return []
+  })
 
   // 监听 Redux 中的 items 变化,转换为显示项目
   useEffect(() => {
@@ -351,12 +358,12 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({ filter, searchQuery
   }
 
   // Skeleton loading state
-  if ((loading || notReady) && clipboardItems.length === 0) {
+  if (notReady || (loading && clipboardItems.length === 0)) {
     return (
       <div className="h-full overflow-y-auto scrollbar-thin px-4 pb-32 pt-2">
         <div className="flex flex-col gap-1">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-lg" />
+          {SKELETON_KEYS.map(key => (
+            <Skeleton key={key} className="h-12 w-full rounded-lg" />
           ))}
         </div>
       </div>
