@@ -7,11 +7,10 @@ use crate::models::{
     ClipboardEntryResource,
 };
 use std::sync::Arc;
-use std::time::Duration;
 use tauri::State;
 use tracing::{info_span, Instrument};
+use uc_core::ids::EntryId;
 use uc_core::security::state::EncryptionState;
-use uc_core::{ids::EntryId, ClipboardChangeOrigin};
 
 /// Get clipboard history entries (preview only)
 /// 获取剪贴板历史条目（仅预览）
