@@ -257,6 +257,20 @@ impl<'a> UseCases<'a> {
         )
     }
 
+    /// List paired devices from repository.
+    ///
+    /// 列出已配对设备。
+    pub fn list_paired_devices(&self) -> uc_app::usecases::ListPairedDevices {
+        uc_app::usecases::ListPairedDevices::new(self.runtime.deps.paired_device_repo.clone())
+    }
+
+    /// Update pairing state for a peer.
+    ///
+    /// 更新对等端配对状态。
+    pub fn set_pairing_state(&self) -> uc_app::usecases::SetPairingState {
+        uc_app::usecases::SetPairingState::new(self.runtime.deps.paired_device_repo.clone())
+    }
+
     /// Resolve thumbnail resource content by representation id.
     ///
     /// 通过表示 id 解析缩略图资源内容。
@@ -678,6 +692,7 @@ mod tests {
         MasterKey, Passphrase,
     };
     use uc_core::security::state::{EncryptionState, EncryptionStateError};
+    use uc_core::PeerId;
     use uc_core::{Blob, BlobId, ClipboardChangeOrigin, ContentHash, DeviceId};
     use uc_infra::clipboard::InMemoryClipboardChangeOrigin;
 
@@ -1231,6 +1246,49 @@ mod tests {
     }
 
     #[async_trait]
+    impl PairedDeviceRepositoryPort for NoopPort {
+        async fn get_by_peer_id(
+            &self,
+            _peer_id: &PeerId,
+        ) -> Result<Option<uc_core::network::PairedDevice>, PairedDeviceRepositoryError> {
+            Ok(None)
+        }
+
+        async fn list_all(
+            &self,
+        ) -> Result<Vec<uc_core::network::PairedDevice>, PairedDeviceRepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn upsert(
+            &self,
+            _device: uc_core::network::PairedDevice,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn set_state(
+            &self,
+            _peer_id: &PeerId,
+            _state: uc_core::network::PairingState,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn update_last_seen(
+            &self,
+            _peer_id: &PeerId,
+            _last_seen_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn delete(&self, _peer_id: &PeerId) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
     impl UiPort for NoopPort {
         async fn open_settings(&self) -> anyhow::Result<()> {
             Ok(())
@@ -1312,6 +1370,7 @@ mod tests {
             watcher_control: Arc::new(NoopPort),
             device_repo: Arc::new(NoopPort),
             device_identity: Arc::new(MockDeviceIdentity),
+            paired_device_repo: Arc::new(NoopPort),
             network: Arc::new(NoopPort),
             onboarding_state: Arc::new(NoopPort),
             blob_store: Arc::new(NoopPort),

@@ -81,6 +81,16 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    paired_device (peer_id) {
+        peer_id -> Text,
+        pairing_state -> Text,
+        identity_fingerprint -> Text,
+        paired_at -> BigInt,
+        last_seen_at -> Nullable<BigInt>,
+    }
+}
+
 diesel::joinable!(clipboard_entry -> clipboard_event (event_id));
 diesel::joinable!(clipboard_selection -> clipboard_entry (entry_id));
 diesel::joinable!(clipboard_snapshot_representation -> blob (blob_id));
@@ -93,5 +103,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     clipboard_selection,
     clipboard_representation_thumbnail,
     clipboard_snapshot_representation,
+    paired_device,
     t_device,
 );

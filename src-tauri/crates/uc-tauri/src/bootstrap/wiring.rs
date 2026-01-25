@@ -62,13 +62,14 @@ use uc_infra::db::mappers::{
     blob_mapper::BlobRowMapper, clipboard_entry_mapper::ClipboardEntryRowMapper,
     clipboard_event_mapper::ClipboardEventRowMapper,
     clipboard_selection_mapper::ClipboardSelectionRowMapper, device_mapper::DeviceRowMapper,
+    paired_device_mapper::PairedDeviceRowMapper,
     snapshot_representation_mapper::RepresentationRowMapper,
 };
 use uc_infra::db::pool::{init_db_pool, DbPool};
 use uc_infra::db::repositories::{
     DieselBlobRepository, DieselClipboardEntryRepository, DieselClipboardEventRepository,
     DieselClipboardRepresentationRepository, DieselClipboardSelectionRepository,
-    DieselDeviceRepository, DieselThumbnailRepository,
+    DieselDeviceRepository, DieselPairedDeviceRepository, DieselThumbnailRepository,
 };
 use uc_infra::device::LocalDeviceIdentity;
 use uc_infra::fs::key_slot_store::{JsonKeySlotStore, KeySlotStore};
@@ -201,6 +202,9 @@ struct InfraLayer {
     // Device repository / 设备仓库
     device_repo: Arc<dyn DeviceRepositoryPort>,
 
+    // Pairing repository / 配对仓库
+    paired_device_repo: Arc<dyn PairedDeviceRepositoryPort>,
+
     // Blob storage / Blob 存储
     blob_repository: Arc<dyn BlobRepositoryPort>,
     thumbnail_repo: Arc<dyn ThumbnailRepositoryPort>,
@@ -309,6 +313,7 @@ fn create_infra_layer(
     let entry_row_mapper = ClipboardEntryRowMapper;
     let selection_row_mapper = ClipboardSelectionRowMapper;
     let device_row_mapper = DeviceRowMapper;
+    let paired_device_row_mapper = PairedDeviceRowMapper;
     let blob_row_mapper = BlobRowMapper;
     let _representation_row_mapper = RepresentationRowMapper;
 
@@ -340,6 +345,12 @@ fn create_infra_layer(
     // 创建设备仓库
     let dev_repo = DieselDeviceRepository::new(Arc::clone(&db_executor), device_row_mapper);
     let device_repo: Arc<dyn DeviceRepositoryPort> = Arc::new(dev_repo);
+
+    // Create paired device repository
+    // 创建配对设备仓库
+    let paired_repo =
+        DieselPairedDeviceRepository::new(Arc::clone(&db_executor), paired_device_row_mapper);
+    let paired_device_repo: Arc<dyn PairedDeviceRepositoryPort> = Arc::new(paired_repo);
 
     // Create blob repository
     // 创建 blob 仓库
@@ -406,6 +417,7 @@ fn create_infra_layer(
         representation_repo,
         selection_repo,
         device_repo,
+        paired_device_repo,
         blob_repository,
         thumbnail_repo,
         thumbnail_generator,
@@ -834,6 +846,9 @@ pub fn wire_dependencies_with_identity_store(
         device_repo: infra.device_repo,
         device_identity: platform.device_identity,
 
+        // Pairing dependencies / 配对依赖
+        paired_device_repo: infra.paired_device_repo,
+
         // Network dependencies / 网络依赖
         network: platform.network,
 
@@ -1069,6 +1084,7 @@ mod tests {
                 let _ = &deps.clipboard_change_origin;
                 let _ = &deps.device_repo;
                 let _ = &&deps.device_identity;
+                let _ = &deps.paired_device_repo;
                 let _ = &deps.network;
                 let _ = &deps.blob_store;
                 let _ = &deps.blob_repository;
@@ -1200,62 +1216,67 @@ mod tests {
 
     #[test]
     fn test_create_platform_layer_returns_expected_types() {
-        // Test that platform layer creates the correct types
-        // 测试平台层创建正确的类型
-        let keyring: Arc<dyn KeyringPort> = Arc::new(DummyKeyring);
-        let temp_dir = std::env::temp_dir().join(format!("uc-wiring-test-{}", std::process::id()));
-        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
-        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let runtime = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+        runtime.block_on(async {
+            // Test that platform layer creates the correct types
+            // 测试平台层创建正确的类型
+            let keyring: Arc<dyn KeyringPort> = Arc::new(DummyKeyring);
+            let temp_dir =
+                std::env::temp_dir().join(format!("uc-wiring-test-{}", std::process::id()));
+            std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+            let (cmd_tx, _cmd_rx) = mpsc::channel(10);
 
-        // Create missing dependencies
-        // 创建缺失的依赖
-        let encryption: Arc<dyn EncryptionPort> = Arc::new(EncryptionRepository);
-        let db_pool = init_db_pool(":memory:").expect("create in-memory db pool");
-        let blob_repository: Arc<dyn BlobRepositoryPort> = Arc::new(DieselBlobRepository::new(
-            Arc::new(DieselSqliteExecutor::new(db_pool)),
-            BlobRowMapper,
-            BlobRowMapper,
-        ));
-        let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
-        let storage_config = Arc::new(ClipboardStorageConfig::defaults());
+            // Create missing dependencies
+            // 创建缺失的依赖
+            let encryption: Arc<dyn EncryptionPort> = Arc::new(EncryptionRepository);
+            let db_pool = init_db_pool(":memory:").expect("create in-memory db pool");
+            let blob_repository: Arc<dyn BlobRepositoryPort> = Arc::new(DieselBlobRepository::new(
+                Arc::new(DieselSqliteExecutor::new(db_pool)),
+                BlobRowMapper,
+                BlobRowMapper,
+            ));
+            let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
+            let storage_config = Arc::new(ClipboardStorageConfig::defaults());
 
-        let result = create_platform_layer(
-            keyring,
-            &temp_dir,
-            cmd_tx,
-            encryption,
-            blob_repository,
-            clock,
-            storage_config,
-            test_identity_store(),
-        );
+            let result = create_platform_layer(
+                keyring,
+                &temp_dir,
+                cmd_tx,
+                encryption,
+                blob_repository,
+                clock,
+                storage_config,
+                test_identity_store(),
+            );
 
-        match result {
-            Ok(layer) => {
-                // Verify all fields have correct types
-                // 验证所有字段都有正确的类型
-                let _clipboard: &Arc<dyn PlatformClipboardPort> = &layer.clipboard;
-                let _keyring: &Arc<dyn KeyringPort> = &layer.keyring;
-                let _ui: &Arc<dyn UiPort> = &layer.ui;
-                let _autostart: &Arc<dyn AutostartPort> = &layer.autostart;
-                let _network: &Arc<dyn NetworkPort> = &layer.network;
-                let _device_identity: &Arc<dyn DeviceIdentityPort> = &layer.device_identity;
-                let _representation_normalizer: &Arc<dyn ClipboardRepresentationNormalizerPort> =
-                    &layer.representation_normalizer;
-                let _blob_writer: &Arc<dyn BlobWriterPort> = &layer.blob_writer;
-                let _blob_store: &Arc<dyn BlobStorePort> = &layer.blob_store;
-                let _encryption_session: &Arc<dyn EncryptionSessionPort> =
-                    &layer.encryption_session;
-                let _watcher_control: &Arc<dyn WatcherControlPort> = &layer.watcher_control;
+            match result {
+                Ok(layer) => {
+                    // Verify all fields have correct types
+                    // 验证所有字段都有正确的类型
+                    let _clipboard: &Arc<dyn PlatformClipboardPort> = &layer.clipboard;
+                    let _keyring: &Arc<dyn KeyringPort> = &layer.keyring;
+                    let _ui: &Arc<dyn UiPort> = &layer.ui;
+                    let _autostart: &Arc<dyn AutostartPort> = &layer.autostart;
+                    let _network: &Arc<dyn NetworkPort> = &layer.network;
+                    let _device_identity: &Arc<dyn DeviceIdentityPort> = &layer.device_identity;
+                    let _representation_normalizer: &Arc<
+                        dyn ClipboardRepresentationNormalizerPort,
+                    > = &layer.representation_normalizer;
+                    let _blob_writer: &Arc<dyn BlobWriterPort> = &layer.blob_writer;
+                    let _blob_store: &Arc<dyn BlobStorePort> = &layer.blob_store;
+                    let _encryption_session: &Arc<dyn EncryptionSessionPort> =
+                        &layer.encryption_session;
+                    let _watcher_control: &Arc<dyn WatcherControlPort> = &layer.watcher_control;
+                }
+                Err(e) => {
+                    // On systems without clipboard support, we might get an error
+                    // 在没有剪贴板支持的系统上，我们可能会收到错误
+                    // This is acceptable for this test
+                    // 这对此测试来说是可接受的
+                    panic!("Platform layer creation failed: {}", e);
+                }
             }
-            Err(e) => {
-                // On systems without clipboard support, we might get an error
-                // 在没有剪贴板支持的系统上，我们可能会收到错误
-                // This is acceptable for this test
-                // 这对此测试来说是可接受的
-                panic!("Platform layer creation failed: {}", e);
-            }
-        }
+        });
     }
 
     #[test]

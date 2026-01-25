@@ -721,6 +721,52 @@ mod tests {
     }
 
     #[async_trait]
+    impl PairedDeviceRepositoryPort for NoopPort {
+        async fn get_by_peer_id(
+            &self,
+            _peer_id: &uc_core::PeerId,
+        ) -> Result<Option<uc_core::network::PairedDevice>, PairedDeviceRepositoryError> {
+            Ok(None)
+        }
+
+        async fn list_all(
+            &self,
+        ) -> Result<Vec<uc_core::network::PairedDevice>, PairedDeviceRepositoryError> {
+            Ok(vec![])
+        }
+
+        async fn upsert(
+            &self,
+            _device: uc_core::network::PairedDevice,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn set_state(
+            &self,
+            _peer_id: &uc_core::PeerId,
+            _state: uc_core::network::PairingState,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn update_last_seen(
+            &self,
+            _peer_id: &uc_core::PeerId,
+            _last_seen_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn delete(
+            &self,
+            _peer_id: &uc_core::PeerId,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
     impl NetworkPort for NoopPort {
         async fn send_clipboard(
             &self,
@@ -979,6 +1025,7 @@ mod tests {
             watcher_control: Arc::new(NoopPort),
             device_repo: Arc::new(NoopPort),
             device_identity: Arc::new(MockDeviceIdentity),
+            paired_device_repo: Arc::new(NoopPort),
             network: Arc::new(NoopPort),
             onboarding_state: Arc::new(NoopPort),
             blob_store: Arc::new(NoopPort),

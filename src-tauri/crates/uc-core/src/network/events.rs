@@ -20,6 +20,7 @@ pub struct DiscoveredPeer {
     pub device_id: Option<String>,
     pub addresses: Vec<String>,
     pub discovered_at: DateTime<Utc>,
+    pub last_seen: DateTime<Utc>,
     pub is_paired: bool,
 }
 
@@ -121,6 +122,7 @@ mod tests {
             device_id: Some("ABC123".to_string()),
             addresses: vec!["/ip4/192.168.1.100/tcp/8000".to_string()],
             discovered_at: Utc::now(),
+            last_seen: Utc::now(),
             is_paired: false,
         };
 
@@ -129,6 +131,7 @@ mod tests {
 
         assert_eq!(deserialized.peer_id, peer.peer_id);
         assert_eq!(deserialized.device_name, peer.device_name);
+        assert_eq!(deserialized.last_seen, peer.last_seen);
         assert!(!deserialized.is_paired);
     }
 }
