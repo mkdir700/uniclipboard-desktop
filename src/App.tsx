@@ -8,6 +8,7 @@ import { P2PProvider } from '@/contexts/P2PContext'
 import { SearchProvider, useSearch } from '@/contexts/SearchContext'
 import { SettingProvider } from '@/contexts/SettingContext'
 import { ShortcutProvider } from '@/contexts/ShortcutContext'
+import { UpdateProvider } from '@/contexts/UpdateContext'
 import { useP2P } from '@/hooks/useP2P'
 import { MainLayout, SettingsFullLayout, WindowShell } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
@@ -103,7 +104,9 @@ export default function App() {
       <SearchProvider>
         <OnboardingProvider>
           <SettingProvider>
-            <AppContentWithBar />
+            <UpdateProvider>
+              <AppContentWithBar />
+            </UpdateProvider>
           </SettingProvider>
         </OnboardingProvider>
       </SearchProvider>
