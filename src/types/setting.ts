@@ -86,6 +86,7 @@ export interface RetentionPolicy {
 export interface SecuritySettings {
   encryption_enabled: boolean
   passphrase_configured: boolean
+  auto_unlock_enabled: boolean
 }
 
 /**
