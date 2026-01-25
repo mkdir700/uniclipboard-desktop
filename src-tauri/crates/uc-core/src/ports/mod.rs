@@ -26,6 +26,7 @@ pub mod clipboard;
 mod clipboard_change_handler;
 mod clipboard_event;
 mod clock;
+pub mod connection_policy;
 pub mod device_identity;
 pub mod device_repository;
 pub mod errors;
@@ -46,6 +47,7 @@ pub use blob_store::BlobStorePort;
 pub use blob_writer::BlobWriterPort;
 pub use clipboard_event::*;
 pub use clock::*;
+pub use connection_policy::{ConnectionPolicyResolverError, ConnectionPolicyResolverPort};
 pub use hash::*;
 
 pub use app_dirs::AppDirsPort;
