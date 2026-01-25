@@ -12,6 +12,7 @@ const SecuritySection: React.FC = () => {
 
   // Local state
   const [endToEndEncryption, setEndToEndEncryption] = useState(true)
+  const [autoUnlockEnabled, setAutoUnlockEnabled] = useState(false)
   const [encryptionPassword, setEncryptionPasswordInput] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
@@ -27,6 +28,7 @@ const SecuritySection: React.FC = () => {
   useEffect(() => {
     if (setting) {
       setEndToEndEncryption(setting.security.encryption_enabled)
+      setAutoUnlockEnabled(setting.security.auto_unlock_enabled)
       getEncryptionPassword().then(password => {
         setEncryptionPasswordInput(password || '')
       })
@@ -38,6 +40,11 @@ const SecuritySection: React.FC = () => {
     const newValue = checked
     setEndToEndEncryption(newValue)
     updateSecuritySetting({ encryption_enabled: newValue })
+  }
+
+  const handleAutoUnlockChange = (checked: boolean) => {
+    setAutoUnlockEnabled(checked)
+    updateSecuritySetting({ auto_unlock_enabled: checked })
   }
 
   // Display error message if there is an error
@@ -91,6 +98,19 @@ const SecuritySection: React.FC = () => {
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
+        </div>
+
+        {/* Auto unlock */}
+        <div className="flex items-center justify-between py-2">
+          <div className="space-y-0.5">
+            <h4 className="text-sm font-medium">
+              {t('settings.sections.security.autoUnlock.label')}
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              {t('settings.sections.security.autoUnlock.description')}
+            </p>
+          </div>
+          <Switch checked={autoUnlockEnabled} onCheckedChange={handleAutoUnlockChange} />
         </div>
       </CardContent>
     </Card>

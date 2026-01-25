@@ -110,7 +110,8 @@ impl Default for RetentionPolicy {
 impl Default for SecuritySettings {
     /// Creates default security settings with encryption disabled and no passphrase configured.
     ///
-    /// The default has `encryption_enabled = false` and `passphrase_configured = false`.
+    /// The default has `encryption_enabled = false`, `passphrase_configured = false`,
+    /// and `auto_unlock_enabled = false`.
     ///
     /// # Examples
     ///
@@ -120,11 +121,13 @@ impl Default for SecuritySettings {
     /// let s = SecuritySettings::default();
     /// assert!(!s.encryption_enabled);
     /// assert!(!s.passphrase_configured);
+    /// assert!(!s.auto_unlock_enabled);
     /// ```
     fn default() -> Self {
         Self {
             encryption_enabled: false,
             passphrase_configured: false,
+            auto_unlock_enabled: false,
         }
     }
 }

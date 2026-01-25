@@ -109,6 +109,13 @@ pub struct SecuritySettings {
     /// 仅用于 UI 与流程判断
     /// 不代表当前口令是否“可用”
     pub passphrase_configured: bool,
+
+    /// 是否启用启动时自动解锁
+    ///
+    /// 仅用于 UI 与流程判断
+    /// 需要用户在系统弹窗中选择“始终允许”才能静默生效
+    #[serde(default)]
+    pub auto_unlock_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,7 +158,8 @@ pub fn current_schema_version() -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuleEvaluation, SyncFrequency};
+    use super::{RuleEvaluation, SecuritySettings, SyncFrequency};
+    use serde_json::json;
 
     #[test]
     fn test_sync_frequency_equality() {
@@ -163,5 +171,20 @@ mod tests {
     fn test_rule_evaluation_equality() {
         assert_eq!(RuleEvaluation::AnyMatch, RuleEvaluation::AnyMatch);
         assert_ne!(RuleEvaluation::AnyMatch, RuleEvaluation::AllMatch);
+    }
+
+    #[test]
+    fn test_security_settings_defaults_auto_unlock_on_missing_field() {
+        let value = json!({
+            "encryption_enabled": true,
+            "passphrase_configured": true
+        });
+
+        let settings: SecuritySettings =
+            serde_json::from_value(value).expect("deserialize security settings");
+
+        assert!(settings.encryption_enabled);
+        assert!(settings.passphrase_configured);
+        assert!(!settings.auto_unlock_enabled);
     }
 }

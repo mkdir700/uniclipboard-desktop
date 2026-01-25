@@ -1,6 +1,8 @@
 import { listen } from '@tauri-apps/api/event'
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { checkOnboardingStatus, type OnboardingStatus } from '@/api/onboarding'
+import { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react'
+import { type OnboardingStatus } from '@/api/onboarding'
+import { appApi, useGetOnboardingStatusQuery } from '@/store/api'
+import { useAppDispatch } from '@/store/hooks'
 
 interface OnboardingContextType {
   status: OnboardingStatus | null
@@ -28,40 +30,32 @@ interface OnboardingCompletedEvent {
 }
 
 export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [status, setStatus] = useState<OnboardingStatus | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const dispatch = useAppDispatch()
+  const { data, isLoading, error, refetch } = useGetOnboardingStatusQuery()
 
-  const refreshStatus = async () => {
-    try {
-      console.log('[OnboardingContext] Checking onboarding status...')
-      const startedAt = Date.now()
-      console.log(
-        `[StartupTiming] onboarding status fetch start ts=${new Date(startedAt).toISOString()}`
-      )
-      setLoading(true)
-      const newStatus = await checkOnboardingStatus()
-      console.log(
-        `[StartupTiming] onboarding status fetch end duration=${Date.now() - startedAt}ms`
-      )
-      console.log('[OnboardingContext] Onboarding status:', newStatus)
-      setStatus(newStatus)
-      setError(null)
-      return newStatus
-    } catch (err) {
-      const errorStr = String(err)
-      setError(errorStr)
-      console.error('[OnboardingContext] Failed to refresh onboarding status:', err)
-      throw err
-    } finally {
-      setLoading(false)
+  const refreshStatus = useCallback(async () => {
+    const result = await refetch()
+    if ('error' in result) {
+      const errorMessage =
+        result.error && typeof result.error === 'object' && 'message' in result.error
+          ? String(result.error.message)
+          : 'Failed to refresh onboarding status'
+      throw new Error(errorMessage)
     }
-  }
 
-  // Check onboarding status on mount
-  useEffect(() => {
-    refreshStatus()
-  }, [])
+    if (!result.data) {
+      throw new Error('Missing onboarding status')
+    }
+
+    return result.data
+  }, [refetch])
+
+  const errorMessage =
+    error && typeof error === 'object' && 'message' in error
+      ? String(error.message)
+      : error
+        ? 'Failed to load onboarding status'
+        : null
 
   // 监听后端事件
   useEffect(() => {
@@ -74,13 +68,13 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
           'onboarding-password-set',
           () => {
             console.log('Password set event received')
-            refreshStatus()
+            dispatch(appApi.util.invalidateTags(['OnboardingStatus']))
           }
         )
 
         unlistenCompleted = await listen<OnboardingCompletedEvent>('onboarding-completed', () => {
           console.log('Onboarding completed event received')
-          refreshStatus()
+          dispatch(appApi.util.invalidateTags(['OnboardingStatus']))
         })
       } catch (err) {
         console.error('Failed to setup onboarding listeners:', err)
@@ -93,10 +87,12 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
       unlistenPasswordSet?.()
       unlistenCompleted?.()
     }
-  }, [])
+  }, [dispatch])
 
   return (
-    <OnboardingContext.Provider value={{ status, loading, error, refreshStatus }}>
+    <OnboardingContext.Provider
+      value={{ status: data ?? null, loading: isLoading, error: errorMessage, refreshStatus }}
+    >
       {children}
     </OnboardingContext.Provider>
   )

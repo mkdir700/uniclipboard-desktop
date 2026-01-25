@@ -11,7 +11,7 @@ use tauri::http::header::{
 };
 use tauri::http::{Request, Response, StatusCode};
 use tauri::webview::PageLoadEvent;
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -360,6 +360,7 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::encryption::initialize_encryption,
             uc_tauri::commands::encryption::is_encryption_initialized,
             uc_tauri::commands::encryption::get_encryption_session_status,
+            uc_tauri::commands::encryption::unlock_encryption_session,
             // Settings commands
             uc_tauri::commands::settings::get_settings,
             uc_tauri::commands::settings::update_settings,
@@ -626,57 +627,7 @@ fn run_app(config: AppConfig) {
                     // Non-fatal: continue startup even if device name initialization fails
                 }
 
-                // 1. Check if encryption initialized and keyring unlock
-                info!("[Startup] Starting keyring unlock for encryption session");
-                let uc = runtime.usecases().auto_unlock_encryption_session();
-                let should_start_watcher = match uc.execute().await {
-                    Ok(true) => {
-                        info!("[Startup] Keyring unlock completed: session ready");
-                        info!("Encryption session unlocked via keyring");
-
-                        // Emit event to notify frontend that encryption session is ready
-                        let app_handle_guard = runtime.app_handle();
-                        if let Some(app_handle) = app_handle_guard.as_ref() {
-                            if let Err(e) = uc_tauri::events::forward_encryption_event(
-                                app_handle,
-                                uc_tauri::events::EncryptionEvent::SessionReady,
-                            ) {
-                                warn!("Failed to emit encryption session ready event: {}", e);
-                            } else {
-                                info!("Emitted encryption session ready event to frontend");
-                            }
-                        }
-                        drop(app_handle_guard);
-
-                        true
-                    }
-                    Ok(false) => {
-                        info!("[Startup] Keyring unlock skipped: encryption not initialized");
-                        info!("Encryption not initialized, clipboard watcher will not start");
-                        info!("User must set encryption password via onboarding");
-                        false
-                    }
-                    Err(e) => {
-                        error!("[Startup] Keyring unlock failed: {}", e);
-                        error!("Keyring unlock failed: {:?}", e);
-                        // Emit error event to frontend for user notification
-                        let app_handle_guard = runtime.app_handle();
-                        if let Some(app_handle) = app_handle_guard.as_ref() {
-                            if let Err(emit_err) = uc_tauri::events::forward_encryption_event(
-                                app_handle,
-                                uc_tauri::events::EncryptionEvent::Failed {
-                                    reason: e.to_string(),
-                                },
-                            ) {
-                                warn!("Failed to emit encryption error event: {}", emit_err);
-                            }
-                        }
-                        drop(app_handle_guard);
-                        false
-                    }
-                };
-
-                // 2. Create PlatformRuntime
+                // 1. Create PlatformRuntime
                 info!("Creating PlatformRuntime...");
                 let executor = Arc::new(SimplePlatformCommandExecutor);
                 let platform_runtime = match PlatformRuntime::new(
@@ -696,36 +647,41 @@ fn run_app(config: AppConfig) {
                     }
                 };
 
-                // 3. Start watcher if encryption is ready
-                if should_start_watcher {
-                    match runtime.usecases().start_clipboard_watcher().execute().await {
-                        Ok(_) => info!("Clipboard watcher started successfully"),
-                        Err(e) => {
-                            error!("Failed to start clipboard watcher: {}", e);
-                            // Emit error event to frontend for user notification
-                            let app_handle_guard = runtime.app_handle();
-                            if let Some(app_handle) = app_handle_guard.as_ref() {
-                                if let Err(emit_err) = app_handle
-                                    .emit("clipboard-watcher-start-failed", format!("{}", e))
-                                {
-                                    warn!(
-                                        "Failed to emit clipboard-watcher-start-failed event: {}",
-                                        emit_err
-                                    );
-                                }
-                            }
-                            drop(app_handle_guard);
-                        }
-                    }
-                }
-
                 // Mark backend-side startup tasks completed. We now finish startup based on backend readiness
                 // to avoid deadlocks when the main window is hidden; frontend handles its own loading state.
                 info!("[Startup] Backend startup tasks completed, marking backend_ready");
                 startup_barrier_for_backend.mark_backend_ready();
                 startup_barrier_for_backend.try_finish(&app_handle_for_startup);
 
-                // 5. Start platform runtime (this is an infinite loop that runs until app exits)
+                // 2. Auto-unlock (non-blocking) if enabled in settings
+                let runtime_for_auto_unlock = runtime.clone();
+                let app_handle_for_unlock = app_handle_for_startup.clone();
+                tauri::async_runtime::spawn(async move {
+                    let auto_unlock_enabled = match runtime_for_auto_unlock.deps.settings.load().await {
+                        Ok(settings) => settings.security.auto_unlock_enabled,
+                        Err(e) => {
+                            warn!("[Startup] Failed to load settings for auto unlock: {}", e);
+                            false
+                        }
+                    };
+
+                    if !auto_unlock_enabled {
+                        info!("[Startup] Auto unlock disabled by settings");
+                        return;
+                    }
+
+                    if let Err(e) =
+                        uc_tauri::commands::encryption::unlock_encryption_session_with_runtime(
+                            &runtime_for_auto_unlock,
+                            &app_handle_for_unlock,
+                        )
+                        .await
+                    {
+                        warn!("[Startup] Auto unlock failed: {}", e);
+                    }
+                });
+
+                // 3. Start platform runtime (this is an infinite loop that runs until app exits)
                 platform_runtime.start().await;
 
                 info!("Platform runtime task ended");
