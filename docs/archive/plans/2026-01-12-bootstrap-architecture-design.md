@@ -618,7 +618,7 @@ git commit -m "refactor: remove legacy AppBuilder and cleanup"
 
 ## References / 参考
 
-- **Project DeepWiki**: https://deepwiki.com/mkdir700/uniclipboard-desktop
+- **Project DeepWiki**: https://deepwiki.com/UniClipboard/UniClipboard
 - **Hexagonal Architecture**: Alistair Cockburn's Ports and Adapters pattern
 - **Clean Architecture**: Robert C. Martin's layered architecture principles
 

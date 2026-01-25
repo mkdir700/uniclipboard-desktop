@@ -1,9 +1,6 @@
-name: 'Build Tauri App'
-run-name: "build-${{ inputs.platform || 'all' }}-v${{ inputs.version || github.ref_name }}"
+name: 'Build Alpha'
+run-name: 'alpha-${{ inputs.platform }}-v${{ inputs.version }}'
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       platform:
@@ -18,10 +15,10 @@ on:
           - 'all'
         default: 'all'
       version:
-        description: '版本号 (例如: 1.0.0)'
+        description: 'Alpha 版本号 (例如: 1.0.0-alpha.1)'
         required: true
         type: string
-        default: '1.0.0'
+        default: '0.0.0-alpha.1'
 
 jobs:
   setup-matrix:
@@ -44,7 +41,7 @@ jobs:
             echo 'matrix=[{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
           fi
 
-  build-tauri:
+  build-alpha:
     name: Build ${{ matrix.target }}
     needs: setup-matrix
     runs-on: ${{ matrix.platform }}
@@ -82,17 +79,17 @@ jobs:
       - name: install frontend dependencies
         run: bun install
 
-      - name: build Tauri app
+      - name: build alpha release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v${{ inputs.version || github.ref_name }}
-          releaseName: UniClipboard v${{ inputs.version || github.ref_name }}
-          releaseBody: See the assets to download this version and install.
+          tagName: v${{ inputs.version }}
+          releaseName: UniClipboard Alpha v${{ inputs.version }}
+          releaseBody: Alpha build for testing.
           releaseDraft: true
-          prerelease: false
+          prerelease: true
           uploadUpdaterJson: true
           args: ${{ matrix.args }}

@@ -10,7 +10,7 @@ uniclipboard-desktop is a cross-platform clipboard synchronization tool built wi
 
 For detailed architecture design, interaction flows, and system overview, refer to the project's DeepWiki documentation:
 
-- **URL**: https://deepwiki.com/mkdir700/uniclipboard-desktop
+- **URL**: https://deepwiki.com/UniClipboard/UniClipboard
 - **Access**: Use `mcp-deepwiki` MCP server to query the documentation programmatically
 
 This resource provides comprehensive diagrams, flow explanations, and design decisions that complement the code structure.
