@@ -1,7 +1,6 @@
-import { listen } from '@tauri-apps/api/event'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { completeOnboarding, setupEncryptionPassword } from '@/api/onboarding'
@@ -12,14 +11,6 @@ import { useOnboarding } from '@/contexts/OnboardingContext'
 import { cn } from '@/lib/utils'
 
 type Step = 'welcome' | 'set-password' | 'error'
-
-interface OnboardingPasswordSetEvent {
-  timestamp: number
-}
-
-interface OnboardingCompletedEvent {
-  timestamp: number
-}
 
 export default function OnboardingPage() {
   const navigate = useNavigate()
@@ -34,17 +25,33 @@ export default function OnboardingPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const completionRequestedRef = useRef(false)
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearCompletionTimeout = useCallback(() => {
+    if (completionTimeoutRef.current) {
+      clearTimeout(completionTimeoutRef.current)
+      completionTimeoutRef.current = null
+    }
+  }, [])
 
   const handleComplete = useCallback(async () => {
+    if (completionRequestedRef.current) {
+      return
+    }
+    completionRequestedRef.current = true
     setLoading(true)
     setError(null)
 
     // 设置 5 秒超时保护
-    const timeoutId = setTimeout(async () => {
+    clearCompletionTimeout()
+    completionTimeoutRef.current = setTimeout(async () => {
       const newStatus = await refreshStatus()
       if (newStatus.has_completed) {
+        clearCompletionTimeout()
         navigate('/', { replace: true })
       } else {
+        completionRequestedRef.current = false
         setError('完成验证超时，请重试')
         setStep('error')
         setLoading(false)
@@ -55,14 +62,15 @@ export default function OnboardingPage() {
       await completeOnboarding()
       // 不再使用 setTimeout，等待事件触发跳转
     } catch (err) {
-      clearTimeout(timeoutId)
+      clearCompletionTimeout()
+      completionRequestedRef.current = false
       const errorMessage = err instanceof Error ? err.message : String(err)
       setError(errorMessage)
       setStep('error')
       setLoading(false)
       toast.error(errorMessage)
     }
-  }, [navigate, refreshStatus])
+  }, [clearCompletionTimeout, navigate, refreshStatus])
 
   // 检查当前状态
   useEffect(() => {
@@ -70,6 +78,8 @@ export default function OnboardingPage() {
 
     // 如果已经完成了 onboarding，直接跳转
     if (status.has_completed) {
+      clearCompletionTimeout()
+      completionRequestedRef.current = false
       navigate('/', { replace: true })
       return
     }
@@ -77,38 +87,9 @@ export default function OnboardingPage() {
     if (status.encryption_password_set) {
       handleComplete()
     }
-  }, [status, navigate, handleComplete])
+  }, [clearCompletionTimeout, status, navigate, handleComplete])
 
-  // 监听密码设置成功事件
-  useEffect(() => {
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      unlisten = await listen<OnboardingPasswordSetEvent>('onboarding-password-set', () => {
-        toast.success('密码设置成功')
-        handleComplete()
-      })
-    }
-
-    setupListener()
-    return () => unlisten?.()
-  }, [handleComplete])
-
-  // 监听完成事件，自动跳转
-  useEffect(() => {
-    let unlisten: (() => void) | undefined
-
-    const setupListener = async () => {
-      unlisten = await listen<OnboardingCompletedEvent>('onboarding-completed', () => {
-        toast.success('设置完成!')
-        setLoading(false)
-        navigate('/', { replace: true })
-      })
-    }
-
-    setupListener()
-    return () => unlisten?.()
-  }, [navigate])
+  useEffect(() => () => clearCompletionTimeout(), [clearCompletionTimeout])
 
   const validatePassword = (): boolean => {
     if (password.length < 8) {
@@ -181,7 +162,7 @@ export default function OnboardingPage() {
                   transition={{ delay: 0.3 }}
                   className="text-muted-foreground text-sm"
                 >
-                  这是首次启动的第 1 步，用于保护同步内容
+                  这是首次启动的安全设置，用于保护同步内容
                 </motion.p>
               </div>
 
@@ -195,14 +176,12 @@ export default function OnboardingPage() {
                   '创建密码后，本机剪贴板会被加密保存',
                   '在其他设备上使用同一密码解锁同步内容',
                   '设置完成即可开始安全同步',
-                ].map((text, i) => (
+                ].map(text => (
                   <div
                     key={text}
                     className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 border border-border/40"
                   >
-                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-semibold text-xs">
-                      {i + 1}
-                    </div>
+                    <div className="w-2 h-2 rounded-full bg-primary/60 shrink-0" />
                     <span className="text-sm text-foreground font-medium">{text}</span>
                   </div>
                 ))}
@@ -228,7 +207,7 @@ export default function OnboardingPage() {
                   onClick={() => setStep('set-password')}
                   className="w-full max-w-sm h-11 text-sm font-medium rounded-xl shadow-lg shadow-primary/20"
                 >
-                  下一步：设置密码
+                  开始设置密码
                 </Button>
               </motion.div>
             </motion.div>
