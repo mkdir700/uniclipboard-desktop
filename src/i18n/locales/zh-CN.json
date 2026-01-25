@@ -99,6 +99,10 @@
           "save": "保存",
           "placeholder": "输入新的加密口令"
         },
+        "autoUnlock": {
+          "label": "自动解锁",
+          "description": "启动应用时自动从钥匙串解锁"
+        },
         "loadError": "加载设置失败:"
       },
       "network": {
@@ -197,6 +201,17 @@
   },
   "onboarding": {
     "preparingDashboard": "准备您的仪表板..."
+  },
+  "unlock": {
+    "title": "解锁 UniClipboard",
+    "description": "您的数据已加密，请解锁以继续。",
+    "button": "解锁",
+    "unlocking": "正在解锁...",
+    "autoUnlock": {
+      "label": "自动解锁",
+      "description": "启动应用时自动解锁"
+    },
+    "macOSNote": "在 macOS 上，您可以在钥匙串提示中选择“始终允许”以启用无缝自动解锁。"
   },
   "language": {
     "zh-CN": "简体中文",

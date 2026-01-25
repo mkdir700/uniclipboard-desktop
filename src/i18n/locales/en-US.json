@@ -99,6 +99,10 @@
           "save": "Save",
           "placeholder": "Enter new encryption password"
         },
+        "autoUnlock": {
+          "label": "Auto unlock",
+          "description": "Automatically unlock from keychain on startup"
+        },
         "loadError": "Failed to load settings:"
       },
       "network": {
@@ -197,6 +201,17 @@
   },
   "onboarding": {
     "preparingDashboard": "Preparing your dashboard..."
+  },
+  "unlock": {
+    "title": "Unlock UniClipboard",
+    "description": "Your data is encrypted. Please unlock to continue.",
+    "button": "Unlock",
+    "unlocking": "Unlocking...",
+    "autoUnlock": {
+      "label": "Auto Unlock",
+      "description": "Automatically unlock when application starts"
+    },
+    "macOSNote": "On macOS, you can choose \"Always Allow\" in the keychain prompt to enable seamless auto-unlock."
   },
   "language": {
     "zh-CN": "简体中文",

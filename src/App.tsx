@@ -1,4 +1,7 @@
+import { listen } from '@tauri-apps/api/event'
+import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { getEncryptionSessionStatus, EncryptionSessionStatus } from '@/api/security'
 import { TitleBar } from '@/components'
 import GlobalPairingRequestDialog from '@/components/GlobalPairingRequestDialog'
 import PairingPinDialog from '@/components/PairingPinDialog'
@@ -14,6 +17,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import DevicesPage from '@/pages/DevicesPage'
 import OnboardingPage from '@/pages/OnboardingPage'
 import SettingsPage from '@/pages/SettingsPage'
+import UnlockPage from '@/pages/UnlockPage'
 import './App.css'
 
 // Global pairing dialogs component
@@ -60,14 +64,54 @@ const GlobalOverlays = () => {
 // 主应用程序内容
 const AppContent = () => {
   const { status, loading } = useOnboarding()
+  const [encryptionStatus, setEncryptionStatus] = useState<EncryptionSessionStatus | null>(null)
+  const [checkingEncryption, setCheckingEncryption] = useState(true)
+
+  useEffect(() => {
+    // Check initial status
+    const checkStatus = async () => {
+      try {
+        const status = await getEncryptionSessionStatus()
+        setEncryptionStatus(status)
+      } catch (error) {
+        console.error('Failed to check encryption status:', error)
+      } finally {
+        setCheckingEncryption(false)
+      }
+    }
+
+    checkStatus()
+
+    const unlistenPromise = listen<'SessionReady' | { type: string }>(
+      'encryption://event',
+      event => {
+        console.log('Encryption event:', event.payload)
+        const eventType = typeof event.payload === 'string' ? event.payload : event.payload?.type
+        if (eventType === 'SessionReady') {
+          setEncryptionStatus(prev =>
+            prev ? { ...prev, session_ready: true } : { initialized: true, session_ready: true }
+          )
+        }
+      }
+    )
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten())
+    }
+  }, [])
 
   // Wait for onboarding status to load
-  if (loading || status === null) {
+  if (loading || status === null || checkingEncryption) {
     return null
   }
 
   if (!status.has_completed) {
     return <OnboardingPage />
+  }
+
+  // If initialized but not ready, show unlock page
+  if (encryptionStatus?.initialized && !encryptionStatus?.session_ready) {
+    return <UnlockPage />
   }
 
   return (

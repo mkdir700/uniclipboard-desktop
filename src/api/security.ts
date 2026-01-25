@@ -57,3 +57,16 @@ export async function getEncryptionSessionStatus(): Promise<EncryptionSessionSta
     throw error
   }
 }
+
+/**
+ * 解锁加密会话
+ * @returns Promise，成功返回true
+ */
+export async function unlockEncryptionSession(): Promise<boolean> {
+  try {
+    return await invoke('unlock_encryption_session')
+  } catch (error) {
+    console.error('解锁加密会话失败:', error)
+    throw error
+  }
+}
