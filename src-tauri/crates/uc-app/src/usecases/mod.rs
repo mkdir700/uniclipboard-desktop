@@ -23,6 +23,7 @@ pub mod internal;
 pub mod is_encryption_initialized;
 pub mod list_clipboard_entries;
 pub mod onboarding;
+pub mod pairing;
 pub mod settings;
 pub mod start_clipboard_watcher;
 pub mod update_settings;
@@ -36,6 +37,7 @@ pub use get_settings::GetSettings;
 pub use initialize_encryption::InitializeEncryption;
 pub use is_encryption_initialized::IsEncryptionInitialized;
 pub use list_clipboard_entries::ListClipboardEntries;
+pub use pairing::{ListPairedDevices, SetPairingState};
 pub use start_clipboard_watcher::StartClipboardWatcher;
 pub use update_settings::UpdateSettings;
 

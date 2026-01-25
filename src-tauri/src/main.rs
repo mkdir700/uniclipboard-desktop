@@ -367,6 +367,9 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::onboarding::get_onboarding_state,
             uc_tauri::commands::onboarding::complete_onboarding,
             uc_tauri::commands::onboarding::initialize_onboarding,
+            // Pairing commands
+            uc_tauri::commands::pairing::list_paired_devices,
+            uc_tauri::commands::pairing::set_pairing_state,
             // Autostart commands
             uc_tauri::commands::autostart::enable_autostart,
             uc_tauri::commands::autostart::disable_autostart,

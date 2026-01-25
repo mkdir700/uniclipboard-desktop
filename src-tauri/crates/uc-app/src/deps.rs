@@ -55,6 +55,9 @@ pub struct AppDeps {
     pub device_repo: Arc<dyn DeviceRepositoryPort>,
     pub device_identity: Arc<dyn DeviceIdentityPort>,
 
+    // Pairing dependencies / 配对依赖
+    pub paired_device_repo: Arc<dyn PairedDeviceRepositoryPort>,
+
     // Network dependencies / 网络依赖
     pub network: Arc<dyn NetworkPort>,
 

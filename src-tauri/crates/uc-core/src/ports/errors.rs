@@ -20,3 +20,12 @@ pub enum AppDirsError {
     #[error("platform error: {0}")]
     Platform(String),
 }
+
+#[derive(Debug, Error)]
+pub enum PairedDeviceRepositoryError {
+    #[error("paired device not found")]
+    NotFound,
+
+    #[error("storage error: {0}")]
+    Storage(String),
+}

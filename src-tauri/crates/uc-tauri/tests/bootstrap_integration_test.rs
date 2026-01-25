@@ -62,6 +62,14 @@ fn test_identity_store() -> Arc<dyn IdentityStorePort> {
     Arc::new(MemoryIdentityStore::default())
 }
 
+fn run_with_tokio<F, T>(operation: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    let runtime = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+    runtime.block_on(async move { operation() })
+}
+
 /// Test 1: Full integration test for config loading
 /// 测试1：配置加载的完整集成测试
 ///
@@ -275,12 +283,13 @@ fn test_bootstrap_config_invalid_port_is_accepted() {
 /// - All dependency fields are properly initialized / 所有依赖字段正确初始化
 #[test]
 fn test_bootstrap_wire_dependencies_creates_app_deps() {
-    let temp_dir = TempDir::new().unwrap();
-    let config_path = temp_dir.path().join("test_config.toml");
+    run_with_tokio(|| {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("test_config.toml");
 
-    // Write a minimal valid config
-    // 写入最小有效配置
-    let toml_content = r#"
+        // Write a minimal valid config
+        // 写入最小有效配置
+        let toml_content = r#"
         [general]
         device_name = "TestDevice"
 
@@ -292,42 +301,44 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
         database_path = ":memory:"
     "#;
 
-    let mut file = fs::File::create(&config_path).unwrap();
-    file.write_all(toml_content.as_bytes()).unwrap();
+        let mut file = fs::File::create(&config_path).unwrap();
+        file.write_all(toml_content.as_bytes()).unwrap();
 
-    let config = load_config(config_path).unwrap();
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps_result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+        let config = load_config(config_path).unwrap();
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let deps_result =
+            wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
-    assert!(
-        deps_result.is_ok(),
-        "wire_dependencies should succeed with valid config"
-    );
+        assert!(
+            deps_result.is_ok(),
+            "wire_dependencies should succeed with valid config"
+        );
 
-    let deps = deps_result.unwrap().deps;
+        let deps = deps_result.unwrap().deps;
 
-    // Verify we can access all dependency fields
-    // 验证我们可以访问所有依赖字段
-    let _ = &deps.clipboard;
-    let _ = &deps.clipboard_event_repo;
-    let _ = &deps.representation_repo;
-    let _ = &deps.representation_normalizer;
-    let _ = &deps.encryption;
-    let _ = &deps.encryption_session;
-    let _ = &deps.keyring;
-    let _ = &deps.key_material;
-    let _ = &deps.watcher_control;
-    let _ = &deps.device_repo;
-    let _ = &deps.device_identity;
-    let _ = &deps.network;
-    let _ = &deps.blob_store;
-    let _ = &deps.blob_repository;
-    let _ = &deps.blob_writer;
-    let _ = &deps.settings;
-    let _ = &deps.ui_port;
-    let _ = &deps.autostart;
-    let _ = &deps.clock;
-    let _ = &deps.hash;
+        // Verify we can access all dependency fields
+        // 验证我们可以访问所有依赖字段
+        let _ = &deps.clipboard;
+        let _ = &deps.clipboard_event_repo;
+        let _ = &deps.representation_repo;
+        let _ = &deps.representation_normalizer;
+        let _ = &deps.encryption;
+        let _ = &deps.encryption_session;
+        let _ = &deps.keyring;
+        let _ = &deps.key_material;
+        let _ = &deps.watcher_control;
+        let _ = &deps.device_repo;
+        let _ = &deps.device_identity;
+        let _ = &deps.network;
+        let _ = &deps.blob_store;
+        let _ = &deps.blob_repository;
+        let _ = &deps.blob_writer;
+        let _ = &deps.settings;
+        let _ = &deps.ui_port;
+        let _ = &deps.autostart;
+        let _ = &deps.clock;
+        let _ = &deps.hash;
+    });
 }
 
 /// Test 6: Integration test - real file I/O error handling
@@ -446,13 +457,14 @@ fn test_bootstrap_load_config_handles_empty_file() {
 /// 这是整个 bootstrap 模块的主要集成测试。
 #[test]
 fn test_bootstrap_full_flow() {
-    let temp_dir = TempDir::new().unwrap();
-    let config_path = temp_dir.path().join("full_flow_config.toml");
+    run_with_tokio(|| {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("full_flow_config.toml");
 
-    // Write a complete configuration
-    // 写入完整配置
-    let toml_content = format!(
-        r#"
+        // Write a complete configuration
+        // 写入完整配置
+        let toml_content = format!(
+            r#"
         [general]
         device_name = "FullFlowTest"
         silent_start = false
@@ -467,33 +479,34 @@ fn test_bootstrap_full_flow() {
         [storage]
         database_path = ":memory:"
     "#,
-        temp_dir.path().display(),
-        temp_dir.path().display()
-    );
+            temp_dir.path().display(),
+            temp_dir.path().display()
+        );
 
-    let mut file = fs::File::create(&config_path).unwrap();
-    file.write_all(toml_content.as_bytes()).unwrap();
+        let mut file = fs::File::create(&config_path).unwrap();
+        file.write_all(toml_content.as_bytes()).unwrap();
 
-    // Step 1: Load config
-    // 步骤 1：加载配置
-    let config = load_config(config_path).unwrap();
-    assert_eq!(config.device_name, "FullFlowTest");
-    assert_eq!(config.webserver_port, 8080);
+        // Step 1: Load config
+        // 步骤 1：加载配置
+        let config = load_config(config_path).unwrap();
+        assert_eq!(config.device_name, "FullFlowTest");
+        assert_eq!(config.webserver_port, 8080);
 
-    // Step 2: Wire dependencies
-    // 步骤 2：连接依赖
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
-        .expect("wire_dependencies should succeed")
-        .deps;
+        // Step 2: Wire dependencies
+        // 步骤 2：连接依赖
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
+            .expect("wire_dependencies should succeed")
+            .deps;
 
-    // Step 3: Create app
-    // 步骤 3：创建应用
-    let app = create_app(deps);
+        // Step 3: Create app
+        // 步骤 3：创建应用
+        let app = create_app(deps);
 
-    // Verify app was created successfully
-    // 验证应用创建成功
-    let _app = app; // Use the variable to avoid warnings
+        // Verify app was created successfully
+        // 验证应用创建成功
+        let _app = app; // Use the variable to avoid warnings
+    });
 }
 
 /// Test 10: Database pool creation with real file system
@@ -506,34 +519,37 @@ fn test_bootstrap_full_flow() {
 /// - Connection pool can be established / 可以建立连接池
 #[test]
 fn test_bootstrap_database_pool_real_filesystem() {
-    let temp_dir = TempDir::new().unwrap();
-    let db_path = temp_dir.path().join("test_data").join("db").join("test.db");
+    run_with_tokio(|| {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_data").join("db").join("test.db");
 
-    // Create config with database path
-    // 使用数据库路径创建配置
-    let mut config = AppConfig::empty();
-    config.database_path = db_path.clone();
+        // Create config with database path
+        // 使用数据库路径创建配置
+        let mut config = AppConfig::empty();
+        config.database_path = db_path.clone();
 
-    // Wire dependencies (this will create the database)
-    // 连接依赖（这将创建数据库）
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps_result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+        // Wire dependencies (this will create the database)
+        // 连接依赖（这将创建数据库）
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let deps_result =
+            wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
-    assert!(
-        deps_result.is_ok(),
-        "wire_dependencies should create database successfully"
-    );
+        assert!(
+            deps_result.is_ok(),
+            "wire_dependencies should create database successfully"
+        );
 
-    // Verify database file was created
-    // 验证数据库文件已创建
-    assert!(db_path.exists(), "Database file should be created");
+        // Verify database file was created
+        // 验证数据库文件已创建
+        assert!(db_path.exists(), "Database file should be created");
 
-    // Verify parent directories were created
-    // 验证父目录已创建
-    assert!(
-        db_path.parent().unwrap().exists(),
-        "Parent directory should be created"
-    );
+        // Verify parent directories were created
+        // 验证父目录已创建
+        assert!(
+            db_path.parent().unwrap().exists(),
+            "Parent directory should be created"
+        );
+    });
 }
 
 /// Test 11: Database pool creation with invalid path
@@ -545,31 +561,34 @@ fn test_bootstrap_database_pool_real_filesystem() {
 /// - Path cannot be created / 无法创建路径
 #[test]
 fn test_bootstrap_database_pool_invalid_path() {
-    // Use a path that cannot be created (e.g., in /root without permissions)
-    // 使用无法创建的路径（例如，没有权限的 /root）
-    let db_path = PathBuf::from("/root/uniclipboard_test_no_permission/test.db");
+    run_with_tokio(|| {
+        // Use a path that cannot be created (e.g., in /root without permissions)
+        // 使用无法创建的路径（例如，没有权限的 /root）
+        let db_path = PathBuf::from("/root/uniclipboard_test_no_permission/test.db");
 
-    let mut config = AppConfig::empty();
-    config.database_path = db_path;
+        let mut config = AppConfig::empty();
+        config.database_path = db_path;
 
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps_result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let deps_result =
+            wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
-    // Should fail gracefully with proper error
-    // 应该优雅地失败并返回适当错误
-    match deps_result {
-        Ok(_) => panic!("wire_dependencies should fail with invalid path"),
-        Err(error) => {
-            let error_msg = error.to_string().to_lowercase();
-            // Error should mention database initialization failure
-            // 错误应该提到数据库初始化失败
-            assert!(
-                error_msg.contains("database") || error_msg.contains("db"),
-                "Error should mention database, got: {}",
-                error
-            );
+        // Should fail gracefully with proper error
+        // 应该优雅地失败并返回适当错误
+        match deps_result {
+            Ok(_) => panic!("wire_dependencies should fail with invalid path"),
+            Err(error) => {
+                let error_msg = error.to_string().to_lowercase();
+                // Error should mention database initialization failure
+                // 错误应该提到数据库初始化失败
+                assert!(
+                    error_msg.contains("database") || error_msg.contains("db"),
+                    "Error should mention database, got: {}",
+                    error
+                );
+            }
         }
-    }
+    });
 }
 
 /// Test 12: create_runtime wrapper function
@@ -606,27 +625,30 @@ fn test_bootstrap_create_runtime_wrapper() {
 /// 此测试验证 wire_dependencies 通过为必需路径使用合理的默认值来处理空配置。
 #[test]
 fn test_bootstrap_wire_dependencies_with_empty_config() {
-    let config = AppConfig::empty();
+    run_with_tokio(|| {
+        let config = AppConfig::empty();
 
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps_result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let deps_result =
+            wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
-    // Should succeed even with empty config (uses in-memory database)
-    // 应该成功，即使配置为空（使用内存数据库）
-    assert!(
-        deps_result.is_ok(),
-        "wire_dependencies should handle empty config"
-    );
+        // Should succeed even with empty config (uses in-memory database)
+        // 应该成功，即使配置为空（使用内存数据库）
+        assert!(
+            deps_result.is_ok(),
+            "wire_dependencies should handle empty config"
+        );
 
-    let deps = deps_result.unwrap().deps;
+        let deps = deps_result.unwrap().deps;
 
-    // Verify all dependencies are present even with empty config
-    // 验证即使配置为空，所有依赖都存在
-    let _ = &deps.clipboard;
-    let _ = &deps.encryption;
-    let _ = &deps.keyring;
-    let _ = &deps.device_repo;
-    let _ = &deps.settings;
+        // Verify all dependencies are present even with empty config
+        // 验证即使配置为空，所有依赖都存在
+        let _ = &deps.clipboard;
+        let _ = &deps.encryption;
+        let _ = &deps.keyring;
+        let _ = &deps.device_repo;
+        let _ = &deps.settings;
+    });
 }
 
 /// Test 14: Integration test - wire_dependencies creates real database repositories
@@ -639,30 +661,32 @@ fn test_bootstrap_wire_dependencies_with_empty_config() {
 /// - All repository types are present / 所有仓库类型都存在
 #[test]
 fn test_bootstrap_wire_dependencies_creates_real_repositories() {
-    let mut config = AppConfig::empty();
-    config.database_path = PathBuf::from(":memory:");
+    run_with_tokio(|| {
+        let mut config = AppConfig::empty();
+        config.database_path = PathBuf::from(":memory:");
 
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
-        .expect("wire_dependencies should succeed")
-        .deps;
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
+            .expect("wire_dependencies should succeed")
+            .deps;
 
-    // Verify clipboard repositories
-    // 验证剪贴板仓库
-    let _clipboard_entry_repo = deps.clipboard_entry_repo.clone();
-    let _clipboard_event_repo = deps.clipboard_event_repo.clone();
-    let _representation_repo = deps.representation_repo.clone();
+        // Verify clipboard repositories
+        // 验证剪贴板仓库
+        let _clipboard_entry_repo = deps.clipboard_entry_repo.clone();
+        let _clipboard_event_repo = deps.clipboard_event_repo.clone();
+        let _representation_repo = deps.representation_repo.clone();
 
-    // Verify device repository
-    // 验证设备仓库
-    let _device_repo = deps.device_repo.clone();
+        // Verify device repository
+        // 验证设备仓库
+        let _device_repo = deps.device_repo.clone();
 
-    // Verify blob repository
-    // 验证 blob 仓库
-    let _blob_repository = deps.blob_repository.clone();
+        // Verify blob repository
+        // 验证 blob 仓库
+        let _blob_repository = deps.blob_repository.clone();
 
-    // If we got here without panicking, all repositories are properly created
-    // 如果我们到这里没有 panic，所有仓库都正确创建了
+        // If we got here without panicking, all repositories are properly created
+        // 如果我们到这里没有 panic，所有仓库都正确创建了
+    });
 }
 
 /// Test 15: Integration test - wire_dependencies creates platform adapters
@@ -675,32 +699,34 @@ fn test_bootstrap_wire_dependencies_creates_real_repositories() {
 /// - All adapters implement their respective traits / 所有适配器实现各自的 trait
 #[test]
 fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
-    let mut config = AppConfig::empty();
-    config.database_path = PathBuf::from(":memory:");
+    run_with_tokio(|| {
+        let mut config = AppConfig::empty();
+        config.database_path = PathBuf::from(":memory:");
 
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
-        .expect("wire_dependencies should succeed")
-        .deps;
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
+            .expect("wire_dependencies should succeed")
+            .deps;
 
-    // Verify system clipboard (platform-specific)
-    // 验证系统剪贴板（平台特定）
-    let _clipboard = deps.clipboard.clone();
+        // Verify system clipboard (platform-specific)
+        // 验证系统剪贴板（平台特定）
+        let _clipboard = deps.clipboard.clone();
 
-    // Verify keyring (platform-specific)
-    // 验证密钥环（平台特定）
-    let _keyring = deps.keyring.clone();
+        // Verify keyring (platform-specific)
+        // 验证密钥环（平台特定）
+        let _keyring = deps.keyring.clone();
 
-    // Verify placeholder adapters exist (for unimplemented ports)
-    // 验证占位符适配器存在（用于未实现的端口）
-    let _ui = deps.ui_port.clone();
-    let _autostart = deps.autostart.clone();
-    let _network = deps.network.clone();
-    let _device_identity = deps.device_identity.clone();
-    let _representation_normalizer = deps.representation_normalizer.clone();
-    let _blob_writer = deps.blob_writer.clone();
-    let _blob_store = deps.blob_store.clone();
-    let _encryption_session = deps.encryption_session.clone();
+        // Verify placeholder adapters exist (for unimplemented ports)
+        // 验证占位符适配器存在（用于未实现的端口）
+        let _ui = deps.ui_port.clone();
+        let _autostart = deps.autostart.clone();
+        let _network = deps.network.clone();
+        let _device_identity = deps.device_identity.clone();
+        let _representation_normalizer = deps.representation_normalizer.clone();
+        let _blob_writer = deps.blob_writer.clone();
+        let _blob_store = deps.blob_store.clone();
+        let _encryption_session = deps.encryption_session.clone();
+    });
 }
 
 /// Test 16: Integration test - settings repository initialization
@@ -713,28 +739,30 @@ fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
 /// - Repository can be accessed / 可以访问仓库
 #[test]
 fn test_bootstrap_settings_repository_initialization() {
-    let temp_dir = TempDir::new().unwrap();
-    let vault_path = temp_dir.path().join("vault");
+    run_with_tokio(|| {
+        let temp_dir = TempDir::new().unwrap();
+        let vault_path = temp_dir.path().join("vault");
 
-    let mut config = AppConfig::empty();
-    config.vault_key_path = vault_path.join("key.json");
-    config.vault_snapshot_path = vault_path.join("snapshot.json");
-    config.database_path = PathBuf::from(":memory:");
+        let mut config = AppConfig::empty();
+        config.vault_key_path = vault_path.join("key.json");
+        config.vault_snapshot_path = vault_path.join("snapshot.json");
+        config.database_path = PathBuf::from(":memory:");
 
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
-        .expect("wire_dependencies should succeed")
-        .deps;
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
+            .expect("wire_dependencies should succeed")
+            .deps;
 
-    // Verify settings repository exists and can be cloned/accessed
-    // 验证设置仓库存在并且可以克隆/访问
-    let settings = deps.settings.clone();
-    let _settings2 = settings.clone();
+        // Verify settings repository exists and can be cloned/accessed
+        // 验证设置仓库存在并且可以克隆/访问
+        let settings = deps.settings.clone();
+        let _settings2 = settings.clone();
 
-    // Test passes if we can successfully create and access the settings repository
-    // 如果我们可以成功创建和访问设置仓库，测试通过
-    // Note: FileSettingsRepository doesn't create files until first write
-    // 注意：FileSettingsRepository 在第一次写入之前不会创建文件
+        // Test passes if we can successfully create and access the settings repository
+        // 如果我们可以成功创建和访问设置仓库，测试通过
+        // Note: FileSettingsRepository doesn't create files until first write
+        // 注意：FileSettingsRepository 在第一次写入之前不会创建文件
+    });
 }
 
 /// Test 17: Integration test - error propagation in wire_dependencies
@@ -747,24 +775,26 @@ fn test_bootstrap_settings_repository_initialization() {
 /// - No panics occur during error handling / 错误处理期间无 panic
 #[test]
 fn test_bootstrap_wire_dependencies_error_propagation() {
-    // Create a config with an invalid database path (non-existent parent with invalid permissions)
-    // 创建具有无效数据库路径的配置（具有无效权限的不存在的父目录）
-    let mut config = AppConfig::empty();
-    config.database_path = PathBuf::from("/nonexistent/with/invalid/permissions/db/test.db");
+    run_with_tokio(|| {
+        // Create a config with an invalid database path (non-existent parent with invalid permissions)
+        // 创建具有无效数据库路径的配置（具有无效权限的不存在的父目录）
+        let mut config = AppConfig::empty();
+        config.database_path = PathBuf::from("/nonexistent/with/invalid/permissions/db/test.db");
 
-    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+        let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+        let result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
-    // Should fail gracefully
-    // 应该优雅地失败
-    match result {
-        Ok(_) => panic!("Should fail with invalid database path"),
-        Err(error) => {
-            let error_msg = error.to_string();
-            // Error message should be descriptive
-            // 错误消息应该是描述性的
-            assert!(!error_msg.is_empty(), "Error message should not be empty");
-            assert!(error_msg.len() > 10, "Error message should be descriptive");
+        // Should fail gracefully
+        // 应该优雅地失败
+        match result {
+            Ok(_) => panic!("Should fail with invalid database path"),
+            Err(error) => {
+                let error_msg = error.to_string();
+                // Error message should be descriptive
+                // 错误消息应该是描述性的
+                assert!(!error_msg.is_empty(), "Error message should not be empty");
+                assert!(error_msg.len() > 10, "Error message should be descriptive");
+            }
         }
-    }
+    });
 }

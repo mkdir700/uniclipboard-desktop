@@ -41,6 +41,7 @@ impl PeerCaches {
             device_id: None,
             addresses,
             discovered_at,
+            last_seen: discovered_at,
             is_paired: false,
         };
         self.discovered_peers

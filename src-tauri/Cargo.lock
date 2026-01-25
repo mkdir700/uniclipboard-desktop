@@ -9286,6 +9286,7 @@ dependencies = [
  "clipboard-rs",
  "clipboard-win",
  "dirs 6.0.0",
+ "futures",
  "image",
  "iota_stronghold",
  "keyring",
