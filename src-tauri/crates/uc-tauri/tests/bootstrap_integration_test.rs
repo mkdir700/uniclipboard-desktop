@@ -25,10 +25,42 @@
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 use uc_core::config::AppConfig;
-use uc_tauri::bootstrap::{create_app, create_runtime, load_config, wire_dependencies};
+use uc_core::ports::{IdentityStoreError, IdentityStorePort};
+use uc_tauri::bootstrap::wiring::wire_dependencies_with_identity_store;
+use uc_tauri::bootstrap::{create_app, create_runtime, load_config};
+
+#[derive(Default)]
+struct MemoryIdentityStore {
+    identity: Mutex<Option<Vec<u8>>>,
+}
+
+impl IdentityStorePort for MemoryIdentityStore {
+    fn load_identity(&self) -> Result<Option<Vec<u8>>, IdentityStoreError> {
+        let guard = self
+            .identity
+            .lock()
+            .map_err(|_| IdentityStoreError::Store("identity store poisoned".to_string()))?;
+        Ok(guard.clone())
+    }
+
+    fn store_identity(&self, identity: &[u8]) -> Result<(), IdentityStoreError> {
+        let mut guard = self
+            .identity
+            .lock()
+            .map_err(|_| IdentityStoreError::Store("identity store poisoned".to_string()))?;
+        *guard = Some(identity.to_vec());
+        Ok(())
+    }
+}
+
+fn test_identity_store() -> Arc<dyn IdentityStorePort> {
+    Arc::new(MemoryIdentityStore::default())
+}
 
 /// Test 1: Full integration test for config loading
 /// 测试1：配置加载的完整集成测试
@@ -265,7 +297,7 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
 
     let config = load_config(config_path).unwrap();
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps_result = wire_dependencies(&config, cmd_tx);
+    let deps_result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
     assert!(
         deps_result.is_ok(),
@@ -451,7 +483,7 @@ fn test_bootstrap_full_flow() {
     // Step 2: Wire dependencies
     // 步骤 2：连接依赖
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies(&config, cmd_tx)
+    let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
         .expect("wire_dependencies should succeed")
         .deps;
 
@@ -485,7 +517,7 @@ fn test_bootstrap_database_pool_real_filesystem() {
     // Wire dependencies (this will create the database)
     // 连接依赖（这将创建数据库）
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps_result = wire_dependencies(&config, cmd_tx);
+    let deps_result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
     assert!(
         deps_result.is_ok(),
@@ -521,7 +553,7 @@ fn test_bootstrap_database_pool_invalid_path() {
     config.database_path = db_path;
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps_result = wire_dependencies(&config, cmd_tx);
+    let deps_result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
     // Should fail gracefully with proper error
     // 应该优雅地失败并返回适当错误
@@ -577,7 +609,7 @@ fn test_bootstrap_wire_dependencies_with_empty_config() {
     let config = AppConfig::empty();
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps_result = wire_dependencies(&config, cmd_tx);
+    let deps_result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
     // Should succeed even with empty config (uses in-memory database)
     // 应该成功，即使配置为空（使用内存数据库）
@@ -611,7 +643,7 @@ fn test_bootstrap_wire_dependencies_creates_real_repositories() {
     config.database_path = PathBuf::from(":memory:");
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies(&config, cmd_tx)
+    let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
         .expect("wire_dependencies should succeed")
         .deps;
 
@@ -647,7 +679,7 @@ fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
     config.database_path = PathBuf::from(":memory:");
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies(&config, cmd_tx)
+    let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
         .expect("wire_dependencies should succeed")
         .deps;
 
@@ -690,7 +722,7 @@ fn test_bootstrap_settings_repository_initialization() {
     config.database_path = PathBuf::from(":memory:");
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let deps = wire_dependencies(&config, cmd_tx)
+    let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
         .expect("wire_dependencies should succeed")
         .deps;
 
@@ -721,7 +753,7 @@ fn test_bootstrap_wire_dependencies_error_propagation() {
     config.database_path = PathBuf::from("/nonexistent/with/invalid/permissions/db/test.db");
 
     let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-    let result = wire_dependencies(&config, cmd_tx);
+    let result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
     // Should fail gracefully
     // 应该优雅地失败

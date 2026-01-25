@@ -32,3 +32,4 @@ dist-ssr
 src-tauri/uniclipboard.db
 src-tauri/crates/**/target/**
 public/splashscreen.html
+.worktrees/

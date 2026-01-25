@@ -485,7 +485,11 @@ fn run_app(config: AppConfig) {
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
 
             // Start background spooler and blob worker tasks
-            start_background_tasks(background, &runtime_for_handler.deps);
+            start_background_tasks(
+                background,
+                &runtime_for_handler.deps,
+                Some(app.handle().clone()),
+            );
 
             // Clone handles for async blocks
             let app_handle_for_startup = app.handle().clone();

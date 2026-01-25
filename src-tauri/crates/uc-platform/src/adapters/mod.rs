@@ -18,6 +18,7 @@ pub mod blob;
 pub mod blob_store;
 pub mod encryption;
 pub mod in_memory_watcher_control;
+pub mod libp2p_network;
 pub mod network;
 pub mod ui;
 
@@ -26,5 +27,6 @@ pub use blob::PlaceholderBlobWriterPort;
 pub use blob_store::{FilesystemBlobStore, PlaceholderBlobStorePort};
 pub use encryption::{InMemoryEncryptionSessionPort, PlaceholderEncryptionSessionPort};
 pub use in_memory_watcher_control::InMemoryWatcherControl;
+pub use libp2p_network::Libp2pNetworkAdapter;
 pub use network::PlaceholderNetworkPort;
 pub use ui::PlaceholderUiPort;

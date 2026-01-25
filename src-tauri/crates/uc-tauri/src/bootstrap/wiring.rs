@@ -36,7 +36,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::async_runtime;
+use tauri::{async_runtime, AppHandle, Runtime};
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
@@ -79,12 +79,15 @@ use uc_infra::security::{
 };
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
+
+use crate::events::forward_libp2p_start_failed;
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
-    PlaceholderAutostartPort, PlaceholderNetworkPort, PlaceholderUiPort,
+    Libp2pNetworkAdapter, PlaceholderAutostartPort, PlaceholderUiPort,
 };
 use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::clipboard::LocalClipboard;
+use uc_platform::identity_store::SystemIdentityStore;
 use uc_platform::runtime::event_bus::PlatformCommandSender;
 
 /// Result type for wiring operations
@@ -129,6 +132,7 @@ pub struct WiredDependencies {
 /// Background runtime components that must be started after async runtime is ready.
 /// 需要在异步运行时就绪后启动的后台组件。
 pub struct BackgroundRuntimeDeps {
+    pub libp2p_network: Arc<Libp2pNetworkAdapter>,
     pub representation_cache: Arc<RepresentationCache>,
     pub spool_manager: Arc<SpoolManager>,
     pub spool_rx: mpsc::Receiver<SpoolRequest>,
@@ -240,6 +244,9 @@ struct PlatformLayer {
 
     // Network operations / 网络操作（占位符）
     network: Arc<dyn NetworkPort>,
+
+    // libp2p network adapter (concrete)
+    libp2p_network: Arc<Libp2pNetworkAdapter>,
 
     // Device identity / 设备身份（占位符）
     device_identity: Arc<dyn DeviceIdentityPort>,
@@ -431,6 +438,8 @@ fn create_infra_layer(
 /// * `encryption` - Encryption service for blob store decorator / Blob 存储加密服务
 /// * `blob_repository` - Blob repository for BlobWriter / BlobWriter 依赖的仓库
 /// * `clock` - Clock service for BlobWriter timestamps / BlobWriter 时间戳服务
+/// * `storage_config` - Clipboard storage configuration / 剪贴板存储配置
+/// * `identity_store` - Identity store for libp2p keypair persistence / libp2p 身份持久化存储
 ///
 /// # Note / 注意
 ///
@@ -448,6 +457,7 @@ fn create_platform_layer(
     blob_repository: Arc<dyn BlobRepositoryPort>,
     clock: Arc<dyn ClockPort>,
     storage_config: Arc<ClipboardStorageConfig>,
+    identity_store: Arc<dyn IdentityStorePort>,
 ) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
@@ -478,7 +488,11 @@ fn create_platform_layer(
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
-    let network: Arc<dyn NetworkPort> = Arc::new(PlaceholderNetworkPort);
+    let libp2p_network = Arc::new(Libp2pNetworkAdapter::new(identity_store).map_err(|e| {
+        WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}"))
+    })?);
+    info!(peer_id = %libp2p_network.local_peer_id(), "Loaded libp2p identity");
+    let network: Arc<dyn NetworkPort> = libp2p_network.clone();
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
 
@@ -515,6 +529,7 @@ fn create_platform_layer(
         ui,
         autostart,
         network,
+        libp2p_network,
         device_identity,
         representation_normalizer,
         blob_writer,
@@ -690,6 +705,18 @@ pub fn wire_dependencies(
     config: &AppConfig,
     platform_cmd_tx: PlatformCommandSender,
 ) -> WiringResult<WiredDependencies> {
+    let identity_store: Arc<dyn IdentityStorePort> = Arc::new(SystemIdentityStore::new());
+    wire_dependencies_with_identity_store(config, platform_cmd_tx, identity_store)
+}
+
+/// Wires dependencies with a caller-provided identity store.
+///
+/// This is primarily intended for tests or environments without a system keyring.
+pub fn wire_dependencies_with_identity_store(
+    config: &AppConfig,
+    platform_cmd_tx: PlatformCommandSender,
+    identity_store: Arc<dyn IdentityStorePort>,
+) -> WiringResult<WiredDependencies> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池
     //
@@ -730,6 +757,7 @@ pub fn wire_dependencies(
         infra.blob_repository.clone(),
         infra.clock.clone(),
         storage_config.clone(),
+        identity_store,
     )?;
 
     // Step 3.5: Wrap ports with encryption decorators
@@ -834,6 +862,7 @@ pub fn wire_dependencies(
     Ok(WiredDependencies {
         deps,
         background: BackgroundRuntimeDeps {
+            libp2p_network: platform.libp2p_network,
             representation_cache,
             spool_manager,
             spool_rx,
@@ -848,8 +877,13 @@ pub fn wire_dependencies(
 
 /// Start background spooler and blob worker tasks.
 /// 启动后台假脱机写入和 blob 物化任务。
-pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps) {
+pub fn start_background_tasks<R: Runtime>(
+    background: BackgroundRuntimeDeps,
+    deps: &AppDeps,
+    app_handle: Option<AppHandle<R>>,
+) {
     let BackgroundRuntimeDeps {
+        libp2p_network,
         representation_cache,
         spool_manager,
         spool_rx,
@@ -861,6 +895,18 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
     } = background;
 
     info!("Starting background clipboard spooler and blob worker");
+
+    let libp2p_app_handle = app_handle.clone();
+    async_runtime::spawn(async move {
+        if let Err(err) = libp2p_network.spawn_swarm() {
+            warn!(error = %err, "Failed to start libp2p swarm");
+            if let Some(app_handle) = libp2p_app_handle {
+                if let Err(emit_err) = forward_libp2p_start_failed(&app_handle, err.to_string()) {
+                    warn!("Failed to emit libp2p start failed event: {emit_err}");
+                }
+            }
+        }
+    });
 
     let representation_repo = deps.representation_repo.clone();
     let worker_tx = deps.worker_tx.clone();
@@ -935,6 +981,7 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tokio::sync::mpsc;
 
     #[test]
@@ -1003,7 +1050,7 @@ mod tests {
         // 测试 wire_dependencies 创建有效的 AppDeps 结构
         let config = AppConfig::empty();
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result = wire_dependencies(&config, cmd_tx);
+        let result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
 
         match result {
             Ok(wired) => {
@@ -1123,6 +1170,34 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct MemoryIdentityStore {
+        identity: Mutex<Option<Vec<u8>>>,
+    }
+
+    impl IdentityStorePort for MemoryIdentityStore {
+        fn load_identity(&self) -> Result<Option<Vec<u8>>, IdentityStoreError> {
+            let guard = self
+                .identity
+                .lock()
+                .map_err(|_| IdentityStoreError::Store("identity store poisoned".to_string()))?;
+            Ok(guard.clone())
+        }
+
+        fn store_identity(&self, identity: &[u8]) -> Result<(), IdentityStoreError> {
+            let mut guard = self
+                .identity
+                .lock()
+                .map_err(|_| IdentityStoreError::Store("identity store poisoned".to_string()))?;
+            *guard = Some(identity.to_vec());
+            Ok(())
+        }
+    }
+
+    fn test_identity_store() -> Arc<dyn IdentityStorePort> {
+        Arc::new(MemoryIdentityStore::default())
+    }
+
     #[test]
     fn test_create_platform_layer_returns_expected_types() {
         // Test that platform layer creates the correct types
@@ -1152,6 +1227,7 @@ mod tests {
             blob_repository,
             clock,
             storage_config,
+            test_identity_store(),
         );
 
         match result {
@@ -1232,7 +1308,8 @@ The functionality is still validated in development mode when running the app wi
         // 测试 wire_dependencies 优雅地处理空的 database_path
         let empty_config = AppConfig::empty();
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result = wire_dependencies(&empty_config, cmd_tx);
+        let result =
+            wire_dependencies_with_identity_store(&empty_config, cmd_tx, test_identity_store());
 
         // Should succeed by using fallback default data directory
         // In headless CI environments, clipboard initialization may fail - accept that as expected
