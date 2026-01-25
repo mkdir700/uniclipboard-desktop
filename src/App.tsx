@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
-import { getEncryptionSessionStatus, EncryptionSessionStatus } from '@/api/security'
+import { type EncryptionSessionStatus } from '@/api/security'
 import { TitleBar } from '@/components'
 import GlobalPairingRequestDialog from '@/components/GlobalPairingRequestDialog'
 import PairingPinDialog from '@/components/PairingPinDialog'
@@ -18,6 +18,7 @@ import DevicesPage from '@/pages/DevicesPage'
 import OnboardingPage from '@/pages/OnboardingPage'
 import SettingsPage from '@/pages/SettingsPage'
 import UnlockPage from '@/pages/UnlockPage'
+import { useGetEncryptionSessionStatusQuery } from '@/store/api'
 import './App.css'
 
 // Global pairing dialogs component
@@ -65,23 +66,14 @@ const GlobalOverlays = () => {
 const AppContent = () => {
   const { status, loading } = useOnboarding()
   const [encryptionStatus, setEncryptionStatus] = useState<EncryptionSessionStatus | null>(null)
-  const [checkingEncryption, setCheckingEncryption] = useState(true)
+  const [encryptionError, setEncryptionError] = useState<string | null>(null)
+  const {
+    data: encryptionData,
+    isLoading: encryptionLoading,
+    error: encryptionQueryError,
+  } = useGetEncryptionSessionStatusQuery()
 
   useEffect(() => {
-    // Check initial status
-    const checkStatus = async () => {
-      try {
-        const status = await getEncryptionSessionStatus()
-        setEncryptionStatus(status)
-      } catch (error) {
-        console.error('Failed to check encryption status:', error)
-      } finally {
-        setCheckingEncryption(false)
-      }
-    }
-
-    checkStatus()
-
     const unlistenPromise = listen<'SessionReady' | { type: string }>(
       'encryption://event',
       event => {
@@ -100,9 +92,40 @@ const AppContent = () => {
     }
   }, [])
 
+  useEffect(() => {
+    if (encryptionData) {
+      setEncryptionStatus(encryptionData)
+      setEncryptionError(null)
+    }
+  }, [encryptionData])
+
+  useEffect(() => {
+    if (!encryptionQueryError) {
+      return
+    }
+
+    const message =
+      typeof encryptionQueryError === 'object' && 'message' in encryptionQueryError
+        ? String(encryptionQueryError.message)
+        : 'Failed to check encryption status'
+    setEncryptionError(message)
+  }, [encryptionQueryError])
+
+  const resolvedEncryptionStatus = encryptionStatus ?? encryptionData ?? null
+
   // Wait for onboarding status to load
-  if (loading || status === null || checkingEncryption) {
+  if (loading || status === null || encryptionLoading) {
     return null
+  }
+
+  if (encryptionError) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-4 text-sm text-foreground">
+        <div className="max-w-sm rounded-md border border-border/20 bg-muted p-4 text-center">
+          Failed to verify encryption status. Please restart the app.
+        </div>
+      </div>
+    )
   }
 
   if (!status.has_completed) {
@@ -110,7 +133,7 @@ const AppContent = () => {
   }
 
   // If initialized but not ready, show unlock page
-  if (encryptionStatus?.initialized && !encryptionStatus?.session_ready) {
+  if (resolvedEncryptionStatus?.initialized && !resolvedEncryptionStatus?.session_ready) {
     return <UnlockPage />
   }
 
