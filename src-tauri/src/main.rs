@@ -481,6 +481,9 @@ fn run_app(config: AppConfig) {
             runtime_for_handler.set_app_handle(app.handle().clone());
             info!("AppHandle set on AppRuntime for event emission");
 
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+
             // Start background spooler and blob worker tasks
             start_background_tasks(background, &runtime_for_handler.deps);
 

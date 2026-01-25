@@ -130,6 +130,7 @@ winapi = { version = "0.3.9", features = [
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
 
 [dependencies.uuid]
 version = "1.10.0"

@@ -12,19 +12,19 @@ It enables seamless and secure syncing of text, images, and files across multipl
 <div align="center">
   <br/>
 
-  <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
+  <a href="https://github.com/UniClipboard/UniClipboard/releases">
     <img
       alt="Windows"
       src="https://img.shields.io/badge/-Windows-blue?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB0PSIxNzI2MzA1OTcxMDA2IiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjE1NDgiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4Ij48cGF0aCBkPSJNNTI3LjI3NTU1MTYxIDk2Ljk3MTAzMDEzdjM3My45OTIxMDY2N2g0OTQuNTEzNjE5NzVWMTUuMDI2NzU3NTN6TTUyNy4yNzU1NTE2MSA5MjguMzIzNTA4MTVsNDk0LjUxMzYxOTc1IDgwLjUyMDI4MDQ5di00NTUuNjc3NDcxNjFoLTQ5NC41MTM2MTk3NXpNNi42NzA0NTEzNiA0NzAuODMzNjgyOTdINDIyLjY3Njg1OTI1VjExMC41NjM2ODE5N2wtNDE4LjAwNjQwNzg5IDY5LjI1Nzc5NzUzek00LjY3MDQ1MTM2IDg0Ni43Njc1OTcwM0w0MjIuNjc2ODU5MjUgOTE0Ljg2MDMxMDEzVjU1My4xNjYzMTcwM0g0LjY3MDQ1MTM2eiIgcC1pZD0iMTU0OSIgZmlsbD0iI2ZmZmZmZiI+PC9wYXRoPjwvc3ZnPg=="
     />
   </a>
-  <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
+  <a href="https://github.com/UniClipboard/UniClipboard/releases">
     <img
       alt="MacOS"
       src="https://img.shields.io/badge/-MacOS-black?style=flat-square&logo=apple&logoColor=white"
     />
   </a >
-  <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
+  <a href="https://github.com/UniClipboard/UniClipboard/releases">
     <img
       alt="Linux"
       src="https://img.shields.io/badge/-Linux-purple?style=flat-square&logo=linux&logoColor=white"
@@ -34,12 +34,12 @@ It enables seamless and secure syncing of text, images, and files across multipl
   <div>
     <a href="./LICENSE">
       <img
-        src="https://img.shields.io/github/license/mkdir700/uniclipboard-desktop?style=flat-square"
+        src="https://img.shields.io/github/license/UniClipboard/UniClipboard?style=flat-square"
       />
     </a >
-    <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
+    <a href="https://github.com/UniClipboard/UniClipboard/releases">
       <img
-        src="https://img.shields.io/github/v/release/mkdir700/uniclipboard-desktop?include_prereleases&style=flat-square"
+        src="https://img.shields.io/github/v/release/UniClipboard/UniClipboard?include_prereleases&style=flat-square"
       />
     </a >
     <a href="https://codecov.io/gh/UniClipboard/UniClipboard" >
@@ -65,14 +65,14 @@ It enables seamless and secure syncing of text, images, and files across multipl
 
 ### Download from Releases
 
-Visit the [GitHub Releases](https://github.com/mkdir700/uniclipboard-desktop/releases) page to download the installation package for your operating system.
+Visit the [GitHub Releases](https://github.com/UniClipboard/UniClipboard/releases) page to download the installation package for your operating system.
 
 ### Build from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/mkdir700/uniclipboard-desktop.git
-cd uniclipboard-desktop
+git clone https://github.com/UniClipboard/UniClipboard.git
+cd UniClipboard
 
 # Install dependencies
 bun install
@@ -147,4 +147,4 @@ This project is licensed under the Apache-2.0 License - see the [LICENSE](./LICE
 
 ---
 
-**Have questions or suggestions?** [Create an Issue](https://github.com/mkdir700/uniclipboard-desktop/issues/new) or contact us to discuss!
+**Have questions or suggestions?** [Create an Issue](https://github.com/UniClipboard/UniClipboard/issues/new) or contact us to discuss!

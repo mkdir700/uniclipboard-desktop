@@ -373,4 +373,4 @@ RUST_LOG=debug cargo test --workspace
 - [Bootstrap System](architecture/bootstrap.md) - How dependency injection works
 - [Module Boundaries](architecture/module-boundaries.md) - What each module can/cannot do
 - [Error Handling](guides/error-handling.md) - Error handling strategy
-- [DeepWiki](https://deepwiki.com/mkdir700/uniclipboard-desktop) - Interactive diagrams
+- [DeepWiki](https://deepwiki.com/UniClipboard/UniClipboard) - Interactive diagrams

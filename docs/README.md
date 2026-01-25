@@ -15,6 +15,7 @@ UniClipboard Desktop is a cross-platform clipboard synchronization tool built wi
 - [Module Boundaries](architecture/module-boundaries.md) - What each module can/cannot do
 - [Snapshot Cache Pipeline ADR](architecture/snapshot-cache/adr-001-snapshot-cache-pipeline.md) - Cache/spool/worker design decisions
 - [Error Handling](guides/error-handling.md) - Error handling strategy
+- [GitHub Releases Updater](guides/github-releases-updater.md) - Auto-update pipeline with latest.json
 
 **For Code Review:**
 

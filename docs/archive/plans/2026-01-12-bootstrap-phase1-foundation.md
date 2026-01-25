@@ -735,7 +735,7 @@ After Phase 1, run the validation checklist from the design doc:
 ## Related Documentation / 相关文档
 
 - **Design Document**: [docs/plans/2026-01-12-bootstrap-architecture-design.md](docs/plans/2026-01-12-bootstrap-architecture-design.md)
-- **Project DeepWiki**: https://deepwiki.com/mkdir700/uniclipboard-desktop
+- **Project DeepWiki**: https://deepwiki.com/UniClipboard/UniClipboard
 
 ---
 

@@ -1,4 +1,4 @@
-![UniClipboard](https://socialify.git.ci/mkdir700/uniclipboard-desktop/image?custom_description=A+privacy-first%2C+end-to-end+encrypted%2C+cross-device+clipboard+sync+built+with+Rust+and+Tauri.&description=1&font=KoHo&forks=1&issues=1&name=1&owner=1&pattern=Floating+Cogs&pulls=1&stargazers=1&theme=Auto)
+![UniClipboard](https://socialify.git.ci/UniClipboard/UniClipboard/image?custom_description=A+privacy-first%2C+end-to-end+encrypted%2C+cross-device+clipboard+sync+built+with+Rust+and+Tauri.&description=1&font=KoHo&forks=1&issues=1&name=1&owner=1&pattern=Floating+Cogs&pulls=1&stargazers=1&theme=Auto)
 
 ## 📝 项目介绍
 
@@ -12,19 +12,19 @@ UniClipboard 是一款以**隐私优先**为核心理念的跨设备剪贴板同
 
   <br/>
 
-  <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
+  <a href="https://github.com/UniClipboard/UniClipboard/releases">
     <img
       alt="Windows"
       src="https://img.shields.io/badge/-Windows-blue?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB0PSIxNzI2MzA1OTcxMDA2IiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjE1NDgiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4Ij48cGF0aCBkPSJNNTI3LjI3NTU1MTYxIDk2Ljk3MTAzMDEzdjM3My45OTIxMDY2N2g0OTQuNTEzNjE5NzVWMTUuMDI2NzU3NTN6TTUyNy4yNzU1NTE2MSA5MjguMzIzNTA4MTVsNDk0LjUxMzYxOTc1IDgwLjUyMDI4MDQ5di00NTUuNjc3NDcxNjFoLTQ5NC41MTM2MTk3NXpNNC42NzA0NTEzNiA0NzAuODMzNjgyOTdINDIyLjY3Njg1OTI1VjExMC41NjM2ODE5N2wtNDE4LjAwNjQwNzg5IDY5LjI1Nzc5NzUzek00LjY3MDQ1MTM2IDg0Ni43Njc1OTcwM0w0MjIuNjc2ODU5MjUgOTE0Ljg2MDMxMDEzVjU1My4xNjYzMTcwM0g0LjY3MDQ1MTM2eiIgcC1pZD0iMTU0OSIgZmlsbD0iI2ZmZmZmZiI+PC9wYXRoPjwvc3ZnPg=="
     />
   </a>  
-  <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
+  <a href="https://github.com/UniClipboard/UniClipboard/releases">
     <img
       alt="MacOS"
       src="https://img.shields.io/badge/-MacOS-black?style=flat-square&logo=apple&logoColor=white"
     />
   </a>
-  <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
+  <a href="https://github.com/UniClipboard/UniClipboard/releases">
     <img
       alt="Linux"
       src="https://img.shields.io/badge/-Linux-purple?style=flat-square&logo=linux&logoColor=white"
@@ -34,16 +34,16 @@ UniClipboard 是一款以**隐私优先**为核心理念的跨设备剪贴板同
   <div>
     <a href="./LICENSE">
       <img
-        src="https://img.shields.io/github/license/mkdir700/uniclipboard-desktop?style=flat-square"
+        src="https://img.shields.io/github/license/UniClipboard/UniClipboard?style=flat-square"
       />
     </a>
-    <a href="https://github.com/mkdir700/uniclipboard-desktop/releases">
+    <a href="https://github.com/UniClipboard/UniClipboard/releases">
       <img
-        src="https://img.shields.io/github/v/release/mkdir700/uniclipboard-desktop?include_prereleases&style=flat-square"
+        src="https://img.shields.io/github/v/release/UniClipboard/UniClipboard?include_prereleases&style=flat-square"
       />
     </a>
-    <a href="https://codecov.io/gh/mkdir700/uniclipboard-desktop" >
-      <img src="https://codecov.io/gh/mkdir700/uniclipboard-desktop/branch/main/graph/badge.svg?token=QZfjXOsQTp"/>
+    <a href="https://codecov.io/gh/UniClipboard/UniClipboard" >
+      <img src="https://codecov.io/gh/UniClipboard/UniClipboard/branch/main/graph/badge.svg?token=QZfjXOsQTp"/>
     </a>
   </div>
 
@@ -65,14 +65,14 @@ UniClipboard 是一款以**隐私优先**为核心理念的跨设备剪贴板同
 
 ### 从 Releases 下载
 
-访问 [GitHub Releases](https://github.com/mkdir700/uniclipboard-desktop/releases) 页面，下载适合您操作系统的安装包。
+访问 [GitHub Releases](https://github.com/UniClipboard/UniClipboard/releases) 页面，下载适合您操作系统的安装包。
 
 ### 从源码构建
 
 ```bash
 # 克隆仓库
-git clone https://github.com/mkdir700/uniclipboard-desktop.git
-cd uniclipboard-desktop
+git clone https://github.com/UniClipboard/UniClipboard.git
+cd UniClipboard
 
 # 安装依赖
 bun install
@@ -147,4 +147,4 @@ bun tauri build
 
 ---
 
-💡 **有问题或建议?** [创建 Issue](https://github.com/mkdir700/uniclipboard-desktop/issues/new) 或联系我们讨论!
+💡 **有问题或建议?** [创建 Issue](https://github.com/UniClipboard/UniClipboard/issues/new) 或联系我们讨论!
