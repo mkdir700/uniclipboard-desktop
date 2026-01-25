@@ -117,55 +117,62 @@ pub async fn unlock_encryption_session_with_runtime(
     runtime: &Arc<AppRuntime>,
     app_handle: &AppHandle,
 ) -> Result<bool, String> {
+    let span = info_span!(
+        "command.encryption.unlock_session",
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
     let uc = runtime.usecases().auto_unlock_encryption_session();
     info!("{} Attempting keyring unlock", UNLOCK_CONTEXT);
-
-    match uc.execute().await {
-        Ok(true) => {
-            info!("{} Keyring unlock completed", UNLOCK_CONTEXT);
-            if let Err(e) = emit_session_ready(app_handle) {
-                warn!(
-                    "{} Failed to emit session ready event: {}",
-                    UNLOCK_CONTEXT, e
-                );
-            }
-
-            if let Err(e) = runtime.usecases().start_clipboard_watcher().execute().await {
-                warn!(
-                    "{} Failed to start clipboard watcher: {}",
-                    UNLOCK_CONTEXT, e
-                );
-                if let Err(emit_err) =
-                    app_handle.emit("clipboard-watcher-start-failed", format!("{}", e))
-                {
+    async {
+        match uc.execute().await {
+            Ok(true) => {
+                info!("{} Keyring unlock completed", UNLOCK_CONTEXT);
+                if let Err(e) = emit_session_ready(app_handle) {
                     warn!(
-                        "{} Failed to emit clipboard-watcher-start-failed event: {}",
+                        "{} Failed to emit session ready event: {}",
+                        UNLOCK_CONTEXT, e
+                    );
+                }
+
+                if let Err(e) = runtime.usecases().start_clipboard_watcher().execute().await {
+                    warn!(
+                        "{} Failed to start clipboard watcher: {}",
+                        UNLOCK_CONTEXT, e
+                    );
+                    if let Err(emit_err) =
+                        app_handle.emit("encryption://watcher-start-failed", format!("{}", e))
+                    {
+                        warn!(
+                            "{} Failed to emit watcher-start-failed event: {}",
+                            UNLOCK_CONTEXT, emit_err
+                        );
+                    }
+                }
+
+                Ok(true)
+            }
+            Ok(false) => {
+                info!(
+                    "{} Encryption not initialized, unlock skipped",
+                    UNLOCK_CONTEXT
+                );
+                Ok(false)
+            }
+            Err(err) => {
+                let reason = err.to_string();
+                warn!("{} Keyring unlock failed: {}", UNLOCK_CONTEXT, reason);
+                if let Err(emit_err) = emit_session_failed(app_handle, reason.clone()) {
+                    warn!(
+                        "{} Failed to emit session failed event: {}",
                         UNLOCK_CONTEXT, emit_err
                     );
                 }
+                Err(reason)
             }
-
-            Ok(true)
-        }
-        Ok(false) => {
-            info!(
-                "{} Encryption not initialized, unlock skipped",
-                UNLOCK_CONTEXT
-            );
-            Ok(false)
-        }
-        Err(err) => {
-            let reason = err.to_string();
-            warn!("{} Keyring unlock failed: {}", UNLOCK_CONTEXT, reason);
-            if let Err(emit_err) = emit_session_failed(app_handle, reason.clone()) {
-                warn!(
-                    "{} Failed to emit session failed event: {}",
-                    UNLOCK_CONTEXT, emit_err
-                );
-            }
-            Err(reason)
         }
     }
+    .instrument(span)
+    .await
 }
 
 #[tauri::command]
