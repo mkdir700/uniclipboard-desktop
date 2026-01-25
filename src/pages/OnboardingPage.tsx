@@ -46,15 +46,25 @@ export default function OnboardingPage() {
     // 设置 5 秒超时保护
     clearCompletionTimeout()
     completionTimeoutRef.current = setTimeout(async () => {
-      const newStatus = await refreshStatus()
-      if (newStatus.has_completed) {
+      try {
+        const newStatus = await refreshStatus()
+        if (newStatus.has_completed) {
+          clearCompletionTimeout()
+          navigate('/', { replace: true })
+        } else {
+          completionRequestedRef.current = false
+          setError('完成验证超时，请重试')
+          setStep('error')
+          setLoading(false)
+        }
+      } catch (err) {
         clearCompletionTimeout()
-        navigate('/', { replace: true })
-      } else {
         completionRequestedRef.current = false
-        setError('完成验证超时，请重试')
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        setError(errorMessage)
         setStep('error')
         setLoading(false)
+        toast.error(errorMessage)
       }
     }, 5000)
 
