@@ -75,9 +75,11 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     // - Can be overridden with RUST_LOG environment variable
     let filter_directives = [
         if is_dev { "debug" } else { "info" },
-        "libp2p_mdns=warn", // Filter noisy proxy errors
-        "wry=off",          // Filter Tauri internal spans (custom_protocol)
-        "ipc::request=off", // Filter Tauri IPC handler spans
+        "libp2p_mdns::behaviour::iface=off", // Suppress iface send errors (No route to host)
+        "libp2p_mdns=warn",                  // Filter noisy proxy errors
+        "tauri=warn",                        // Filter noisy setup spans (app::setup)
+        "wry=off",                           // Filter Tauri internal spans (custom_protocol)
+        "ipc::request=off",                  // Filter Tauri IPC handler spans
         if is_dev {
             "uc_platform=debug"
         } else {
