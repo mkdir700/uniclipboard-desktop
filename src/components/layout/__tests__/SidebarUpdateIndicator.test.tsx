@@ -39,6 +39,7 @@ const baseSetting: Settings = {
   security: {
     encryption_enabled: false,
     passphrase_configured: false,
+    auto_unlock_enabled: false,
   },
 }
 

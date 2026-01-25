@@ -31,6 +31,6 @@ dist-ssr
 **/uniclipboard.db
 src-tauri/uniclipboard.db
 src-tauri/crates/**/target/**
+src-tauri/.app_data/
 public/splashscreen.html
 .worktrees/
-src-tauri/.app_data/vault
