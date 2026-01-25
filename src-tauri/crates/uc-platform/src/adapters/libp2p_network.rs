@@ -2,30 +2,61 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use libp2p::{
-    futures::StreamExt,
-    mdns, noise,
+    futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt},
+    identity, mdns, noise,
+    request_response::{self, ProtocolSupport},
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, SwarmBuilder,
+    tcp, yamux, Multiaddr, PeerId, StreamProtocol, SwarmBuilder,
 };
+use libp2p_stream as stream;
 use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock as StdRwLock};
 use tokio::sync::{mpsc, RwLock};
-use uc_core::network::{ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent};
-use uc_core::ports::{IdentityStorePort, NetworkControlPort, NetworkPort};
+use uc_core::network::{
+    ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingState,
+    ProtocolDenyReason, ProtocolDirection, ProtocolId, ProtocolKind, ResolvedConnectionPolicy,
+};
+use uc_core::ports::{
+    ConnectionPolicyResolverPort, IdentityStorePort, NetworkControlPort, NetworkPort,
+};
+use uuid::Uuid;
 
 use crate::identity_store::load_or_create_identity;
+
+const PAIRING_PROTOCOL_ID: &str = ProtocolId::Pairing.as_str();
+const BUSINESS_PROTOCOL_ID: &str = ProtocolId::Business.as_str();
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct PairingHello {
+    session_id: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+enum PairingReply {
+    Accept,
+    Reject { reason: String },
+}
+
+#[derive(Debug)]
+enum PairingCommand {
+    SendRequest {
+        peer_id: uc_core::PeerId,
+        request: PairingHello,
+    },
+}
+
+#[derive(Debug)]
+enum BusinessCommand {
+    SendClipboard {
+        peer_id: uc_core::PeerId,
+        data: Vec<u8>,
+    },
+}
 
 pub struct PeerCaches {
     discovered_peers: HashMap<String, DiscoveredPeer>,
     reachable_peers: HashSet<String>,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum NetworkStartState {
-    NotStarted,
-    Starting,
-    Started,
 }
 
 impl PeerCaches {
@@ -76,27 +107,57 @@ impl PeerCaches {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "MdnsBehaviourEvent")]
-struct MdnsBehaviour {
+#[behaviour(out_event = "Libp2pBehaviourEvent")]
+struct Libp2pBehaviour {
     mdns: mdns::tokio::Behaviour,
+    pairing: request_response::json::Behaviour<PairingHello, PairingReply>,
+    stream: stream::Behaviour,
 }
 
 #[derive(Debug)]
-enum MdnsBehaviourEvent {
+enum Libp2pBehaviourEvent {
     Mdns(mdns::Event),
+    Pairing(request_response::Event<PairingHello, PairingReply>),
+    Stream,
 }
 
-impl From<mdns::Event> for MdnsBehaviourEvent {
+impl From<mdns::Event> for Libp2pBehaviourEvent {
     fn from(event: mdns::Event) -> Self {
         Self::Mdns(event)
     }
 }
 
-impl MdnsBehaviour {
+impl From<request_response::Event<PairingHello, PairingReply>> for Libp2pBehaviourEvent {
+    fn from(event: request_response::Event<PairingHello, PairingReply>) -> Self {
+        Self::Pairing(event)
+    }
+}
+
+impl From<()> for Libp2pBehaviourEvent {
+    fn from(_: ()) -> Self {
+        Self::Stream
+    }
+}
+
+impl Libp2pBehaviour {
     fn new(local_peer_id: PeerId) -> Result<Self> {
         let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)
             .map_err(|e| anyhow!("failed to create mdns behaviour: {e}"))?;
-        Ok(Self { mdns })
+        let config = request_response::Config::default()
+            .with_request_timeout(std::time::Duration::from_secs(10));
+        let pairing = request_response::json::Behaviour::new(
+            [(
+                StreamProtocol::new(PAIRING_PROTOCOL_ID),
+                ProtocolSupport::Full,
+            )],
+            config,
+        );
+        let stream = stream::Behaviour::new();
+        Ok(Self {
+            mdns,
+            pairing,
+            stream,
+        })
     }
 }
 
@@ -107,122 +168,111 @@ pub struct Libp2pNetworkAdapter {
     event_rx: Mutex<Option<mpsc::Receiver<NetworkEvent>>>,
     clipboard_tx: mpsc::Sender<ClipboardMessage>,
     clipboard_rx: Mutex<Option<mpsc::Receiver<ClipboardMessage>>>,
-    identity_store: Arc<dyn IdentityStorePort>,
-    start_state: Mutex<NetworkStartState>,
+    pairing_tx: mpsc::Sender<PairingCommand>,
+    pairing_rx: Mutex<Option<mpsc::Receiver<PairingCommand>>>,
+    business_tx: mpsc::Sender<BusinessCommand>,
+    business_rx: Mutex<Option<mpsc::Receiver<BusinessCommand>>>,
+    keypair: Mutex<Option<identity::Keypair>>,
+    policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
+    stream_control: Mutex<Option<stream::Control>>,
 }
 
 impl Libp2pNetworkAdapter {
-    pub fn new(identity_store: Arc<dyn IdentityStorePort>) -> Result<Self> {
+    pub fn new(
+        identity_store: Arc<dyn IdentityStorePort>,
+        policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
+    ) -> Result<Self> {
+        let keypair = load_or_create_identity(identity_store.as_ref())
+            .map_err(|e| anyhow!("failed to load libp2p identity: {e}"))?;
+        let local_peer_id = PeerId::from(keypair.public()).to_string();
         let (event_tx, event_rx) = mpsc::channel(64);
         let (clipboard_tx, clipboard_rx) = mpsc::channel(64);
+        let (pairing_tx, pairing_rx) = mpsc::channel(64);
+        let (business_tx, business_rx) = mpsc::channel(64);
 
         Ok(Self {
-            local_peer_id: StdRwLock::new(None),
+            local_peer_id: StdRwLock::new(Some(local_peer_id)),
             caches: Arc::new(RwLock::new(PeerCaches::new())),
             event_tx,
             event_rx: Mutex::new(Some(event_rx)),
             clipboard_tx,
             clipboard_rx: Mutex::new(Some(clipboard_rx)),
-            identity_store,
-            start_state: Mutex::new(NetworkStartState::NotStarted),
+            pairing_tx,
+            pairing_rx: Mutex::new(Some(pairing_rx)),
+            business_tx,
+            business_rx: Mutex::new(Some(business_rx)),
+            keypair: Mutex::new(Some(keypair)),
+            policy_resolver,
+            stream_control: Mutex::new(None),
         })
     }
 
     pub fn spawn_swarm(&self) -> Result<()> {
-        self.mark_starting()?;
+        let keypair = self.take_keypair()?;
+        let local_peer_id = PeerId::from(keypair.public());
+        let behaviour = Libp2pBehaviour::new(local_peer_id)
+            .map_err(|e| anyhow!("failed to create libp2p behaviour: {e}"))?;
 
-        let result = (|| {
-            let keypair = load_or_create_identity(self.identity_store.as_ref())
-                .map_err(|e| anyhow!("failed to load libp2p identity: {e}"))?;
-            let local_peer_id = PeerId::from(keypair.public());
-            let local_peer_id_str = local_peer_id.to_string();
-            self.set_local_peer_id(Some(local_peer_id_str.clone()))?;
-            info!("Loaded libp2p identity: {}", local_peer_id_str);
-            let mdns_behaviour = MdnsBehaviour::new(local_peer_id)
-                .map_err(|e| anyhow!("failed to create mdns behaviour: {e}"))?;
+        let mut swarm = SwarmBuilder::with_existing_identity(keypair)
+            .with_tokio()
+            .with_tcp(
+                tcp::Config::default().nodelay(true),
+                noise::Config::new,
+                yamux::Config::default,
+            )
+            .map_err(|e| anyhow!("failed to configure tcp transport: {e}"))?
+            .with_behaviour(move |_| behaviour)
+            .map_err(|e| anyhow!("failed to attach libp2p behaviour: {e}"))?
+            .build();
 
-            let mut swarm = SwarmBuilder::with_existing_identity(keypair)
-                .with_tokio()
-                .with_tcp(
-                    tcp::Config::default().nodelay(true),
-                    noise::Config::new,
-                    yamux::Config::default,
-                )
-                .map_err(|e| anyhow!("failed to configure tcp transport: {e}"))?
-                .with_behaviour(move |_| mdns_behaviour)
-                .map_err(|e| anyhow!("failed to attach mdns behaviour: {e}"))?
-                .build();
-
-            listen_on_swarm(
-                &mut swarm,
-                "/ip4/0.0.0.0/tcp/0"
-                    .parse()
-                    .map_err(|e| anyhow!("failed to parse listen address: {e}"))?,
-                &self.event_tx,
-            )?;
-
-            let caches = self.caches.clone();
-            let event_tx = self.event_tx.clone();
-            tokio::spawn(async move {
-                run_swarm(swarm, caches, event_tx).await;
-            });
-            Ok(())
-        })();
-
-        match result {
-            Ok(()) => {
-                self.mark_started()?;
-                Ok(())
-            }
-            Err(err) => {
-                self.reset_start_state()?;
-                Err(err)
-            }
-        }
-    }
-
-    fn mark_starting(&self) -> Result<()> {
+        let stream_control = swarm.behaviour().stream.new_control();
         let mut guard = self
-            .start_state
+            .stream_control
             .lock()
-            .map_err(|_| anyhow!("start state mutex poisoned"))?;
-        match *guard {
-            NetworkStartState::NotStarted => {
-                *guard = NetworkStartState::Starting;
-                Ok(())
-            }
-            NetworkStartState::Starting | NetworkStartState::Started => {
-                Err(anyhow!("swarm already started"))
-            }
-        }
-    }
+            .map_err(|_| anyhow!("stream control mutex poisoned"))?;
+        *guard = Some(stream_control.clone());
 
-    fn mark_started(&self) -> Result<()> {
-        let mut guard = self
-            .start_state
-            .lock()
-            .map_err(|_| anyhow!("start state mutex poisoned"))?;
-        *guard = NetworkStartState::Started;
+        spawn_business_stream_echo(
+            stream_control.clone(),
+            self.event_tx.clone(),
+            self.policy_resolver.clone(),
+        );
+
+        listen_on_swarm(
+            &mut swarm,
+            "/ip4/0.0.0.0/tcp/0"
+                .parse()
+                .map_err(|e| anyhow!("failed to parse listen address: {e}"))?,
+            &self.event_tx,
+        )?;
+
+        let caches = self.caches.clone();
+        let event_tx = self.event_tx.clone();
+        let policy_resolver = self.policy_resolver.clone();
+        let pairing_rx = Self::take_receiver(&self.pairing_rx, "pairing command")?;
+        let business_rx = Self::take_receiver(&self.business_rx, "business command")?;
+        tokio::spawn(async move {
+            run_swarm(
+                swarm,
+                caches,
+                event_tx,
+                policy_resolver,
+                pairing_rx,
+                business_rx,
+            )
+            .await;
+        });
         Ok(())
     }
 
-    fn reset_start_state(&self) -> Result<()> {
+    fn take_keypair(&self) -> Result<identity::Keypair> {
         let mut guard = self
-            .start_state
+            .keypair
             .lock()
-            .map_err(|_| anyhow!("start state mutex poisoned"))?;
-        *guard = NetworkStartState::NotStarted;
-        self.set_local_peer_id(None)?;
-        Ok(())
-    }
-
-    fn set_local_peer_id(&self, peer_id: Option<String>) -> Result<()> {
-        let mut guard = self
-            .local_peer_id
-            .write()
-            .map_err(|_| anyhow!("local peer id lock poisoned"))?;
-        *guard = peer_id;
-        Ok(())
+            .map_err(|_| anyhow!("libp2p keypair mutex poisoned"))?;
+        guard
+            .take()
+            .ok_or_else(|| anyhow!("libp2p keypair already taken"))
     }
 
     fn take_receiver<T>(
@@ -241,7 +291,14 @@ impl Libp2pNetworkAdapter {
 #[async_trait]
 impl NetworkPort for Libp2pNetworkAdapter {
     async fn send_clipboard(&self, _peer_id: &str, _encrypted_data: Vec<u8>) -> Result<()> {
-        Err(anyhow!("NetworkPort::send_clipboard not implemented yet"))
+        let peer = uc_core::PeerId::from(_peer_id);
+        self.business_tx
+            .send(BusinessCommand::SendClipboard {
+                peer_id: peer,
+                data: _encrypted_data,
+            })
+            .await
+            .map_err(|err| anyhow!("failed to queue business stream: {err}"))
     }
 
     async fn broadcast_clipboard(&self, _encrypted_data: Vec<u8>) -> Result<()> {
@@ -277,7 +334,19 @@ impl NetworkPort for Libp2pNetworkAdapter {
     }
 
     async fn initiate_pairing(&self, _peer_id: String, _device_name: String) -> Result<String> {
-        Err(anyhow!("NetworkPort::initiate_pairing not implemented yet"))
+        let session_id = Uuid::new_v4().to_string();
+        let peer = uc_core::PeerId::from(_peer_id);
+        let request = PairingHello {
+            session_id: session_id.clone(),
+        };
+        self.pairing_tx
+            .send(PairingCommand::SendRequest {
+                peer_id: peer,
+                request,
+            })
+            .await
+            .map_err(|err| anyhow!("failed to queue pairing request: {err}"))?;
+        Ok(session_id)
     }
 
     async fn send_pin_response(&self, _session_id: String, _pin_match: bool) -> Result<()> {
@@ -312,98 +381,295 @@ impl NetworkControlPort for Libp2pNetworkAdapter {
     }
 }
 
+async fn echo_payload<T>(stream: &mut T) -> Result<()>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).await?;
+    stream.write_all(&buf).await?;
+    Ok(())
+}
+
+fn spawn_business_stream_echo(
+    mut control: stream::Control,
+    event_tx: mpsc::Sender<NetworkEvent>,
+    policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
+) {
+    let mut incoming = match control.accept(StreamProtocol::new(BUSINESS_PROTOCOL_ID)) {
+        Ok(incoming) => incoming,
+        Err(err) => {
+            warn!("failed to accept business stream: {err}");
+            return;
+        }
+    };
+
+    tokio::spawn(async move {
+        while let Some((_peer, mut stream)) = incoming.next().await {
+            let peer_id = _peer.to_string();
+            let event_tx = event_tx.clone();
+            let policy_resolver = policy_resolver.clone();
+            tokio::spawn(async move {
+                if check_business_allowed(
+                    &policy_resolver,
+                    &event_tx,
+                    &peer_id,
+                    ProtocolDirection::Inbound,
+                )
+                .await
+                .is_err()
+                {
+                    return;
+                }
+                if let Err(err) = echo_payload(&mut stream).await {
+                    warn!("business stream echo failed: {err}");
+                }
+            });
+        }
+    });
+}
+
+async fn handle_pairing_event(
+    swarm: &mut Swarm<Libp2pBehaviour>,
+    event: request_response::Event<PairingHello, PairingReply>,
+    policy_resolver: &Arc<dyn ConnectionPolicyResolverPort>,
+) {
+    if let request_response::Event::Message { peer, message, .. } = event {
+        if let request_response::Message::Request { channel, .. } = message {
+            let peer_id = uc_core::PeerId::from(peer.to_string());
+            let reply = match policy_resolver.resolve_for_peer(&peer_id).await {
+                Ok(resolved) if resolved.allowed.allows(ProtocolKind::Business) => {
+                    PairingReply::Accept
+                }
+                Ok(_) => PairingReply::Reject {
+                    reason: "not trusted".to_string(),
+                },
+                Err(err) => PairingReply::Reject {
+                    reason: format!("resolver error: {err}"),
+                },
+            };
+            if let Err(err) = swarm.behaviour_mut().pairing.send_response(channel, reply) {
+                warn!("failed to send pairing reply: {err:?}");
+            }
+        }
+    }
+}
+
+async fn emit_protocol_denied(
+    event_tx: &mpsc::Sender<NetworkEvent>,
+    peer_id: String,
+    pairing_state: PairingState,
+    direction: ProtocolDirection,
+    reason: ProtocolDenyReason,
+) {
+    if let Err(err) = event_tx
+        .send(NetworkEvent::ProtocolDenied {
+            peer_id,
+            protocol_id: BUSINESS_PROTOCOL_ID.to_string(),
+            pairing_state,
+            direction,
+            reason,
+        })
+        .await
+    {
+        warn!("failed to emit protocol denied event: {err}");
+    }
+}
+
+async fn check_business_allowed(
+    policy_resolver: &Arc<dyn ConnectionPolicyResolverPort>,
+    event_tx: &mpsc::Sender<NetworkEvent>,
+    peer_id: &str,
+    direction: ProtocolDirection,
+) -> Result<ResolvedConnectionPolicy> {
+    let peer = uc_core::PeerId::from(peer_id);
+    match policy_resolver.resolve_for_peer(&peer).await {
+        Ok(resolved) => {
+            if resolved.allowed.allows(ProtocolKind::Business) {
+                Ok(resolved)
+            } else {
+                emit_protocol_denied(
+                    event_tx,
+                    peer_id.to_string(),
+                    resolved.pairing_state,
+                    direction,
+                    ProtocolDenyReason::NotTrusted,
+                )
+                .await;
+                Err(anyhow!("business protocol denied"))
+            }
+        }
+        Err(err) => {
+            emit_protocol_denied(
+                event_tx,
+                peer_id.to_string(),
+                PairingState::Pending,
+                direction,
+                ProtocolDenyReason::RepoError,
+            )
+            .await;
+            Err(anyhow!("policy resolver failed: {err}"))
+        }
+    }
+}
+
 async fn run_swarm(
-    mut swarm: Swarm<MdnsBehaviour>,
+    mut swarm: Swarm<Libp2pBehaviour>,
     caches: Arc<RwLock<PeerCaches>>,
     event_tx: mpsc::Sender<NetworkEvent>,
+    policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
+    mut pairing_rx: mpsc::Receiver<PairingCommand>,
+    mut business_rx: mpsc::Receiver<BusinessCommand>,
 ) {
     info!("libp2p mDNS swarm started");
 
     loop {
-        match swarm.select_next_some().await {
-            SwarmEvent::Behaviour(MdnsBehaviourEvent::Mdns(event)) => match event {
-                mdns::Event::Discovered(peers) => {
-                    let discovered = collect_mdns_discovered(peers);
-                    let events = {
-                        let mut caches = caches.write().await;
-                        apply_mdns_discovered(&mut caches, discovered, Utc::now())
-                    };
+        tokio::select! {
+            event = swarm.select_next_some() => {
+                match event {
+                    SwarmEvent::Behaviour(Libp2pBehaviourEvent::Mdns(event)) => match event {
+                        mdns::Event::Discovered(peers) => {
+                            let discovered = collect_mdns_discovered(peers);
+                            let events = {
+                                let mut caches = caches.write().await;
+                                apply_mdns_discovered(&mut caches, discovered, Utc::now())
+                            };
 
-                    for event in events {
-                        let _ = try_send_event(&event_tx, event, "PeerDiscovered");
+                            for event in events {
+                                let _ = try_send_event(&event_tx, event, "PeerDiscovered");
+                            }
+                        }
+                        mdns::Event::Expired(peers) => {
+                            let expired = collect_mdns_expired(peers);
+                            let events = {
+                                let mut caches = caches.write().await;
+                                apply_mdns_expired(&mut caches, expired)
+                            };
+
+                            for event in events {
+                                let _ = try_send_event(&event_tx, event, "PeerLost");
+                            }
+                        }
+                    },
+                    SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) => {
+                        handle_pairing_event(&mut swarm, event, &policy_resolver).await;
+                    }
+                    SwarmEvent::Behaviour(Libp2pBehaviourEvent::Stream) => {}
+                    SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                        let peer_id = peer_id.to_string();
+                        let event = {
+                            let mut caches = caches.write().await;
+                            apply_peer_ready(&mut caches, &peer_id)
+                        };
+
+                        if let Some(event) = event {
+                            let _ = try_send_event(&event_tx, event, "PeerReady");
+                        } else {
+                            debug!("connection established for unknown peer {peer_id}");
+                        }
+                    }
+                    SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                        let peer_id = peer_id.to_string();
+                        let event = {
+                            let mut caches = caches.write().await;
+                            apply_peer_not_ready(&mut caches, &peer_id)
+                        };
+
+                        if let Some(event) = event {
+                            let _ = try_send_event(&event_tx, event, "PeerNotReady");
+                        }
+                    }
+                    SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                        error!("outgoing connection error to {:?}: {}", peer_id, error);
+                        if let Err(err) = event_tx
+                            .send(NetworkEvent::Error("network connection error".to_string()))
+                            .await
+                        {
+                            warn!("failed to publish network error event: {err}");
+                        }
+                    }
+                    SwarmEvent::IncomingConnectionError {
+                        send_back_addr,
+                        error,
+                        ..
+                    } => {
+                        error!(
+                            "incoming connection error from {}: {}",
+                            send_back_addr, error
+                        );
+                        if let Err(err) = event_tx
+                            .send(NetworkEvent::Error("network connection error".to_string()))
+                            .await
+                        {
+                            warn!("failed to publish network error event: {err}");
+                        }
+                    }
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        info!("libp2p listening on {address}");
+                    }
+                    _ => {}
+                }
+            }
+            Some(command) = pairing_rx.recv() => {
+                match command {
+                    PairingCommand::SendRequest { peer_id, request } => {
+                        let peer = match peer_id.as_str().parse::<PeerId>() {
+                            Ok(peer) => peer,
+                            Err(err) => {
+                                warn!("invalid peer id for pairing request: {err}");
+                                continue;
+                            }
+                        };
+                        swarm.behaviour_mut().pairing.send_request(&peer, request);
                     }
                 }
-                mdns::Event::Expired(peers) => {
-                    let expired = collect_mdns_expired(peers);
-                    let events = {
-                        let mut caches = caches.write().await;
-                        apply_mdns_expired(&mut caches, expired)
-                    };
-
-                    for event in events {
-                        let _ = try_send_event(&event_tx, event, "PeerLost");
+            }
+            Some(command) = business_rx.recv() => {
+                match command {
+                    BusinessCommand::SendClipboard { peer_id, data } => {
+                        let peer = match peer_id.as_str().parse::<PeerId>() {
+                            Ok(peer) => peer,
+                            Err(err) => {
+                                warn!("invalid peer id for business stream: {err}");
+                                continue;
+                            }
+                        };
+                        if check_business_allowed(
+                            &policy_resolver,
+                            &event_tx,
+                            peer_id.as_str(),
+                            ProtocolDirection::Outbound,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            continue;
+                        }
+                        let mut control = swarm.behaviour().stream.new_control();
+                        match control
+                            .open_stream(peer, StreamProtocol::new(BUSINESS_PROTOCOL_ID))
+                            .await
+                        {
+                            Ok(mut stream) => {
+                                if let Err(err) = stream.write_all(&data).await {
+                                    warn!("business stream write failed: {err}");
+                                } else if let Err(err) = stream.close().await {
+                                    warn!("business stream close failed: {err}");
+                                }
+                            }
+                            Err(err) => {
+                                warn!("business stream open failed: {err}");
+                            }
+                        }
                     }
                 }
-            },
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                let peer_id = peer_id.to_string();
-                let event = {
-                    let mut caches = caches.write().await;
-                    apply_peer_ready(&mut caches, &peer_id)
-                };
-
-                if let Some(event) = event {
-                    let _ = try_send_event(&event_tx, event, "PeerReady");
-                } else {
-                    debug!("connection established for unknown peer {peer_id}");
-                }
             }
-            SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                let peer_id = peer_id.to_string();
-                let event = {
-                    let mut caches = caches.write().await;
-                    apply_peer_not_ready(&mut caches, &peer_id)
-                };
-
-                if let Some(event) = event {
-                    let _ = try_send_event(&event_tx, event, "PeerNotReady");
-                }
-            }
-            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                error!("outgoing connection error to {:?}: {}", peer_id, error);
-                if let Err(err) = event_tx
-                    .send(NetworkEvent::Error("network connection error".to_string()))
-                    .await
-                {
-                    warn!("failed to publish network error event: {err}");
-                }
-            }
-            SwarmEvent::IncomingConnectionError {
-                send_back_addr,
-                error,
-                ..
-            } => {
-                error!(
-                    "incoming connection error from {}: {}",
-                    send_back_addr, error
-                );
-                if let Err(err) = event_tx
-                    .send(NetworkEvent::Error("network connection error".to_string()))
-                    .await
-                {
-                    warn!("failed to publish network error event: {err}");
-                }
-            }
-            SwarmEvent::NewListenAddr { address, .. } => {
-                info!("libp2p listening on {address}");
-            }
-            _ => {}
         }
     }
 }
 
 fn listen_on_swarm(
-    swarm: &mut Swarm<MdnsBehaviour>,
+    swarm: &mut Swarm<Libp2pBehaviour>,
     listen_addr: Multiaddr,
     event_tx: &mpsc::Sender<NetworkEvent>,
 ) -> Result<()> {
@@ -502,10 +768,15 @@ fn apply_peer_not_ready(caches: &mut PeerCaches, peer_id: &str) -> Option<Networ
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libp2p::futures::{AsyncReadExt, AsyncWriteExt};
     use libp2p::identity;
+    use libp2p::multiaddr::Protocol;
     use libp2p::Multiaddr;
     use std::sync::{Arc, Mutex};
     use tokio::time::{sleep, timeout, Duration};
+    use tokio_util::compat::TokioAsyncReadCompatExt;
+    use uc_core::network::{ConnectionPolicy, PairingState, ResolvedConnectionPolicy};
+    use uc_core::ports::{ConnectionPolicyResolverError, ConnectionPolicyResolverPort};
 
     #[test]
     fn cache_inserts_discovered_peer_with_addresses() {
@@ -672,40 +943,297 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
-    struct CountingIdentityStore {
-        data: Mutex<Option<Vec<u8>>>,
-        load_calls: std::sync::atomic::AtomicUsize,
-    }
+    struct FakeResolver;
 
-    impl CountingIdentityStore {
-        fn load_count(&self) -> usize {
-            self.load_calls.load(std::sync::atomic::Ordering::SeqCst)
-        }
-    }
-
-    impl IdentityStorePort for CountingIdentityStore {
-        fn load_identity(&self) -> Result<Option<Vec<u8>>, uc_core::ports::IdentityStoreError> {
-            self.load_calls
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let guard = self.data.lock().expect("lock counting identity store");
-            Ok(guard.clone())
-        }
-
-        fn store_identity(
+    #[async_trait::async_trait]
+    impl ConnectionPolicyResolverPort for FakeResolver {
+        async fn resolve_for_peer(
             &self,
-            identity: &[u8],
-        ) -> Result<(), uc_core::ports::IdentityStoreError> {
-            let mut guard = self.data.lock().expect("lock counting identity store");
-            *guard = Some(identity.to_vec());
-            Ok(())
+            _peer_id: &uc_core::PeerId,
+        ) -> Result<ResolvedConnectionPolicy, ConnectionPolicyResolverError> {
+            Ok(ResolvedConnectionPolicy {
+                pairing_state: PairingState::Trusted,
+                allowed: ConnectionPolicy::allowed_protocols(PairingState::Trusted),
+            })
+        }
+    }
+
+    struct PendingResolver;
+
+    #[async_trait::async_trait]
+    impl ConnectionPolicyResolverPort for PendingResolver {
+        async fn resolve_for_peer(
+            &self,
+            _peer_id: &uc_core::PeerId,
+        ) -> Result<ResolvedConnectionPolicy, ConnectionPolicyResolverError> {
+            Ok(ResolvedConnectionPolicy {
+                pairing_state: PairingState::Pending,
+                allowed: ConnectionPolicy::allowed_protocols(PairingState::Pending),
+            })
+        }
+    }
+
+    fn build_swarm(keypair: identity::Keypair) -> Swarm<Libp2pBehaviour> {
+        let local_peer_id = PeerId::from(keypair.public());
+        let behaviour = Libp2pBehaviour::new(local_peer_id).expect("behaviour");
+        SwarmBuilder::with_existing_identity(keypair)
+            .with_tokio()
+            .with_tcp(
+                tcp::Config::default().nodelay(true),
+                noise::Config::new,
+                yamux::Config::default,
+            )
+            .expect("tcp config")
+            .with_behaviour(move |_| behaviour)
+            .expect("attach behaviour")
+            .build()
+    }
+
+    async fn listen_on_random(swarm: &mut Swarm<Libp2pBehaviour>) -> Multiaddr {
+        swarm
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().expect("listen addr"))
+            .expect("listen on addr");
+        loop {
+            match swarm.select_next_some().await {
+                SwarmEvent::NewListenAddr { address, .. } => return address,
+                _ => {}
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn adapter_constructs_with_policy_resolver() {
+        let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(FakeResolver);
+        let adapter = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()), resolver);
+        assert!(adapter.is_ok());
+    }
+
+    #[test]
+    fn libp2p_request_response_feature_available() {
+        let _ = libp2p::request_response::Config::default();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pairing_request_emits_response_event() {
+        let keypair_a = identity::Keypair::generate_ed25519();
+        let keypair_b = identity::Keypair::generate_ed25519();
+        let peer_b = PeerId::from(keypair_b.public());
+
+        let mut swarm_a = build_swarm(keypair_a);
+        let mut swarm_b = build_swarm(keypair_b);
+
+        let addr_b = listen_on_random(&mut swarm_b).await;
+        let _addr_a = listen_on_random(&mut swarm_a).await;
+        let dial_addr = addr_b.with(Protocol::P2p(peer_b));
+        swarm_a.dial(dial_addr).expect("dial b");
+
+        swarm_a.behaviour_mut().pairing.send_request(
+            &peer_b,
+            PairingHello {
+                session_id: "session-1".to_string(),
+            },
+        );
+
+        let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(FakeResolver);
+        let response = timeout(Duration::from_secs(10), async {
+            loop {
+                tokio::select! {
+                    event = swarm_a.select_next_some() => {
+                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
+                            if let request_response::Event::Message { message, .. } = event {
+                                if let request_response::Message::Response { response, .. } = message {
+                                    return response;
+                                }
+                            }
+                        }
+                    }
+                    event = swarm_b.select_next_some() => {
+                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
+                            handle_pairing_event(&mut swarm_b, event, &resolver).await;
+                        }
+                    }
+                }
+            }
+        })
+        .await
+        .expect("response timeout");
+
+        assert!(matches!(response, PairingReply::Accept));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pairing_rejected_does_not_enable_business() {
+        let keypair_a = identity::Keypair::generate_ed25519();
+        let keypair_b = identity::Keypair::generate_ed25519();
+        let peer_b = PeerId::from(keypair_b.public());
+
+        let mut swarm_a = build_swarm(keypair_a);
+        let mut swarm_b = build_swarm(keypair_b);
+
+        let addr_b = listen_on_random(&mut swarm_b).await;
+        let _addr_a = listen_on_random(&mut swarm_a).await;
+        let dial_addr = addr_b.with(Protocol::P2p(peer_b));
+        swarm_a.dial(dial_addr).expect("dial b");
+
+        swarm_a.behaviour_mut().pairing.send_request(
+            &peer_b,
+            PairingHello {
+                session_id: "session-2".to_string(),
+            },
+        );
+
+        let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(PendingResolver);
+        let response = timeout(Duration::from_secs(10), async {
+            loop {
+                tokio::select! {
+                    event = swarm_a.select_next_some() => {
+                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
+                            if let request_response::Event::Message { message, .. } = event {
+                                if let request_response::Message::Response { response, .. } = message {
+                                    return response;
+                                }
+                            }
+                        }
+                    }
+                    event = swarm_b.select_next_some() => {
+                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
+                            handle_pairing_event(&mut swarm_b, event, &resolver).await;
+                        }
+                    }
+                }
+            }
+        })
+        .await
+        .expect("response timeout");
+
+        assert!(matches!(response, PairingReply::Reject { .. }));
+    }
+
+    #[tokio::test]
+    async fn business_stream_echoes_payload() {
+        let payload = b"hello-business".to_vec();
+        let (client, server) = tokio::io::duplex(1024);
+        let mut client = client.compat();
+        let mut server = server.compat();
+        let server_task = tokio::spawn(async move { echo_payload(&mut server).await });
+
+        client.write_all(&payload).await.expect("write payload");
+        client.close().await.expect("close write");
+
+        let mut response = Vec::new();
+        client
+            .read_to_end(&mut response)
+            .await
+            .expect("read response");
+
+        let server_result = server_task.await.expect("server task");
+        server_result.expect("server echo");
+
+        assert_eq!(response, payload);
+    }
+
+    #[tokio::test]
+    async fn outbound_business_denied_emits_event() {
+        let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(PendingResolver);
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+
+        let result =
+            check_business_allowed(&resolver, &event_tx, "peer-1", ProtocolDirection::Outbound)
+                .await;
+
+        assert!(result.is_err());
+
+        let event = event_rx.recv().await.expect("protocol denied event");
+        match event {
+            NetworkEvent::ProtocolDenied {
+                direction, reason, ..
+            } => {
+                assert_eq!(direction, ProtocolDirection::Outbound);
+                assert_eq!(reason, ProtocolDenyReason::NotTrusted);
+            }
+            _ => panic!("expected ProtocolDenied"),
+        }
+    }
+
+    #[tokio::test]
+    async fn inbound_business_denied_drops_stream_and_emits_event() {
+        let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(PendingResolver);
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+
+        let result =
+            check_business_allowed(&resolver, &event_tx, "peer-2", ProtocolDirection::Inbound)
+                .await;
+
+        assert!(result.is_err());
+
+        let event = event_rx.recv().await.expect("protocol denied event");
+        match event {
+            NetworkEvent::ProtocolDenied {
+                direction, reason, ..
+            } => {
+                assert_eq!(direction, ProtocolDirection::Inbound);
+                assert_eq!(reason, ProtocolDenyReason::NotTrusted);
+            }
+            _ => panic!("expected ProtocolDenied"),
+        }
+    }
+
+    #[tokio::test]
+    async fn initiate_pairing_sends_request_response() {
+        let adapter = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter");
+
+        let session_id = adapter
+            .initiate_pairing("peer-1".to_string(), "device".to_string())
+            .await
+            .expect("initiate pairing");
+
+        let mut rx = Libp2pNetworkAdapter::take_receiver(&adapter.pairing_rx, "pairing")
+            .expect("pairing receiver");
+        let command = rx.recv().await.expect("pairing command");
+        match command {
+            PairingCommand::SendRequest { peer_id, request } => {
+                assert_eq!(peer_id.as_str(), "peer-1");
+                assert_eq!(request.session_id, session_id);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn send_clipboard_opens_business_stream() {
+        let adapter = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter");
+        let payload = vec![1, 2, 3, 4];
+
+        adapter
+            .send_clipboard("peer-2", payload.clone())
+            .await
+            .expect("send clipboard");
+
+        let mut rx = Libp2pNetworkAdapter::take_receiver(&adapter.business_rx, "business")
+            .expect("business receiver");
+        let command = rx.recv().await.expect("business command");
+        match command {
+            BusinessCommand::SendClipboard { peer_id, data } => {
+                assert_eq!(peer_id.as_str(), "peer-2");
+                assert_eq!(data, payload);
+            }
         }
     }
 
     #[tokio::test]
     async fn subscribe_clipboard_receiver_is_open() {
-        let adapter = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()))
-            .expect("create adapter");
+        let adapter = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter");
 
         let receiver = adapter
             .subscribe_clipboard()
@@ -740,10 +1268,18 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn mdns_e2e_discovers_peers() {
-        let adapter_a = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()))
-            .expect("create adapter a");
-        let adapter_b = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()))
-            .expect("create adapter b");
+        let adapter_a = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter a");
+        let adapter_b = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter b");
+        let peer_a = adapter_a.local_peer_id();
+        let peer_b = adapter_b.local_peer_id();
 
         adapter_a.spawn_swarm().expect("start swarm a");
         adapter_b.spawn_swarm().expect("start swarm b");
@@ -795,7 +1331,7 @@ mod tests {
     async fn listen_on_failure_emits_error_event_and_returns_err() {
         let keypair = identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(keypair.public());
-        let mdns_behaviour = MdnsBehaviour::new(local_peer_id).expect("mdns behaviour");
+        let behaviour = Libp2pBehaviour::new(local_peer_id).expect("behaviour");
         let mut swarm = SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
@@ -804,8 +1340,8 @@ mod tests {
                 yamux::Config::default,
             )
             .expect("tcp config")
-            .with_behaviour(move |_| mdns_behaviour)
-            .expect("attach mdns behaviour")
+            .with_behaviour(move |_| behaviour)
+            .expect("attach behaviour")
             .build();
 
         let (event_tx, mut event_rx) = mpsc::channel(1);

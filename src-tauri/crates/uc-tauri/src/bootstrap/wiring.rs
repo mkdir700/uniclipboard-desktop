@@ -41,6 +41,7 @@ use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 use uc_app::app_paths::AppPaths;
+use uc_app::usecases::ResolveConnectionPolicy;
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
@@ -498,9 +499,13 @@ fn create_platform_layer(
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
-    let libp2p_network = Arc::new(Libp2pNetworkAdapter::new(identity_store).map_err(|e| {
-        WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}"))
-    })?);
+    let policy_resolver = Arc::new(ResolveConnectionPolicy::new(paired_device_repo.clone()));
+    let libp2p_network = Arc::new(
+        Libp2pNetworkAdapter::new(identity_store, policy_resolver).map_err(|e| {
+            WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}"))
+        })?,
+    );
+    info!(peer_id = %libp2p_network.local_peer_id(), "Loaded libp2p identity");
     let network: Arc<dyn NetworkPort> = libp2p_network.clone();
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
