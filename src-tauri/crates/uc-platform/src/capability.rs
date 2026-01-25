@@ -70,6 +70,7 @@ pub fn detect_storage_capability() -> SecureStorageCapability {
 /// 2. Check for WSL-specific environment variables:
 ///    - `WSL_DISTRO_NAME`
 ///    - `WSL_INTEROP`
+#[cfg(target_os = "linux")]
 fn is_wsl() -> bool {
     // Method 1: Check /proc/version
     if let Ok(version) = std::fs::read_to_string("/proc/version") {
@@ -91,15 +92,20 @@ fn is_wsl() -> bool {
 /// - `DBUS_SESSION_BUS_ADDRESS` environment variable (D-Bus session bus)
 ///
 /// Both are required for keyring daemons (gnome-keyring, kwallet, etc.) to function.
+#[cfg(target_os = "linux")]
 fn has_desktop_environment() -> bool {
     std::env::var("DISPLAY").is_ok() && std::env::var("DBUS_SESSION_BUS_ADDRESS").is_ok()
 }
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
     use super::*;
+
+    #[cfg(target_os = "linux")]
     use std::sync::{Mutex, OnceLock};
 
+    #[cfg(target_os = "linux")]
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
@@ -123,6 +129,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_desktop_environment_detection() {
         let _lock = env_lock();
         // Save original values

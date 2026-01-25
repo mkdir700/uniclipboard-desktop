@@ -11,7 +11,7 @@ use tauri::http::header::{
 };
 use tauri::http::{Request, Response, StatusCode};
 use tauri::webview::PageLoadEvent;
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
