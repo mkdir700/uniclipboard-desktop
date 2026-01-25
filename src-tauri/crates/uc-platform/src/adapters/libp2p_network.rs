@@ -190,6 +190,9 @@ impl NetworkPort for Libp2pNetworkAdapter {
     }
 
     async fn subscribe_clipboard(&self) -> Result<mpsc::Receiver<ClipboardMessage>> {
+        if self.clipboard_tx.is_closed() {
+            warn!("clipboard channel sender is closed");
+        }
         Self::take_receiver(&self.clipboard_rx, "clipboard")
     }
 
