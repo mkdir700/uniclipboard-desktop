@@ -11,7 +11,20 @@
     "dashboard": "Dashboard",
     "devices": "Devices",
     "settings": "Settings",
+    "updateAvailable": "Update available",
     "back": "Back"
+  },
+  "update": {
+    "title": "Update available",
+    "currentVersion": "Current version",
+    "latestVersion": "Latest version",
+    "releaseNotes": "Release notes",
+    "noNotes": "No release notes provided.",
+    "updateNow": "Update now",
+    "later": "Later",
+    "noUpdate": "You're already on the latest version.",
+    "checkFailed": "Failed to check for updates.",
+    "installFailed": "Update failed. Please try again."
   },
   "settings": {
     "title": "Settings",
@@ -186,6 +199,10 @@
         "appName": "UniClipboard",
         "version": "Version 0.1.0",
         "checkUpdate": "Check for updates",
+        "autoCheckUpdate": {
+          "label": "Auto-check for updates",
+          "description": "Automatically check for new versions when the app starts"
+        },
         "copyright": "© 2025 UniClipboard Team. All rights reserved.",
         "links": {
           "privacyPolicy": "Privacy Policy",

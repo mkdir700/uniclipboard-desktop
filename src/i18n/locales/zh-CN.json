@@ -11,7 +11,20 @@
     "dashboard": "仪表板",
     "devices": "设备管理",
     "settings": "设置",
+    "updateAvailable": "有新版本",
     "back": "返回"
+  },
+  "update": {
+    "title": "发现新版本",
+    "currentVersion": "当前版本",
+    "latestVersion": "最新版本",
+    "releaseNotes": "更新日志",
+    "noNotes": "暂无更新日志",
+    "updateNow": "立即更新",
+    "later": "稍后",
+    "noUpdate": "当前已是最新版本。",
+    "checkFailed": "检查更新失败",
+    "installFailed": "更新失败，请稍后重试"
   },
   "settings": {
     "title": "设置",
@@ -186,6 +199,10 @@
         "appName": "UniClipboard",
         "version": "版本 0.1.0",
         "checkUpdate": "检查更新",
+        "autoCheckUpdate": {
+          "label": "自动检查更新",
+          "description": "应用启动时自动检查是否有新版本"
+        },
         "copyright": "© 2025 UniClipboard Team. All rights reserved.",
         "links": {
           "privacyPolicy": "隐私政策",
