@@ -14,7 +14,7 @@ use uc_core::PeerId;
 pub async fn list_paired_devices(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Vec<PairedDevice>, String> {
-    let span = info_span!("command.pairing.list", device_id = %runtime.deps.device_identity.current_device_id());
+    let span = info_span!("command.pairing.list");
     async {
         let uc = runtime.usecases().list_paired_devices();
         let devices = uc.execute().await.map_err(|e| {
@@ -35,7 +35,7 @@ pub async fn set_pairing_state(
     peer_id: String,
     state: PairingState,
 ) -> Result<(), String> {
-    let span = info_span!("command.pairing.set_state", device_id = %runtime.deps.device_identity.current_device_id(), peer_id = %peer_id);
+    let span = info_span!("command.pairing.set_state", peer_id = %peer_id);
     async {
         let uc = runtime.usecases().set_pairing_state();
         uc.execute(PeerId::from(peer_id.as_str()), state)
