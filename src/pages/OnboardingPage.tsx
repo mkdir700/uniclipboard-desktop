@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle, AlertCircle, Loader2, Key, Eye, EyeOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { completeOnboarding, setupEncryptionPassword } from '@/api/onboarding'
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { useOnboarding } from '@/contexts/OnboardingContext'
 import { cn } from '@/lib/utils'
 
-type Step = 'welcome' | 'set-password' | 'confirming' | 'complete' | 'error'
+type Step = 'welcome' | 'set-password' | 'error'
 
 interface OnboardingPasswordSetEvent {
   timestamp: number
@@ -19,28 +19,6 @@ interface OnboardingPasswordSetEvent {
 
 interface OnboardingCompletedEvent {
   timestamp: number
-}
-
-// 进度条组件
-const OnboardingProgress: React.FC<{ currentStep: number; totalSteps: number }> = ({
-  currentStep,
-  totalSteps,
-}) => {
-  return (
-    <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50">
-      <div className="flex items-center gap-2">
-        {Array.from({ length: totalSteps }).map((_, index) => (
-          <div
-            key={index}
-            className={cn(
-              'w-2 h-2 rounded-full transition-colors duration-300',
-              currentStep >= index ? 'bg-foreground' : 'bg-foreground/20'
-            )}
-          />
-        ))}
-      </div>
-    </div>
-  )
 }
 
 export default function OnboardingPage() {
@@ -57,6 +35,35 @@ export default function OnboardingPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [passwordError, setPasswordError] = useState<string | null>(null)
 
+  const handleComplete = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    // 设置 5 秒超时保护
+    const timeoutId = setTimeout(async () => {
+      const newStatus = await refreshStatus()
+      if (newStatus.has_completed) {
+        navigate('/', { replace: true })
+      } else {
+        setError('完成验证超时，请重试')
+        setStep('error')
+        setLoading(false)
+      }
+    }, 5000)
+
+    try {
+      await completeOnboarding()
+      // 不再使用 setTimeout，等待事件触发跳转
+    } catch (err) {
+      clearTimeout(timeoutId)
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      setError(errorMessage)
+      setStep('error')
+      setLoading(false)
+      toast.error(errorMessage)
+    }
+  }, [navigate, refreshStatus])
+
   // 检查当前状态
   useEffect(() => {
     if (status === null) return
@@ -66,11 +73,11 @@ export default function OnboardingPage() {
       navigate('/', { replace: true })
       return
     }
-    // 如果密码已设置，跳过密码设置步骤
+    // 如果密码已设置，直接尝试完成
     if (status.encryption_password_set) {
-      setStep('confirming')
+      handleComplete()
     }
-  }, [status, navigate])
+  }, [status, navigate, handleComplete])
 
   // 监听密码设置成功事件
   useEffect(() => {
@@ -78,14 +85,14 @@ export default function OnboardingPage() {
 
     const setupListener = async () => {
       unlisten = await listen<OnboardingPasswordSetEvent>('onboarding-password-set', () => {
-        setStep('confirming')
         toast.success('密码设置成功')
+        handleComplete()
       })
     }
 
     setupListener()
     return () => unlisten?.()
-  }, [])
+  }, [handleComplete])
 
   // 监听完成事件，自动跳转
   useEffect(() => {
@@ -93,11 +100,9 @@ export default function OnboardingPage() {
 
     const setupListener = async () => {
       unlisten = await listen<OnboardingCompletedEvent>('onboarding-completed', () => {
-        setStep('complete')
         toast.success('设置完成!')
         setLoading(false)
-        // 短暂延迟后跳转，让用户看到成功状态
-        setTimeout(() => navigate('/', { replace: true }), 2000)
+        navigate('/', { replace: true })
       })
     }
 
@@ -138,57 +143,10 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleComplete = async () => {
-    setLoading(true)
-    setError(null)
-
-    // 设置 5 秒超时保护
-    const timeoutId = setTimeout(async () => {
-      const newStatus = await refreshStatus()
-      if (newStatus.has_completed) {
-        navigate('/', { replace: true })
-      } else {
-        setError('完成验证超时，请重试')
-        setStep('error')
-        setLoading(false)
-      }
-    }, 5000)
-
-    try {
-      await completeOnboarding()
-      // 不再使用 setTimeout，等待事件触发跳转
-    } catch (err) {
-      clearTimeout(timeoutId)
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      setError(errorMessage)
-      setStep('error')
-      setLoading(false)
-      toast.error(errorMessage)
-    }
-  }
-
-  // 计算当前步骤索引
-  const getStepIndex = () => {
-    switch (step) {
-      case 'welcome':
-        return 0
-      case 'set-password':
-        return 1
-      case 'confirming':
-      case 'complete':
-        return 2
-      default:
-        return 0
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* 进度条 - 仅在正常步骤显示 */}
-      {step !== 'error' && <OnboardingProgress currentStep={getStepIndex()} totalSteps={3} />}
-
+    <div className="h-full w-full bg-background flex flex-col">
       {/* 内容区域 */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 max-w-sm mx-auto">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 max-w-2xl mx-auto py-8 min-h-0 overflow-y-auto">
         <AnimatePresence mode="wait" initial={false}>
           {/* 欢迎步骤 */}
           {step === 'welcome' && (
@@ -198,87 +156,79 @@ export default function OnboardingPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.4 }}
-              className="w-full"
+              className="w-full max-w-2xl mx-auto"
             >
-              {/* Logo - 文字品牌 */}
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.5 }}
-                className="mb-8"
-              >
-                <h1 className="text-4xl font-bold bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent text-center">
-                  UniClipboard
-                </h1>
-              </motion.div>
+              <div className="text-center mb-6">
+                <motion.h1
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="text-3xl font-bold text-foreground mb-2 tracking-tight"
+                >
+                  欢迎来到 UniClipboard
+                </motion.h1>
+                <motion.h2
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="text-xl font-semibold text-foreground/80 mb-3"
+                >
+                  现在设置加密密码
+                </motion.h2>
+                <motion.p
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-muted-foreground text-sm"
+                >
+                  这是首次启动的第 1 步，用于保护同步内容
+                </motion.p>
+              </div>
 
-              {/* 标题 */}
-              <motion.h1
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-2xl font-bold text-foreground mb-2 text-center"
-              >
-                欢迎使用
-              </motion.h1>
-
-              {/* 描述 */}
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-center text-muted-foreground mb-8 text-sm"
-              >
-                请设置一个加密密码来保护您的剪贴板数据
-              </motion.p>
-
-              {/* 使用说明卡片 */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="w-full mb-8 p-4 rounded-xl bg-muted/30 border border-border/40"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-start gap-2">
-                    <div className="mt-0.5 w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    </div>
-                    <span className="text-sm leading-relaxed text-foreground">
-                      加密您的剪贴板数据
-                    </span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <div className="mt-0.5 w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    </div>
-                    <span className="text-sm leading-relaxed text-foreground">
-                      在其他设备上解密同步的内容
-                    </span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <div className="mt-0.5 w-4 h-4 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
-                    </div>
-                    <span className="text-sm leading-relaxed text-foreground">
-                      丢失密码无法恢复数据
-                    </span>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* 按钮 */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="w-full"
+                className="grid gap-3 mb-6"
+              >
+                {[
+                  '创建密码后，本机剪贴板会被加密保存',
+                  '在其他设备上使用同一密码解锁同步内容',
+                  '设置完成即可开始安全同步',
+                ].map((text, i) => (
+                  <div
+                    key={text}
+                    className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 border border-border/40"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-semibold text-xs">
+                      {i + 1}
+                    </div>
+                    <span className="text-sm text-foreground font-medium">{text}</span>
+                  </div>
+                ))}
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="flex items-center gap-2 justify-center mb-6 text-destructive text-xs font-medium bg-destructive/5 py-1.5 px-3 rounded-full w-fit mx-auto"
+              >
+                <AlertCircle className="w-4 h-4" />
+                <span>丢失密码将无法恢复已加密数据</span>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="flex justify-center"
               >
                 <Button
                   onClick={() => setStep('set-password')}
-                  className="w-full h-11 text-sm font-medium rounded-xl shadow-lg shadow-primary/20"
+                  className="w-full max-w-sm h-11 text-sm font-medium rounded-xl shadow-lg shadow-primary/20"
                 >
-                  开始设置
+                  下一步：设置密码
                 </Button>
               </motion.div>
             </motion.div>
@@ -292,7 +242,7 @@ export default function OnboardingPage() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -300, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-full"
+              className="w-full max-w-2xl mx-auto"
             >
               {/* 标题 */}
               <h1 className="text-2xl font-bold text-foreground mb-2">创建您的密码</h1>
@@ -410,123 +360,6 @@ export default function OnboardingPage() {
             </motion.div>
           )}
 
-          {/* 确认步骤 */}
-          {step === 'confirming' && (
-            <motion.div
-              key="confirming"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="w-full flex flex-col items-center"
-            >
-              {/* 图标 + Spinner 组合 */}
-              <div className="relative mb-8">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                  className="w-20 h-20"
-                >
-                  <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
-                  <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full" />
-                </motion.div>
-                <Key className="absolute inset-0 m-auto w-8 h-8 text-primary" />
-              </div>
-
-              {/* 标题 */}
-              <h1 className="text-2xl font-bold text-center mb-2">正在设置您的设备</h1>
-
-              {/* 描述 */}
-              <p className="text-center text-muted-foreground text-sm mb-8">
-                请稍候，我们正在初始化您的安全剪贴板同步
-              </p>
-
-              {/* 加载指示器 */}
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>初始化中...</span>
-              </div>
-
-              {/* 手动完成按钮（如果自动完成失败） */}
-              {!loading && (
-                <Button onClick={handleComplete} className="mt-8">
-                  完成设置
-                </Button>
-              )}
-            </motion.div>
-          )}
-
-          {/* 完成步骤 */}
-          {step === 'complete' && (
-            <motion.div
-              key="complete"
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: 'spring', duration: 0.5 }}
-              className="w-full flex flex-col items-center"
-            >
-              {/* 成功图标 */}
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-                className="mb-8"
-              >
-                <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
-                  <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
-                </div>
-              </motion.div>
-
-              {/* 标题 */}
-              <motion.h1
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.3 }}
-                className="text-3xl font-bold text-center mb-3"
-              >
-                全部完成！
-              </motion.h1>
-
-              {/* 描述 */}
-              <motion.p
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="text-center text-muted-foreground mb-12"
-              >
-                您的剪贴板同步已准备就绪
-              </motion.p>
-
-              {/* 配置摘要 */}
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="w-full space-y-3 mb-12"
-              >
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0" />
-                  <span className="text-sm">加密已配置</span>
-                </div>
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0" />
-                  <span className="text-sm">设备已注册</span>
-                </div>
-              </motion.div>
-
-              {/* 跳转提示 */}
-              <motion.p
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.6 }}
-                className="text-sm text-muted-foreground"
-              >
-                正在跳转到主页面...
-              </motion.p>
-            </motion.div>
-          )}
-
           {/* 错误步骤 */}
           {step === 'error' && (
             <motion.div
@@ -535,7 +368,7 @@ export default function OnboardingPage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="w-full flex flex-col items-center"
+              className="w-full max-w-sm mx-auto flex flex-col items-center"
             >
               {/* 错误图标 */}
               <div className="mb-8">

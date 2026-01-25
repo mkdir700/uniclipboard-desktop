@@ -1,5 +1,13 @@
 import { listen } from '@tauri-apps/api/event'
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { checkOnboardingStatus, type OnboardingStatus } from '@/api/onboarding'
 
 interface OnboardingContextType {
@@ -31,15 +39,19 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const hasLoadedRef = useRef(false)
 
-  const refreshStatus = async () => {
+  const refreshStatus = useCallback(async () => {
+    const shouldSetLoading = !hasLoadedRef.current
     try {
       console.log('[OnboardingContext] Checking onboarding status...')
       const startedAt = Date.now()
       console.log(
         `[StartupTiming] onboarding status fetch start ts=${new Date(startedAt).toISOString()}`
       )
-      setLoading(true)
+      if (shouldSetLoading) {
+        setLoading(true)
+      }
       const newStatus = await checkOnboardingStatus()
       console.log(
         `[StartupTiming] onboarding status fetch end duration=${Date.now() - startedAt}ms`
@@ -54,14 +66,17 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
       console.error('[OnboardingContext] Failed to refresh onboarding status:', err)
       throw err
     } finally {
-      setLoading(false)
+      if (shouldSetLoading) {
+        setLoading(false)
+        hasLoadedRef.current = true
+      }
     }
-  }
+  }, [])
 
   // Check onboarding status on mount
   useEffect(() => {
     refreshStatus()
-  }, [])
+  }, [refreshStatus])
 
   // 监听后端事件
   useEffect(() => {
@@ -93,7 +108,7 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
       unlistenPasswordSet?.()
       unlistenCompleted?.()
     }
-  }, [])
+  }, [refreshStatus])
 
   return (
     <OnboardingContext.Provider value={{ status, loading, error, refreshStatus }}>
