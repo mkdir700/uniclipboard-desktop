@@ -11,6 +11,19 @@ pub enum NetworkStatus {
     Error(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ProtocolDirection {
+    Inbound,
+    Outbound,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ProtocolDenyReason {
+    NotTrusted,
+    Blocked,
+    RepoError,
+}
+
 /// A peer discovered via mDNS
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveredPeer {
@@ -98,6 +111,13 @@ pub enum NetworkEvent {
 
     // Status events
     StatusChanged(NetworkStatus),
+    ProtocolDenied {
+        peer_id: String,
+        protocol_id: String,
+        pairing_state: crate::network::PairingState,
+        direction: ProtocolDirection,
+        reason: ProtocolDenyReason,
+    },
     #[allow(dead_code)]
     Error(String),
 }
@@ -133,5 +153,25 @@ mod tests {
         assert_eq!(deserialized.device_name, peer.device_name);
         assert_eq!(deserialized.last_seen, peer.last_seen);
         assert!(!deserialized.is_paired);
+    }
+
+    #[test]
+    fn protocol_denied_event_serializes() {
+        use crate::network::PairingState;
+
+        let event = NetworkEvent::ProtocolDenied {
+            peer_id: "peer-1".to_string(),
+            protocol_id: "/uc-business/1.0.0".to_string(),
+            pairing_state: PairingState::Pending,
+            direction: ProtocolDirection::Inbound,
+            reason: ProtocolDenyReason::NotTrusted,
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+        let restored: NetworkEvent = serde_json::from_str(&json).unwrap();
+        match restored {
+            NetworkEvent::ProtocolDenied { .. } => {}
+            _ => panic!("expected ProtocolDenied"),
+        }
     }
 }
