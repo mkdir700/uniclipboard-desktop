@@ -3,7 +3,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Provider } from 'react-redux'
 import App from './App'
-import { initSentry, Sentry } from './observability/sentry'
+import { initSentry, Sentry } from '@/observability/sentry'
 import { store } from './store'
 import './i18n'
 
