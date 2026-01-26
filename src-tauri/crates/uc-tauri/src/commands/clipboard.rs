@@ -2,6 +2,7 @@
 //! 剪贴板相关的 Tauri 命令
 
 use crate::bootstrap::AppRuntime;
+use crate::commands::record_trace_fields;
 use crate::models::{
     ClipboardEntriesResponse, ClipboardEntryDetail, ClipboardEntryProjection,
     ClipboardEntryResource,
@@ -10,6 +11,7 @@ use std::sync::Arc;
 use tauri::State;
 use tracing::{info_span, Instrument};
 use uc_core::ids::EntryId;
+use uc_core::ports::observability::TraceMetadata;
 use uc_core::security::state::EncryptionState;
 
 /// Get clipboard history entries (preview only)
@@ -19,6 +21,7 @@ pub async fn get_clipboard_entries(
     runtime: State<'_, Arc<AppRuntime>>,
     limit: Option<usize>,
     offset: Option<usize>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<ClipboardEntriesResponse, String> {
     let resolved_limit = limit.unwrap_or(50);
     let resolved_offset = offset.unwrap_or(0);
@@ -26,10 +29,13 @@ pub async fn get_clipboard_entries(
 
     let span = info_span!(
         "command.clipboard.get_entries",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         device_id = %device_id,
         limit = resolved_limit,
         offset = resolved_offset,
     );
+    record_trace_fields(&span, &_trace);
 
     async move {
         // Check encryption session readiness to avoid decryption failures during startup
@@ -130,14 +136,18 @@ mod restore_tests {
 pub async fn delete_clipboard_entry(
     runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
+    _trace: Option<TraceMetadata>,
 ) -> Result<(), String> {
     let device_id = runtime.deps.device_identity.current_device_id();
 
     let span = info_span!(
         "command.clipboard.delete_entry",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         device_id = %device_id,
         entry_id = %entry_id,
     );
+    record_trace_fields(&span, &_trace);
 
     async move {
         let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
@@ -160,11 +170,15 @@ pub async fn delete_clipboard_entry(
 pub async fn get_clipboard_entry_detail(
     runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
+    _trace: Option<TraceMetadata>,
 ) -> Result<ClipboardEntryDetail, String> {
     let span = info_span!(
         "command.clipboard.get_entry_detail",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         entry_id = %entry_id,
     );
+    record_trace_fields(&span, &_trace);
 
     async move {
         let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
@@ -197,11 +211,15 @@ pub async fn get_clipboard_entry_detail(
 pub async fn get_clipboard_entry_resource(
     runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
+    _trace: Option<TraceMetadata>,
 ) -> Result<ClipboardEntryResource, String> {
     let span = info_span!(
         "command.clipboard.get_entry_resource",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         entry_id = %entry_id,
     );
+    record_trace_fields(&span, &_trace);
 
     async move {
         let parsed_id = uc_core::ids::EntryId::from(entry_id.clone());
@@ -235,18 +253,23 @@ pub async fn get_clipboard_entry_resource(
 pub async fn restore_clipboard_entry(
     runtime: State<'_, Arc<AppRuntime>>,
     entry_id: String,
+    _trace: Option<TraceMetadata>,
 ) -> Result<bool, String> {
-    restore_clipboard_entry_impl(runtime.as_ref(), entry_id).await
+    restore_clipboard_entry_impl(runtime.as_ref(), entry_id, _trace).await
 }
 
 async fn restore_clipboard_entry_impl(
     runtime: &AppRuntime,
     entry_id: String,
+    trace: Option<TraceMetadata>,
 ) -> Result<bool, String> {
     let span = info_span!(
         "command.clipboard.restore_entry",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         entry_id = %entry_id,
     );
+    record_trace_fields(&span, &trace);
 
     async move {
         let parsed_id = EntryId::from(entry_id.clone());
@@ -1048,7 +1071,7 @@ mod tests {
         };
 
         let runtime = AppRuntime::new(deps);
-        let result = restore_clipboard_entry_impl(&runtime, entry_id.to_string()).await;
+        let result = restore_clipboard_entry_impl(&runtime, entry_id.to_string(), None).await;
 
         assert!(result.is_err());
         let calls = calls.lock().unwrap().clone();
