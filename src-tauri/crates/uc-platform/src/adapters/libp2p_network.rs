@@ -3,22 +3,29 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use libp2p::{
     futures::StreamExt,
-    identity, mdns, noise,
+    mdns, noise,
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, SwarmBuilder,
 };
 use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock as StdRwLock};
 use tokio::sync::{mpsc, RwLock};
 use uc_core::network::{ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent};
-use uc_core::ports::{IdentityStorePort, NetworkPort};
+use uc_core::ports::{IdentityStorePort, NetworkControlPort, NetworkPort};
 
 use crate::identity_store::load_or_create_identity;
 
 pub struct PeerCaches {
     discovered_peers: HashMap<String, DiscoveredPeer>,
     reachable_peers: HashSet<String>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum NetworkStartState {
+    NotStarted,
+    Starting,
+    Started,
 }
 
 impl PeerCaches {
@@ -94,75 +101,128 @@ impl MdnsBehaviour {
 }
 
 pub struct Libp2pNetworkAdapter {
-    local_peer_id: String,
+    local_peer_id: StdRwLock<Option<String>>,
     caches: Arc<RwLock<PeerCaches>>,
     event_tx: mpsc::Sender<NetworkEvent>,
     event_rx: Mutex<Option<mpsc::Receiver<NetworkEvent>>>,
     clipboard_tx: mpsc::Sender<ClipboardMessage>,
     clipboard_rx: Mutex<Option<mpsc::Receiver<ClipboardMessage>>>,
-    keypair: Mutex<Option<identity::Keypair>>,
+    identity_store: Arc<dyn IdentityStorePort>,
+    start_state: Mutex<NetworkStartState>,
 }
 
 impl Libp2pNetworkAdapter {
     pub fn new(identity_store: Arc<dyn IdentityStorePort>) -> Result<Self> {
-        let keypair = load_or_create_identity(identity_store.as_ref())
-            .map_err(|e| anyhow!("failed to load libp2p identity: {e}"))?;
-        let local_peer_id = PeerId::from(keypair.public()).to_string();
         let (event_tx, event_rx) = mpsc::channel(64);
         let (clipboard_tx, clipboard_rx) = mpsc::channel(64);
 
         Ok(Self {
-            local_peer_id,
+            local_peer_id: StdRwLock::new(None),
             caches: Arc::new(RwLock::new(PeerCaches::new())),
             event_tx,
             event_rx: Mutex::new(Some(event_rx)),
             clipboard_tx,
             clipboard_rx: Mutex::new(Some(clipboard_rx)),
-            keypair: Mutex::new(Some(keypair)),
+            identity_store,
+            start_state: Mutex::new(NetworkStartState::NotStarted),
         })
     }
 
     pub fn spawn_swarm(&self) -> Result<()> {
-        let keypair = self.take_keypair()?;
-        let local_peer_id = PeerId::from(keypair.public());
-        let mdns_behaviour = MdnsBehaviour::new(local_peer_id)
-            .map_err(|e| anyhow!("failed to create mdns behaviour: {e}"))?;
+        self.mark_starting()?;
 
-        let mut swarm = SwarmBuilder::with_existing_identity(keypair)
-            .with_tokio()
-            .with_tcp(
-                tcp::Config::default().nodelay(true),
-                noise::Config::new,
-                yamux::Config::default,
-            )
-            .map_err(|e| anyhow!("failed to configure tcp transport: {e}"))?
-            .with_behaviour(move |_| mdns_behaviour)
-            .map_err(|e| anyhow!("failed to attach mdns behaviour: {e}"))?
-            .build();
+        let result = (|| {
+            let keypair = load_or_create_identity(self.identity_store.as_ref())
+                .map_err(|e| anyhow!("failed to load libp2p identity: {e}"))?;
+            let local_peer_id = PeerId::from(keypair.public());
+            let local_peer_id_str = local_peer_id.to_string();
+            self.set_local_peer_id(Some(local_peer_id_str.clone()))?;
+            info!("Loaded libp2p identity: {}", local_peer_id_str);
+            let mdns_behaviour = MdnsBehaviour::new(local_peer_id)
+                .map_err(|e| anyhow!("failed to create mdns behaviour: {e}"))?;
 
-        listen_on_swarm(
-            &mut swarm,
-            "/ip4/0.0.0.0/tcp/0"
-                .parse()
-                .map_err(|e| anyhow!("failed to parse listen address: {e}"))?,
-            &self.event_tx,
-        )?;
+            let mut swarm = SwarmBuilder::with_existing_identity(keypair)
+                .with_tokio()
+                .with_tcp(
+                    tcp::Config::default().nodelay(true),
+                    noise::Config::new,
+                    yamux::Config::default,
+                )
+                .map_err(|e| anyhow!("failed to configure tcp transport: {e}"))?
+                .with_behaviour(move |_| mdns_behaviour)
+                .map_err(|e| anyhow!("failed to attach mdns behaviour: {e}"))?
+                .build();
 
-        let caches = self.caches.clone();
-        let event_tx = self.event_tx.clone();
-        tokio::spawn(async move {
-            run_swarm(swarm, caches, event_tx).await;
-        });
+            listen_on_swarm(
+                &mut swarm,
+                "/ip4/0.0.0.0/tcp/0"
+                    .parse()
+                    .map_err(|e| anyhow!("failed to parse listen address: {e}"))?,
+                &self.event_tx,
+            )?;
 
+            let caches = self.caches.clone();
+            let event_tx = self.event_tx.clone();
+            tokio::spawn(async move {
+                run_swarm(swarm, caches, event_tx).await;
+            });
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                self.mark_started()?;
+                Ok(())
+            }
+            Err(err) => {
+                self.reset_start_state()?;
+                Err(err)
+            }
+        }
+    }
+
+    fn mark_starting(&self) -> Result<()> {
+        let mut guard = self
+            .start_state
+            .lock()
+            .map_err(|_| anyhow!("start state mutex poisoned"))?;
+        match *guard {
+            NetworkStartState::NotStarted => {
+                *guard = NetworkStartState::Starting;
+                Ok(())
+            }
+            NetworkStartState::Starting | NetworkStartState::Started => {
+                Err(anyhow!("swarm already started"))
+            }
+        }
+    }
+
+    fn mark_started(&self) -> Result<()> {
+        let mut guard = self
+            .start_state
+            .lock()
+            .map_err(|_| anyhow!("start state mutex poisoned"))?;
+        *guard = NetworkStartState::Started;
         Ok(())
     }
 
-    fn take_keypair(&self) -> Result<identity::Keypair> {
+    fn reset_start_state(&self) -> Result<()> {
         let mut guard = self
-            .keypair
+            .start_state
             .lock()
-            .map_err(|_| anyhow!("keypair mutex poisoned"))?;
-        guard.take().ok_or_else(|| anyhow!("swarm already started"))
+            .map_err(|_| anyhow!("start state mutex poisoned"))?;
+        *guard = NetworkStartState::NotStarted;
+        self.set_local_peer_id(None)?;
+        Ok(())
+    }
+
+    fn set_local_peer_id(&self, peer_id: Option<String>) -> Result<()> {
+        let mut guard = self
+            .local_peer_id
+            .write()
+            .map_err(|_| anyhow!("local peer id lock poisoned"))?;
+        *guard = peer_id;
+        Ok(())
     }
 
     fn take_receiver<T>(
@@ -207,7 +267,13 @@ impl NetworkPort for Libp2pNetworkAdapter {
     }
 
     fn local_peer_id(&self) -> String {
-        self.local_peer_id.clone()
+        match self.local_peer_id.read() {
+            Ok(guard) => guard.clone().unwrap_or_default(),
+            Err(_) => {
+                warn!("local peer id lock poisoned");
+                String::new()
+            }
+        }
     }
 
     async fn initiate_pairing(&self, _peer_id: String, _device_name: String) -> Result<String> {
@@ -236,6 +302,13 @@ impl NetworkPort for Libp2pNetworkAdapter {
 
     async fn subscribe_events(&self) -> Result<mpsc::Receiver<NetworkEvent>> {
         Self::take_receiver(&self.event_rx, "network event")
+    }
+}
+
+#[async_trait]
+impl NetworkControlPort for Libp2pNetworkAdapter {
+    async fn start_network(&self) -> Result<()> {
+        self.spawn_swarm()
     }
 }
 
@@ -429,6 +502,7 @@ fn apply_peer_not_ready(caches: &mut PeerCaches, peer_id: &str) -> Option<Networ
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libp2p::identity;
     use libp2p::Multiaddr;
     use std::sync::{Arc, Mutex};
     use tokio::time::{sleep, timeout, Duration};
@@ -598,6 +672,36 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct CountingIdentityStore {
+        data: Mutex<Option<Vec<u8>>>,
+        load_calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl CountingIdentityStore {
+        fn load_count(&self) -> usize {
+            self.load_calls.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    impl IdentityStorePort for CountingIdentityStore {
+        fn load_identity(&self) -> Result<Option<Vec<u8>>, uc_core::ports::IdentityStoreError> {
+            self.load_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let guard = self.data.lock().expect("lock counting identity store");
+            Ok(guard.clone())
+        }
+
+        fn store_identity(
+            &self,
+            identity: &[u8],
+        ) -> Result<(), uc_core::ports::IdentityStoreError> {
+            let mut guard = self.data.lock().expect("lock counting identity store");
+            *guard = Some(identity.to_vec());
+            Ok(())
+        }
+    }
+
     #[tokio::test]
     async fn subscribe_clipboard_receiver_is_open() {
         let adapter = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()))
@@ -609,6 +713,15 @@ mod tests {
             .expect("subscribe clipboard");
 
         assert!(!receiver.is_closed());
+    }
+
+    #[test]
+    fn new_does_not_load_identity() {
+        let store = Arc::new(CountingIdentityStore::default());
+
+        let _adapter = Libp2pNetworkAdapter::new(store.clone()).expect("create adapter");
+
+        assert_eq!(store.load_count(), 0, "identity should not load on new");
     }
 
     async fn wait_for_discovery(
@@ -631,11 +744,12 @@ mod tests {
             .expect("create adapter a");
         let adapter_b = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()))
             .expect("create adapter b");
-        let peer_a = adapter_a.local_peer_id();
-        let peer_b = adapter_b.local_peer_id();
 
         adapter_a.spawn_swarm().expect("start swarm a");
         adapter_b.spawn_swarm().expect("start swarm b");
+
+        let peer_a = adapter_a.local_peer_id();
+        let peer_b = adapter_b.local_peer_id();
 
         let rx_a = adapter_a.subscribe_events().await.expect("subscribe a");
         let rx_b = adapter_b.subscribe_events().await.expect("subscribe b");

@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use libp2p::PeerId;
 use uc_core::network::{ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent};
 use uc_core::ports::IdentityStorePort;
-use uc_core::ports::NetworkPort;
+use uc_core::ports::{NetworkControlPort, NetworkPort};
 
 use crate::identity_store::load_or_create_identity;
 
@@ -102,6 +102,13 @@ impl NetworkPort for PlaceholderNetworkPort {
     async fn subscribe_events(&self) -> Result<tokio::sync::mpsc::Receiver<NetworkEvent>> {
         let (_tx, rx) = tokio::sync::mpsc::channel(1);
         Ok(rx)
+    }
+}
+
+#[async_trait]
+impl NetworkControlPort for PlaceholderNetworkPort {
+    async fn start_network(&self) -> Result<()> {
+        Ok(())
     }
 }
 
