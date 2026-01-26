@@ -18,9 +18,11 @@ use tauri_plugin_stronghold;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
+use uc_app::usecases::pairing::{PairingConfig, PairingOrchestrator};
 use uc_core::config::AppConfig;
 use uc_core::ports::AppDirsPort;
 use uc_core::ports::ClipboardChangeHandler;
+use uc_core::ports::NetworkPort;
 use uc_platform::ipc::PlatformCommand;
 use uc_platform::ports::PlatformCommandExecutorPort;
 use uc_platform::runtime::event_bus::{
@@ -29,7 +31,8 @@ use uc_platform::runtime::event_bus::{
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::tracing as bootstrap_tracing;
 use uc_tauri::bootstrap::{
-    ensure_default_device_name, load_config, start_background_tasks, wire_dependencies, AppRuntime,
+    ensure_default_device_name, load_config, resolve_pairing_device_name, start_background_tasks,
+    wire_dependencies, AppRuntime,
 };
 use uc_tauri::protocol::{parse_uc_request, UcRoute};
 
@@ -407,6 +410,16 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::onboarding::complete_onboarding,
             uc_tauri::commands::onboarding::initialize_onboarding,
             // Pairing commands
+            uc_tauri::commands::pairing::get_local_peer_id,
+            uc_tauri::commands::pairing::get_p2p_peers,
+            uc_tauri::commands::pairing::get_local_device_info,
+            uc_tauri::commands::pairing::get_paired_peers,
+            uc_tauri::commands::pairing::get_paired_peers_with_status,
+            uc_tauri::commands::pairing::initiate_p2p_pairing,
+            uc_tauri::commands::pairing::verify_p2p_pairing_pin,
+            uc_tauri::commands::pairing::reject_p2p_pairing,
+            uc_tauri::commands::pairing::accept_p2p_pairing,
+            uc_tauri::commands::pairing::unpair_p2p_device,
             uc_tauri::commands::pairing::list_paired_devices,
             uc_tauri::commands::pairing::set_pairing_state,
             // Autostart commands
@@ -459,6 +472,25 @@ fn run_app(config: AppConfig) {
     // Clone Arc for Tauri state management (will have app_handle injected in setup)
     let runtime_for_tauri = runtime_for_handler.clone();
 
+    let pairing_device_repo = runtime_for_handler.deps.paired_device_repo.clone();
+    let pairing_device_identity = runtime_for_handler.deps.device_identity.clone();
+    let pairing_settings = runtime_for_handler.deps.settings.clone();
+    let pairing_peer_id = background.libp2p_network.local_peer_id();
+    let pairing_identity_pubkey = background.libp2p_network.local_identity_pubkey();
+    let pairing_device_name = tauri::async_runtime::block_on(async move {
+        resolve_pairing_device_name(pairing_settings).await
+    });
+    let pairing_device_id = pairing_device_identity.current_device_id().to_string();
+    let (pairing_orchestrator, pairing_action_rx) = PairingOrchestrator::new(
+        PairingConfig::default(),
+        pairing_device_repo,
+        pairing_device_name,
+        pairing_device_id,
+        pairing_peer_id,
+        pairing_identity_pubkey,
+    );
+    let pairing_orchestrator = Arc::new(pairing_orchestrator);
+
     // Startup barrier used to coordinate splashscreen close timing.
     // NOTE: Must be managed before startup to be available via tauri::State<T>.
     let startup_barrier = Arc::new(uc_tauri::commands::startup::StartupBarrier::default());
@@ -474,6 +506,7 @@ fn run_app(config: AppConfig) {
     Builder::default()
         // Register AppRuntime for Tauri commands
         .manage(runtime_for_tauri)
+        .manage(pairing_orchestrator.clone())
         .manage(startup_barrier.clone())
         .on_page_load(|webview, payload| {
             if webview.label() != "main" {
@@ -530,6 +563,9 @@ fn run_app(config: AppConfig) {
             start_background_tasks(
                 background,
                 &runtime_for_handler.deps,
+                Some(app.handle().clone()),
+                pairing_orchestrator.clone(),
+                pairing_action_rx,
             );
 
             // Clone handles for async blocks
