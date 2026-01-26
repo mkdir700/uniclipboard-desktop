@@ -1,4 +1,4 @@
-use super::protocol::{ClipboardMessage, PairingRequest, PairingResponse};
+use super::protocol::{ClipboardMessage, PairingMessage, PairingRequest, PairingResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -73,6 +73,10 @@ pub enum NetworkEvent {
     },
 
     // Pairing events
+    PairingMessageReceived {
+        peer_id: String,
+        message: PairingMessage,
+    },
     PairingRequestReceived {
         session_id: String,
         peer_id: String,

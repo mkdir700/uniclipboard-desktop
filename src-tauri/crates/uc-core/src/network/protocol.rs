@@ -14,7 +14,7 @@ pub enum ProtocolMessage {
 }
 
 /// Pairing protocol messages for secure device pairing with PIN verification
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PairingMessage {
     Request(PairingRequest),
     Challenge(PairingChallenge),
@@ -30,7 +30,7 @@ pub enum PairingMessage {
 /// # Fields
 /// - `device_id`: 6-digit stable device ID (from database devices.id)
 /// - `peer_id`: libp2p PeerId (network layer, changes on each restart)
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingRequest {
     pub session_id: String,
     pub device_name: String,
@@ -38,6 +38,10 @@ pub struct PairingRequest {
     pub device_id: String,
     /// Current libp2p PeerId for this session (network layer)
     pub peer_id: String,
+    /// Stable identity public key (Ed25519)
+    pub identity_pubkey: Vec<u8>,
+    /// Random nonce for short-code transcript
+    pub nonce: Vec<u8>,
 }
 
 /// Pairing challenge sent by responder with PIN
@@ -47,13 +51,17 @@ pub struct PairingRequest {
 ///
 /// # Fields
 /// - `device_id`: 6-digit stable device ID of the responder (from database devices.id)
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingChallenge {
     pub session_id: String,
     pub pin: String,
     pub device_name: String, // Responder's device name
     /// 6-digit stable device ID of the responder (from devices table)
     pub device_id: String,
+    /// Stable identity public key (Ed25519)
+    pub identity_pubkey: Vec<u8>,
+    /// Random nonce for short-code transcript
+    pub nonce: Vec<u8>,
 }
 
 /// Pairing response from initiator after PIN verification
@@ -100,7 +108,7 @@ pub struct PairingChallenge {
 /// let hash = argon2id_hash(pin, salt, params);
 /// let encoded = [0x01, salt..., hash...]; // 49 bytes total
 /// ```
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingResponse {
     pub session_id: String,
     /// Argon2id-derived key encoded as {version(1)||salt(16)||hash(32)} = 49 bytes
@@ -112,7 +120,7 @@ pub struct PairingResponse {
 ///
 /// Note: This no longer includes shared_secret as we've removed ECDH key exchange.
 /// All devices now use the same master key derived from the user's encryption password.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingConfirm {
     pub session_id: String,
     pub success: bool,
@@ -183,6 +191,17 @@ impl std::fmt::Debug for PairingMessage {
     }
 }
 
+impl PairingMessage {
+    pub fn session_id(&self) -> &str {
+        match self {
+            PairingMessage::Request(msg) => &msg.session_id,
+            PairingMessage::Challenge(msg) => &msg.session_id,
+            PairingMessage::Response(msg) => &msg.session_id,
+            PairingMessage::Confirm(msg) => &msg.session_id,
+        }
+    }
+}
+
 impl std::fmt::Debug for PairingRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PairingRequest")
@@ -190,6 +209,8 @@ impl std::fmt::Debug for PairingRequest {
             .field("device_name", &self.device_name)
             .field("device_id", &self.device_id)
             .field("peer_id", &self.peer_id)
+            .field("identity_pubkey_len", &self.identity_pubkey.len())
+            .field("nonce_len", &self.nonce.len())
             .finish()
     }
 }
@@ -201,6 +222,8 @@ impl std::fmt::Debug for PairingChallenge {
             .field("pin", &"[REDACTED]")
             .field("device_name", &self.device_name)
             .field("device_id", &self.device_id)
+            .field("identity_pubkey_len", &self.identity_pubkey.len())
+            .field("nonce_len", &self.nonce.len())
             .finish()
     }
 }
