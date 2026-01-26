@@ -55,6 +55,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@reduxjs/toolkit": "^2.11.2",
+    "@sentry/react": "^8.0.0",
     "@tauri-apps/api": "^2.9.1",
     "@tauri-apps/plugin-autostart": "~2.5.1",
     "@tauri-apps/plugin-updater": "^2.9.0",
