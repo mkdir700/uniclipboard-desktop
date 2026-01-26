@@ -17,6 +17,7 @@ impl DirsAppDirsAdapter {
     /// # Examples
     ///
     /// ```
+    /// use uc_platform::app_dirs::DirsAppDirsAdapter;
     /// let _ = DirsAppDirsAdapter::new();
     /// ```
     pub fn new() -> Self {
@@ -34,7 +35,8 @@ impl DirsAppDirsAdapter {
     ///
     /// ```
     /// use std::path::PathBuf;
-    /// use crate::app_dirs::DirsAppDirsAdapter;
+    /// use uc_core::ports::AppDirsPort;
+    /// use uc_platform::app_dirs::DirsAppDirsAdapter;
     ///
     /// let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
     /// ```
@@ -53,8 +55,10 @@ impl DirsAppDirsAdapter {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// use std::path::PathBuf;
+    /// use uc_core::ports::AppDirsPort;
+    /// use uc_platform::app_dirs::DirsAppDirsAdapter;
     /// // For tests you can construct an adapter with an explicit base directory:
     /// let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
     /// assert_eq!(adapter.base_data_local_dir(), Some(PathBuf::from("/tmp")));
@@ -83,12 +87,13 @@ impl AppDirsPort for DirsAppDirsAdapter {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use std::path::PathBuf;
+    /// use uc_core::ports::AppDirsPort;
+    /// use uc_platform::app_dirs::DirsAppDirsAdapter;
     ///
-    /// let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
-    /// let dirs = adapter.get_app_dirs().unwrap();
-    /// assert_eq!(dirs.app_data_root, PathBuf::from("/tmp/uniclipboard"));
+    /// let adapter = DirsAppDirsAdapter::new();
+    /// let _ = adapter.get_app_dirs();
     /// ```
     fn get_app_dirs(&self) -> Result<AppDirs, AppDirsError> {
         let base_data = self

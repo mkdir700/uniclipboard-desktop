@@ -1,169 +1,185 @@
-//! Secure storage selection and default keyring factory.
+//! Secure storage selection and default secure storage factory.
 
 use std::{fs, path::PathBuf, sync::Arc};
 use tracing::{debug, error, info, warn};
 
-use uc_core::ports::KeyringPort;
+use uc_core::ports::SecureStoragePort;
 
 use crate::{
     capability::{detect_storage_capability, SecureStorageCapability},
-    file_keyring::FileBasedKeyring,
-    keyring::SystemKeyring,
+    file_secure_storage::FileSecureStorage,
+    system_secure_storage::SystemSecureStorage,
 };
 
 #[derive(Debug, thiserror::Error)]
-pub enum KeyringFactoryError {
+pub enum SecureStorageFactoryError {
     #[error("secure storage unsupported: {capability:?}")]
     Unsupported { capability: SecureStorageCapability },
 
-    #[error("failed to initialize file-based keyring: {0}")]
+    #[error("failed to initialize file-based secure storage: {0}")]
     FileBasedInit(#[from] std::io::Error),
 }
 
-fn keyring_from_capability(
+fn secure_storage_from_capability(
     capability: SecureStorageCapability,
-) -> Result<Arc<dyn KeyringPort>, KeyringFactoryError> {
-    keyring_from_capability_with_base_dir(capability, None)
+) -> Result<Arc<dyn SecureStoragePort>, SecureStorageFactoryError> {
+    secure_storage_from_capability_with_base_dir(capability, None)
 }
 
-/// Create a keyring instance matching the provided secure storage capability.
+/// Create a secure storage instance matching the provided secure storage capability.
 ///
-/// If `capability` is `SystemKeyring`, returns a `SystemKeyring` wrapped in `Arc<dyn KeyringPort>`.
-/// If `capability` is `FileBasedKeystore`, returns a `FileBasedKeyring` using the provided
-/// `base_dir`. If `base_dir` is `None`, returns `KeyringFactoryError::FileBasedInit` with
-/// `std::io::ErrorKind::NotFound`. If `capability` is `Unsupported`, returns
-/// `KeyringFactoryError::Unsupported` containing the provided capability.
+/// If `capability` indicates system storage, returns a system-backed implementation wrapped in
+/// `Arc<dyn SecureStoragePort>`. If `capability` is `FileBasedKeystore`, returns a file-backed
+/// implementation using the provided `base_dir`. If `base_dir` is `None`,
+/// returns `SecureStorageFactoryError::FileBasedInit` with `std::io::ErrorKind::NotFound`.
+/// If `capability` is `Unsupported`, returns `SecureStorageFactoryError::Unsupported` containing
+/// the provided capability.
 ///
 /// The `base_dir` argument supplies the application data root required for file-based storage;
 /// when present the directory will be created if it does not exist.
 ///
 /// # Examples
 ///
-/// ```
+/// ```ignore
 /// # use std::sync::Arc;
 /// # use std::path::PathBuf;
-/// # use crate::{keyring_from_capability_with_base_dir, SecureStorageCapability};
-/// // System keyring
-/// let keyring = keyring_from_capability_with_base_dir(SecureStorageCapability::SystemKeyring, None);
-/// assert!(keyring.is_ok());
+/// # use uc_platform::capability::SecureStorageCapability;
+/// # use uc_platform::secure_storage::secure_storage_from_capability_with_base_dir;
+/// let temp_dir = std::env::temp_dir();
+/// let storage = secure_storage_from_capability_with_base_dir(
+///     SecureStorageCapability::FileBasedKeystore,
+///     Some(temp_dir),
+/// );
+/// assert!(storage.is_ok());
 /// ```
-fn keyring_from_capability_with_base_dir(
+fn secure_storage_from_capability_with_base_dir(
     capability: SecureStorageCapability,
     base_dir: Option<PathBuf>,
-) -> Result<Arc<dyn KeyringPort>, KeyringFactoryError> {
+) -> Result<Arc<dyn SecureStoragePort>, SecureStorageFactoryError> {
     match capability {
         SecureStorageCapability::SystemKeyring => {
-            Ok(Arc::new(SystemKeyring {}) as Arc<dyn KeyringPort>)
+            Ok(Arc::new(SystemSecureStorage::new()) as Arc<dyn SecureStoragePort>)
         }
         SecureStorageCapability::FileBasedKeystore => {
             if let Some(base_dir) = base_dir {
                 fs::create_dir_all(&base_dir)?;
-                Ok(Arc::new(FileBasedKeyring::with_base_dir(base_dir)) as Arc<dyn KeyringPort>)
+                Ok(Arc::new(FileSecureStorage::with_base_dir(base_dir))
+                    as Arc<dyn SecureStoragePort>)
             } else {
-                Err(KeyringFactoryError::FileBasedInit(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "FileBasedKeyring requires app data root",
-                )))
+                Err(SecureStorageFactoryError::FileBasedInit(
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "File-based secure storage requires app data root",
+                    ),
+                ))
             }
         }
         SecureStorageCapability::Unsupported => {
-            Err(KeyringFactoryError::Unsupported { capability })
+            Err(SecureStorageFactoryError::Unsupported { capability })
         }
     }
 }
 
-/// Create a default secure keyring based on the detected storage capability.
+/// Create a default secure storage implementation based on the detected storage capability.
 ///
-/// The function selects an appropriate keyring implementation for the current
+/// The function selects an appropriate secure storage implementation for the current
 /// environment:
-/// - If a system keyring is available, returns a system-backed keyring.
-/// - If only a file-based keystore is available, returns a `FileBasedInit`
-///   error indicating an application data root is required.
+/// - If system secure storage is available, returns a system-backed implementation.
+/// - If only a file-based keystore is available, returns a `FileBasedInit` error
+///   indicating an application data root is required.
 /// - If secure storage is unsupported, returns an `Unsupported` error.
 ///
 /// # Returns
 ///
-/// `Ok(Arc<dyn KeyringPort>)` with the selected keyring on success; otherwise
-/// an appropriate `KeyringFactoryError` describing why a keyring could not be
+/// `Ok(Arc<dyn SecureStoragePort>)` with the selected storage on success; otherwise
+/// an appropriate `SecureStorageFactoryError` describing why storage could not be
 /// created (`FileBasedInit` when an app data root is required, or
 /// `Unsupported` when no secure storage is available).
 ///
 /// # Examples
 ///
 /// ```
-/// let _ = create_default_keyring();
+/// use uc_platform::secure_storage::create_default_secure_storage;
+/// let _ = create_default_secure_storage();
 /// ```
-pub fn create_default_keyring() -> Result<Arc<dyn KeyringPort>, KeyringFactoryError> {
+pub fn create_default_secure_storage(
+) -> Result<Arc<dyn SecureStoragePort>, SecureStorageFactoryError> {
     let capability = detect_storage_capability();
     debug!(capability = ?capability, "Detected secure storage capability");
 
     match capability {
         SecureStorageCapability::SystemKeyring => {
-            info!("Using system keyring for secure storage");
-            keyring_from_capability(capability)
+            info!("Using system secure storage");
+            secure_storage_from_capability(capability)
         }
         SecureStorageCapability::FileBasedKeystore => {
             warn!(
-                "File-based keyring requires app data root; use create_default_keyring_in_app_data_root"
+                "File-based secure storage requires app data root; use create_default_secure_storage_in_app_data_root"
             );
-            Err(KeyringFactoryError::FileBasedInit(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "FileBasedKeyring requires app data root",
-            )))
+            Err(SecureStorageFactoryError::FileBasedInit(
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "File-based secure storage requires app data root",
+                ),
+            ))
         }
         SecureStorageCapability::Unsupported => {
             error!(capability = ?capability, "Secure storage unsupported");
-            Err(KeyringFactoryError::Unsupported { capability })
+            Err(SecureStorageFactoryError::Unsupported { capability })
         }
     }
 }
 
-/// Create a default keyring using `app_data_root` when a file-based keystore is required.
+/// Create a default secure storage using `app_data_root` when a file-based keystore is required.
 ///
-/// Detects the platform's secure storage capability and returns an appropriate `KeyringPort`:
-/// - If the system keyring is available, returns the system keyring.
-/// - If a file-based keystore is detected, initializes a `FileBasedKeyring` rooted at `app_data_root`.
-/// - If secure storage is unsupported, returns `KeyringFactoryError::Unsupported`.
+/// Detects the platform's secure storage capability and returns an appropriate `SecureStoragePort`:
+/// - If system secure storage is available, returns the system-backed implementation.
+/// - If a file-based keystore is detected, initializes a file-backed implementation rooted at
+///   `app_data_root`.
+/// - If secure storage is unsupported, returns `SecureStorageFactoryError::Unsupported`.
 ///
 /// # Parameters
 ///
-/// - `app_data_root`: Path to the application's data root used to initialize a file-based keyring.
+/// - `app_data_root`: Path to the application's data root used to initialize file-based storage.
 ///
 /// # Errors
 ///
-/// Returns `KeyringFactoryError::Unsupported` when secure storage is not available.
-/// Returns `KeyringFactoryError::FileBasedInit` if initialization of a file-based keyring fails.
+/// Returns `SecureStorageFactoryError::Unsupported` when secure storage is not available.
+/// Returns `SecureStorageFactoryError::FileBasedInit` if initialization of file-based storage fails.
 ///
 /// # Examples
 ///
 /// ```
 /// use std::path::PathBuf;
-/// let app_data_root = std::env::temp_dir().join("my_app_keyring");
-/// let res = create_default_keyring_in_app_data_root(app_data_root);
-/// // On platforms with system keyring support this may still return Ok with a system keyring.
-/// assert!(res.is_ok() || matches!(res.unwrap_err(), crate::KeyringFactoryError::Unsupported));
+/// use uc_platform::secure_storage::{
+///     create_default_secure_storage_in_app_data_root, SecureStorageFactoryError,
+/// };
+/// let app_data_root = std::env::temp_dir().join("my_app_storage");
+/// let res = create_default_secure_storage_in_app_data_root(app_data_root);
+/// // On platforms with system secure storage support this may still return Ok.
+/// assert!(matches!(res, Ok(_)) || matches!(res, Err(SecureStorageFactoryError::Unsupported { .. })));
 /// ```
-pub fn create_default_keyring_in_app_data_root(
+pub fn create_default_secure_storage_in_app_data_root(
     app_data_root: PathBuf,
-) -> Result<Arc<dyn KeyringPort>, KeyringFactoryError> {
+) -> Result<Arc<dyn SecureStoragePort>, SecureStorageFactoryError> {
     let capability = detect_storage_capability();
     debug!(capability = ?capability, "Detected secure storage capability");
 
     match capability {
         SecureStorageCapability::SystemKeyring => {
-            info!("Using system keyring for secure storage");
-            keyring_from_capability(capability)
+            info!("Using system secure storage");
+            secure_storage_from_capability(capability)
         }
         SecureStorageCapability::FileBasedKeystore => {
-            warn!("Using file-based keyring (insecure dev fallback for WSL/headless environments)");
+            warn!("Using file-based secure storage (insecure dev fallback for WSL/headless environments)");
             Ok(
-                Arc::new(FileBasedKeyring::new_in_app_data_root(app_data_root)?)
-                    as Arc<dyn KeyringPort>,
+                Arc::new(FileSecureStorage::new_in_app_data_root(app_data_root)?)
+                    as Arc<dyn SecureStoragePort>,
             )
         }
         SecureStorageCapability::Unsupported => {
             error!(capability = ?capability, "Secure storage unsupported");
-            Err(KeyringFactoryError::Unsupported { capability })
+            Err(SecureStorageFactoryError::Unsupported { capability })
         }
     }
 }
@@ -175,26 +191,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keyring_from_capability_unsupported_returns_error() {
-        let result =
-            keyring_from_capability_with_base_dir(SecureStorageCapability::Unsupported, None);
+    fn secure_storage_from_capability_unsupported_returns_error() {
+        let result = secure_storage_from_capability_with_base_dir(
+            SecureStorageCapability::Unsupported,
+            None,
+        );
         assert!(matches!(
             result,
-            Err(KeyringFactoryError::Unsupported { .. })
+            Err(SecureStorageFactoryError::Unsupported { .. })
         ));
     }
 
     #[test]
-    fn keyring_from_capability_system_keyring_returns_ok() {
-        let result =
-            keyring_from_capability_with_base_dir(SecureStorageCapability::SystemKeyring, None);
+    fn secure_storage_from_capability_system_storage_returns_ok() {
+        let result = secure_storage_from_capability_with_base_dir(
+            SecureStorageCapability::SystemKeyring,
+            None,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
-    fn keyring_from_capability_file_based_keystore_returns_ok() {
+    fn secure_storage_from_capability_file_based_keystore_returns_ok() {
         let temp_dir = tempfile::TempDir::new().unwrap();
-        let result = keyring_from_capability_with_base_dir(
+        let result = secure_storage_from_capability_with_base_dir(
             SecureStorageCapability::FileBasedKeystore,
             Some(temp_dir.path().to_path_buf()),
         );
