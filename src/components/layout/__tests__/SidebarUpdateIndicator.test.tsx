@@ -2,8 +2,8 @@ import type { Update } from '@tauri-apps/plugin-updater'
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Sidebar from '@/components/layout/Sidebar'
-import { SettingContext } from '@/contexts/SettingContext'
-import { UpdateContext } from '@/contexts/UpdateContext'
+import { SettingContext } from '@/contexts/setting-context'
+import { UpdateContext } from '@/contexts/update-context'
 import type { Settings } from '@/types/setting'
 
 const baseSetting: Settings = {

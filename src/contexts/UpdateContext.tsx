@@ -1,16 +1,9 @@
 import { check, type Update } from '@tauri-apps/plugin-updater'
-import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from '@/components/ui/sonner'
+import { UpdateContext } from './update-context'
+import { toast } from '@/components/ui/toast'
 import { useSetting } from '@/hooks/useSetting'
-
-export interface UpdateContextType {
-  updateInfo: Update | null
-  isCheckingUpdate: boolean
-  checkForUpdates: () => Promise<Update | null>
-}
-
-export const UpdateContext = createContext<UpdateContextType | undefined>(undefined)
 
 interface UpdateProviderProps {
   children: React.ReactNode

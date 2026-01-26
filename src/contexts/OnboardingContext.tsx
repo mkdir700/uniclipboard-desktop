@@ -1,25 +1,8 @@
 import { listen } from '@tauri-apps/api/event'
-import { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react'
-import { type OnboardingStatus } from '@/api/onboarding'
+import { useCallback, useEffect, type ReactNode } from 'react'
+import { OnboardingContext } from './onboarding-context'
 import { appApi, useGetOnboardingStatusQuery } from '@/store/api'
 import { useAppDispatch } from '@/store/hooks'
-
-interface OnboardingContextType {
-  status: OnboardingStatus | null
-  loading: boolean
-  error: string | null
-  refreshStatus: () => Promise<OnboardingStatus>
-}
-
-const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined)
-
-export const useOnboarding = () => {
-  const context = useContext(OnboardingContext)
-  if (!context) {
-    throw new Error('useOnboarding must be used within OnboardingProvider')
-  }
-  return context
-}
 
 interface OnboardingPasswordSetEvent {
   timestamp: number
@@ -29,7 +12,7 @@ interface OnboardingCompletedEvent {
   timestamp: number
 }
 
-export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
   const dispatch = useAppDispatch()
   const { data, isLoading, error, refetch } = useGetOnboardingStatusQuery()
 

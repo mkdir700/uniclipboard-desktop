@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useShortcutContext } from '@/contexts/ShortcutContext'
+import { useShortcutContext } from '@/contexts/shortcut-context'
 import { ShortcutScope } from '@/shortcuts/definitions'
 import { ShortcutLayer } from '@/shortcuts/layers'
 

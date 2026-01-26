@@ -1,13 +1,11 @@
 import { listen } from '@tauri-apps/api/event'
-import React, { useState, useEffect, createContext, ReactNode, useCallback } from 'react'
+import React, { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { SettingContext } from './setting-context'
 import { DEFAULT_THEME_COLOR } from '@/constants/theme'
 import i18n, { normalizeLanguage, persistLanguage } from '@/i18n'
 import { invokeWithTrace } from '@/lib/tauri-command'
 import type { SettingChangedEvent } from '@/types/events'
 import type { SettingContextType, Settings } from '@/types/setting'
-
-// 创建并导出 Context - 必须在文件顶部创建
-export const SettingContext = createContext<SettingContextType | undefined>(undefined)
 
 // 设置提供者属性接口
 interface SettingProviderProps {

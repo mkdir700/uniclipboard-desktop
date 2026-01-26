@@ -15,7 +15,7 @@ import {
   ClipboardFileItem,
 } from '@/api/clipboardItems'
 import { Skeleton } from '@/components/ui/skeleton'
-import { toast } from '@/components/ui/sonner'
+import { toast } from '@/components/ui/toast'
 import { useShortcut } from '@/hooks/useShortcut'
 import { captureUserIntent } from '@/observability/breadcrumbs'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'

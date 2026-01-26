@@ -11,8 +11,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Card, CardContent } from '@/components/ui/card'
-import { toast } from '@/components/ui/sonner'
 import { Switch } from '@/components/ui/switch'
+import { toast } from '@/components/ui/toast'
 import { useSetting } from '@/hooks/useSetting'
 import { useUpdate } from '@/hooks/useUpdate'
 
