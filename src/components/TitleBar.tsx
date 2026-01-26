@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
-import { useOnboarding } from '@/contexts/OnboardingContext'
+import { useOnboarding } from '@/contexts/onboarding-context'
 import { usePlatform } from '@/hooks/usePlatform'
 import { cn } from '@/lib/utils'
 

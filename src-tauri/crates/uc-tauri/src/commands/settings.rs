@@ -2,10 +2,12 @@
 //! 设置相关的 Tauri 命令
 
 use crate::bootstrap::AppRuntime;
+use crate::commands::record_trace_fields;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{info_span, Instrument};
+use uc_core::ports::observability::TraceMetadata;
 use uc_core::settings::model::Settings;
 
 /// Get application settings
@@ -16,11 +18,17 @@ use uc_core::settings::model::Settings;
 /// ## Returns / 返回值
 /// - JSON representation of current Settings
 #[tauri::command]
-pub async fn get_settings(runtime: State<'_, Arc<AppRuntime>>) -> Result<Value, String> {
+pub async fn get_settings(
+    runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
+) -> Result<Value, String> {
     let span = info_span!(
         "command.settings.get",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         device_id = %runtime.deps.device_identity.current_device_id(),
     );
+    record_trace_fields(&span, &_trace);
     async {
         let uc = runtime.usecases().get_settings();
         let settings = uc.execute().await.map_err(|e| {
@@ -61,11 +69,15 @@ pub async fn get_settings(runtime: State<'_, Arc<AppRuntime>>) -> Result<Value, 
 pub async fn update_settings(
     runtime: State<'_, Arc<AppRuntime>>,
     settings: Value,
+    _trace: Option<TraceMetadata>,
 ) -> Result<(), String> {
     let span = info_span!(
         "command.settings.update",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         device_id = %runtime.deps.device_identity.current_device_id(),
     );
+    record_trace_fields(&span, &_trace);
     async {
         // Parse JSON into Settings domain model
         let parsed_settings: Settings = serde_json::from_value(settings.clone()).map_err(|e| {

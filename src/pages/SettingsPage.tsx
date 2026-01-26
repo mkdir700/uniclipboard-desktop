@@ -11,6 +11,7 @@ import SyncSection from '@/components/setting/SyncSection'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { SettingContentLayout } from '@/layouts'
+import { captureUserIntent } from '@/observability/breadcrumbs'
 
 const SettingsPage: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState('general')
@@ -18,6 +19,7 @@ const SettingsPage: React.FC = () => {
 
   // Handle ESC key to navigate back
   useEffect(() => {
+    captureUserIntent('open_settings')
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         const idx = (window.history.state as { idx?: number } | null)?.idx

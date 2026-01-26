@@ -13,6 +13,7 @@ import { DeviceList, DeviceHeader } from '@/components'
 import { DeviceTab } from '@/components/device/Header'
 import PairingDialog from '@/components/PairingDialog'
 import PairingPinDialog from '@/components/PairingPinDialog'
+import { captureUserIntent } from '@/observability/breadcrumbs'
 import { useAppDispatch } from '@/store/hooks'
 import { fetchPairedDevices } from '@/store/slices/devicesSlice'
 
@@ -100,6 +101,7 @@ const DevicesPage: React.FC = () => {
   }, [setupP2PRequestListener])
 
   const handleAddDevice = () => {
+    captureUserIntent('pair_device', { source: 'add_device' })
     setShowPairingDialog(true)
   }
 
@@ -115,6 +117,7 @@ const DevicesPage: React.FC = () => {
   const handleAcceptPairing = async () => {
     // 接收方点击接受后，后端会自动生成 PIN 并发送 p2p-pin-ready 事件
     // 前端只需要等待 PIN 事件即可
+    captureUserIntent('pair_device', { source: 'request' })
     console.log('Accepting pairing request, waiting for PIN...')
   }
 

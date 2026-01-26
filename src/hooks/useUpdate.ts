@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { UpdateContext, type UpdateContextType } from '@/contexts/UpdateContext'
+import { UpdateContext, type UpdateContextType } from '@/contexts/update-context'
 
 export const useUpdate = (): UpdateContextType => {
   const context = useContext(UpdateContext)

@@ -1,6 +1,6 @@
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { render, screen, waitFor } from '@testing-library/react'
-import { SettingContext } from '@/contexts/SettingContext'
+import { SettingContext } from '@/contexts/setting-context'
 import { UpdateProvider } from '@/contexts/UpdateContext'
 import { useUpdate } from '@/hooks/useUpdate'
 import type { Settings } from '@/types/setting'

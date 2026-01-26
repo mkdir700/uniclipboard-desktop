@@ -17,7 +17,7 @@ import {
   fetchClipboardResourceText,
   getClipboardEntryResource,
 } from '@/api/clipboardItems'
-import { toast } from '@/components/ui/sonner'
+import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import { formatFileSize } from '@/utils'
 

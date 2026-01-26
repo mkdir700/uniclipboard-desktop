@@ -2,11 +2,13 @@
 //! 加密相关的 Tauri 命令
 
 use crate::bootstrap::AppRuntime;
+use crate::commands::record_trace_fields;
 use crate::events::{forward_libp2p_start_failed, EncryptionEvent};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tracing::{info, info_span, warn, Instrument};
+use uc_core::ports::observability::TraceMetadata;
 
 const LOG_CONTEXT: &str = "[initialize_encryption]";
 const UNLOCK_CONTEXT: &str = "[unlock_encryption_session]";
@@ -42,11 +44,15 @@ pub async fn initialize_encryption(
     runtime: State<'_, Arc<AppRuntime>>,
     app_handle: AppHandle,
     passphrase: String,
+    _trace: Option<TraceMetadata>,
 ) -> Result<(), String> {
     let span = info_span!(
         "command.encryption.initialize",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         device_id = %runtime.deps.device_identity.current_device_id(),
     );
+    record_trace_fields(&span, &_trace);
 
     let uc = runtime.usecases().initialize_encryption();
     log::debug!("{} Use case created, executing...", LOG_CONTEXT);
@@ -134,11 +140,15 @@ fn emit_session_failed<R: Runtime>(
 pub async fn unlock_encryption_session_with_runtime<R: Runtime>(
     runtime: &Arc<AppRuntime>,
     app_handle: &AppHandle<R>,
+    trace: Option<TraceMetadata>,
 ) -> Result<bool, String> {
     let span = info_span!(
         "command.encryption.unlock_session",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         device_id = %runtime.deps.device_identity.current_device_id(),
     );
+    record_trace_fields(&span, &trace);
     let uc = runtime.usecases().auto_unlock_encryption_session();
     info!("{} Attempting keyring unlock", UNLOCK_CONTEXT);
     async {
@@ -212,8 +222,9 @@ pub async fn unlock_encryption_session_with_runtime<R: Runtime>(
 pub async fn unlock_encryption_session(
     runtime: State<'_, Arc<AppRuntime>>,
     app_handle: AppHandle,
+    _trace: Option<TraceMetadata>,
 ) -> Result<bool, String> {
-    unlock_encryption_session_with_runtime(runtime.inner(), &app_handle).await
+    unlock_encryption_session_with_runtime(runtime.inner(), &app_handle, _trace).await
 }
 
 #[cfg(test)]
@@ -987,7 +998,7 @@ mod tests {
         let app = tauri::test::mock_app();
         let app_handle = app.handle();
 
-        let unlocked = unlock_encryption_session_with_runtime(&runtime, &app_handle)
+        let unlocked = unlock_encryption_session_with_runtime(&runtime, &app_handle, None)
             .await
             .expect("unlock");
 
@@ -1008,11 +1019,15 @@ mod tests {
 #[tauri::command]
 pub async fn is_encryption_initialized(
     runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<bool, String> {
     let span = info_span!(
         "command.encryption.is_initialized",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         device_id = %runtime.deps.device_identity.current_device_id(),
     );
+    record_trace_fields(&span, &_trace);
     async {
         let uc = runtime.usecases().is_encryption_initialized();
         let result = uc.execute().await.map_err(|e| {
@@ -1035,11 +1050,15 @@ pub async fn is_encryption_initialized(
 #[tauri::command]
 pub async fn get_encryption_session_status(
     runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<EncryptionSessionStatus, String> {
     let span = info_span!(
         "command.encryption.session_status",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
         device_id = %runtime.deps.device_identity.current_device_id(),
     );
+    record_trace_fields(&span, &_trace);
 
     async {
         let state = runtime

@@ -1,5 +1,6 @@
-import { toast, Toaster as SonnerToaster } from 'sonner'
+import type { CSSProperties } from 'react'
 import type { ToasterProps } from 'sonner'
+import { Toaster as SonnerToaster } from 'sonner'
 import { useSetting } from '@/hooks/useSetting'
 
 function Toaster({ ...props }: ToasterProps) {
@@ -37,11 +38,11 @@ function Toaster({ ...props }: ToasterProps) {
           '--info-border': 'var(--primary)',
           '--info-text': 'var(--primary-foreground)',
           '--border-radius': 'var(--radius)',
-        } as React.CSSProperties
+        } as CSSProperties
       }
       {...props}
     />
   )
 }
 
-export { Toaster, toast }
+export { Toaster }

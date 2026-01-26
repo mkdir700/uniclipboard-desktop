@@ -1,5 +1,5 @@
 import { useHotkeys } from 'react-hotkeys-hook'
-import { useShortcutContext } from '@/contexts/ShortcutContext'
+import { useShortcutContext } from '@/contexts/shortcut-context'
 import { ShortcutScope } from '@/shortcuts/definitions'
 
 /**

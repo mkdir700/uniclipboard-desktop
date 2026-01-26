@@ -4,9 +4,12 @@
 //! These commands are simple wrappers around the tauri_plugin_autostart plugin.
 //! 这些命令是 tauri_plugin_autostart 插件的简单包装器。
 
+use crate::commands::record_trace_fields;
 use std::fmt::Display;
 use tauri::AppHandle;
 use tauri_plugin_autostart::ManagerExt as _;
+use tracing::{info_span, Instrument};
+use uc_core::ports::observability::TraceMetadata;
 
 fn format_autostart_error(prefix: &str, error: impl Display) -> String {
     format!("{}: {}", prefix, error)
@@ -22,12 +25,25 @@ fn format_autostart_error(prefix: &str, error: impl Display) -> String {
 /// 这是一个简单的包装命令，委托给 tauri_plugin_autostart 插件。
 /// 不需要用例，因为这是平台插件包装器，而非业务逻辑。
 #[tauri::command]
-pub async fn enable_autostart(app_handle: AppHandle) -> Result<(), String> {
-    let autostart_manager = app_handle.autolaunch();
-    autostart_manager
-        .enable()
-        .map_err(|e| format_autostart_error("Failed to enable autostart", e))?;
-    Ok(())
+pub async fn enable_autostart(
+    app_handle: AppHandle,
+    _trace: Option<TraceMetadata>,
+) -> Result<(), String> {
+    let span = info_span!(
+        "command.autostart.enable",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+    );
+    record_trace_fields(&span, &_trace);
+    async {
+        let autostart_manager = app_handle.autolaunch();
+        autostart_manager
+            .enable()
+            .map_err(|e| format_autostart_error("Failed to enable autostart", e))?;
+        Ok(())
+    }
+    .instrument(span)
+    .await
 }
 
 /// Disable autostart
@@ -40,12 +56,25 @@ pub async fn enable_autostart(app_handle: AppHandle) -> Result<(), String> {
 /// 这是一个简单的包装命令，委托给 tauri_plugin_autostart 插件。
 /// 不需要用例，因为这是平台插件包装器，而非业务逻辑。
 #[tauri::command]
-pub async fn disable_autostart(app_handle: AppHandle) -> Result<(), String> {
-    let autostart_manager = app_handle.autolaunch();
-    autostart_manager
-        .disable()
-        .map_err(|e| format_autostart_error("Failed to disable autostart", e))?;
-    Ok(())
+pub async fn disable_autostart(
+    app_handle: AppHandle,
+    _trace: Option<TraceMetadata>,
+) -> Result<(), String> {
+    let span = info_span!(
+        "command.autostart.disable",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+    );
+    record_trace_fields(&span, &_trace);
+    async {
+        let autostart_manager = app_handle.autolaunch();
+        autostart_manager
+            .disable()
+            .map_err(|e| format_autostart_error("Failed to disable autostart", e))?;
+        Ok(())
+    }
+    .instrument(span)
+    .await
 }
 
 /// Check if autostart is enabled
@@ -61,11 +90,24 @@ pub async fn disable_autostart(app_handle: AppHandle) -> Result<(), String> {
 /// 这是一个简单的包装命令，委托给 tauri_plugin_autostart 插件。
 /// 不需要用例，因为这是平台插件包装器，而非业务逻辑。
 #[tauri::command]
-pub async fn is_autostart_enabled(app_handle: AppHandle) -> Result<bool, String> {
-    let autostart_manager = app_handle.autolaunch();
-    autostart_manager
-        .is_enabled()
-        .map_err(|e| format_autostart_error("Failed to check autostart status", e))
+pub async fn is_autostart_enabled(
+    app_handle: AppHandle,
+    _trace: Option<TraceMetadata>,
+) -> Result<bool, String> {
+    let span = info_span!(
+        "command.autostart.is_enabled",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+    );
+    record_trace_fields(&span, &_trace);
+    async {
+        let autostart_manager = app_handle.autolaunch();
+        autostart_manager
+            .is_enabled()
+            .map_err(|e| format_autostart_error("Failed to check autostart status", e))
+    }
+    .instrument(span)
+    .await
 }
 
 #[cfg(test)]

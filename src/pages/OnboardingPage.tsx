@@ -7,7 +7,7 @@ import { completeOnboarding, setupEncryptionPassword } from '@/api/onboarding'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useOnboarding } from '@/contexts/OnboardingContext'
+import { useOnboarding } from '@/contexts/onboarding-context'
 import { cn } from '@/lib/utils'
 
 type Step = 'welcome' | 'set-password' | 'error'

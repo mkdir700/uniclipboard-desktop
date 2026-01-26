@@ -711,6 +711,7 @@ fn run_app(config: AppConfig) {
                         uc_tauri::commands::encryption::unlock_encryption_session_with_runtime(
                             &runtime_for_auto_unlock,
                             &app_handle_for_unlock,
+                            None,
                         )
                         .await
                     {

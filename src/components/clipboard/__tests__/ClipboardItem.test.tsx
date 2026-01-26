@@ -1,13 +1,13 @@
-import { invoke } from '@tauri-apps/api/core'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ClipboardItem from '@/components/clipboard/ClipboardItem'
+import { invokeWithTrace } from '@/lib/tauri-command'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+vi.mock('@/lib/tauri-command', () => ({
+  invokeWithTrace: vi.fn(),
 }))
 
-const invokeMock = vi.mocked(invoke)
+const invokeMock = vi.mocked(invokeWithTrace)
 
 describe('ClipboardItem', () => {
   beforeEach(() => {

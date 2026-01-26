@@ -1,13 +1,7 @@
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
+import { SearchContext } from './search-context'
 
-interface SearchContextType {
-  searchValue: string
-  setSearchValue: (value: string) => void
-}
-
-const SearchContext = createContext<SearchContextType | undefined>(undefined)
-
-export const SearchProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const SearchProvider = ({ children }: { children: ReactNode }) => {
   const [searchValue, setSearchValue] = useState('')
 
   const handleSetSearchValue = useCallback((value: string) => {
@@ -19,12 +13,4 @@ export const SearchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       {children}
     </SearchContext.Provider>
   )
-}
-
-export const useSearch = () => {
-  const context = useContext(SearchContext)
-  if (context === undefined) {
-    throw new Error('useSearch must be used within a SearchProvider')
-  }
-  return context
 }

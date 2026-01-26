@@ -26,7 +26,7 @@ vi.mock('framer-motion', () => ({
   ),
 }))
 
-vi.mock('@/contexts/OnboardingContext', () => ({
+vi.mock('@/contexts/onboarding-context', () => ({
   useOnboarding: () => ({
     status: {
       has_completed: false,

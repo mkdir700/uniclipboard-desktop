@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AboutSection from '@/components/setting/AboutSection'
-import { SettingContext } from '@/contexts/SettingContext'
-import { UpdateContext } from '@/contexts/UpdateContext'
+import { SettingContext } from '@/contexts/setting-context'
+import { UpdateContext } from '@/contexts/update-context'
 import type { Settings } from '@/types/setting'
 
 vi.mock('react-i18next', () => ({

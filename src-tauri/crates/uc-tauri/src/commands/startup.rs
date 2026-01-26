@@ -4,8 +4,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::commands::record_trace_fields;
 use tauri::{AppHandle, Manager, State};
-use tracing::{info, warn};
+use tracing::{info, info_span, warn, Instrument};
+use uc_core::ports::observability::TraceMetadata;
 
 /// Startup barrier used to coordinate "frontend ready" and "backend ready".
 ///
@@ -108,9 +110,20 @@ impl StartupBarrier {
 pub async fn frontend_ready(
     app_handle: AppHandle,
     barrier: State<'_, Arc<StartupBarrier>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<(), String> {
-    info!("Received frontend_ready handshake");
-    barrier.mark_frontend_ready();
-    barrier.try_finish(&app_handle);
-    Ok(())
+    let span = info_span!(
+        "command.startup.frontend_ready",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+    );
+    record_trace_fields(&span, &_trace);
+    async {
+        info!("Received frontend_ready handshake");
+        barrier.mark_frontend_ready();
+        barrier.try_finish(&app_handle);
+        Ok(())
+    }
+    .instrument(span)
+    .await
 }
