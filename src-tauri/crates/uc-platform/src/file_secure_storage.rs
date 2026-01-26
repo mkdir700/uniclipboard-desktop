@@ -30,7 +30,12 @@ impl FileSecureStorage {
     }
 
     fn file_path(&self, key: &str) -> PathBuf {
-        self.base_dir.join(format!("{key}.bin"))
+        let safe: String = key
+            .as_bytes()
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect();
+        self.base_dir.join(format!("{safe}.bin"))
     }
 
     fn map_io_error(context: &str, err: io::Error) -> SecureStorageError {
