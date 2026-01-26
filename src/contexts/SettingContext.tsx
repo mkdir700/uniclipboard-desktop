@@ -1,8 +1,8 @@
-import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import React, { useState, useEffect, createContext, ReactNode } from 'react'
+import React, { useState, useEffect, createContext, ReactNode, useCallback } from 'react'
 import { DEFAULT_THEME_COLOR } from '@/constants/theme'
 import i18n, { normalizeLanguage, persistLanguage } from '@/i18n'
+import { invokeWithTrace } from '@/lib/tauri-command'
 import type { SettingChangedEvent } from '@/types/events'
 import type { SettingContextType, Settings } from '@/types/setting'
 
@@ -21,10 +21,10 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
   const [error, setError] = useState<string | null>(null)
 
   // 加载设置
-  const loadSetting = async () => {
+  const loadSetting = useCallback(async () => {
     try {
       setLoading(true)
-      const settingObj = await invoke<Settings>('get_settings')
+      const settingObj = await invokeWithTrace<Settings>('get_settings')
       setSetting(settingObj)
       setError(null)
     } catch (err) {
@@ -33,14 +33,14 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   // 保存设置
   const saveSetting = async (newSetting: Settings) => {
     try {
       setLoading(true)
       // New command: update_settings, takes JSON object directly
-      await invoke('update_settings', { settings: newSetting })
+      await invokeWithTrace('update_settings', { settings: newSetting })
       setSetting(newSetting)
       setError(null)
     } catch (err) {
@@ -111,8 +111,8 @@ export const SettingProvider: React.FC<SettingProviderProps> = ({ children }) =>
 
   // Load settings immediately on mount
   useEffect(() => {
-    loadSetting()
-  }, [])
+    void loadSetting()
+  }, [loadSetting])
 
   // 监听来自其他窗口的设置变更事件
   useEffect(() => {
