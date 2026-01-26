@@ -1,4 +1,4 @@
-import { Sentry, sentryEnabled } from './sentry'
+import { Sentry, sentryEnabled } from '@/observability/sentry'
 
 export type UserIntent =
   | 'copy_clipboard'
