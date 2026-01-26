@@ -4,8 +4,8 @@
  * 提供 libp2p 设备发现、配对和剪贴板同步功能
  */
 
-import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { invokeWithTrace } from '@/lib/tauri-command'
 
 /**
  * P2P 设备信息
@@ -146,7 +146,7 @@ export interface P2PPeerConnectionEvent {
  */
 export async function getLocalPeerId(): Promise<string> {
   try {
-    return await invoke<string>('get_local_peer_id')
+    return await invokeWithTrace<string>('get_local_peer_id')
   } catch (error) {
     console.error('Failed to get local peer ID:', error)
     throw error
@@ -158,7 +158,7 @@ export async function getLocalPeerId(): Promise<string> {
  */
 export async function getP2PPeers(): Promise<P2PPeerInfo[]> {
   try {
-    return await invoke<P2PPeerInfo[]>('get_p2p_peers')
+    return await invokeWithTrace<P2PPeerInfo[]>('get_p2p_peers')
   } catch (error) {
     console.error('Failed to get P2P peers:', error)
     throw error
@@ -170,7 +170,7 @@ export async function getP2PPeers(): Promise<P2PPeerInfo[]> {
  */
 export async function initiateP2PPairing(request: P2PPairingRequest): Promise<P2PPairingResponse> {
   try {
-    return await invoke<P2PPairingResponse>('initiate_p2p_pairing', {
+    return await invokeWithTrace<P2PPairingResponse>('initiate_p2p_pairing', {
       request,
     })
   } catch (error) {
@@ -184,7 +184,7 @@ export async function initiateP2PPairing(request: P2PPairingRequest): Promise<P2
  */
 export async function verifyP2PPairingPin(request: P2PPinVerifyRequest): Promise<void> {
   try {
-    await invoke('verify_p2p_pairing_pin', {
+    await invokeWithTrace('verify_p2p_pairing_pin', {
       request,
     })
   } catch (error) {
@@ -198,7 +198,7 @@ export async function verifyP2PPairingPin(request: P2PPinVerifyRequest): Promise
  */
 export async function rejectP2PPairing(sessionId: string, peerId: string): Promise<void> {
   try {
-    await invoke('reject_p2p_pairing', {
+    await invokeWithTrace('reject_p2p_pairing', {
       sessionId,
       peerId,
     })
@@ -213,7 +213,7 @@ export async function rejectP2PPairing(sessionId: string, peerId: string): Promi
  */
 export async function unpairP2PDevice(peerId: string): Promise<void> {
   try {
-    await invoke('unpair_p2p_device', {
+    await invokeWithTrace('unpair_p2p_device', {
       peerId,
     })
   } catch (error) {
@@ -227,7 +227,7 @@ export async function unpairP2PDevice(peerId: string): Promise<void> {
  */
 export async function acceptP2PPairing(sessionId: string): Promise<void> {
   try {
-    await invoke('accept_p2p_pairing', {
+    await invokeWithTrace('accept_p2p_pairing', {
       sessionId,
     })
   } catch (error) {
@@ -341,7 +341,7 @@ export async function onP2PPeerConnectionChanged(
  */
 export async function getLocalDeviceInfo(): Promise<LocalDeviceInfo> {
   try {
-    return await invoke<LocalDeviceInfo>('get_local_device_info')
+    return await invokeWithTrace<LocalDeviceInfo>('get_local_device_info')
   } catch (error) {
     console.error('Failed to get local device info:', error)
     throw error
@@ -353,7 +353,7 @@ export async function getLocalDeviceInfo(): Promise<LocalDeviceInfo> {
  */
 export async function getPairedPeers(): Promise<PairedPeer[]> {
   try {
-    return await invoke<PairedPeer[]>('get_paired_peers')
+    return await invokeWithTrace<PairedPeer[]>('get_paired_peers')
   } catch (error) {
     console.error('Failed to get paired peers:', error)
     throw error
@@ -365,7 +365,7 @@ export async function getPairedPeers(): Promise<PairedPeer[]> {
  */
 export async function getPairedPeersWithStatus(): Promise<PairedPeer[]> {
   try {
-    return await invoke<PairedPeer[]>('get_paired_peers_with_status')
+    return await invokeWithTrace<PairedPeer[]>('get_paired_peers_with_status')
   } catch (error) {
     console.error('Failed to get paired peers with status:', error)
     throw error
