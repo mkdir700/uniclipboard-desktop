@@ -1113,31 +1113,11 @@ mod tests {
             "noop".to_string()
         }
 
-        async fn initiate_pairing(
+        async fn send_pairing_message(
             &self,
             _peer_id: String,
-            _device_name: String,
-        ) -> anyhow::Result<String> {
-            Ok("session".to_string())
-        }
-
-        async fn send_pin_response(
-            &self,
-            _session_id: String,
-            _pin_match: bool,
+            _message: uc_core::network::PairingMessage,
         ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn send_pairing_rejection(
-            &self,
-            _session_id: String,
-            _peer_id: String,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn accept_pairing(&self, _session_id: String) -> anyhow::Result<()> {
             Ok(())
         }
 
