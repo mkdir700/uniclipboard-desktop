@@ -33,6 +33,7 @@ mod hash;
 pub mod identity_store;
 pub mod network;
 pub mod network_control;
+pub mod observability;
 pub mod onboarding;
 pub mod paired_device_repository;
 pub mod security;
@@ -58,6 +59,7 @@ pub use errors::{AppDirsError, DeviceRepositoryError, PairedDeviceRepositoryErro
 pub use identity_store::{IdentityStoreError, IdentityStorePort};
 pub use network::NetworkPort;
 pub use network_control::NetworkControlPort;
+pub use observability::{extract_trace, OptionalTrace, TraceMetadata, TraceParseError};
 pub use onboarding::OnboardingStatePort;
 pub use paired_device_repository::PairedDeviceRepositoryPort;
 pub use security::encryption::EncryptionPort;
