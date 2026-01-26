@@ -2,7 +2,7 @@
 //!
 //! ## Responsibilities / 职责
 //!
-//! - ✅ Create infra implementations (db, fs, keyring) / 创建 infra 层具体实现
+//! - ✅ Create infra implementations (db, fs, secure storage) / 创建 infra 层具体实现
 //! - ✅ Create platform implementations (clipboard, network) / 创建 platform 层具体实现
 //! - ✅ Inject all dependencies into App / 将所有依赖注入到 App
 //!
@@ -36,7 +36,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::{async_runtime, AppHandle, Runtime};
+use tauri::async_runtime;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
@@ -81,14 +81,13 @@ use uc_infra::security::{
 use uc_infra::settings::repository::FileSettingsRepository;
 use uc_infra::{FileOnboardingStateRepository, SystemClock};
 
-use crate::events::forward_libp2p_start_failed;
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
     Libp2pNetworkAdapter, PlaceholderAutostartPort, PlaceholderUiPort,
 };
 use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::clipboard::LocalClipboard;
-use uc_platform::identity_store::SystemIdentityStore;
+use uc_platform::identity_store::FileIdentityStore;
 use uc_platform::runtime::event_bus::PlatformCommandSender;
 
 /// Result type for wiring operations
@@ -101,8 +100,8 @@ pub enum WiringError {
     #[error("Database initialization failed: {0}")]
     DatabaseInit(String),
 
-    #[error("Keyring initialization failed: {0}")]
-    KeyringInit(String),
+    #[error("Secure storage initialization failed: {0}")]
+    SecureStorageInit(String),
 
     #[error("Clipboard initialization failed: {0}")]
     ClipboardInit(String),
@@ -133,7 +132,6 @@ pub struct WiredDependencies {
 /// Background runtime components that must be started after async runtime is ready.
 /// 需要在异步运行时就绪后启动的后台组件。
 pub struct BackgroundRuntimeDeps {
-    pub libp2p_network: Arc<Libp2pNetworkAdapter>,
     pub representation_cache: Arc<RepresentationCache>,
     pub spool_manager: Arc<SpoolManager>,
     pub spool_rx: mpsc::Receiver<SpoolRequest>,
@@ -228,7 +226,7 @@ struct InfraLayer {
 
 /// Platform layer implementations / 平台层实现
 ///
-/// This struct holds all platform-specific implementations (clipboard, keyring, etc.)
+/// This struct holds all platform-specific implementations (clipboard, secure storage, etc.)
 /// that will be injected into the application.
 ///
 /// 此结构体保存所有平台特定实现（剪贴板、密钥环等），将被注入到应用程序中。
@@ -237,8 +235,8 @@ struct PlatformLayer {
     clipboard: Arc<dyn PlatformClipboardPort>,
     system_clipboard: Arc<dyn SystemClipboardPort>,
 
-    // Keyring for secure storage / 密钥环用于安全存储
-    keyring: Arc<dyn KeyringPort>,
+    // Secure storage / 安全存储
+    secure_storage: Arc<dyn SecureStoragePort>,
 
     // UI operations / UI 操作（占位符）
     ui: Arc<dyn UiPort>,
@@ -292,7 +290,7 @@ struct PlatformLayer {
 ///
 /// # Returns / 返回
 ///
-/// * `WiringResult<(InfraLayer, Arc<dyn KeyringPort>)>` - The infrastructure layer and keyring on success / 成功时返回基础设施层和密钥环
+/// * `WiringResult<InfraLayer>` - The infrastructure layer on success / 成功时返回基础设施层
 ///
 /// # Errors / 错误
 ///
@@ -302,7 +300,7 @@ fn create_infra_layer(
     db_pool: DbPool,
     vault_path: &PathBuf,
     settings_path: &PathBuf,
-    keyring: Arc<dyn KeyringPort>,
+    secure_storage: Arc<dyn SecureStoragePort>,
 ) -> WiringResult<InfraLayer> {
     // Create database executor and wrap in Arc for cloning
     // 创建数据库执行器并包装在 Arc 中以供克隆
@@ -369,7 +367,7 @@ fn create_infra_layer(
         InfraThumbnailGenerator::new(128).map_err(|e| WiringError::ThumbnailInit(e.to_string()))?;
     let thumbnail_generator: Arc<dyn ThumbnailGeneratorPort> = Arc::new(thumbnail_generator);
 
-    let keyring_for_key_material = Arc::clone(&keyring);
+    let secure_storage_for_key_material = Arc::clone(&secure_storage);
 
     // Create key slot store
     // 创建密钥槽存储
@@ -379,7 +377,7 @@ fn create_infra_layer(
     // Create key material service
     // 创建密钥材料服务
     let key_material_service =
-        DefaultKeyMaterialService::new(keyring_for_key_material, keyslot_store);
+        DefaultKeyMaterialService::new(secure_storage_for_key_material, keyslot_store);
     let key_material: Arc<dyn KeyMaterialPort> = Arc::new(key_material_service);
 
     // Create encryption service
@@ -444,7 +442,7 @@ fn create_infra_layer(
 ///
 /// # Arguments / 参数
 ///
-/// * `keyring` - Keyring created in infra layer / 在 infra 层中创建的密钥环
+/// * `secure_storage` - Secure storage instance / 安全存储实例
 /// * `config_dir` - Configuration directory for device identity storage / 用于存储设备身份的配置目录
 /// * `platform_cmd_tx` - Command sender for platform runtime / 平台运行时命令发送器
 /// * `encryption` - Encryption service for blob store decorator / Blob 存储加密服务
@@ -455,14 +453,14 @@ fn create_infra_layer(
 ///
 /// # Note / 注意
 ///
-/// - Keyring is passed in as parameter (created in infra layer for key material service)
-/// - 密钥环作为参数传入（在 infra 层中创建以供密钥材料服务使用）
+/// - Secure storage is passed in as parameter for key material + identity usage
+/// - 安全存储作为参数传入（供密钥材料与身份使用）
 /// - Device identity uses LocalDeviceIdentity with UUID v4 persistence
 /// - 设备身份使用 LocalDeviceIdentity 持久化 UUID v4
 /// - Most implementations are placeholders and will be replaced in future tasks
 /// - 大多数实现是占位符，将在未来任务中替换
 fn create_platform_layer(
-    keyring: Arc<dyn KeyringPort>,
+    secure_storage: Arc<dyn SecureStoragePort>,
     config_dir: &PathBuf,
     platform_cmd_tx: PlatformCommandSender,
     encryption: Arc<dyn EncryptionPort>,
@@ -503,7 +501,6 @@ fn create_platform_layer(
     let libp2p_network = Arc::new(Libp2pNetworkAdapter::new(identity_store).map_err(|e| {
         WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}"))
     })?);
-    info!(peer_id = %libp2p_network.local_peer_id(), "Loaded libp2p identity");
     let network: Arc<dyn NetworkPort> = libp2p_network.clone();
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
@@ -537,7 +534,7 @@ fn create_platform_layer(
     Ok(PlatformLayer {
         clipboard,
         system_clipboard,
-        keyring,
+        secure_storage,
         ui,
         autostart,
         network,
@@ -691,7 +688,7 @@ fn derive_default_paths_from_app_dirs(
 ///
 /// Returns a `WiringError` when any required dependency cannot be constructed, for example:
 /// - `WiringError::DatabaseInit` for database/pool initialization failures
-/// - `WiringError::KeyringInit` for keyring creation failures
+/// - `WiringError::SecureStorageInit` for secure storage creation failures
 /// - `WiringError::ClipboardInit` for clipboard adapter failures
 /// - `WiringError::NetworkInit` for network adapter failures
 /// - `WiringError::BlobStorageInit` for blob store initialization failures
@@ -717,17 +714,16 @@ pub fn wire_dependencies(
     config: &AppConfig,
     platform_cmd_tx: PlatformCommandSender,
 ) -> WiringResult<WiredDependencies> {
-    let identity_store: Arc<dyn IdentityStorePort> = Arc::new(SystemIdentityStore::new());
-    wire_dependencies_with_identity_store(config, platform_cmd_tx, identity_store)
+    wire_dependencies_with_identity_store(config, platform_cmd_tx, None)
 }
 
 /// Wires dependencies with a caller-provided identity store.
 ///
-/// This is primarily intended for tests or environments without a system keyring.
+/// This is primarily intended for tests or environments without system secure storage.
 pub fn wire_dependencies_with_identity_store(
     config: &AppConfig,
     platform_cmd_tx: PlatformCommandSender,
-    identity_store: Arc<dyn IdentityStorePort>,
+    identity_store: Option<Arc<dyn IdentityStorePort>>,
 ) -> WiringResult<WiredDependencies> {
     // Step 1: Create database connection pool
     // 步骤 1：创建数据库连接池
@@ -751,18 +747,23 @@ pub fn wire_dependencies_with_identity_store(
 
     let settings_path = paths.settings_path;
 
-    let keyring = uc_platform::secure_storage::create_default_keyring_in_app_data_root(
-        paths.app_data_root.clone(),
-    )
-    .map_err(|e| WiringError::KeyringInit(e.to_string()))?;
+    let secure_storage =
+        uc_platform::secure_storage::create_default_secure_storage_in_app_data_root(
+            paths.app_data_root.clone(),
+        )
+        .map_err(|e| WiringError::SecureStorageInit(e.to_string()))?;
 
-    let infra = create_infra_layer(db_pool, &vault_path, &settings_path, keyring.clone())?;
+    let identity_store = identity_store.unwrap_or_else(|| {
+        Arc::new(FileIdentityStore::new(paths.app_data_root.clone())) as Arc<dyn IdentityStorePort>
+    });
+
+    let infra = create_infra_layer(db_pool, &vault_path, &settings_path, secure_storage.clone())?;
 
     // Step 3: Create platform layer implementations
     // 步骤 3：创建平台层实现
     let storage_config = Arc::new(ClipboardStorageConfig::defaults());
     let platform = create_platform_layer(
-        keyring,
+        secure_storage,
         &vault_path,
         platform_cmd_tx,
         infra.encryption.clone(),
@@ -838,7 +839,7 @@ pub fn wire_dependencies_with_identity_store(
         encryption_session: platform.encryption_session,
         encryption_state: infra.encryption_state,
         key_scope: platform.key_scope,
-        keyring: platform.keyring,
+        secure_storage: platform.secure_storage,
         key_material: infra.key_material,
         watcher_control: platform.watcher_control,
 
@@ -851,6 +852,7 @@ pub fn wire_dependencies_with_identity_store(
 
         // Network dependencies / 网络依赖
         network: platform.network,
+        network_control: platform.libp2p_network.clone(),
 
         // Onboarding dependencies / 入门引导依赖
         onboarding_state: infra.onboarding_state,
@@ -877,7 +879,6 @@ pub fn wire_dependencies_with_identity_store(
     Ok(WiredDependencies {
         deps,
         background: BackgroundRuntimeDeps {
-            libp2p_network: platform.libp2p_network,
             representation_cache,
             spool_manager,
             spool_rx,
@@ -892,13 +893,8 @@ pub fn wire_dependencies_with_identity_store(
 
 /// Start background spooler and blob worker tasks.
 /// 启动后台假脱机写入和 blob 物化任务。
-pub fn start_background_tasks<R: Runtime>(
-    background: BackgroundRuntimeDeps,
-    deps: &AppDeps,
-    app_handle: Option<AppHandle<R>>,
-) {
+pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps) {
     let BackgroundRuntimeDeps {
-        libp2p_network,
         representation_cache,
         spool_manager,
         spool_rx,
@@ -910,18 +906,6 @@ pub fn start_background_tasks<R: Runtime>(
     } = background;
 
     info!("Starting background clipboard spooler and blob worker");
-
-    let libp2p_app_handle = app_handle.clone();
-    async_runtime::spawn(async move {
-        if let Err(err) = libp2p_network.spawn_swarm() {
-            warn!(error = %err, "Failed to start libp2p swarm");
-            if let Some(app_handle) = libp2p_app_handle {
-                if let Err(emit_err) = forward_libp2p_start_failed(&app_handle, err.to_string()) {
-                    warn!("Failed to emit libp2p start failed event: {emit_err}");
-                }
-            }
-        }
-    });
 
     let representation_repo = deps.representation_repo.clone();
     let worker_tx = deps.worker_tx.clone();
@@ -1007,9 +991,9 @@ mod tests {
     }
 
     #[test]
-    fn test_wiring_error_keyring() {
-        let err = WiringError::KeyringInit("keyring unavailable".to_string());
-        assert!(err.to_string().contains("Keyring initialization"));
+    fn test_wiring_error_secure_storage() {
+        let err = WiringError::SecureStorageInit("secure storage unavailable".to_string());
+        assert!(err.to_string().contains("Secure storage initialization"));
     }
 
     #[test]
@@ -1065,7 +1049,8 @@ mod tests {
         // 测试 wire_dependencies 创建有效的 AppDeps 结构
         let config = AppConfig::empty();
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+        let result =
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()));
 
         match result {
             Ok(wired) => {
@@ -1078,7 +1063,7 @@ mod tests {
                 let _ = &deps.representation_normalizer;
                 let _ = &deps.encryption;
                 let _ = &deps.encryption_session;
-                let _ = &deps.keyring;
+                let _ = &deps.secure_storage;
                 let _ = &deps.key_material;
                 let _ = &deps.watcher_control;
                 let _ = &deps.clipboard_change_origin;
@@ -1159,29 +1144,18 @@ mod tests {
     }
 
     #[derive(Clone)]
-    struct DummyKeyring;
+    struct DummySecureStorage;
 
-    impl KeyringPort for DummyKeyring {
-        fn load_kek(
-            &self,
-            _scope: &uc_core::security::model::KeyScope,
-        ) -> Result<uc_core::security::model::Kek, uc_core::security::model::EncryptionError>
-        {
-            Err(uc_core::security::model::EncryptionError::KeyNotFound)
+    impl SecureStoragePort for DummySecureStorage {
+        fn get(&self, _key: &str) -> Result<Option<Vec<u8>>, SecureStorageError> {
+            Ok(None)
         }
 
-        fn store_kek(
-            &self,
-            _scope: &uc_core::security::model::KeyScope,
-            _kek: &uc_core::security::model::Kek,
-        ) -> Result<(), uc_core::security::model::EncryptionError> {
+        fn set(&self, _key: &str, _value: &[u8]) -> Result<(), SecureStorageError> {
             Ok(())
         }
 
-        fn delete_kek(
-            &self,
-            _scope: &uc_core::security::model::KeyScope,
-        ) -> Result<(), uc_core::security::model::EncryptionError> {
+        fn delete(&self, _key: &str) -> Result<(), SecureStorageError> {
             Ok(())
         }
     }
@@ -1220,7 +1194,7 @@ mod tests {
         runtime.block_on(async {
             // Test that platform layer creates the correct types
             // 测试平台层创建正确的类型
-            let keyring: Arc<dyn KeyringPort> = Arc::new(DummyKeyring);
+            let secure_storage: Arc<dyn SecureStoragePort> = Arc::new(DummySecureStorage);
             let temp_dir =
                 std::env::temp_dir().join(format!("uc-wiring-test-{}", std::process::id()));
             std::fs::create_dir_all(&temp_dir).expect("create temp dir");
@@ -1239,7 +1213,7 @@ mod tests {
             let storage_config = Arc::new(ClipboardStorageConfig::defaults());
 
             let result = create_platform_layer(
-                keyring,
+                secure_storage,
                 &temp_dir,
                 cmd_tx,
                 encryption,
@@ -1254,7 +1228,7 @@ mod tests {
                     // Verify all fields have correct types
                     // 验证所有字段都有正确的类型
                     let _clipboard: &Arc<dyn PlatformClipboardPort> = &layer.clipboard;
-                    let _keyring: &Arc<dyn KeyringPort> = &layer.keyring;
+                    let _secure_storage: &Arc<dyn SecureStoragePort> = &layer.secure_storage;
                     let _ui: &Arc<dyn UiPort> = &layer.ui;
                     let _autostart: &Arc<dyn AutostartPort> = &layer.autostart;
                     let _network: &Arc<dyn NetworkPort> = &layer.network;
@@ -1300,9 +1274,9 @@ mod tests {
             unimplemented!()
         };
 
-        let _ = || -> std::sync::Arc<dyn KeyringPort> {
-            // This closure should only compile if PlatformLayer has a `keyring` field
-            // 此闭包只有在 PlatformLayer 有 `keyring` 字段时才能编译
+        let _ = || -> std::sync::Arc<dyn SecureStoragePort> {
+            // This closure should only compile if PlatformLayer has a `secure_storage` field
+            // 此闭包只有在 PlatformLayer 有 `secure_storage` 字段时才能编译
             unimplemented!()
         };
 
@@ -1329,8 +1303,11 @@ The functionality is still validated in development mode when running the app wi
         // 测试 wire_dependencies 优雅地处理空的 database_path
         let empty_config = AppConfig::empty();
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result =
-            wire_dependencies_with_identity_store(&empty_config, cmd_tx, test_identity_store());
+        let result = wire_dependencies_with_identity_store(
+            &empty_config,
+            cmd_tx,
+            Some(test_identity_store()),
+        );
 
         // Should succeed by using fallback default data directory
         // In headless CI environments, clipboard initialization may fail - accept that as expected

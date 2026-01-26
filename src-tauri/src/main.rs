@@ -530,7 +530,6 @@ fn run_app(config: AppConfig) {
             start_background_tasks(
                 background,
                 &runtime_for_handler.deps,
-                Some(app.handle().clone()),
             );
 
             // Clone handles for async blocks

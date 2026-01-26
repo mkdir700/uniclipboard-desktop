@@ -307,7 +307,7 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
         let config = load_config(config_path).unwrap();
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
         let deps_result =
-            wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()));
 
         assert!(
             deps_result.is_ok(),
@@ -324,7 +324,7 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
         let _ = &deps.representation_normalizer;
         let _ = &deps.encryption;
         let _ = &deps.encryption_session;
-        let _ = &deps.keyring;
+        let _ = &deps.secure_storage;
         let _ = &deps.key_material;
         let _ = &deps.watcher_control;
         let _ = &deps.device_repo;
@@ -339,6 +339,35 @@ fn test_bootstrap_wire_dependencies_creates_app_deps() {
         let _ = &deps.clock;
         let _ = &deps.hash;
     });
+}
+
+/// Test 5.1: wiring exposes secure storage, not keyring
+/// 测试5.1：wiring 暴露 secure storage，而不是 keyring
+#[test]
+fn wiring_exposes_secure_storage_not_keyring() {
+    let crate_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let platform_keyring = crate_root.join("../uc-platform/src/keyring.rs");
+    let platform_file_keyring = crate_root.join("../uc-platform/src/file_keyring.rs");
+    let core_keyring = crate_root.join("../uc-core/src/ports/security/keyring.rs");
+
+    assert!(
+        !platform_keyring.exists(),
+        "uc-platform keyring adapter should be removed"
+    );
+    assert!(
+        !platform_file_keyring.exists(),
+        "uc-platform file_keyring adapter should be removed"
+    );
+    assert!(
+        !core_keyring.exists(),
+        "uc-core KeyringPort definition should be removed"
+    );
+
+    let config = AppConfig::empty();
+    let (cmd_tx, _cmd_rx) = mpsc::channel(10);
+    let result =
+        wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()));
+    assert!(result.is_ok());
 }
 
 /// Test 6: Integration test - real file I/O error handling
@@ -495,9 +524,10 @@ fn test_bootstrap_full_flow() {
         // Step 2: Wire dependencies
         // 步骤 2：连接依赖
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
-            .expect("wire_dependencies should succeed")
-            .deps;
+        let deps =
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()))
+                .expect("wire_dependencies should succeed")
+                .deps;
 
         // Step 3: Create app
         // 步骤 3：创建应用
@@ -532,7 +562,7 @@ fn test_bootstrap_database_pool_real_filesystem() {
         // 连接依赖（这将创建数据库）
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
         let deps_result =
-            wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()));
 
         assert!(
             deps_result.is_ok(),
@@ -571,7 +601,7 @@ fn test_bootstrap_database_pool_invalid_path() {
 
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
         let deps_result =
-            wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()));
 
         // Should fail gracefully with proper error
         // 应该优雅地失败并返回适当错误
@@ -630,7 +660,7 @@ fn test_bootstrap_wire_dependencies_with_empty_config() {
 
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
         let deps_result =
-            wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()));
 
         // Should succeed even with empty config (uses in-memory database)
         // 应该成功，即使配置为空（使用内存数据库）
@@ -645,7 +675,7 @@ fn test_bootstrap_wire_dependencies_with_empty_config() {
         // 验证即使配置为空，所有依赖都存在
         let _ = &deps.clipboard;
         let _ = &deps.encryption;
-        let _ = &deps.keyring;
+        let _ = &deps.secure_storage;
         let _ = &deps.device_repo;
         let _ = &deps.settings;
     });
@@ -666,9 +696,10 @@ fn test_bootstrap_wire_dependencies_creates_real_repositories() {
         config.database_path = PathBuf::from(":memory:");
 
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
-            .expect("wire_dependencies should succeed")
-            .deps;
+        let deps =
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()))
+                .expect("wire_dependencies should succeed")
+                .deps;
 
         // Verify clipboard repositories
         // 验证剪贴板仓库
@@ -704,17 +735,18 @@ fn test_bootstrap_wire_dependencies_creates_platform_adapters() {
         config.database_path = PathBuf::from(":memory:");
 
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
-            .expect("wire_dependencies should succeed")
-            .deps;
+        let deps =
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()))
+                .expect("wire_dependencies should succeed")
+                .deps;
 
         // Verify system clipboard (platform-specific)
         // 验证系统剪贴板（平台特定）
         let _clipboard = deps.clipboard.clone();
 
-        // Verify keyring (platform-specific)
-        // 验证密钥环（平台特定）
-        let _keyring = deps.keyring.clone();
+        // Verify secure storage (platform-specific)
+        // 验证安全存储（平台特定）
+        let _secure_storage = deps.secure_storage.clone();
 
         // Verify placeholder adapters exist (for unimplemented ports)
         // 验证占位符适配器存在（用于未实现的端口）
@@ -749,9 +781,10 @@ fn test_bootstrap_settings_repository_initialization() {
         config.database_path = PathBuf::from(":memory:");
 
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let deps = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store())
-            .expect("wire_dependencies should succeed")
-            .deps;
+        let deps =
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()))
+                .expect("wire_dependencies should succeed")
+                .deps;
 
         // Verify settings repository exists and can be cloned/accessed
         // 验证设置仓库存在并且可以克隆/访问
@@ -782,7 +815,8 @@ fn test_bootstrap_wire_dependencies_error_propagation() {
         config.database_path = PathBuf::from("/nonexistent/with/invalid/permissions/db/test.db");
 
         let (cmd_tx, _cmd_rx) = mpsc::channel(10);
-        let result = wire_dependencies_with_identity_store(&config, cmd_tx, test_identity_store());
+        let result =
+            wire_dependencies_with_identity_store(&config, cmd_tx, Some(test_identity_store()));
 
         // Should fail gracefully
         // 应该优雅地失败

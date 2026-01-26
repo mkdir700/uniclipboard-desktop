@@ -47,7 +47,7 @@ pub async fn get_clipboard_entries(
         if should_return_not_ready(encryption_state, session_ready) {
             tracing::warn!(
                 "Encryption initialized but session not ready yet, returning not-ready response. \
-                 This typically happens during app startup before keyring unlock completes."
+                 This typically happens during app startup before secure storage unlock completes."
             );
             return Ok(ClipboardEntriesResponse::NotReady);
         }
@@ -636,21 +636,6 @@ mod tests {
     }
 
     #[async_trait]
-    impl KeyringPort for NoopPort {
-        fn load_kek(&self, _scope: &KeyScope) -> Result<Kek, EncryptionError> {
-            Err(EncryptionError::KeyNotFound)
-        }
-
-        fn store_kek(&self, _scope: &KeyScope, _kek: &Kek) -> Result<(), EncryptionError> {
-            Ok(())
-        }
-
-        fn delete_kek(&self, _scope: &KeyScope) -> Result<(), EncryptionError> {
-            Ok(())
-        }
-    }
-
-    #[async_trait]
     impl KeyMaterialPort for NoopPort {
         async fn load_kek(&self, _scope: &KeyScope) -> Result<Kek, EncryptionError> {
             Err(EncryptionError::KeyNotFound)
@@ -845,6 +830,13 @@ mod tests {
     }
 
     #[async_trait]
+    impl uc_core::ports::NetworkControlPort for NoopPort {
+        async fn start_network(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
     impl OnboardingStatePort for NoopPort {
         async fn get_state(&self) -> anyhow::Result<uc_core::onboarding::OnboardingState> {
             Ok(uc_core::onboarding::OnboardingState::default())
@@ -858,6 +850,20 @@ mod tests {
         }
 
         async fn reset(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl uc_core::ports::SecureStoragePort for NoopPort {
+        fn get(&self, _key: &str) -> Result<Option<Vec<u8>>, uc_core::ports::SecureStorageError> {
+            Ok(None)
+        }
+
+        fn set(&self, _key: &str, _value: &[u8]) -> Result<(), uc_core::ports::SecureStorageError> {
+            Ok(())
+        }
+
+        fn delete(&self, _key: &str) -> Result<(), uc_core::ports::SecureStorageError> {
             Ok(())
         }
     }
@@ -1020,13 +1026,14 @@ mod tests {
             encryption_session: Arc::new(NoopPort),
             encryption_state: Arc::new(NoopPort),
             key_scope: Arc::new(NoopPort),
-            keyring: Arc::new(NoopPort),
+            secure_storage: Arc::new(NoopPort),
             key_material: Arc::new(NoopPort),
             watcher_control: Arc::new(NoopPort),
             device_repo: Arc::new(NoopPort),
             device_identity: Arc::new(MockDeviceIdentity),
             paired_device_repo: Arc::new(NoopPort),
             network: Arc::new(NoopPort),
+            network_control: Arc::new(NoopPort),
             onboarding_state: Arc::new(NoopPort),
             blob_store: Arc::new(NoopPort),
             blob_repository: Arc::new(NoopPort),

@@ -47,7 +47,7 @@ pub struct AppDeps {
     pub encryption_session: Arc<dyn EncryptionSessionPort>,
     pub encryption_state: Arc<dyn uc_core::ports::security::encryption_state::EncryptionStatePort>,
     pub key_scope: Arc<dyn uc_core::ports::security::key_scope::KeyScopePort>,
-    pub keyring: Arc<dyn KeyringPort>,
+    pub secure_storage: Arc<dyn SecureStoragePort>,
     pub key_material: Arc<dyn KeyMaterialPort>,
     pub watcher_control: Arc<dyn WatcherControlPort>,
 
@@ -60,6 +60,7 @@ pub struct AppDeps {
 
     // Network dependencies / 网络依赖
     pub network: Arc<dyn NetworkPort>,
+    pub network_control: Arc<dyn NetworkControlPort>,
 
     // Onboarding dependencies / 入门引导依赖
     pub onboarding_state: Arc<dyn OnboardingStatePort>,

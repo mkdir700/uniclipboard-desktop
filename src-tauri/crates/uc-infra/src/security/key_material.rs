@@ -1,24 +1,42 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use uc_core::{
-    ports::{KeyMaterialPort, KeyringPort},
+    ports::{KeyMaterialPort, SecureStoragePort},
     security::model::{EncryptionError, Kek, KeyScope, KeySlot, KeySlotFile},
 };
 
 use crate::fs::key_slot_store::KeySlotStore;
 
 pub struct DefaultKeyMaterialService {
-    keyring: Arc<dyn KeyringPort>,
+    secure_storage: Arc<dyn SecureStoragePort>,
     keyslot_store: Arc<dyn KeySlotStore>,
 }
 
 impl DefaultKeyMaterialService {
     /// Create a new key material service
     /// 创建新的密钥材料服务
-    pub fn new(keyring: Arc<dyn KeyringPort>, keyslot_store: Arc<dyn KeySlotStore>) -> Self {
+    pub fn new(
+        secure_storage: Arc<dyn SecureStoragePort>,
+        keyslot_store: Arc<dyn KeySlotStore>,
+    ) -> Self {
         Self {
-            keyring,
+            secure_storage,
             keyslot_store,
+        }
+    }
+}
+
+fn kek_key(scope: &KeyScope) -> String {
+    format!("kek:v1:{}", scope.to_identifier())
+}
+
+fn map_storage_error(err: uc_core::ports::SecureStorageError) -> EncryptionError {
+    use uc_core::ports::SecureStorageError as StorageError;
+    match err {
+        StorageError::PermissionDenied(_) => EncryptionError::PermissionDenied,
+        StorageError::Corrupt(_) => EncryptionError::KeyMaterialCorrupt,
+        StorageError::Unavailable(msg) | StorageError::Other(msg) => {
+            EncryptionError::KeyringError(msg)
         }
     }
 }
@@ -26,15 +44,26 @@ impl DefaultKeyMaterialService {
 #[async_trait]
 impl KeyMaterialPort for DefaultKeyMaterialService {
     async fn load_kek(&self, scope: &KeyScope) -> Result<Kek, EncryptionError> {
-        self.keyring.load_kek(scope)
+        let key = kek_key(scope);
+        let secret = self
+            .secure_storage
+            .get(&key)
+            .map_err(map_storage_error)?
+            .ok_or(EncryptionError::KeyNotFound)?;
+        Kek::from_bytes(&secret)
+            .map_err(|e| EncryptionError::KeyringError(format!("invalid KEK material: {e}")))
     }
 
     async fn store_kek(&self, scope: &KeyScope, kek: &Kek) -> Result<(), EncryptionError> {
-        self.keyring.store_kek(scope, kek)
+        let key = kek_key(scope);
+        self.secure_storage
+            .set(&key, &kek.0)
+            .map_err(map_storage_error)
     }
 
     async fn delete_kek(&self, scope: &KeyScope) -> Result<(), EncryptionError> {
-        self.keyring.delete_kek(scope)
+        let key = kek_key(scope);
+        self.secure_storage.delete(&key).map_err(map_storage_error)
     }
 
     async fn load_keyslot(&self, scope: &KeyScope) -> Result<KeySlot, EncryptionError> {
@@ -63,37 +92,41 @@ impl KeyMaterialPort for DefaultKeyMaterialService {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
+    use uc_core::ports::SecureStorageError;
     use uc_core::security::model::{
         EncryptionAlgo, EncryptionFormatVersion, KdfParams, KeyScope, KeySlotVersion,
         WrappedMasterKey,
     };
 
-    struct TestKeyringState {
-        load_result: Option<Result<Kek, EncryptionError>>,
-        store_result: Option<Result<(), EncryptionError>>,
-        delete_result: Option<Result<(), EncryptionError>>,
-        load_scope: Option<KeyScope>,
-        store_scope: Option<KeyScope>,
-        store_kek: Option<Kek>,
-        delete_scope: Option<KeyScope>,
+    struct TestSecureStorageState {
+        data: HashMap<String, Vec<u8>>,
+        get_result: Option<Result<Option<Vec<u8>>, SecureStorageError>>,
+        set_result: Option<Result<(), SecureStorageError>>,
+        delete_result: Option<Result<(), SecureStorageError>>,
+        get_key: Option<String>,
+        set_key: Option<String>,
+        set_value: Option<Vec<u8>>,
+        delete_key: Option<String>,
     }
 
     #[derive(Clone)]
-    struct TestKeyring {
-        state: Arc<Mutex<TestKeyringState>>,
+    struct TestSecureStorage {
+        state: Arc<Mutex<TestSecureStorageState>>,
     }
 
-    impl TestKeyring {
-        fn new() -> (Self, Arc<Mutex<TestKeyringState>>) {
-            let state = Arc::new(Mutex::new(TestKeyringState {
-                load_result: None,
-                store_result: None,
+    impl TestSecureStorage {
+        fn new() -> (Self, Arc<Mutex<TestSecureStorageState>>) {
+            let state = Arc::new(Mutex::new(TestSecureStorageState {
+                data: HashMap::new(),
+                get_result: None,
+                set_result: None,
                 delete_result: None,
-                load_scope: None,
-                store_scope: None,
-                store_kek: None,
-                delete_scope: None,
+                get_key: None,
+                set_key: None,
+                set_value: None,
+                delete_key: None,
             }));
             (
                 Self {
@@ -104,27 +137,35 @@ mod tests {
         }
     }
 
-    impl KeyringPort for TestKeyring {
-        fn load_kek(&self, scope: &KeyScope) -> Result<Kek, EncryptionError> {
-            let mut state = self.state.lock().expect("lock keyring state");
-            state.load_scope = Some(scope.clone());
-            state
-                .load_result
-                .take()
-                .unwrap_or(Err(EncryptionError::KeyMaterialCorrupt))
+    impl SecureStoragePort for TestSecureStorage {
+        fn get(&self, key: &str) -> Result<Option<Vec<u8>>, SecureStorageError> {
+            let mut state = self.state.lock().expect("lock secure storage state");
+            state.get_key = Some(key.to_string());
+            if let Some(result) = state.get_result.take() {
+                return result;
+            }
+            Ok(state.data.get(key).cloned())
         }
 
-        fn store_kek(&self, scope: &KeyScope, kek: &Kek) -> Result<(), EncryptionError> {
-            let mut state = self.state.lock().expect("lock keyring state");
-            state.store_scope = Some(scope.clone());
-            state.store_kek = Some(kek.clone());
-            state.store_result.take().unwrap_or(Ok(()))
+        fn set(&self, key: &str, value: &[u8]) -> Result<(), SecureStorageError> {
+            let mut state = self.state.lock().expect("lock secure storage state");
+            state.set_key = Some(key.to_string());
+            state.set_value = Some(value.to_vec());
+            if let Some(result) = state.set_result.take() {
+                return result;
+            }
+            state.data.insert(key.to_string(), value.to_vec());
+            Ok(())
         }
 
-        fn delete_kek(&self, scope: &KeyScope) -> Result<(), EncryptionError> {
-            let mut state = self.state.lock().expect("lock keyring state");
-            state.delete_scope = Some(scope.clone());
-            state.delete_result.take().unwrap_or(Ok(()))
+        fn delete(&self, key: &str) -> Result<(), SecureStorageError> {
+            let mut state = self.state.lock().expect("lock secure storage state");
+            state.delete_key = Some(key.to_string());
+            if let Some(result) = state.delete_result.take() {
+                return result;
+            }
+            state.data.remove(key);
+            Ok(())
         }
     }
 
@@ -211,69 +252,71 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn load_kek_delegates_to_keyring() {
-        let (keyring, state) = TestKeyring::new();
+    async fn load_kek_reads_from_secure_storage() {
+        let (storage, state) = TestSecureStorage::new();
         let (keyslot_store, _) = TestKeySlotStore::new();
         let service = DefaultKeyMaterialService::new(
-            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(storage) as Arc<dyn SecureStoragePort>,
             Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
         );
         let scope = sample_scope("profile-1");
         let kek = sample_kek();
+        let key = kek_key(&scope);
 
-        state.lock().expect("lock keyring state").load_result = Some(Ok(kek.clone()));
+        {
+            let mut guard = state.lock().expect("lock secure storage state");
+            guard.data.insert(key.clone(), kek.0.to_vec());
+        }
 
         let loaded = service.load_kek(&scope).await.expect("load kek");
-
         assert_eq!(loaded, kek);
-        let guard = state.lock().expect("lock keyring state");
-        assert_eq!(guard.load_scope, Some(scope));
+
+        let guard = state.lock().expect("lock secure storage state");
+        assert_eq!(guard.get_key, Some(key));
     }
 
     #[tokio::test]
-    async fn store_kek_delegates_to_keyring() {
-        let (keyring, state) = TestKeyring::new();
+    async fn store_kek_writes_to_secure_storage() {
+        let (storage, state) = TestSecureStorage::new();
         let (keyslot_store, _) = TestKeySlotStore::new();
         let service = DefaultKeyMaterialService::new(
-            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(storage) as Arc<dyn SecureStoragePort>,
             Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
         );
         let scope = sample_scope("profile-2");
         let kek = sample_kek();
-
-        state.lock().expect("lock keyring state").store_result = Some(Ok(()));
+        let key = kek_key(&scope);
 
         service.store_kek(&scope, &kek).await.expect("store kek");
 
-        let guard = state.lock().expect("lock keyring state");
-        assert_eq!(guard.store_scope, Some(scope));
-        assert_eq!(guard.store_kek, Some(kek));
+        let guard = state.lock().expect("lock secure storage state");
+        assert_eq!(guard.set_key, Some(key));
+        assert_eq!(guard.set_value, Some(kek.0.to_vec()));
     }
 
     #[tokio::test]
-    async fn delete_kek_delegates_to_keyring() {
-        let (keyring, state) = TestKeyring::new();
+    async fn delete_kek_writes_to_secure_storage() {
+        let (storage, state) = TestSecureStorage::new();
         let (keyslot_store, _) = TestKeySlotStore::new();
         let service = DefaultKeyMaterialService::new(
-            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(storage) as Arc<dyn SecureStoragePort>,
             Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
         );
         let scope = sample_scope("profile-3");
-
-        state.lock().expect("lock keyring state").delete_result = Some(Ok(()));
+        let key = kek_key(&scope);
 
         service.delete_kek(&scope).await.expect("delete kek");
 
-        let guard = state.lock().expect("lock keyring state");
-        assert_eq!(guard.delete_scope, Some(scope));
+        let guard = state.lock().expect("lock secure storage state");
+        assert_eq!(guard.delete_key, Some(key));
     }
 
     #[tokio::test]
     async fn load_keyslot_rejects_scope_mismatch() {
-        let (keyring, _) = TestKeyring::new();
+        let (storage, _) = TestSecureStorage::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
         let service = DefaultKeyMaterialService::new(
-            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(storage) as Arc<dyn SecureStoragePort>,
             Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
         );
         let scope = sample_scope("profile-a");
@@ -291,10 +334,10 @@ mod tests {
 
     #[tokio::test]
     async fn load_keyslot_returns_keyslot_on_match() {
-        let (keyring, _) = TestKeyring::new();
+        let (storage, _) = TestSecureStorage::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
         let service = DefaultKeyMaterialService::new(
-            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(storage) as Arc<dyn SecureStoragePort>,
             Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
         );
         let scope = sample_scope("profile-ok");
@@ -310,10 +353,10 @@ mod tests {
 
     #[tokio::test]
     async fn store_keyslot_persists_file_representation() {
-        let (keyring, _) = TestKeyring::new();
+        let (storage, _) = TestSecureStorage::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
         let service = DefaultKeyMaterialService::new(
-            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(storage) as Arc<dyn SecureStoragePort>,
             Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
         );
         let keyslot = sample_keyslot(sample_scope("profile-store"));
@@ -334,10 +377,10 @@ mod tests {
 
     #[tokio::test]
     async fn delete_keyslot_rejects_scope_mismatch_without_delete() {
-        let (keyring, _) = TestKeyring::new();
+        let (storage, _) = TestSecureStorage::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
         let service = DefaultKeyMaterialService::new(
-            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(storage) as Arc<dyn SecureStoragePort>,
             Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
         );
         let scope = sample_scope("profile-x");
@@ -357,10 +400,10 @@ mod tests {
 
     #[tokio::test]
     async fn delete_keyslot_deletes_on_match() {
-        let (keyring, _) = TestKeyring::new();
+        let (storage, _) = TestSecureStorage::new();
         let (keyslot_store, state) = TestKeySlotStore::new();
         let service = DefaultKeyMaterialService::new(
-            Arc::new(keyring) as Arc<dyn KeyringPort>,
+            Arc::new(storage) as Arc<dyn SecureStoragePort>,
             Arc::new(keyslot_store) as Arc<dyn KeySlotStore>,
         );
         let scope = sample_scope("profile-del");
