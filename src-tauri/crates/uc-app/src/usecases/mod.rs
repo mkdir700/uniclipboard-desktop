@@ -26,6 +26,8 @@ pub mod onboarding;
 pub mod pairing;
 pub mod settings;
 pub mod start_clipboard_watcher;
+pub mod start_network;
+pub mod start_network_after_unlock;
 pub mod update_settings;
 
 pub use auto_unlock_encryption_session::AutoUnlockEncryptionSession;
@@ -39,6 +41,8 @@ pub use is_encryption_initialized::IsEncryptionInitialized;
 pub use list_clipboard_entries::ListClipboardEntries;
 pub use pairing::{ListPairedDevices, SetPairingState};
 pub use start_clipboard_watcher::StartClipboardWatcher;
+pub use start_network::StartNetwork;
+pub use start_network_after_unlock::StartNetworkAfterUnlock;
 pub use update_settings::UpdateSettings;
 
 // Re-export onboarding types for Tauri command serialization
