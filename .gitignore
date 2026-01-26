@@ -34,3 +34,4 @@ src-tauri/crates/**/target/**
 src-tauri/.app_data/
 public/splashscreen.html
 .worktrees/
+.env
