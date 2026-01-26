@@ -1,0 +1,13 @@
+[general]
+device_name = "local"
+silent_start = false
+
+[security]
+vault_key_path = ".app_data/vault/key"
+vault_snapshot_path = ".app_data/vault/snapshot"
+
+[network]
+webserver_port = 0
+
+[storage]
+database_path = ".app_data/uniclipboard.db"
