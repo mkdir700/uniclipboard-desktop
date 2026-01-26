@@ -3,8 +3,11 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Provider } from 'react-redux'
 import App from './App'
+import { initSentry, Sentry } from './observability/sentry'
 import { store } from './store'
 import './i18n'
+
+initSentry()
 
 const startupTimingOrigin = Date.now()
 const logStartupTiming = (label: string) => {
@@ -33,7 +36,7 @@ const notifyBackendFrontendReady = async () => {
     console.log(
       `[StartupTiming] frontend_ready import start ts=${new Date(importStartedAt).toISOString()}`
     )
-    const { invoke } = await import('@tauri-apps/api/core')
+    const { invokeWithTrace } = await import('@/lib/tauri-command')
     console.log(
       `[StartupTiming] frontend_ready import end duration=${Date.now() - importStartedAt}ms`
     )
@@ -45,7 +48,7 @@ const notifyBackendFrontendReady = async () => {
 
     while (Date.now() < deadline) {
       try {
-        await invoke('frontend_ready')
+        await invokeWithTrace('frontend_ready')
         console.log('[Startup] frontend_ready sent')
         console.log(`[StartupTiming] frontend_ready success duration=${Date.now() - startAt}ms`)
         return
@@ -106,7 +109,9 @@ initLogging().then(() => {
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <Provider store={store}>
-      <App />
+      <Sentry.ErrorBoundary fallback={<div>Something went wrong.</div>}>
+        <App />
+      </Sentry.ErrorBoundary>
     </Provider>
   </React.StrictMode>
 )
