@@ -1,12 +1,12 @@
-import { invoke } from '@tauri-apps/api/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getEncryptionSessionStatus, unlockEncryptionSession } from '@/api/security'
+import { invokeWithTrace } from '@/lib/tauri-command'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+vi.mock('@/lib/tauri-command', () => ({
+  invokeWithTrace: vi.fn(),
 }))
 
-const invokeMock = vi.mocked(invoke)
+const invokeMock = vi.mocked(invokeWithTrace)
 
 describe('security api', () => {
   beforeEach(() => {

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invokeWithTrace } from '@/lib/tauri-command'
 
 export interface EncryptionSessionStatus {
   initialized: boolean
@@ -11,7 +11,7 @@ export interface EncryptionSessionStatus {
  */
 export async function getEncryptionPassword(): Promise<string> {
   try {
-    return await invoke('get_encryption_password')
+    return await invokeWithTrace('get_encryption_password')
   } catch (error) {
     console.error('获取加密口令失败:', error)
     throw error
@@ -25,7 +25,7 @@ export async function getEncryptionPassword(): Promise<string> {
  */
 export async function setEncryptionPassword(password: string): Promise<boolean> {
   try {
-    return await invoke('set_encryption_password', { password })
+    return await invokeWithTrace('set_encryption_password', { password })
   } catch (error) {
     console.error('设置加密口令失败:', error)
     throw error
@@ -38,7 +38,7 @@ export async function setEncryptionPassword(password: string): Promise<boolean> 
  */
 export async function deleteEncryptionPassword(): Promise<boolean> {
   try {
-    return await invoke('delete_encryption_password')
+    return await invokeWithTrace('delete_encryption_password')
   } catch (error) {
     console.error('删除加密口令失败:', error)
     throw error
@@ -51,7 +51,7 @@ export async function deleteEncryptionPassword(): Promise<boolean> {
  */
 export async function getEncryptionSessionStatus(): Promise<EncryptionSessionStatus> {
   try {
-    return await invoke('get_encryption_session_status')
+    return await invokeWithTrace('get_encryption_session_status')
   } catch (error) {
     console.error('获取加密会话状态失败:', error)
     throw error
@@ -64,7 +64,7 @@ export async function getEncryptionSessionStatus(): Promise<EncryptionSessionSta
  */
 export async function unlockEncryptionSession(): Promise<boolean> {
   try {
-    return await invoke('unlock_encryption_session')
+    return await invokeWithTrace('unlock_encryption_session')
   } catch (error) {
     console.error('解锁加密会话失败:', error)
     throw error
