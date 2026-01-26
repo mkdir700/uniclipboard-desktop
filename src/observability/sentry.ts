@@ -1,5 +1,6 @@
 import type { ErrorEvent, EventHint } from '@sentry/core'
 import * as Sentry from '@sentry/react'
+import { redactSensitiveArgs } from '@/observability/redaction'
 
 const sentryEnabled = Boolean(import.meta.env.VITE_SENTRY_DSN)
 
@@ -25,7 +26,17 @@ export function initSentry(): void {
     if (type === 'ResizeObserver loop limit exceeded') {
       return null
     }
+    if (event.extra) {
+      event.extra = redactSensitiveArgs(event.extra) as Record<string, unknown>
+    }
     return event
+  }
+
+  const beforeBreadcrumb = (breadcrumb: Sentry.Breadcrumb): Sentry.Breadcrumb | null => {
+    if (breadcrumb.data) {
+      breadcrumb.data = redactSensitiveArgs(breadcrumb.data) as Record<string, unknown>
+    }
+    return breadcrumb
   }
 
   Sentry.init({
@@ -37,6 +48,7 @@ export function initSentry(): void {
     release: import.meta.env.VITE_APP_VERSION,
     integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
     beforeSend,
+    beforeBreadcrumb,
     initialScope: {
       tags: {
         platform: getTauriPlatform(),
