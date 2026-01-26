@@ -17,6 +17,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/sonner'
 import { useShortcut } from '@/hooks/useShortcut'
+import { captureUserIntent } from '@/observability/breadcrumbs'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import {
   removeClipboardItem,
@@ -217,6 +218,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({
   // 处理复制到剪贴板
   const handleCopyItem = async (itemId: string) => {
     try {
+      captureUserIntent('copy_clipboard', { count: 1 })
       console.log(`${t('clipboard.content.logs.copyItem')} ${itemId}`)
       const result = await dispatch(copyToClipboard(itemId)).unwrap()
       if (result.success) {
@@ -302,6 +304,8 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({
       return handleCopyItem(selectedItems[0].id)
     }
 
+    captureUserIntent('copy_clipboard', { count: selectedItems.length })
+
     const toText = (it: DisplayClipboardItem): string => {
       switch (it.type) {
         case 'text':
@@ -337,6 +341,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({
 
   const handleBatchToggleFavorite = async () => {
     if (selectedItems.length === 0) return
+    captureUserIntent('toggle_favorite', { count: selectedItems.length })
     const targetFavorited = favoriteIntent === 'favorite'
     await Promise.all(
       selectedItems.map(it =>
@@ -349,6 +354,7 @@ const ClipboardContent: React.FC<ClipboardContentProps> = ({
 
   const handleBatchDelete = async () => {
     if (selectedItems.length === 0) return
+    captureUserIntent('delete_entry', { count: selectedItems.length })
     setDeleteDialogOpen(true)
   }
 
