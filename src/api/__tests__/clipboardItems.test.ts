@@ -1,12 +1,12 @@
-import { invoke } from '@tauri-apps/api/core'
 import { describe, expect, it, vi } from 'vitest'
 import { getClipboardItems } from '@/api/clipboardItems'
+import { invokeWithTrace } from '@/lib/tauri-command'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+vi.mock('@/lib/tauri-command', () => ({
+  invokeWithTrace: vi.fn(),
 }))
 
-const invokeMock = vi.mocked(invoke)
+const invokeMock = vi.mocked(invokeWithTrace)
 
 describe('getClipboardItems', () => {
   it('将 image/* 条目映射为 image 类型，并优先使用后端返回的 thumbnail_url', async () => {
@@ -41,7 +41,7 @@ describe('getClipboardItems', () => {
   })
 
   it('returns not_ready when backend is not ready', async () => {
-    vi.mocked(invoke).mockResolvedValue({ status: 'not_ready' })
+    invokeMock.mockResolvedValue({ status: 'not_ready' })
 
     const result = (await getClipboardItems()) as unknown as { status: string }
 
@@ -49,7 +49,7 @@ describe('getClipboardItems', () => {
   })
 
   it('maps backend projections when ready', async () => {
-    vi.mocked(invoke).mockResolvedValue({
+    invokeMock.mockResolvedValue({
       status: 'ready',
       entries: [
         {
