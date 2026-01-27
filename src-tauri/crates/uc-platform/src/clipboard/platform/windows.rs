@@ -58,7 +58,6 @@ impl SystemClipboardPort for WindowsClipboard {
 }
 
 /// Windows-specific: Read image from clipboard as Bitmap format
-#[cfg(target_os = "windows")]
 fn read_image_windows() -> Result<Vec<u8>> {
     use clipboard_win::{formats, get_clipboard};
     let data = get_clipboard(formats::Bitmap)
@@ -73,7 +72,6 @@ fn read_image_windows() -> Result<Vec<u8>> {
 }
 
 /// Windows-specific: Write image to clipboard as Bitmap format
-#[cfg(target_os = "windows")]
 fn write_image_windows(bytes: &[u8]) -> Result<()> {
     use clipboard_win::{empty, formats, set_clipboard};
     use std::ptr::null_mut;
@@ -127,7 +125,6 @@ fn write_image_windows(bytes: &[u8]) -> Result<()> {
 
 /// Convert image to BMP format (Windows Bitmap)
 /// Generates BMP file header + info header + pixel data
-#[cfg(target_os = "windows")]
 fn to_bitmap(img: &image::DynamicImage) -> Vec<u8> {
     use image::GenericImageView;
 
@@ -150,7 +147,6 @@ fn to_bitmap(img: &image::DynamicImage) -> Vec<u8> {
 }
 
 /// Generate BMP file header and info header (54 bytes total)
-#[cfg(target_os = "windows")]
 fn get_bmp_header(width: u32, height: u32) -> Vec<u8> {
     let mut vec = vec![0; 54];
 
@@ -209,7 +205,6 @@ fn get_bmp_header(width: u32, height: u32) -> Vec<u8> {
 }
 
 /// Helper to set bytes in a slice at a specific range
-#[cfg(target_os = "windows")]
 fn set_bytes(to: &mut [u8], from: &[u8], range: Range<usize>) {
     for (from_idx, i) in range.enumerate() {
         to[i] = from[from_idx];
