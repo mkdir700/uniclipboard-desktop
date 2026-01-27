@@ -41,6 +41,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "chrono"] }
 tracing-log = "0.2"
+tracing-appender = "0.2"
 
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
