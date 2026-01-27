@@ -2,6 +2,7 @@ use super::super::common::CommonClipboardImpl;
 use anyhow::Result;
 use async_trait::async_trait;
 use clipboard_rs::ClipboardContext;
+use std::ops::Range;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, debug_span};
 use uc_core::clipboard::SystemClipboardSnapshot;
