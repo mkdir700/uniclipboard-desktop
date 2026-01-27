@@ -32,15 +32,16 @@ jobs:
       - name: Generate matrix
         id: set-matrix
         run: |
-          if [ "${{ inputs.platform }}" == "all" ]; then
+          PLATFORM="${{ inputs.platform || 'all' }}"
+          if [ "$PLATFORM" == "all" ]; then
             echo 'matrix=[{"platform":"macos-latest","target":"aarch64-apple-darwin","args":"--target aarch64-apple-darwin"},{"platform":"macos-latest","target":"x86_64-apple-darwin","args":"--target x86_64-apple-darwin"},{"platform":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","args":""},{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
-          elif [ "${{ inputs.platform }}" == "macos-aarch64" ]; then
+          elif [ "$PLATFORM" == "macos-aarch64" ]; then
             echo 'matrix=[{"platform":"macos-latest","target":"aarch64-apple-darwin","args":"--target aarch64-apple-darwin"}]' >> "$GITHUB_OUTPUT"
-          elif [ "${{ inputs.platform }}" == "macos-x86_64" ]; then
+          elif [ "$PLATFORM" == "macos-x86_64" ]; then
             echo 'matrix=[{"platform":"macos-latest","target":"x86_64-apple-darwin","args":"--target x86_64-apple-darwin"}]' >> "$GITHUB_OUTPUT"
-          elif [ "${{ inputs.platform }}" == "ubuntu-22.04" ]; then
+          elif [ "$PLATFORM" == "ubuntu-22.04" ]; then
             echo 'matrix=[{"platform":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","args":""}]' >> "$GITHUB_OUTPUT"
-          elif [ "${{ inputs.platform }}" == "windows-latest" ]; then
+          elif [ "$PLATFORM" == "windows-latest" ]; then
             echo 'matrix=[{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
           fi
 
@@ -89,10 +90,16 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v${{ inputs.version || github.ref_name }}
-          releaseName: UniClipboard v${{ inputs.version || github.ref_name }}
+          tagName: ${{ startsWith(inputs.version || github.ref_name, 'v') && (inputs.version || github.ref_name) || format('v{0}', inputs.version || github.ref_name) }}
+          releaseName: UniClipboard ${{ startsWith(inputs.version || github.ref_name, 'v') && (inputs.version || github.ref_name) || format('v{0}', inputs.version || github.ref_name) }}
           releaseBody: See the assets to download this version and install.
-          releaseDraft: true
+          releaseDraft: ${{ github.event_name == 'push' }}
           prerelease: false
           uploadUpdaterJson: true
           args: ${{ matrix.args }}
+
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: uniclipping-${{ matrix.target }}
+          path: src-tauri/target/release/bundle/**
