@@ -24,7 +24,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::{info_span, Instrument};
+use tracing::{info, info_span, warn, Instrument};
 
 use uc_core::{
     network::{
@@ -280,6 +280,11 @@ impl PairingOrchestrator {
             peer_id = %peer_id
         );
         async {
+            info!(
+                session_id = %session_id,
+                peer_id = %peer_id,
+                "handling pairing challenge"
+            );
             self.record_session_peer(
                 session_id,
                 peer_id.to_string(),
@@ -288,6 +293,13 @@ impl PairingOrchestrator {
             .await;
             let actions = {
                 let mut sessions = self.sessions.write().await;
+                if !sessions.contains_key(session_id) {
+                    info!(
+                        session_id = %session_id,
+                        peer_id = %peer_id,
+                        "pairing session not found for challenge"
+                    );
+                }
                 let context = sessions.get_mut(session_id).context("Session not found")?;
                 let (_state, actions) = context.state_machine.handle_event(
                     PairingEvent::RecvChallenge {
