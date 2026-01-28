@@ -103,6 +103,13 @@ impl IdentityFingerprint {
     ///
     /// * `public_key` - 设备的身份公钥(Ed25519, 32字节)
     pub fn from_public_key(public_key: &[u8]) -> Result<Self, FingerprintError> {
+        if public_key.len() != 32 {
+            return Err(FingerprintError::InvalidKeyLength {
+                expected: 32,
+                actual: public_key.len(),
+            });
+        }
+
         // Domain separator 防止不同用途的公钥混淆
         let mut hasher = Sha256::new();
         hasher.update(b"uc-identity-fp-v1");
@@ -255,6 +262,30 @@ mod tests {
         let display = fp.as_display();
         assert_eq!(display.chars().filter(|&c| c == '-').count(), 3);
         assert_eq!(display.replace('-', "").len(), 16);
+    }
+
+    #[test]
+    fn test_fingerprint_from_public_key_invalid_length() {
+        let short_key = vec![0u8; 31];
+        let long_key = vec![0u8; 33];
+
+        let short_result = IdentityFingerprint::from_public_key(&short_key);
+        assert_eq!(
+            short_result,
+            Err(FingerprintError::InvalidKeyLength {
+                expected: 32,
+                actual: 31
+            })
+        );
+
+        let long_result = IdentityFingerprint::from_public_key(&long_key);
+        assert_eq!(
+            long_result,
+            Err(FingerprintError::InvalidKeyLength {
+                expected: 32,
+                actual: 33
+            })
+        );
     }
 
     #[test]
