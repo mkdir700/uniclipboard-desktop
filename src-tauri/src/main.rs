@@ -18,7 +18,7 @@ use tauri_plugin_stronghold;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use uc_app::usecases::pairing::{PairingConfig, PairingOrchestrator};
+use uc_app::usecases::pairing::PairingOrchestrator;
 use uc_core::config::AppConfig;
 use uc_core::ports::AppDirsPort;
 use uc_core::ports::ClipboardChangeHandler;
@@ -31,8 +31,8 @@ use uc_platform::runtime::event_bus::{
 use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::tracing as bootstrap_tracing;
 use uc_tauri::bootstrap::{
-    ensure_default_device_name, load_config, resolve_pairing_device_name, start_background_tasks,
-    wire_dependencies, AppRuntime,
+    ensure_default_device_name, load_config, resolve_pairing_config, resolve_pairing_device_name,
+    start_background_tasks, wire_dependencies, AppRuntime,
 };
 use uc_tauri::protocol::{parse_uc_request, UcRoute};
 
@@ -477,12 +477,14 @@ fn run_app(config: AppConfig) {
     let pairing_settings = runtime_for_handler.deps.settings.clone();
     let pairing_peer_id = background.libp2p_network.local_peer_id();
     let pairing_identity_pubkey = background.libp2p_network.local_identity_pubkey();
-    let pairing_device_name = tauri::async_runtime::block_on(async move {
-        resolve_pairing_device_name(pairing_settings).await
+    let (pairing_device_name, pairing_config) = tauri::async_runtime::block_on(async move {
+        let device_name = resolve_pairing_device_name(pairing_settings.clone()).await;
+        let config = resolve_pairing_config(pairing_settings).await;
+        (device_name, config)
     });
     let pairing_device_id = pairing_device_identity.current_device_id().to_string();
     let (pairing_orchestrator, pairing_action_rx) = PairingOrchestrator::new(
-        PairingConfig::default(),
+        pairing_config,
         pairing_device_repo,
         pairing_device_name,
         pairing_device_id,
