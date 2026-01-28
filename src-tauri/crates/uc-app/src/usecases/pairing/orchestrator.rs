@@ -662,10 +662,40 @@ impl PairingOrchestrator {
             let mut sessions = self.sessions.write().await;
             let now = Utc::now();
             let timeout = Duration::seconds(self.config.session_timeout_secs);
+            let expired_ids: Vec<SessionId> = sessions
+                .iter()
+                .filter_map(|(session_id, context)| {
+                    let expired = now.signed_duration_since(context.created_at).num_seconds()
+                        >= timeout.num_seconds();
+                    if expired {
+                        Some(session_id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
 
-            sessions.retain(|_, context| {
-                now.signed_duration_since(context.created_at).num_seconds() < timeout.num_seconds()
-            });
+            let mut expired_contexts = Vec::with_capacity(expired_ids.len());
+            for session_id in &expired_ids {
+                if let Some(context) = sessions.remove(session_id) {
+                    expired_contexts.push((session_id.clone(), context));
+                }
+            }
+            drop(sessions);
+
+            if !expired_ids.is_empty() {
+                let mut peers = self.session_peers.write().await;
+                for session_id in &expired_ids {
+                    peers.remove(session_id);
+                }
+            }
+
+            for (_session_id, context) in expired_contexts {
+                let mut timers = context.timers.lock().await;
+                for (_kind, handle) in timers.drain() {
+                    handle.abort();
+                }
+            }
         }
         .instrument(span)
         .await
@@ -840,6 +870,52 @@ mod tests {
 
         let sessions = orchestrator.sessions.read().await;
         assert!(sessions.is_empty());
+
+        let peers = orchestrator.session_peers.read().await;
+        assert!(peers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_aborts_expired_session_timers() {
+        let config = PairingConfig {
+            step_timeout_secs: 1,
+            user_verification_timeout_secs: 1,
+            session_timeout_secs: 1,
+            max_retries: 1,
+            protocol_version: "1.0.0".to_string(),
+        };
+        let device_repo = Arc::new(MockDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            config,
+            device_repo,
+            "TestDevice".to_string(),
+            "device-123".to_string(),
+            "peer-456".to_string(),
+            vec![0u8; 32],
+        );
+
+        let session_id = orchestrator
+            .initiate_pairing("remote-peer".to_string())
+            .await
+            .expect("initiate pairing");
+
+        let join_handle = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        });
+        let abort_handle = join_handle.abort_handle();
+
+        {
+            let mut sessions = orchestrator.sessions.write().await;
+            let context = sessions.get_mut(&session_id).expect("session context");
+            let mut timers = context.timers.lock().await;
+            timers.insert(TimeoutKind::WaitingChallenge, abort_handle);
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        orchestrator.cleanup_expired_sessions().await;
+
+        let join_result = join_handle.await;
+        assert!(join_result.is_err());
     }
 
     #[test]
