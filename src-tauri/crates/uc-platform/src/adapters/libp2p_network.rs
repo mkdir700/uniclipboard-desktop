@@ -1344,9 +1344,6 @@ mod tests {
             Arc::new(FakeResolver),
         )
         .expect("create adapter b");
-        let peer_a = adapter_a.local_peer_id();
-        let peer_b = adapter_b.local_peer_id();
-
         adapter_a.spawn_swarm().expect("start swarm a");
         adapter_b.spawn_swarm().expect("start swarm b");
 
