@@ -759,38 +759,29 @@ impl PairingStateMachine {
                 let peer_id = match self.context.peer_id.clone() {
                     Some(id) => id,
                     None => {
-                        return (
-                            PairingState::Failed {
-                                session_id: session_id.clone(),
-                                reason: FailureReason::Other("Missing peer id".to_string()),
-                            },
-                            vec![cancel_action],
-                        )
+                        let (state, mut actions) = self
+                            .fail_with_reason(FailureReason::Other("Missing peer id".to_string()));
+                        actions.insert(0, cancel_action.clone());
+                        return (state, actions);
                     }
                 };
                 let pin = match self.context.pin.clone() {
                     Some(pin) => pin,
                     None => {
-                        return (
-                            PairingState::Failed {
-                                session_id: session_id.clone(),
-                                reason: FailureReason::Other("Missing PIN".to_string()),
-                            },
-                            vec![cancel_action],
-                        )
+                        let (state, mut actions) =
+                            self.fail_with_reason(FailureReason::Other("Missing PIN".to_string()));
+                        actions.insert(0, cancel_action.clone());
+                        return (state, actions);
                     }
                 };
 
                 let pin_hash = match hash_pin(&pin) {
                     Ok(hash) => hash,
                     Err(err) => {
-                        return (
-                            PairingState::Failed {
-                                session_id: session_id.clone(),
-                                reason: FailureReason::CryptoError(err.to_string()),
-                            },
-                            vec![cancel_action],
-                        )
+                        let (state, mut actions) =
+                            self.fail_with_reason(FailureReason::CryptoError(err.to_string()));
+                        actions.insert(0, cancel_action.clone());
+                        return (state, actions);
                     }
                 };
                 self.context.pin = None;
