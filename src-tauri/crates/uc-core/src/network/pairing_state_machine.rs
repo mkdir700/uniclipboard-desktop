@@ -881,16 +881,30 @@ impl PairingStateMachine {
                 PairingEvent::RecvConfirm { confirm, .. },
             ) => {
                 if !confirm.success {
-                    return self.fail_with_reason(FailureReason::Other(
+                    let cancel_action = PairingAction::CancelTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::WaitingConfirm,
+                    };
+                    let (state, mut actions) = self.fail_with_reason(FailureReason::Other(
                         confirm
                             .error
                             .unwrap_or_else(|| "Pairing rejected".to_string()),
                     ));
+                    actions.insert(0, cancel_action);
+                    return (state, actions);
                 }
 
                 let paired_device = match self.build_paired_device(now) {
                     Ok(device) => device,
-                    Err(reason) => return self.fail_with_reason(reason),
+                    Err(reason) => {
+                        let cancel_action = PairingAction::CancelTimer {
+                            session_id: session_id.clone(),
+                            kind: TimeoutKind::WaitingConfirm,
+                        };
+                        let (state, mut actions) = self.fail_with_reason(reason);
+                        actions.insert(0, cancel_action);
+                        return (state, actions);
+                    }
                 };
 
                 let new_state = PairingState::PersistingTrust {
