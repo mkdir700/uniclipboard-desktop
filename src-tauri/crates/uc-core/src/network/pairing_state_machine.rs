@@ -952,12 +952,18 @@ impl PairingStateMachine {
     }
 
     fn fail_with_reason(&self, reason: FailureReason) -> (PairingState, Vec<PairingAction>) {
+        let session_id = self.context.session_id.clone().unwrap_or_default();
+        let error_msg = format!("{:?}", reason);
         (
             PairingState::Failed {
-                session_id: self.context.session_id.clone().unwrap_or_default(),
+                session_id: session_id.clone(),
                 reason,
             },
-            vec![],
+            vec![PairingAction::EmitResult {
+                session_id,
+                success: false,
+                error: Some(error_msg),
+            }],
         )
     }
 
