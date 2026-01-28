@@ -99,7 +99,6 @@ pub async fn get_local_peer_id(
         "command.pairing.get_local_peer_id",
         trace_id = tracing::field::Empty,
         trace_ts = tracing::field::Empty,
-        device_id = %runtime.deps.device_identity.current_device_id(),
     );
     record_trace_fields(&span, &_trace);
     async { Ok(runtime.usecases().get_local_peer_id().execute()) }
@@ -116,7 +115,6 @@ pub async fn get_local_device_info(
         "command.pairing.get_local_device_info",
         trace_id = tracing::field::Empty,
         trace_ts = tracing::field::Empty,
-        device_id = %runtime.deps.device_identity.current_device_id(),
     );
     record_trace_fields(&span, &_trace);
     async {
