@@ -856,7 +856,23 @@ impl PairingStateMachine {
                     return (new_state, actions);
                 }
 
-                (next_state, vec![cancel_action, confirm_action])
+                let mut actions = vec![cancel_action, confirm_action];
+                if matches!(
+                    next_state,
+                    PairingState::Failed { .. } | PairingState::Cancelled { .. }
+                ) {
+                    let error = match &next_state {
+                        PairingState::Failed { reason, .. } => Some(format!("{:?}", reason)),
+                        PairingState::Cancelled { by, .. } => Some(format!("Cancelled: {:?}", by)),
+                        _ => None,
+                    };
+                    actions.push(PairingAction::EmitResult {
+                        session_id: session_id.clone(),
+                        success: false,
+                        error,
+                    });
+                }
+                (next_state, actions)
             }
 
             // ========== ResponseSent -> PersistingTrust ==========
