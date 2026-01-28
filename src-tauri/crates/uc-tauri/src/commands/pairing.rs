@@ -6,7 +6,7 @@ use crate::commands::record_trace_fields;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Emitter, State};
 use tracing::{info_span, Instrument};
 use uc_app::usecases::{LocalDeviceInfo, PairingOrchestrator};
 use uc_core::network::{ConnectedPeer, DiscoveredPeer, PairedDevice, PairingState};
@@ -56,6 +56,13 @@ pub struct P2PPinVerifyRequest {
     pub pin_matches: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct P2PCommandErrorEvent {
+    command: String,
+    message: String,
+}
+
 /// List paired devices
 /// 列出已配对设备
 #[tauri::command]
@@ -73,7 +80,9 @@ pub async fn list_paired_devices(
         let uc = runtime.usecases().list_paired_devices();
         let devices = uc.execute().await.map_err(|e| {
             tracing::error!(error = %e, "Failed to list paired devices");
-            e.to_string()
+            let message = e.to_string();
+            emit_command_error(&runtime, "list_paired_devices", &message);
+            message
         })?;
         Ok(devices)
     }
@@ -95,7 +104,12 @@ pub async fn get_local_device_info(
         .get_local_device_info()
         .execute()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to get local device info");
+            let message = e.to_string();
+            emit_command_error(&runtime, "get_local_device_info", &message);
+            message
+        })
 }
 
 #[tauri::command]
@@ -107,13 +121,23 @@ pub async fn get_p2p_peers(
         .list_discovered_peers()
         .execute()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to list discovered peers");
+            let message = format!("list_discovered_peers: {}", e);
+            emit_command_error(&runtime, "get_p2p_peers", &message);
+            e.to_string()
+        })?;
     let connected = runtime
         .usecases()
         .list_connected_peers()
         .execute()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to list connected peers");
+            let message = format!("list_connected_peers: {}", e);
+            emit_command_error(&runtime, "get_p2p_peers", &message);
+            e.to_string()
+        })?;
     let connected_map = connected_peer_ids(&connected);
 
     Ok(discovered
@@ -144,19 +168,34 @@ pub async fn get_paired_peers_with_status(
         .list_paired_devices()
         .execute()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to list paired devices");
+            let message = format!("list_paired_devices: {}", e);
+            emit_command_error(&runtime, "get_paired_peers_with_status", &message);
+            e.to_string()
+        })?;
     let discovered = runtime
         .usecases()
         .list_discovered_peers()
         .execute()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to list discovered peers");
+            let message = format!("list_discovered_peers: {}", e);
+            emit_command_error(&runtime, "get_paired_peers_with_status", &message);
+            e.to_string()
+        })?;
     let connected = runtime
         .usecases()
         .list_connected_peers()
         .execute()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to list connected peers");
+            let message = format!("list_connected_peers: {}", e);
+            emit_command_error(&runtime, "get_paired_peers_with_status", &message);
+            e.to_string()
+        })?;
     let discovered_map = discovered_peer_map(&discovered);
     let connected_map = connected_peer_ids(&connected);
 
@@ -206,7 +245,9 @@ pub async fn set_pairing_state(
             .await
             .map_err(|e| {
                 tracing::error!(error = %e, "Failed to set pairing state");
-                e.to_string()
+                let message = e.to_string();
+                emit_command_error(&runtime, "set_pairing_state", &message);
+                message
             })?;
         Ok(())
     }
@@ -224,7 +265,10 @@ pub async fn initiate_p2p_pairing(
         let session_id = orchestrator
             .initiate_pairing(request.peer_id)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to initiate P2P pairing");
+                e.to_string()
+            })?;
         Ok(P2PPairingResponse {
             session_id,
             success: true,
@@ -245,7 +289,10 @@ pub async fn accept_p2p_pairing(
         orchestrator
             .user_accept_pairing(&session_id)
             .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| {
+                tracing::error!(error = %e, session_id = %session_id, "Failed to accept P2P pairing");
+                e.to_string()
+            })
     }
     .instrument(span)
     .await
@@ -261,7 +308,10 @@ pub async fn reject_p2p_pairing(
         orchestrator
             .user_reject_pairing(&session_id)
             .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| {
+                tracing::error!(error = %e, session_id = %session_id, "Failed to reject P2P pairing");
+                e.to_string()
+            })
     }
     .instrument(span)
     .await
@@ -278,12 +328,26 @@ pub async fn verify_p2p_pairing_pin(
             orchestrator
                 .user_accept_pairing(&request.session_id)
                 .await
-                .map_err(|e| e.to_string())
+                .map_err(|e| {
+                    tracing::error!(
+                        error = %e,
+                        session_id = %request.session_id,
+                        "Failed to accept P2P pairing (pin verify)"
+                    );
+                    e.to_string()
+                })
         } else {
             orchestrator
                 .user_reject_pairing(&request.session_id)
                 .await
-                .map_err(|e| e.to_string())
+                .map_err(|e| {
+                    tracing::error!(
+                        error = %e,
+                        session_id = %request.session_id,
+                        "Failed to reject P2P pairing (pin verify)"
+                    );
+                    e.to_string()
+                })
         }
     }
     .instrument(span)
@@ -298,10 +362,32 @@ pub async fn unpair_p2p_device(
     let span = info_span!("command.pairing.unpair", peer_id = %peer_id);
     async {
         let uc = runtime.usecases().unpair_device();
-        uc.execute(peer_id).await.map_err(|e| e.to_string())
+        uc.execute(peer_id.clone()).await.map_err(|e| {
+            tracing::error!(error = %e, peer_id = %peer_id, "Failed to unpair P2P device");
+            let message = e.to_string();
+            emit_command_error(&runtime, "unpair_p2p_device", &message);
+            message
+        })
     }
     .instrument(span)
     .await
+}
+
+fn emit_command_error(runtime: &AppRuntime, command: &str, message: &str) {
+    if let Some(app) = runtime.app_handle().as_ref() {
+        let payload = P2PCommandErrorEvent {
+            command: command.to_string(),
+            message: message.to_string(),
+        };
+        if let Err(err) = app.emit("p2p-command-error", payload) {
+            tracing::warn!(error = %err, command = %command, "Failed to emit p2p command error");
+        }
+    } else {
+        tracing::debug!(
+            command = %command,
+            "AppHandle not available, skipping p2p command error emission"
+        );
+    }
 }
 
 fn discovered_peer_map(peers: &[DiscoveredPeer]) -> HashMap<String, DiscoveredPeer> {
