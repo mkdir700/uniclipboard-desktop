@@ -24,6 +24,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex, RwLock};
+use tracing::{info_span, Instrument};
 
 use uc_core::{
     network::{
@@ -158,49 +159,58 @@ impl PairingOrchestrator {
     /// 发起配对 (Initiator)
     pub async fn initiate_pairing(&self, peer_id: String) -> Result<SessionId> {
         let session_id = uuid::Uuid::new_v4().to_string();
-        self.record_session_peer(&session_id, peer_id.clone(), None)
-            .await;
-
-        let policy = self.build_policy();
-        let mut state_machine = PairingStateMachine::new_with_local_identity_and_policy(
-            self.local_identity.device_name.clone(),
-            self.local_identity.device_id.clone(),
-            self.local_identity.identity_pubkey.clone(),
-            policy,
+        let span = info_span!(
+            "pairing.initiate",
+            session_id = %session_id,
+            peer_id = %peer_id
         );
-        let _ = state_machine.handle_event(
-            PairingEvent::StartPairing {
-                role: PairingRole::Initiator,
-                peer_id: peer_id.clone(),
-            },
-            Utc::now(),
-        );
+        async {
+            self.record_session_peer(&session_id, peer_id.clone(), None)
+                .await;
 
-        let context = PairingSessionContext {
-            state_machine,
-            created_at: Utc::now(),
-            timers: Mutex::new(HashMap::new()),
-        };
+            let policy = self.build_policy();
+            let mut state_machine = PairingStateMachine::new_with_local_identity_and_policy(
+                self.local_identity.device_name.clone(),
+                self.local_identity.device_id.clone(),
+                self.local_identity.identity_pubkey.clone(),
+                policy,
+            );
+            let _ = state_machine.handle_event(
+                PairingEvent::StartPairing {
+                    role: PairingRole::Initiator,
+                    peer_id: peer_id.clone(),
+                },
+                Utc::now(),
+            );
 
-        self.sessions
-            .write()
-            .await
-            .insert(session_id.clone(), context);
+            let context = PairingSessionContext {
+                state_machine,
+                created_at: Utc::now(),
+                timers: Mutex::new(HashMap::new()),
+            };
 
-        let nonce = uuid::Uuid::new_v4().as_bytes().to_vec();
-        let request = PairingRequest {
-            session_id: session_id.clone(),
-            device_name: self.local_identity.device_name.clone(),
-            device_id: self.local_identity.device_id.clone(),
-            peer_id: self.local_identity.peer_id.clone(),
-            identity_pubkey: self.local_identity.identity_pubkey.clone(),
-            nonce,
-        };
+            self.sessions
+                .write()
+                .await
+                .insert(session_id.clone(), context);
 
-        self.send_message(&peer_id, PairingMessage::Request(request))
-            .await?;
+            let nonce = uuid::Uuid::new_v4().as_bytes().to_vec();
+            let request = PairingRequest {
+                session_id: session_id.clone(),
+                device_name: self.local_identity.device_name.clone(),
+                device_id: self.local_identity.device_id.clone(),
+                peer_id: self.local_identity.peer_id.clone(),
+                identity_pubkey: self.local_identity.identity_pubkey.clone(),
+                nonce,
+            };
 
-        Ok(session_id)
+            self.send_message(&peer_id, PairingMessage::Request(request))
+                .await?;
+
+            Ok(session_id)
+        }
+        .instrument(span)
+        .await
     }
 
     /// 处理收到的配对请求 (Responder)
@@ -210,42 +220,51 @@ impl PairingOrchestrator {
         request: PairingRequest,
     ) -> Result<()> {
         let session_id = request.session_id.clone();
-        self.record_session_peer(
-            &session_id,
-            peer_id.clone(),
-            Some(request.device_name.clone()),
-        )
-        .await;
-
-        let policy = self.build_policy();
-        let mut state_machine = PairingStateMachine::new_with_local_identity_and_policy(
-            self.local_identity.device_name.clone(),
-            self.local_identity.device_id.clone(),
-            self.local_identity.identity_pubkey.clone(),
-            policy,
+        let span = info_span!(
+            "pairing.handle_request",
+            session_id = %session_id,
+            peer_id = %peer_id
         );
-        let (_state, actions) = state_machine.handle_event(
-            PairingEvent::RecvRequest {
-                session_id: session_id.clone(),
-                request,
-            },
-            Utc::now(),
-        );
+        async {
+            self.record_session_peer(
+                &session_id,
+                peer_id.clone(),
+                Some(request.device_name.clone()),
+            )
+            .await;
 
-        // 执行动作(如果有)
-        for action in actions {
-            self.execute_action(&session_id, &peer_id, action).await?;
+            let policy = self.build_policy();
+            let mut state_machine = PairingStateMachine::new_with_local_identity_and_policy(
+                self.local_identity.device_name.clone(),
+                self.local_identity.device_id.clone(),
+                self.local_identity.identity_pubkey.clone(),
+                policy,
+            );
+            let (_state, actions) = state_machine.handle_event(
+                PairingEvent::RecvRequest {
+                    session_id: session_id.clone(),
+                    request,
+                },
+                Utc::now(),
+            );
+
+            // 执行动作(如果有)
+            for action in actions {
+                self.execute_action(&session_id, &peer_id, action).await?;
+            }
+
+            let context = PairingSessionContext {
+                state_machine,
+                created_at: Utc::now(),
+                timers: Mutex::new(HashMap::new()),
+            };
+
+            self.sessions.write().await.insert(session_id, context);
+
+            Ok(())
         }
-
-        let context = PairingSessionContext {
-            state_machine,
-            created_at: Utc::now(),
-            timers: Mutex::new(HashMap::new()),
-        };
-
-        self.sessions.write().await.insert(session_id, context);
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 
     /// 处理收到的Challenge (Initiator)
@@ -255,31 +274,40 @@ impl PairingOrchestrator {
         peer_id: &str,
         challenge: PairingChallenge,
     ) -> Result<()> {
-        self.record_session_peer(
-            session_id,
-            peer_id.to_string(),
-            Some(challenge.device_name.clone()),
-        )
-        .await;
-        let actions = {
-            let mut sessions = self.sessions.write().await;
-            let context = sessions.get_mut(session_id).context("Session not found")?;
-            let (_state, actions) = context.state_machine.handle_event(
-                PairingEvent::RecvChallenge {
-                    session_id: session_id.to_string(),
-                    challenge,
-                },
-                Utc::now(),
-            );
-            actions
-        };
+        let span = info_span!(
+            "pairing.handle_challenge",
+            session_id = %session_id,
+            peer_id = %peer_id
+        );
+        async {
+            self.record_session_peer(
+                session_id,
+                peer_id.to_string(),
+                Some(challenge.device_name.clone()),
+            )
+            .await;
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                let context = sessions.get_mut(session_id).context("Session not found")?;
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::RecvChallenge {
+                        session_id: session_id.to_string(),
+                        challenge,
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
 
-        // 执行动作(包括展示验证UI)
-        for action in actions {
-            self.execute_action(session_id, peer_id, action).await?;
+            // 执行动作(包括展示验证UI)
+            for action in actions {
+                self.execute_action(session_id, peer_id, action).await?;
+            }
+
+            Ok(())
         }
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 
     /// 处理收到的Response (Responder)
@@ -289,66 +317,85 @@ impl PairingOrchestrator {
         peer_id: &str,
         response: uc_core::network::protocol::PairingResponse,
     ) -> Result<()> {
-        let actions = {
-            let mut sessions = self.sessions.write().await;
-            let context = sessions.get_mut(session_id).context("Session not found")?;
-            let (_state, actions) = context.state_machine.handle_event(
-                PairingEvent::RecvResponse {
-                    session_id: session_id.to_string(),
-                    response,
-                },
-                Utc::now(),
-            );
-            actions
-        };
+        let span = info_span!(
+            "pairing.handle_response",
+            session_id = %session_id,
+            peer_id = %peer_id
+        );
+        async {
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                let context = sessions.get_mut(session_id).context("Session not found")?;
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::RecvResponse {
+                        session_id: session_id.to_string(),
+                        response,
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
 
-        for action in actions {
-            self.execute_action(session_id, peer_id, action).await?;
+            for action in actions {
+                self.execute_action(session_id, peer_id, action).await?;
+            }
+
+            Ok(())
         }
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 
     /// 用户接受配对 (验证短码匹配)
     pub async fn user_accept_pairing(&self, session_id: &str) -> Result<()> {
-        let actions = {
-            let mut sessions = self.sessions.write().await;
-            let context = sessions.get_mut(session_id).context("Session not found")?;
-            let (_state, actions) = context.state_machine.handle_event(
-                PairingEvent::UserAccept {
-                    session_id: session_id.to_string(),
-                },
-                Utc::now(),
-            );
-            actions
-        };
+        let span = info_span!("pairing.user_accept", session_id = %session_id);
+        async {
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                let context = sessions.get_mut(session_id).context("Session not found")?;
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::UserAccept {
+                        session_id: session_id.to_string(),
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
 
-        for action in actions {
-            self.execute_action(session_id, "", action).await?;
+            for action in actions {
+                self.execute_action(session_id, "", action).await?;
+            }
+
+            Ok(())
         }
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 
     /// 用户拒绝配对
     pub async fn user_reject_pairing(&self, session_id: &str) -> Result<()> {
-        let actions = {
-            let mut sessions = self.sessions.write().await;
-            let context = sessions.get_mut(session_id).context("Session not found")?;
-            let (_state, actions) = context.state_machine.handle_event(
-                PairingEvent::UserReject {
-                    session_id: session_id.to_string(),
-                },
-                Utc::now(),
-            );
-            actions
-        };
+        let span = info_span!("pairing.user_reject", session_id = %session_id);
+        async {
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                let context = sessions.get_mut(session_id).context("Session not found")?;
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::UserReject {
+                        session_id: session_id.to_string(),
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
 
-        for action in actions {
-            self.execute_action(session_id, "", action).await?;
+            for action in actions {
+                self.execute_action(session_id, "", action).await?;
+            }
+
+            Ok(())
         }
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 
     /// 处理收到的Confirm (双方)
@@ -358,24 +405,33 @@ impl PairingOrchestrator {
         peer_id: &str,
         confirm: PairingConfirm,
     ) -> Result<()> {
-        let actions = {
-            let mut sessions = self.sessions.write().await;
-            let context = sessions.get_mut(session_id).context("Session not found")?;
-            let (_state, actions) = context.state_machine.handle_event(
-                PairingEvent::RecvConfirm {
-                    session_id: session_id.to_string(),
-                    confirm,
-                },
-                Utc::now(),
-            );
-            actions
-        };
+        let span = info_span!(
+            "pairing.handle_confirm",
+            session_id = %session_id,
+            peer_id = %peer_id
+        );
+        async {
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                let context = sessions.get_mut(session_id).context("Session not found")?;
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::RecvConfirm {
+                        session_id: session_id.to_string(),
+                        confirm,
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
 
-        for action in actions {
-            self.execute_action(session_id, peer_id, action).await?;
+            for action in actions {
+                self.execute_action(session_id, peer_id, action).await?;
+            }
+
+            Ok(())
         }
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 
     /// 执行单个动作
@@ -601,13 +657,18 @@ impl PairingOrchestrator {
 
     /// 清理过期会话
     pub async fn cleanup_expired_sessions(&self) {
-        let mut sessions = self.sessions.write().await;
-        let now = Utc::now();
-        let timeout = Duration::seconds(self.config.session_timeout_secs);
+        let span = info_span!("pairing.cleanup_expired_sessions");
+        async {
+            let mut sessions = self.sessions.write().await;
+            let now = Utc::now();
+            let timeout = Duration::seconds(self.config.session_timeout_secs);
 
-        sessions.retain(|_, context| {
-            now.signed_duration_since(context.created_at).num_seconds() < timeout.num_seconds()
-        });
+            sessions.retain(|_, context| {
+                now.signed_duration_since(context.created_at).num_seconds() < timeout.num_seconds()
+            });
+        }
+        .instrument(span)
+        .await
     }
 
     async fn handle_timeout(
@@ -617,35 +678,44 @@ impl PairingOrchestrator {
         session_id: String,
         kind: TimeoutKind,
     ) -> Result<()> {
-        let actions = {
-            let mut sessions = sessions.write().await;
-            let context = sessions.get_mut(&session_id).context("Session not found")?;
-            {
-                let mut timers = context.timers.lock().await;
-                timers.remove(&kind);
+        let span = info_span!(
+            "pairing.handle_timeout",
+            session_id = %session_id,
+            kind = ?kind
+        );
+        async {
+            let actions = {
+                let mut sessions = sessions.write().await;
+                let context = sessions.get_mut(&session_id).context("Session not found")?;
+                {
+                    let mut timers = context.timers.lock().await;
+                    timers.remove(&kind);
+                }
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::Timeout {
+                        session_id: session_id.clone(),
+                        kind,
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
+
+            for action in actions {
+                Self::execute_action_inner(
+                    action_tx.clone(),
+                    sessions.clone(),
+                    device_repo.clone(),
+                    session_id.clone(),
+                    action,
+                )
+                .await?;
             }
-            let (_state, actions) = context.state_machine.handle_event(
-                PairingEvent::Timeout {
-                    session_id: session_id.clone(),
-                    kind,
-                },
-                Utc::now(),
-            );
-            actions
-        };
 
-        for action in actions {
-            Self::execute_action_inner(
-                action_tx.clone(),
-                sessions.clone(),
-                device_repo.clone(),
-                session_id.clone(),
-                action,
-            )
-            .await?;
+            Ok(())
         }
-
-        Ok(())
+        .instrument(span)
+        .await
     }
 }
 
