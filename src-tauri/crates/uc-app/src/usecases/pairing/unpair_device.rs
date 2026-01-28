@@ -16,14 +16,14 @@ impl UnpairDevice {
 
     pub async fn execute(&self, peer_id: String) -> Result<()> {
         let peer = PeerId::from(peer_id.as_str());
+        self.network
+            .unpair_device(peer_id.clone())
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to unpair device: {}", e))?;
         self.repo
             .delete(&peer)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to delete paired device: {}", e))?;
-        self.network
-            .unpair_device(peer_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to unpair device: {}", e))?;
         Ok(())
     }
 }
