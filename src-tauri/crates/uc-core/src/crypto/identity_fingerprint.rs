@@ -61,9 +61,6 @@ impl IdentityFingerprint {
     /// 指纹的分组大小(字符数)
     const GROUP_SIZE: usize = 4;
 
-    /// 指纹的总组数
-    const GROUP_COUNT: usize = 4;
-
     /// 从原始字节数组创建指纹
     ///
     /// # Arguments

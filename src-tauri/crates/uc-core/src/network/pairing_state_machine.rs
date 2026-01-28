@@ -30,6 +30,7 @@ use crate::network::{
     paired_device::{PairedDevice, PairingState as PairedDeviceState},
     protocol::{PairingChallenge, PairingConfirm, PairingMessage, PairingResponse},
 };
+use crate::settings::model::PairingSettings;
 use crate::PeerId;
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
@@ -166,7 +167,7 @@ pub enum FailureReason {
 }
 
 /// 超时类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TimeoutKind {
     /// 等待 Challenge 超时
     WaitingChallenge,
@@ -320,6 +321,34 @@ pub enum PairingAction {
     NoOp,
 }
 
+/// 配对策略配置
+#[derive(Debug, Clone)]
+pub struct PairingPolicy {
+    /// 步骤超时时间(秒)
+    pub step_timeout_secs: i64,
+    /// 用户确认超时时间(秒)
+    pub user_verification_timeout_secs: i64,
+    /// 最大重试次数
+    pub max_retries: u8,
+    /// 协议版本
+    pub protocol_version: String,
+}
+
+impl Default for PairingPolicy {
+    fn default() -> Self {
+        let defaults = PairingSettings::default();
+        Self {
+            step_timeout_secs: defaults.step_timeout.as_secs().min(i64::MAX as u64) as i64,
+            user_verification_timeout_secs: defaults
+                .user_verification_timeout
+                .as_secs()
+                .min(i64::MAX as u64) as i64,
+            max_retries: defaults.max_retries,
+            protocol_version: defaults.protocol_version,
+        }
+    }
+}
+
 /// 配对状态机
 ///
 /// 维护配对会话的状态,并根据事件产生状态转换和动作。
@@ -342,6 +371,8 @@ pub struct PairingStateMachine {
     state: PairingState,
     /// 配对上下文 (nonce、会话ID等)
     context: PairingContext,
+    /// 配对策略
+    policy: PairingPolicy,
 }
 
 /// 配对流程的上下文信息
@@ -365,10 +396,6 @@ struct PairingContext {
     local_identity_pubkey: Option<Vec<u8>>,
     /// 对端身份公钥
     peer_identity_pubkey: Option<Vec<u8>>,
-    /// 当前重试次数
-    attempt: u8,
-    /// 最大重试次数
-    max_attempts: u8,
     /// 短码 (用户确认码)
     short_code: Option<String>,
     /// 当前 PIN
@@ -393,8 +420,6 @@ impl Default for PairingContext {
             peer_nonce: None,
             local_identity_pubkey: None,
             peer_identity_pubkey: None,
-            attempt: 0,
-            max_attempts: 3,
             short_code: None,
             pin: None,
             local_fingerprint: None,
@@ -407,9 +432,12 @@ impl Default for PairingContext {
 impl PairingStateMachine {
     /// 创建新的状态机实例
     pub fn new() -> Self {
+        let policy = PairingPolicy::default();
+        let mut context = PairingContext::default();
         Self {
             state: PairingState::Idle,
-            context: PairingContext::default(),
+            context,
+            policy,
         }
     }
 
@@ -419,6 +447,7 @@ impl PairingStateMachine {
         local_device_id: String,
         local_identity_pubkey: Vec<u8>,
     ) -> Self {
+        let policy = PairingPolicy::default();
         let mut context = PairingContext::default();
         context.local_device_name = Some(local_device_name);
         context.local_device_id = Some(local_device_id);
@@ -426,6 +455,25 @@ impl PairingStateMachine {
         Self {
             state: PairingState::Idle,
             context,
+            policy,
+        }
+    }
+
+    /// 创建新的状态机实例并注入本地设备信息与策略
+    pub fn new_with_local_identity_and_policy(
+        local_device_name: String,
+        local_device_id: String,
+        local_identity_pubkey: Vec<u8>,
+        policy: PairingPolicy,
+    ) -> Self {
+        let mut context = PairingContext::default();
+        context.local_device_name = Some(local_device_name);
+        context.local_device_id = Some(local_device_id);
+        context.local_identity_pubkey = Some(local_identity_pubkey);
+        Self {
+            state: PairingState::Idle,
+            context,
+            policy,
         }
     }
 
@@ -594,7 +642,7 @@ impl PairingStateMachine {
                     &challenge.nonce,
                     &local_identity_pubkey,
                     &challenge.identity_pubkey,
-                    "1.0.0",
+                    &self.policy.protocol_version,
                 ) {
                     Ok(code) => code,
                     Err(err) => {
@@ -606,19 +654,28 @@ impl PairingStateMachine {
                 self.context.local_fingerprint = Some(local_fingerprint.clone());
                 self.context.peer_fingerprint = Some(peer_fingerprint.clone());
 
+                let expires_at =
+                    now + Duration::seconds(self.policy.user_verification_timeout_secs);
                 let new_state = PairingState::WaitingUserVerification {
                     session_id: challenge.session_id.clone(),
                     short_code: short_code.clone(),
                     peer_fingerprint: peer_fingerprint.clone(),
-                    expires_at: now + Duration::minutes(5),
+                    expires_at,
                 };
-                let actions = vec![PairingAction::ShowVerification {
-                    session_id: challenge.session_id,
-                    short_code,
-                    local_fingerprint,
-                    peer_fingerprint,
-                    peer_display_name: challenge.device_name,
-                }];
+                let actions = vec![
+                    PairingAction::ShowVerification {
+                        session_id: challenge.session_id.clone(),
+                        short_code,
+                        local_fingerprint,
+                        peer_fingerprint,
+                        peer_display_name: challenge.device_name,
+                    },
+                    PairingAction::StartTimer {
+                        session_id: challenge.session_id,
+                        kind: TimeoutKind::UserVerification,
+                        deadline: expires_at,
+                    },
+                ];
 
                 (new_state, actions)
             }
@@ -674,10 +731,18 @@ impl PairingStateMachine {
                 let new_state = PairingState::WaitingForResponse {
                     session_id: session_id.clone(),
                 };
-                let actions = vec![PairingAction::Send {
-                    peer_id,
-                    message: PairingMessage::Challenge(challenge),
-                }];
+                let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
+                let actions = vec![
+                    PairingAction::Send {
+                        peer_id,
+                        message: PairingMessage::Challenge(challenge),
+                    },
+                    PairingAction::StartTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::WaitingResponse,
+                        deadline,
+                    },
+                ];
 
                 (new_state, actions)
             }
@@ -687,25 +752,45 @@ impl PairingStateMachine {
                 PairingState::WaitingUserVerification { session_id, .. },
                 PairingEvent::UserAccept { .. },
             ) => {
+                let cancel_action = PairingAction::CancelTimer {
+                    session_id: session_id.clone(),
+                    kind: TimeoutKind::UserVerification,
+                };
                 let peer_id = match self.context.peer_id.clone() {
                     Some(id) => id,
                     None => {
-                        return self
-                            .fail_with_reason(FailureReason::Other("Missing peer id".to_string()))
+                        return (
+                            PairingState::Failed {
+                                session_id: session_id.clone(),
+                                reason: FailureReason::Other("Missing peer id".to_string()),
+                            },
+                            vec![cancel_action],
+                        )
                     }
                 };
                 let pin = match self.context.pin.clone() {
                     Some(pin) => pin,
                     None => {
-                        return self
-                            .fail_with_reason(FailureReason::Other("Missing PIN".to_string()))
+                        return (
+                            PairingState::Failed {
+                                session_id: session_id.clone(),
+                                reason: FailureReason::Other("Missing PIN".to_string()),
+                            },
+                            vec![cancel_action],
+                        )
                     }
                 };
 
                 let pin_hash = match hash_pin(&pin) {
                     Ok(hash) => hash,
                     Err(err) => {
-                        return self.fail_with_reason(FailureReason::CryptoError(err.to_string()))
+                        return (
+                            PairingState::Failed {
+                                session_id: session_id.clone(),
+                                reason: FailureReason::CryptoError(err.to_string()),
+                            },
+                            vec![cancel_action],
+                        )
                     }
                 };
                 self.context.pin = None;
@@ -720,10 +805,19 @@ impl PairingStateMachine {
                     session_id: session_id.clone(),
                     attempt: 0,
                 };
-                let actions = vec![PairingAction::Send {
-                    peer_id,
-                    message: PairingMessage::Response(response),
-                }];
+                let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
+                let actions = vec![
+                    cancel_action,
+                    PairingAction::Send {
+                        peer_id,
+                        message: PairingMessage::Response(response),
+                    },
+                    PairingAction::StartTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::WaitingConfirm,
+                        deadline,
+                    },
+                ];
 
                 (new_state, actions)
             }
@@ -745,6 +839,10 @@ impl PairingStateMachine {
                         Ok(result) => result,
                         Err(reason) => return self.fail_with_reason(reason),
                     };
+                let cancel_action = PairingAction::CancelTimer {
+                    session_id: session_id.clone(),
+                    kind: TimeoutKind::WaitingResponse,
+                };
 
                 if matches!(next_state, PairingState::ConfirmSent { .. }) {
                     let paired_device = match self.build_paired_device(now) {
@@ -756,6 +854,7 @@ impl PairingStateMachine {
                         paired_device: paired_device.clone(),
                     };
                     let actions = vec![
+                        cancel_action,
                         confirm_action,
                         PairingAction::PersistPairedDevice {
                             session_id: session_id.clone(),
@@ -766,7 +865,7 @@ impl PairingStateMachine {
                     return (new_state, actions);
                 }
 
-                (next_state, vec![confirm_action])
+                (next_state, vec![cancel_action, confirm_action])
             }
 
             // ========== ResponseSent -> PersistingTrust ==========
@@ -791,10 +890,16 @@ impl PairingStateMachine {
                     session_id: session_id.clone(),
                     paired_device: paired_device.clone(),
                 };
-                let actions = vec![PairingAction::PersistPairedDevice {
-                    session_id: session_id.clone(),
-                    device: paired_device,
-                }];
+                let actions = vec![
+                    PairingAction::CancelTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::WaitingConfirm,
+                    },
+                    PairingAction::PersistPairedDevice {
+                        session_id: session_id.clone(),
+                        device: paired_device,
+                    },
+                ];
 
                 (new_state, actions)
             }
@@ -1218,5 +1323,121 @@ mod tests {
         assert!(confirm.success);
         assert_eq!(confirm.sender_device_name, "LocalDevice");
         assert_eq!(confirm.device_id, "device-1");
+    }
+
+    #[test]
+    fn test_user_verification_expiry_uses_policy() {
+        let policy = PairingPolicy {
+            step_timeout_secs: 5,
+            user_verification_timeout_secs: 30,
+            max_retries: 2,
+            protocol_version: "2.0.0".to_string(),
+        };
+        let now = Utc::now();
+        let mut sm = PairingStateMachine::new_with_local_identity_and_policy(
+            "Local".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+            policy,
+        );
+        let challenge = PairingChallenge {
+            session_id: "session-1".to_string(),
+            pin: "123456".to_string(),
+            device_name: "Peer".to_string(),
+            device_id: "device-2".to_string(),
+            identity_pubkey: vec![2; 32],
+            nonce: vec![9; 16],
+        };
+
+        let (state, _actions) = sm.handle_event(
+            PairingEvent::RecvChallenge {
+                session_id: "session-1".to_string(),
+                challenge,
+            },
+            now,
+        );
+
+        let PairingState::WaitingUserVerification { expires_at, .. } = state else {
+            panic!("expected WaitingUserVerification");
+        };
+        assert_eq!(expires_at, now + Duration::seconds(30));
+    }
+
+    #[test]
+    fn test_user_verification_starts_timer() {
+        let policy = PairingPolicy::default();
+        let now = Utc::now();
+        let mut sm = PairingStateMachine::new_with_local_identity_and_policy(
+            "Local".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+            policy,
+        );
+        let challenge = PairingChallenge {
+            session_id: "session-1".to_string(),
+            pin: "123456".to_string(),
+            device_name: "Peer".to_string(),
+            device_id: "device-2".to_string(),
+            identity_pubkey: vec![2; 32],
+            nonce: vec![9; 16],
+        };
+
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::RecvChallenge {
+                session_id: "session-1".to_string(),
+                challenge,
+            },
+            now,
+        );
+
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::StartTimer {
+                kind: TimeoutKind::UserVerification,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn test_user_accept_cancels_verification_timer() {
+        let policy = PairingPolicy::default();
+        let now = Utc::now();
+        let mut sm = PairingStateMachine::new_with_local_identity_and_policy(
+            "Local".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+            policy,
+        );
+        let challenge = PairingChallenge {
+            session_id: "session-1".to_string(),
+            pin: "123456".to_string(),
+            device_name: "Peer".to_string(),
+            device_id: "device-2".to_string(),
+            identity_pubkey: vec![2; 32],
+            nonce: vec![9; 16],
+        };
+        sm.handle_event(
+            PairingEvent::RecvChallenge {
+                session_id: "session-1".to_string(),
+                challenge,
+            },
+            now,
+        );
+
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: "session-1".to_string(),
+            },
+            now,
+        );
+
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::CancelTimer {
+                kind: TimeoutKind::UserVerification,
+                ..
+            }
+        )));
     }
 }
