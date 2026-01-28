@@ -635,33 +635,22 @@ async fn run_swarm(
                     PairingCommand::SendMessage { peer_id, message } => {
                         let session_id = message.session_id().to_string();
                         let message_kind = pairing_message_kind(&message);
-                        let channel = {
-                            let mut channels = pairing_response_channels.lock().await;
-                            channels.remove(&session_id)
-                        };
-
-                        if let Some(channel) = channel {
-                            let elapsed = channel.received_at.elapsed();
-                            if let Err(err) = swarm
-                                .behaviour_mut()
-                                .pairing
-                                .send_response(channel.channel, message)
-                            {
-                                warn!(
+                        if !matches!(message, PairingMessage::Request(_)) {
+                            let channel = {
+                                let mut channels = pairing_response_channels.lock().await;
+                                channels.remove(&session_id)
+                            };
+                            if let Some(channel) = channel {
+                                let elapsed = channel.received_at.elapsed();
+                                drop(channel.channel);
+                                debug!(
                                     session_id = %session_id,
                                     message_kind = %message_kind,
                                     elapsed_ms = elapsed.as_millis(),
-                                    error = ?err,
-                                    "failed to send pairing response"
+                                    "discarded pairing response channel"
                                 );
                             }
-                            continue;
                         }
-                        warn!(
-                            session_id = %session_id,
-                            message_kind = %message_kind,
-                            "pairing response channel missing; falling back to request"
-                        );
 
                         let peer = match peer_id.as_str().parse::<PeerId>() {
                             Ok(peer) => peer,
@@ -670,6 +659,11 @@ async fn run_swarm(
                                 continue;
                             }
                         };
+                        debug!(
+                            session_id = %session_id,
+                            message_kind = %message_kind,
+                            "sending pairing message as request"
+                        );
                         swarm.behaviour_mut().pairing.send_request(&peer, message);
                     }
                 }
@@ -1193,7 +1187,10 @@ mod tests {
                                     channels.remove("session-2")
                                 };
                                 if let Some(channel) = channel {
-                                    let _ = swarm_b.behaviour_mut().pairing.send_response(channel, challenge.clone());
+                                    let _ = swarm_b
+                                        .behaviour_mut()
+                                        .pairing
+                                        .send_response(channel.channel, challenge.clone());
                                 }
                             }
                         }
@@ -1205,6 +1202,112 @@ mod tests {
         .expect("response timeout");
 
         assert!(matches!(response, PairingMessage::Challenge(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pairing_challenge_sent_as_request_even_with_channel() {
+        let keypair_a = identity::Keypair::generate_ed25519();
+        let keypair_b = identity::Keypair::generate_ed25519();
+        let peer_a = PeerId::from(keypair_a.public());
+        let peer_b = PeerId::from(keypair_b.public());
+
+        let mut swarm_a = build_swarm(keypair_a);
+        let mut swarm_b = build_swarm(keypair_b);
+
+        let addr_b = listen_on_random(&mut swarm_b).await;
+        let _addr_a = listen_on_random(&mut swarm_a).await;
+        let dial_addr = addr_b.with(Protocol::P2p(peer_b));
+        swarm_a.dial(dial_addr).expect("dial b");
+
+        let caches = Arc::new(RwLock::new(PeerCaches::new()));
+        let (event_tx, mut event_rx) = mpsc::channel(8);
+        let policy_resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(FakeResolver);
+        let pairing_response_channels = Arc::new(AsyncMutex::new(HashMap::new()));
+        let (pairing_tx, pairing_rx) = mpsc::channel(8);
+        let (_business_tx, business_rx) = mpsc::channel(8);
+
+        let swarm_task = tokio::spawn(run_swarm(
+            swarm_b,
+            caches,
+            event_tx,
+            policy_resolver,
+            pairing_response_channels,
+            pairing_rx,
+            business_rx,
+        ));
+
+        let request = PairingMessage::Request(PairingRequest {
+            session_id: "session-3".to_string(),
+            device_name: "device-a".to_string(),
+            device_id: "device-a".to_string(),
+            peer_id: "peer-a".to_string(),
+            identity_pubkey: vec![1; 32],
+            nonce: vec![2; 16],
+        });
+        swarm_a
+            .behaviour_mut()
+            .pairing
+            .send_request(&peer_b, request);
+
+        let _received = timeout(Duration::from_secs(10), async {
+            loop {
+                tokio::select! {
+                    event = event_rx.recv() => {
+                        if let Some(NetworkEvent::PairingMessageReceived { .. }) = event {
+                            return;
+                        }
+                    }
+                    event = swarm_a.select_next_some() => {
+                        let _ = event;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("pairing request event");
+
+        let challenge = PairingMessage::Challenge(PairingChallenge {
+            session_id: "session-3".to_string(),
+            pin: "654321".to_string(),
+            device_name: "device-b".to_string(),
+            device_id: "device-b".to_string(),
+            identity_pubkey: vec![3; 32],
+            nonce: vec![4; 16],
+        });
+        pairing_tx
+            .send(PairingCommand::SendMessage {
+                peer_id: uc_core::PeerId::from(peer_a.to_string()),
+                message: challenge,
+            })
+            .await
+            .expect("queue challenge");
+
+        let received_as_request = timeout(Duration::from_secs(10), async {
+            loop {
+                if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) =
+                    swarm_a.select_next_some().await
+                {
+                    if let request_response::Event::Message { message, .. } = event {
+                        match message {
+                            request_response::Message::Request { request, .. } => {
+                                let _ = request;
+                                return true;
+                            }
+                            request_response::Message::Response { response, .. } => {
+                                let _ = response;
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        })
+        .await
+        .expect("challenge delivery");
+
+        swarm_task.abort();
+
+        assert!(received_as_request);
     }
 
     #[tokio::test]
