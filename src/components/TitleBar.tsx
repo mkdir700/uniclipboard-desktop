@@ -18,7 +18,7 @@ interface TitleBarProps {
 // macOS window style configuration (must match enableModernWindowStyle call)
 const MAC_WINDOW_STYLE = {
   cornerRadius: 12,
-  offsetX: -15,
+  offsetX: -10,
   offsetY: -3,
 } as const
 

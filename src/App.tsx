@@ -15,6 +15,7 @@ import { SettingProvider } from '@/contexts/SettingContext'
 import { ShortcutProvider } from '@/contexts/ShortcutContext'
 import { UpdateProvider } from '@/contexts/UpdateContext'
 import { useP2P } from '@/hooks/useP2P'
+import { usePlatform } from '@/hooks/usePlatform'
 import { MainLayout, SettingsFullLayout, WindowShell } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
 import DevicesPage from '@/pages/DevicesPage'
@@ -194,8 +195,11 @@ const AppContentWithBar = () => {
   // WindowShell provides the correct window-level structure:
   // - TitleBar: Window chrome layer (full-width, drag region)
   // - Content: App layout layer (Sidebar + Main via routes)
+  const { isMac, isTauri } = usePlatform()
+  const showCustomTitleBar = !isTauri || isMac
+
   return (
-    <WindowShell titleBar={<TitleBarWithSearch />}>
+    <WindowShell titleBar={showCustomTitleBar ? <TitleBarWithSearch /> : null}>
       <AppContent />
     </WindowShell>
   )
