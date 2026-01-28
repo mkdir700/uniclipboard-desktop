@@ -35,3 +35,4 @@ src-tauri/.app_data/
 public/splashscreen.html
 .worktrees/
 .env
+.sisyphus
