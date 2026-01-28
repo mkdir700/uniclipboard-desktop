@@ -19,7 +19,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -403,114 +403,149 @@ impl PairingOrchestrator {
         action: PairingAction,
     ) -> impl Future<Output = Result<()>> + Send {
         async move {
-            match action {
-                PairingAction::Send {
-                    peer_id: target_peer,
-                    message,
-                } => {
-                    action_tx
-                        .send(PairingAction::Send {
-                            peer_id: target_peer,
-                            message,
-                        })
-                        .await
-                        .context("Failed to queue send action")?;
-                }
-                PairingAction::ShowVerification { .. } | PairingAction::EmitResult { .. } => {
-                    action_tx
-                        .send(action)
-                        .await
-                        .context("Failed to queue ui action")?;
-                }
-                PairingAction::PersistPairedDevice {
-                    session_id: _,
-                    device,
-                } => {
-                    device_repo
-                        .upsert(device.clone())
-                        .await
-                        .context("Failed to persist paired device")?;
+            let mut queue = VecDeque::from([action]);
+            let mut pending_error: Option<anyhow::Error> = None;
 
-                    // 通知状态机持久化成功
-                    let mut sessions = sessions.write().await;
-                    if let Some(context) = sessions.get_mut(&session_id) {
-                        let _ = context.state_machine.handle_event(
-                            PairingEvent::PersistOk {
-                                session_id: session_id.clone(),
-                                device_id: device.peer_id.to_string(),
-                            },
-                            Utc::now(),
-                        );
+            while let Some(action) = queue.pop_front() {
+                match action {
+                    PairingAction::Send {
+                        peer_id: target_peer,
+                        message,
+                    } => {
+                        action_tx
+                            .send(PairingAction::Send {
+                                peer_id: target_peer,
+                                message,
+                            })
+                            .await
+                            .context("Failed to queue send action")?;
                     }
-                }
-                PairingAction::StartTimer {
-                    session_id: action_session_id,
-                    kind,
-                    deadline,
-                } => {
-                    let sessions_for_timer = sessions.clone();
-                    let mut sessions = sessions.write().await;
-                    let context = sessions
-                        .get_mut(&action_session_id)
-                        .context("Session not found")?;
-                    {
+                    PairingAction::ShowVerification { .. } | PairingAction::EmitResult { .. } => {
+                        action_tx
+                            .send(action)
+                            .await
+                            .context("Failed to queue ui action")?;
+                    }
+                    PairingAction::PersistPairedDevice {
+                        session_id: _,
+                        device,
+                    } => {
+                        match device_repo.upsert(device.clone()).await {
+                            Ok(()) => {
+                                // 通知状态机持久化成功
+                                let actions = {
+                                    let mut sessions = sessions.write().await;
+                                    if let Some(context) = sessions.get_mut(&session_id) {
+                                        let (_state, actions) = context.state_machine.handle_event(
+                                            PairingEvent::PersistOk {
+                                                session_id: session_id.clone(),
+                                                device_id: device.peer_id.to_string(),
+                                            },
+                                            Utc::now(),
+                                        );
+                                        actions
+                                    } else {
+                                        vec![]
+                                    }
+                                };
+                                queue.extend(actions);
+                            }
+                            Err(err) => {
+                                let actions = {
+                                    let mut sessions = sessions.write().await;
+                                    if let Some(context) = sessions.get_mut(&session_id) {
+                                        let (_state, actions) = context.state_machine.handle_event(
+                                            PairingEvent::PersistErr {
+                                                session_id: session_id.clone(),
+                                                error: err.to_string(),
+                                            },
+                                            Utc::now(),
+                                        );
+                                        actions
+                                    } else {
+                                        vec![]
+                                    }
+                                };
+                                queue.extend(actions);
+                                if pending_error.is_none() {
+                                    pending_error = Some(anyhow::Error::new(err));
+                                }
+                            }
+                        }
+                    }
+                    PairingAction::StartTimer {
+                        session_id: action_session_id,
+                        kind,
+                        deadline,
+                    } => {
+                        let sessions_for_timer = sessions.clone();
+                        let mut sessions = sessions.write().await;
+                        let context = sessions
+                            .get_mut(&action_session_id)
+                            .context("Session not found")?;
+                        {
+                            let mut timers = context.timers.lock().await;
+                            if let Some(handle) = timers.remove(&kind) {
+                                handle.abort();
+                            }
+                        }
+
+                        let action_tx = action_tx.clone();
+                        let sessions = sessions_for_timer;
+                        let device_repo = device_repo.clone();
+                        let session_id_for_log = action_session_id.clone();
+                        let sleep_duration = deadline
+                            .signed_duration_since(Utc::now())
+                            .to_std()
+                            .unwrap_or_else(|_| std::time::Duration::from_secs(0));
+                        let future = async move {
+                            tokio::time::sleep(sleep_duration).await;
+                            if let Err(error) = Self::handle_timeout(
+                                action_tx,
+                                sessions,
+                                device_repo,
+                                action_session_id,
+                                kind,
+                            )
+                            .await
+                            {
+                                tracing::error!(
+                                    %session_id_for_log,
+                                    ?kind,
+                                    error = ?error,
+                                    "pairing timer handling failed"
+                                );
+                            }
+                        };
+                        let future: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(future);
+                        let handle = tokio::spawn(future);
+
+                        let abort_handle = handle.abort_handle();
+                        let mut timers = context.timers.lock().await;
+                        timers.insert(kind, abort_handle);
+                    }
+                    PairingAction::CancelTimer {
+                        session_id: action_session_id,
+                        kind,
+                    } => {
+                        let mut sessions = sessions.write().await;
+                        let context = sessions
+                            .get_mut(&action_session_id)
+                            .context("Session not found")?;
                         let mut timers = context.timers.lock().await;
                         if let Some(handle) = timers.remove(&kind) {
                             handle.abort();
                         }
                     }
-
-                    let action_tx = action_tx.clone();
-                    let sessions = sessions_for_timer;
-                    let device_repo = device_repo.clone();
-                    let session_id_for_log = action_session_id.clone();
-                    let sleep_duration = deadline
-                        .signed_duration_since(Utc::now())
-                        .to_std()
-                        .unwrap_or_else(|_| std::time::Duration::from_secs(0));
-                    let future = async move {
-                        tokio::time::sleep(sleep_duration).await;
-                        if let Err(error) = Self::handle_timeout(
-                            action_tx,
-                            sessions,
-                            device_repo,
-                            action_session_id,
-                            kind,
-                        )
-                        .await
-                        {
-                            tracing::error!(
-                                %session_id_for_log,
-                                ?kind,
-                                error = ?error,
-                                "pairing timer handling failed"
-                            );
-                        }
-                    };
-                    let future: Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(future);
-                    let handle = tokio::spawn(future);
-
-                    let abort_handle = handle.abort_handle();
-                    let mut timers = context.timers.lock().await;
-                    timers.insert(kind, abort_handle);
-                }
-                PairingAction::CancelTimer {
-                    session_id: action_session_id,
-                    kind,
-                } => {
-                    let mut sessions = sessions.write().await;
-                    let context = sessions
-                        .get_mut(&action_session_id)
-                        .context("Session not found")?;
-                    let mut timers = context.timers.lock().await;
-                    if let Some(handle) = timers.remove(&kind) {
-                        handle.abort();
+                    PairingAction::LogTransition { .. } => {
+                        // 日志已记录,无需额外操作
                     }
+                    PairingAction::NoOp => {}
                 }
-                PairingAction::LogTransition { .. } => {
-                    // 日志已记录,无需额外操作
-                }
-                PairingAction::NoOp => {}
+            }
+
+            if let Some(error) = pending_error {
+                return Err(error).context("Failed to persist paired device");
             }
 
             Ok(())
