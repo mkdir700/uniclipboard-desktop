@@ -14,6 +14,6 @@ pub use config::load_config;
 pub use init::ensure_default_device_name;
 pub use runtime::{create_app, create_runtime, AppRuntime, UseCases};
 pub use wiring::{
-    resolve_pairing_device_name, start_background_tasks, wire_dependencies, BackgroundRuntimeDeps,
-    WiredDependencies,
+    resolve_pairing_config, resolve_pairing_device_name, start_background_tasks, wire_dependencies,
+    BackgroundRuntimeDeps, WiredDependencies,
 };

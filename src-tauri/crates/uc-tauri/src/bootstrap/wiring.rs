@@ -41,10 +41,11 @@ use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
 use crate::events::{
-    P2PPairingCompleteEvent, P2PPairingFailedEvent, P2PPairingRequestEvent, P2PPinReadyEvent,
+    forward_libp2p_start_failed, P2PPairingCompleteEvent, P2PPairingFailedEvent,
+    P2PPairingRequestEvent, P2PPinReadyEvent,
 };
 use uc_app::app_paths::AppPaths;
-use uc_app::usecases::{PairingOrchestrator, ResolveConnectionPolicy};
+use uc_app::usecases::{PairingConfig, PairingOrchestrator, ResolveConnectionPolicy};
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
@@ -56,6 +57,7 @@ use uc_core::ports::clipboard::{
     SpoolQueuePort, SpoolRequest,
 };
 use uc_core::ports::*;
+use uc_core::settings::model::Settings;
 use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::{
     BackgroundBlobWorker, ClipboardRepresentationNormalizer, InMemoryClipboardChangeOrigin,
@@ -1053,6 +1055,16 @@ pub async fn resolve_pairing_device_name(settings: Arc<dyn SettingsPort>) -> Str
         Err(err) => {
             warn!(error = %err, "Failed to load settings for pairing device name");
             DEFAULT_PAIRING_DEVICE_NAME.to_string()
+        }
+    }
+}
+
+pub async fn resolve_pairing_config(settings: Arc<dyn SettingsPort>) -> PairingConfig {
+    match settings.load().await {
+        Ok(settings) => PairingConfig::from_settings(&settings),
+        Err(err) => {
+            warn!(error = %err, "Failed to load settings for pairing config");
+            PairingConfig::from_settings(&Settings::default())
         }
     }
 }
