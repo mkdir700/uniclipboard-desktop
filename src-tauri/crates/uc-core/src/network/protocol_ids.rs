@@ -12,3 +12,14 @@ impl ProtocolId {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ProtocolId;
+
+    #[test]
+    fn protocol_id_strings_match_expected_values() {
+        assert_eq!(ProtocolId::Pairing.as_str(), "/uc-pairing/1.0.0");
+        assert_eq!(ProtocolId::Business.as_str(), "/uc-business/1.0.0");
+    }
+}
