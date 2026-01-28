@@ -456,9 +456,11 @@ fn create_infra_layer(
 /// * `platform_cmd_tx` - Command sender for platform runtime / 平台运行时命令发送器
 /// * `encryption` - Encryption service for blob store decorator / Blob 存储加密服务
 /// * `blob_repository` - Blob repository for BlobWriter / BlobWriter 依赖的仓库
+/// * `paired_device_repo` - Paired device repository for policy resolver / 已配对设备仓库（用于策略解析）
 /// * `clock` - Clock service for BlobWriter timestamps / BlobWriter 时间戳服务
 /// * `storage_config` - Clipboard storage configuration / 剪贴板存储配置
 /// * `identity_store` - Identity store for libp2p keypair persistence / libp2p 身份持久化存储
+/// * `settings_repo` - Settings repository for device name resolution / 设置仓库（用于设备名解析）
 ///
 /// # Note / 注意
 ///
@@ -478,6 +480,7 @@ fn create_platform_layer(
     clock: Arc<dyn ClockPort>,
     storage_config: Arc<ClipboardStorageConfig>,
     identity_store: Arc<dyn IdentityStorePort>,
+    settings_repo: Arc<dyn SettingsPort>,
 ) -> WiringResult<PlatformLayer> {
     // Create system clipboard implementation (platform-specific)
     // 创建系统剪贴板实现（平台特定）
@@ -493,6 +496,9 @@ fn create_platform_layer(
         WiringError::SettingsInit(format!("Failed to create device identity: {}", e))
     })?;
     let device_identity: Arc<dyn DeviceIdentityPort> = Arc::new(device_identity);
+    let local_device_id = device_identity.current_device_id().to_string();
+    let local_device_name =
+        async_runtime::block_on(resolve_pairing_device_name(settings_repo.clone()));
 
     // Create blob store (filesystem-based)
     // 创建 blob 存储（基于文件系统）
@@ -510,7 +516,13 @@ fn create_platform_layer(
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
     let policy_resolver = Arc::new(ResolveConnectionPolicy::new(paired_device_repo.clone()));
     let libp2p_network = Arc::new(
-        Libp2pNetworkAdapter::new(identity_store, policy_resolver).map_err(|e| {
+        Libp2pNetworkAdapter::new(
+            identity_store,
+            policy_resolver,
+            local_device_id,
+            local_device_name,
+        )
+        .map_err(|e| {
             WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}"))
         })?,
     );
@@ -786,6 +798,7 @@ pub fn wire_dependencies_with_identity_store(
         infra.clock.clone(),
         storage_config.clone(),
         identity_store,
+        infra.settings_repo.clone(),
     )?;
 
     // Step 3.5: Wrap ports with encryption decorators
@@ -1773,6 +1786,8 @@ mod tests {
             );
             let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
             let storage_config = Arc::new(ClipboardStorageConfig::defaults());
+            let settings_repo: Arc<dyn SettingsPort> =
+                Arc::new(FileSettingsRepository::new(temp_dir.join("settings.json")));
 
             let result = create_platform_layer(
                 secure_storage,
@@ -1784,6 +1799,7 @@ mod tests {
                 clock,
                 storage_config,
                 test_identity_store(),
+                settings_repo,
             );
 
             match result {

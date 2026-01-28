@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use libp2p::{
     futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt},
-    identity, mdns, noise,
+    identify, identity, mdns, noise,
     request_response::{self, ProtocolSupport},
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, StreamProtocol, SwarmBuilder,
@@ -116,6 +116,7 @@ impl PeerCaches {
 struct Libp2pBehaviour {
     mdns: mdns::tokio::Behaviour,
     pairing: request_response::json::Behaviour<PairingMessage, PairingMessage>,
+    identify: identify::Behaviour,
     stream: stream::Behaviour,
 }
 
@@ -123,6 +124,7 @@ struct Libp2pBehaviour {
 enum Libp2pBehaviourEvent {
     Mdns(mdns::Event),
     Pairing(request_response::Event<PairingMessage, PairingMessage>),
+    Identify(identify::Event),
     Stream,
 }
 
@@ -138,6 +140,12 @@ impl From<request_response::Event<PairingMessage, PairingMessage>> for Libp2pBeh
     }
 }
 
+impl From<identify::Event> for Libp2pBehaviourEvent {
+    fn from(event: identify::Event) -> Self {
+        Self::Identify(event)
+    }
+}
+
 impl From<()> for Libp2pBehaviourEvent {
     fn from(_: ()) -> Self {
         Self::Stream
@@ -145,7 +153,11 @@ impl From<()> for Libp2pBehaviourEvent {
 }
 
 impl Libp2pBehaviour {
-    fn new(local_peer_id: PeerId) -> Result<Self> {
+    fn new(
+        local_peer_id: PeerId,
+        keypair: &identity::Keypair,
+        agent_version: String,
+    ) -> Result<Self> {
         let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)
             .map_err(|e| anyhow!("failed to create mdns behaviour: {e}"))?;
         let config = request_response::Config::default()
@@ -157,10 +169,15 @@ impl Libp2pBehaviour {
             )],
             config,
         );
+        let identify = identify::Behaviour::new(
+            identify::Config::new(agent_version, keypair.public())
+                .with_push_listen_addr_updates(true),
+        );
         let stream = stream::Behaviour::new();
         Ok(Self {
             mdns,
             pairing,
+            identify,
             stream,
         })
     }
@@ -169,6 +186,8 @@ impl Libp2pBehaviour {
 pub struct Libp2pNetworkAdapter {
     local_peer_id: String,
     local_identity_pubkey: Vec<u8>,
+    local_device_id: String,
+    local_device_name: String,
     caches: Arc<RwLock<PeerCaches>>,
     event_tx: mpsc::Sender<NetworkEvent>,
     event_rx: Mutex<Option<mpsc::Receiver<NetworkEvent>>>,
@@ -189,6 +208,8 @@ impl Libp2pNetworkAdapter {
     pub fn new(
         identity_store: Arc<dyn IdentityStorePort>,
         policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
+        local_device_id: String,
+        local_device_name: String,
     ) -> Result<Self> {
         let keypair = load_or_create_identity(identity_store.as_ref())
             .map_err(|e| anyhow!("failed to load libp2p identity: {e}"))?;
@@ -203,6 +224,8 @@ impl Libp2pNetworkAdapter {
         Ok(Self {
             local_peer_id,
             local_identity_pubkey,
+            local_device_id,
+            local_device_name,
             caches: Arc::new(RwLock::new(PeerCaches::new())),
             event_tx,
             event_rx: Mutex::new(Some(event_rx)),
@@ -226,7 +249,11 @@ impl Libp2pNetworkAdapter {
     pub fn spawn_swarm(&self) -> Result<()> {
         let keypair = self.take_keypair()?;
         let local_peer_id = PeerId::from(keypair.public());
-        let behaviour = Libp2pBehaviour::new(local_peer_id)
+        let agent_version = format!(
+            "uniclipboard/2.0.0/{}/{}",
+            self.local_device_id, self.local_device_name
+        );
+        let behaviour = Libp2pBehaviour::new(local_peer_id, &keypair, agent_version)
             .map_err(|e| anyhow!("failed to create libp2p behaviour: {e}"))?;
 
         let mut swarm = SwarmBuilder::with_existing_identity(keypair)
@@ -594,6 +621,29 @@ async fn run_swarm(
                         )
                         .await;
                     }
+                    SwarmEvent::Behaviour(Libp2pBehaviourEvent::Identify(event)) => {
+                        if let identify::Event::Received { peer_id, info, .. } = event {
+                            let agent_version = info.agent_version;
+                            if let Some(device_name) =
+                                parse_agent_version_device_name(&agent_version)
+                            {
+                                let peer_id = peer_id.to_string();
+                                let mut caches = caches.write().await;
+                                if !caches.update_device_name(&peer_id, device_name) {
+                                    debug!(
+                                        peer_id = %peer_id,
+                                        "identify device name update skipped (peer not cached)"
+                                    );
+                                }
+                            } else {
+                                debug!(
+                                    peer_id = %peer_id,
+                                    agent_version_len = agent_version.len(),
+                                    "identify agent_version format mismatch"
+                                );
+                            }
+                        }
+                    }
                     SwarmEvent::Behaviour(Libp2pBehaviourEvent::Stream) => {}
                     SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                         let peer_id = peer_id.to_string();
@@ -818,6 +868,21 @@ fn apply_peer_not_ready(caches: &mut PeerCaches, peer_id: &str) -> Option<Networ
     }
 }
 
+fn parse_agent_version_device_name(agent_version: &str) -> Option<&str> {
+    let mut parts = agent_version.splitn(4, '/');
+    match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some("uniclipboard"), Some(_version), Some(_device_id), Some(device_name)) => {
+            let trimmed = device_name.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -884,6 +949,18 @@ mod tests {
                 .and_then(|peer| peer.device_name.as_deref()),
             Some("Desk")
         );
+    }
+
+    #[test]
+    fn parse_agent_version_device_name_accepts_strict_format() {
+        let agent_version = "uniclipboard/2.0.0/123456/Desk";
+        assert_eq!(parse_agent_version_device_name(agent_version), Some("Desk"));
+    }
+
+    #[test]
+    fn parse_agent_version_device_name_rejects_invalid_format() {
+        let agent_version = "invalid/2.0.0/123456/Desk";
+        assert!(parse_agent_version_device_name(agent_version).is_none());
     }
 
     #[test]
@@ -1052,7 +1129,9 @@ mod tests {
 
     fn build_swarm(keypair: identity::Keypair) -> Swarm<Libp2pBehaviour> {
         let local_peer_id = PeerId::from(keypair.public());
-        let behaviour = Libp2pBehaviour::new(local_peer_id).expect("behaviour");
+        let agent_version = "uniclipboard/2.0.0/123456/TestDevice".to_string();
+        let behaviour =
+            Libp2pBehaviour::new(local_peer_id, &keypair, agent_version).expect("behaviour");
         SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
@@ -1081,7 +1160,12 @@ mod tests {
     #[tokio::test]
     async fn adapter_constructs_with_policy_resolver() {
         let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(FakeResolver);
-        let adapter = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()), resolver);
+        let adapter = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            resolver,
+            "device-1".to_string(),
+            "TestDevice".to_string(),
+        );
         assert!(adapter.is_ok());
     }
 
@@ -1311,6 +1395,8 @@ mod tests {
         let adapter = Libp2pNetworkAdapter::new(
             Arc::new(TestIdentityStore::default()),
             Arc::new(FakeResolver),
+            "device-1".to_string(),
+            "TestDevice".to_string(),
         )
         .expect("create adapter");
 
@@ -1346,6 +1432,8 @@ mod tests {
         let adapter = Libp2pNetworkAdapter::new(
             Arc::new(TestIdentityStore::default()),
             Arc::new(FakeResolver),
+            "device-1".to_string(),
+            "TestDevice".to_string(),
         )
         .expect("create adapter");
         let payload = vec![1, 2, 3, 4];
@@ -1371,6 +1459,8 @@ mod tests {
         let adapter = Libp2pNetworkAdapter::new(
             Arc::new(TestIdentityStore::default()),
             Arc::new(FakeResolver),
+            "device-1".to_string(),
+            "TestDevice".to_string(),
         )
         .expect("create adapter");
 
@@ -1401,11 +1491,15 @@ mod tests {
         let adapter_a = Libp2pNetworkAdapter::new(
             Arc::new(TestIdentityStore::default()),
             Arc::new(FakeResolver),
+            "device-a".to_string(),
+            "DeviceA".to_string(),
         )
         .expect("create adapter a");
         let adapter_b = Libp2pNetworkAdapter::new(
             Arc::new(TestIdentityStore::default()),
             Arc::new(FakeResolver),
+            "device-b".to_string(),
+            "DeviceB".to_string(),
         )
         .expect("create adapter b");
         adapter_a.spawn_swarm().expect("start swarm a");
@@ -1458,7 +1552,9 @@ mod tests {
     async fn listen_on_failure_emits_error_event_and_returns_err() {
         let keypair = identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(keypair.public());
-        let behaviour = Libp2pBehaviour::new(local_peer_id).expect("behaviour");
+        let agent_version = "uniclipboard/2.0.0/123456/TestDevice".to_string();
+        let behaviour =
+            Libp2pBehaviour::new(local_peer_id, &keypair, agent_version).expect("behaviour");
         let mut swarm = SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_tcp(
