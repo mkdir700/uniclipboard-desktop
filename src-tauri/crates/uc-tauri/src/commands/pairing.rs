@@ -91,136 +91,185 @@ pub async fn list_paired_devices(
 }
 
 #[tauri::command]
-pub async fn get_local_peer_id(runtime: State<'_, Arc<AppRuntime>>) -> Result<String, String> {
-    Ok(runtime.usecases().get_local_peer_id().execute())
+pub async fn get_local_peer_id(
+    runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
+) -> Result<String, String> {
+    let span = info_span!(
+        "command.pairing.get_local_peer_id",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    record_trace_fields(&span, &_trace);
+    async { Ok(runtime.usecases().get_local_peer_id().execute()) }
+        .instrument(span)
+        .await
 }
 
 #[tauri::command]
 pub async fn get_local_device_info(
     runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<LocalDeviceInfo, String> {
-    runtime
-        .usecases()
-        .get_local_device_info()
-        .execute()
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to get local device info");
-            let message = e.to_string();
-            emit_command_error(&runtime, "get_local_device_info", &message);
-            message
-        })
+    let span = info_span!(
+        "command.pairing.get_local_device_info",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    record_trace_fields(&span, &_trace);
+    async {
+        runtime
+            .usecases()
+            .get_local_device_info()
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to get local device info");
+                let message = e.to_string();
+                emit_command_error(&runtime, "get_local_device_info", &message);
+                message
+            })
+    }
+    .instrument(span)
+    .await
 }
 
 #[tauri::command]
 pub async fn get_p2p_peers(
     runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<Vec<P2PPeerInfo>, String> {
-    let discovered = runtime
-        .usecases()
-        .list_discovered_peers()
-        .execute()
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to list discovered peers");
-            let message = format!("list_discovered_peers: {}", e);
-            emit_command_error(&runtime, "get_p2p_peers", &message);
-            e.to_string()
-        })?;
-    let connected = runtime
-        .usecases()
-        .list_connected_peers()
-        .execute()
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to list connected peers");
-            let message = format!("list_connected_peers: {}", e);
-            emit_command_error(&runtime, "get_p2p_peers", &message);
-            e.to_string()
-        })?;
-    let connected_map = connected_peer_ids(&connected);
+    let span = info_span!(
+        "command.pairing.get_p2p_peers",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    record_trace_fields(&span, &_trace);
+    async {
+        let discovered = runtime
+            .usecases()
+            .list_discovered_peers()
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to list discovered peers");
+                let message = format!("list_discovered_peers: {}", e);
+                emit_command_error(&runtime, "get_p2p_peers", &message);
+                e.to_string()
+            })?;
+        let connected = runtime
+            .usecases()
+            .list_connected_peers()
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to list connected peers");
+                let message = format!("list_connected_peers: {}", e);
+                emit_command_error(&runtime, "get_p2p_peers", &message);
+                e.to_string()
+            })?;
+        let connected_map = connected_peer_ids(&connected);
 
-    Ok(discovered
-        .into_iter()
-        .map(|peer| P2PPeerInfo {
-            peer_id: peer.peer_id.clone(),
-            device_name: peer.device_name,
-            addresses: peer.addresses,
-            is_paired: peer.is_paired,
-            connected: connected_map.contains_key(&peer.peer_id),
-        })
-        .collect())
+        Ok(discovered
+            .into_iter()
+            .map(|peer| P2PPeerInfo {
+                peer_id: peer.peer_id.clone(),
+                device_name: peer.device_name,
+                addresses: peer.addresses,
+                is_paired: peer.is_paired,
+                connected: connected_map.contains_key(&peer.peer_id),
+            })
+            .collect())
+    }
+    .instrument(span)
+    .await
 }
 
 #[tauri::command]
 pub async fn get_paired_peers(
     runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<Vec<PairedPeer>, String> {
-    get_paired_peers_with_status(runtime).await
+    get_paired_peers_with_status(runtime, _trace).await
 }
 
 #[tauri::command]
 pub async fn get_paired_peers_with_status(
     runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<Vec<PairedPeer>, String> {
-    let paired_devices = runtime
-        .usecases()
-        .list_paired_devices()
-        .execute()
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to list paired devices");
-            let message = format!("list_paired_devices: {}", e);
-            emit_command_error(&runtime, "get_paired_peers_with_status", &message);
-            e.to_string()
-        })?;
-    let discovered = runtime
-        .usecases()
-        .list_discovered_peers()
-        .execute()
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to list discovered peers");
-            let message = format!("list_discovered_peers: {}", e);
-            emit_command_error(&runtime, "get_paired_peers_with_status", &message);
-            e.to_string()
-        })?;
-    let connected = runtime
-        .usecases()
-        .list_connected_peers()
-        .execute()
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to list connected peers");
-            let message = format!("list_connected_peers: {}", e);
-            emit_command_error(&runtime, "get_paired_peers_with_status", &message);
-            e.to_string()
-        })?;
-    let discovered_map = discovered_peer_map(&discovered);
-    let connected_map = connected_peer_ids(&connected);
+    let span = info_span!(
+        "command.pairing.get_paired_peers_with_status",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        device_id = %runtime.deps.device_identity.current_device_id(),
+    );
+    record_trace_fields(&span, &_trace);
+    async {
+        let paired_devices = runtime
+            .usecases()
+            .list_paired_devices()
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to list paired devices");
+                let message = format!("list_paired_devices: {}", e);
+                emit_command_error(&runtime, "get_paired_peers_with_status", &message);
+                e.to_string()
+            })?;
+        let discovered = runtime
+            .usecases()
+            .list_discovered_peers()
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to list discovered peers");
+                let message = format!("list_discovered_peers: {}", e);
+                emit_command_error(&runtime, "get_paired_peers_with_status", &message);
+                e.to_string()
+            })?;
+        let connected = runtime
+            .usecases()
+            .list_connected_peers()
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to list connected peers");
+                let message = format!("list_connected_peers: {}", e);
+                emit_command_error(&runtime, "get_paired_peers_with_status", &message);
+                e.to_string()
+            })?;
+        let discovered_map = discovered_peer_map(&discovered);
+        let connected_map = connected_peer_ids(&connected);
 
-    Ok(paired_devices
-        .into_iter()
-        .map(|device| {
-            let peer_id = device.peer_id.to_string();
-            let discovered_peer = discovered_map.get(&peer_id);
-            let device_name = discovered_peer
-                .and_then(|peer| peer.device_name.clone())
-                .unwrap_or_else(|| "Unknown Device".to_string());
-            let addresses = discovered_peer
-                .map(|peer| peer.addresses.clone())
-                .unwrap_or_default();
-            PairedPeer {
-                peer_id,
-                device_name,
-                shared_secret: vec![],
-                paired_at: device.paired_at.to_rfc3339(),
-                last_seen: device.last_seen_at.map(|time| time.to_rfc3339()),
-                last_known_addresses: addresses,
-                connected: connected_map.contains_key(&device.peer_id.to_string()),
-            }
-        })
-        .collect())
+        Ok(paired_devices
+            .into_iter()
+            .map(|device| {
+                let peer_id = device.peer_id.to_string();
+                let discovered_peer = discovered_map.get(&peer_id);
+                let device_name = discovered_peer
+                    .and_then(|peer| peer.device_name.clone())
+                    .unwrap_or_else(|| "Unknown Device".to_string());
+                let addresses = discovered_peer
+                    .map(|peer| peer.addresses.clone())
+                    .unwrap_or_default();
+                PairedPeer {
+                    peer_id,
+                    device_name,
+                    shared_secret: vec![],
+                    paired_at: device.paired_at.to_rfc3339(),
+                    last_seen: device.last_seen_at.map(|time| time.to_rfc3339()),
+                    last_known_addresses: addresses,
+                    connected: connected_map.contains_key(&device.peer_id.to_string()),
+                }
+            })
+            .collect())
+    }
+    .instrument(span)
+    .await
 }
 
 /// Update pairing state for a peer
@@ -259,8 +308,15 @@ pub async fn set_pairing_state(
 pub async fn initiate_p2p_pairing(
     request: P2PPairingRequest,
     orchestrator: State<'_, Arc<PairingOrchestrator>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<P2PPairingResponse, String> {
-    let span = info_span!("command.pairing.initiate", peer_id = %request.peer_id);
+    let span = info_span!(
+        "command.pairing.initiate",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        peer_id = %request.peer_id,
+    );
+    record_trace_fields(&span, &_trace);
     async {
         let session_id = orchestrator
             .initiate_pairing(request.peer_id)
@@ -283,8 +339,15 @@ pub async fn initiate_p2p_pairing(
 pub async fn accept_p2p_pairing(
     session_id: String,
     orchestrator: State<'_, Arc<PairingOrchestrator>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<(), String> {
-    let span = info_span!("command.pairing.accept", session_id = %session_id);
+    let span = info_span!(
+        "command.pairing.accept",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        session_id = %session_id,
+    );
+    record_trace_fields(&span, &_trace);
     async {
         orchestrator
             .user_accept_pairing(&session_id)
@@ -302,8 +365,15 @@ pub async fn accept_p2p_pairing(
 pub async fn reject_p2p_pairing(
     session_id: String,
     orchestrator: State<'_, Arc<PairingOrchestrator>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<(), String> {
-    let span = info_span!("command.pairing.reject", session_id = %session_id);
+    let span = info_span!(
+        "command.pairing.reject",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        session_id = %session_id,
+    );
+    record_trace_fields(&span, &_trace);
     async {
         orchestrator
             .user_reject_pairing(&session_id)
@@ -321,8 +391,15 @@ pub async fn reject_p2p_pairing(
 pub async fn verify_p2p_pairing_pin(
     request: P2PPinVerifyRequest,
     orchestrator: State<'_, Arc<PairingOrchestrator>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<(), String> {
-    let span = info_span!("command.pairing.verify_pin", session_id = %request.session_id);
+    let span = info_span!(
+        "command.pairing.verify_pin",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        session_id = %request.session_id,
+    );
+    record_trace_fields(&span, &_trace);
     async {
         if request.pin_matches {
             orchestrator
@@ -358,8 +435,15 @@ pub async fn verify_p2p_pairing_pin(
 pub async fn unpair_p2p_device(
     peer_id: String,
     runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
 ) -> Result<(), String> {
-    let span = info_span!("command.pairing.unpair", peer_id = %peer_id);
+    let span = info_span!(
+        "command.pairing.unpair",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        peer_id = %peer_id,
+    );
+    record_trace_fields(&span, &_trace);
     async {
         let uc = runtime.usecases().unpair_device();
         uc.execute(peer_id.clone()).await.map_err(|e| {
