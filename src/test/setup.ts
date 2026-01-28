@@ -1,4 +1,8 @@
 import '@testing-library/jest-dom/vitest'
+import { vi } from 'vitest'
+
+vi.stubEnv('VITE_SENTRY_DSN', 'https://example.com/1')
+vi.stubEnv('VITE_APP_VERSION', 'test')
 
 if (
   typeof globalThis.localStorage === 'undefined' ||

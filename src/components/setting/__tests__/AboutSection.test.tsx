@@ -46,6 +46,13 @@ const baseSetting: Settings = {
     passphrase_configured: false,
     auto_unlock_enabled: false,
   },
+  pairing: {
+    step_timeout: 15,
+    user_verification_timeout: 120,
+    session_timeout: 300,
+    max_retries: 3,
+    protocol_version: '1.0.0',
+  },
 }
 
 describe('AboutSection', () => {
