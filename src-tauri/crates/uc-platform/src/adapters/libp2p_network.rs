@@ -432,6 +432,12 @@ async fn handle_pairing_event(
                 request, channel, ..
             } => {
                 let session_id = request.session_id().to_string();
+                info!(
+                    session_id = %session_id,
+                    peer_id = %peer,
+                    message_kind = "Request",
+                    "pairing request received"
+                );
                 {
                     let mut channels = response_channels.lock().await;
                     channels.insert(
@@ -453,6 +459,13 @@ async fn handle_pairing_event(
                 }
             }
             request_response::Message::Response { response, .. } => {
+                let session_id = response.session_id().to_string();
+                info!(
+                    session_id = %session_id,
+                    peer_id = %peer,
+                    message_kind = "Response",
+                    "pairing response received"
+                );
                 if let Err(err) = event_tx
                     .send(NetworkEvent::PairingMessageReceived {
                         peer_id: peer.to_string(),
