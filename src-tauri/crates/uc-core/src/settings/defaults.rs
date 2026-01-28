@@ -132,11 +132,31 @@ impl Default for SecuritySettings {
     }
 }
 
+impl Default for PairingSettings {
+    /// Creates default pairing settings for handshake timers and retry behavior.
+    ///
+    /// Defaults are:
+    /// - `step_timeout`: 15 seconds
+    /// - `user_verification_timeout`: 120 seconds
+    /// - `session_timeout`: 300 seconds
+    /// - `max_retries`: 3
+    /// - `protocol_version`: "1.0.0"
+    fn default() -> Self {
+        Self {
+            step_timeout: Duration::from_secs(15),
+            user_verification_timeout: Duration::from_secs(120),
+            session_timeout: Duration::from_secs(300),
+            max_retries: 3,
+            protocol_version: "1.0.0".to_string(),
+        }
+    }
+}
+
 impl Default for Settings {
     /// Constructs a Settings instance populated with the current schema version and sensible nested defaults.
     ///
     /// The created `Settings` uses `CURRENT_SCHEMA_VERSION` for `schema_version` and the `Default` implementations
-    /// of the nested settings types for `general`, `sync`, `retention_policy`, and `security`.
+    /// of the nested settings types for `general`, `sync`, `retention_policy`, `security`, and `pairing`.
     ///
     /// # Examples
     ///
@@ -150,11 +170,12 @@ impl Default for Settings {
     /// let _ = settings.sync;
     /// let _ = settings.retention_policy;
     /// let _ = settings.security;
+    /// let _ = settings.pairing;
     /// ```
     ///
     /// # Returns
     ///
-    /// `Settings` initialized with `CURRENT_SCHEMA_VERSION` and default values for `general`, `sync`, `retention_policy`, and `security`.
+    /// `Settings` initialized with `CURRENT_SCHEMA_VERSION` and default values for `general`, `sync`, `retention_policy`, `security`, and `pairing`.
     fn default() -> Self {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
@@ -162,6 +183,7 @@ impl Default for Settings {
             sync: SyncSettings::default(),
             retention_policy: RetentionPolicy::default(),
             security: SecuritySettings::default(),
+            pairing: PairingSettings::default(),
         }
     }
 }
