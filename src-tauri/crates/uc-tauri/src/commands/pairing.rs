@@ -1,14 +1,14 @@
 //! Pairing-related Tauri commands
 //! 配对相关的 Tauri 命令
 
-use crate::bootstrap::{resolve_pairing_device_name, AppRuntime};
+use crate::bootstrap::AppRuntime;
 use crate::commands::record_trace_fields;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{info_span, Instrument};
-use uc_app::usecases::pairing::PairingOrchestrator;
+use uc_app::usecases::{LocalDeviceInfo, PairingOrchestrator};
 use uc_core::network::{ConnectedPeer, DiscoveredPeer, PairedDevice, PairingState};
 use uc_core::ports::observability::TraceMetadata;
 use uc_core::PeerId;
@@ -21,13 +21,6 @@ pub struct P2PPeerInfo {
     pub addresses: Vec<String>,
     pub is_paired: bool,
     pub connected: bool,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalDeviceInfo {
-    pub peer_id: String,
-    pub device_name: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -90,18 +83,19 @@ pub async fn list_paired_devices(
 
 #[tauri::command]
 pub async fn get_local_peer_id(runtime: State<'_, Arc<AppRuntime>>) -> Result<String, String> {
-    Ok(runtime.deps.network.local_peer_id())
+    Ok(runtime.usecases().get_local_peer_id().execute())
 }
 
 #[tauri::command]
 pub async fn get_local_device_info(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<LocalDeviceInfo, String> {
-    let device_name = resolve_pairing_device_name(runtime.deps.settings.clone()).await;
-    Ok(LocalDeviceInfo {
-        peer_id: runtime.deps.network.local_peer_id(),
-        device_name,
-    })
+    runtime
+        .usecases()
+        .get_local_device_info()
+        .execute()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -109,15 +103,15 @@ pub async fn get_p2p_peers(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Vec<P2PPeerInfo>, String> {
     let discovered = runtime
-        .deps
-        .network
-        .get_discovered_peers()
+        .usecases()
+        .list_discovered_peers()
+        .execute()
         .await
         .map_err(|e| e.to_string())?;
     let connected = runtime
-        .deps
-        .network
-        .get_connected_peers()
+        .usecases()
+        .list_connected_peers()
+        .execute()
         .await
         .map_err(|e| e.to_string())?;
     let connected_map = connected_peer_ids(&connected);
@@ -152,15 +146,15 @@ pub async fn get_paired_peers_with_status(
         .await
         .map_err(|e| e.to_string())?;
     let discovered = runtime
-        .deps
-        .network
-        .get_discovered_peers()
+        .usecases()
+        .list_discovered_peers()
+        .execute()
         .await
         .map_err(|e| e.to_string())?;
     let connected = runtime
-        .deps
-        .network
-        .get_connected_peers()
+        .usecases()
+        .list_connected_peers()
+        .execute()
         .await
         .map_err(|e| e.to_string())?;
     let discovered_map = discovered_peer_map(&discovered);
@@ -303,20 +297,8 @@ pub async fn unpair_p2p_device(
 ) -> Result<(), String> {
     let span = info_span!("command.pairing.unpair", peer_id = %peer_id);
     async {
-        let peer = PeerId::from(peer_id.as_str());
-        runtime
-            .deps
-            .paired_device_repo
-            .delete(&peer)
-            .await
-            .map_err(|e| e.to_string())?;
-        runtime
-            .deps
-            .network
-            .unpair_device(peer_id)
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(())
+        let uc = runtime.usecases().unpair_device();
+        uc.execute(peer_id).await.map_err(|e| e.to_string())
     }
     .instrument(span)
     .await

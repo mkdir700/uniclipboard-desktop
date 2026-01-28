@@ -264,11 +264,52 @@ impl<'a> UseCases<'a> {
         uc_app::usecases::ListPairedDevices::new(self.runtime.deps.paired_device_repo.clone())
     }
 
+    /// Get local peer id from network port.
+    ///
+    /// 获取本地 Peer ID。
+    pub fn get_local_peer_id(&self) -> uc_app::usecases::GetLocalPeerId {
+        uc_app::usecases::GetLocalPeerId::new(self.runtime.deps.network.clone())
+    }
+
+    /// Get local device info (peer id + device name).
+    ///
+    /// 获取本地设备信息（Peer ID + 设备名称）。
+    pub fn get_local_device_info(&self) -> uc_app::usecases::GetLocalDeviceInfo {
+        uc_app::usecases::GetLocalDeviceInfo::new(
+            self.runtime.deps.network.clone(),
+            self.runtime.deps.settings.clone(),
+        )
+    }
+
+    /// List discovered peers from network.
+    ///
+    /// 列出已发现的对等端。
+    pub fn list_discovered_peers(&self) -> uc_app::usecases::ListDiscoveredPeers {
+        uc_app::usecases::ListDiscoveredPeers::new(self.runtime.deps.network.clone())
+    }
+
+    /// List connected peers from network.
+    ///
+    /// 列出已连接的对等端。
+    pub fn list_connected_peers(&self) -> uc_app::usecases::ListConnectedPeers {
+        uc_app::usecases::ListConnectedPeers::new(self.runtime.deps.network.clone())
+    }
+
     /// Update pairing state for a peer.
     ///
     /// 更新对等端配对状态。
     pub fn set_pairing_state(&self) -> uc_app::usecases::SetPairingState {
         uc_app::usecases::SetPairingState::new(self.runtime.deps.paired_device_repo.clone())
+    }
+
+    /// Unpair device and remove from repository.
+    ///
+    /// 取消配对并从存储中删除。
+    pub fn unpair_device(&self) -> uc_app::usecases::UnpairDevice {
+        uc_app::usecases::UnpairDevice::new(
+            self.runtime.deps.network.clone(),
+            self.runtime.deps.paired_device_repo.clone(),
+        )
     }
 
     /// Resolve thumbnail resource content by representation id.
