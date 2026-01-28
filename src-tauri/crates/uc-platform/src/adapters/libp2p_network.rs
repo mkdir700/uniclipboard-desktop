@@ -9,10 +9,11 @@ use libp2p::{
     tcp, yamux, Multiaddr, PeerId, StreamProtocol, SwarmBuilder,
 };
 use libp2p_stream as stream;
-use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tokio::sync::{mpsc, Mutex as AsyncMutex, RwLock};
+use tracing::{debug, error, info, warn};
 use uc_core::network::{
     ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage, PairingState,
     ProtocolDenyReason, ProtocolDirection, ProtocolId, ProtocolKind, ResolvedConnectionPolicy,
@@ -40,6 +41,20 @@ enum BusinessCommand {
         peer_id: uc_core::PeerId,
         data: Vec<u8>,
     },
+}
+
+struct PairingResponseChannel {
+    channel: request_response::ResponseChannel<PairingMessage>,
+    received_at: Instant,
+}
+
+fn pairing_message_kind(message: &PairingMessage) -> &'static str {
+    match message {
+        PairingMessage::Request(_) => "Request",
+        PairingMessage::Challenge(_) => "Challenge",
+        PairingMessage::Response(_) => "Response",
+        PairingMessage::Confirm(_) => "Confirm",
+    }
 }
 
 pub struct PeerCaches {
@@ -164,8 +179,7 @@ pub struct Libp2pNetworkAdapter {
     keypair: Mutex<Option<identity::Keypair>>,
     policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
     stream_control: Mutex<Option<stream::Control>>,
-    pairing_response_channels:
-        Arc<AsyncMutex<HashMap<String, request_response::ResponseChannel<PairingMessage>>>>,
+    pairing_response_channels: Arc<AsyncMutex<HashMap<String, PairingResponseChannel>>>,
 }
 
 impl Libp2pNetworkAdapter {
@@ -376,7 +390,7 @@ fn spawn_business_stream_echo(
     let mut incoming = match control.accept(StreamProtocol::new(BUSINESS_PROTOCOL_ID)) {
         Ok(incoming) => incoming,
         Err(err) => {
-            warn!("failed to accept business stream: {err}");
+            warn!(error = %err, "failed to accept business stream");
             return;
         }
     };
@@ -399,7 +413,7 @@ fn spawn_business_stream_echo(
                     return;
                 }
                 if let Err(err) = echo_payload(&mut stream).await {
-                    warn!("business stream echo failed: {err}");
+                    warn!(error = %err, "business stream echo failed");
                 }
             });
         }
@@ -409,9 +423,7 @@ fn spawn_business_stream_echo(
 async fn handle_pairing_event(
     _swarm: &mut Swarm<Libp2pBehaviour>,
     event: request_response::Event<PairingMessage, PairingMessage>,
-    response_channels: &Arc<
-        AsyncMutex<HashMap<String, request_response::ResponseChannel<PairingMessage>>>,
-    >,
+    response_channels: &Arc<AsyncMutex<HashMap<String, PairingResponseChannel>>>,
     event_tx: &mpsc::Sender<NetworkEvent>,
 ) {
     if let request_response::Event::Message { peer, message, .. } = event {
@@ -422,7 +434,13 @@ async fn handle_pairing_event(
                 let session_id = request.session_id().to_string();
                 {
                     let mut channels = response_channels.lock().await;
-                    channels.insert(session_id.clone(), channel);
+                    channels.insert(
+                        session_id.clone(),
+                        PairingResponseChannel {
+                            channel,
+                            received_at: Instant::now(),
+                        },
+                    );
                 }
                 if let Err(err) = event_tx
                     .send(NetworkEvent::PairingMessageReceived {
@@ -431,7 +449,7 @@ async fn handle_pairing_event(
                     })
                     .await
                 {
-                    warn!("failed to emit pairing message: {err}");
+                    warn!(error = %err, "failed to emit pairing message");
                 }
             }
             request_response::Message::Response { response, .. } => {
@@ -442,7 +460,7 @@ async fn handle_pairing_event(
                     })
                     .await
                 {
-                    warn!("failed to emit pairing response: {err}");
+                    warn!(error = %err, "failed to emit pairing response");
                 }
             }
         }
@@ -466,7 +484,7 @@ async fn emit_protocol_denied(
         })
         .await
     {
-        warn!("failed to emit protocol denied event: {err}");
+        warn!(error = %err, "failed to emit protocol denied event");
     }
 }
 
@@ -512,9 +530,7 @@ async fn run_swarm(
     caches: Arc<RwLock<PeerCaches>>,
     event_tx: mpsc::Sender<NetworkEvent>,
     policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
-    pairing_response_channels: Arc<
-        AsyncMutex<HashMap<String, request_response::ResponseChannel<PairingMessage>>>,
-    >,
+    pairing_response_channels: Arc<AsyncMutex<HashMap<String, PairingResponseChannel>>>,
     mut pairing_rx: mpsc::Receiver<PairingCommand>,
     mut business_rx: mpsc::Receiver<BusinessCommand>,
 ) {
@@ -568,7 +584,7 @@ async fn run_swarm(
                         if let Some(event) = event {
                             let _ = try_send_event(&event_tx, event, "PeerReady");
                         } else {
-                            debug!("connection established for unknown peer {peer_id}");
+                            debug!(peer_id = %peer_id, "connection established for unknown peer");
                         }
                     }
                     SwarmEvent::ConnectionClosed { peer_id, .. } => {
@@ -583,12 +599,12 @@ async fn run_swarm(
                         }
                     }
                     SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                        error!("outgoing connection error to {:?}: {}", peer_id, error);
+                        error!(peer_id = ?peer_id, error = %error, "outgoing connection error");
                         if let Err(err) = event_tx
                             .send(NetworkEvent::Error("network connection error".to_string()))
                             .await
                         {
-                            warn!("failed to publish network error event: {err}");
+                            warn!(error = %err, "failed to publish network error event");
                         }
                     }
                     SwarmEvent::IncomingConnectionError {
@@ -597,18 +613,19 @@ async fn run_swarm(
                         ..
                     } => {
                         error!(
-                            "incoming connection error from {}: {}",
-                            send_back_addr, error
+                            send_back_addr = %send_back_addr,
+                            error = %error,
+                            "incoming connection error"
                         );
                         if let Err(err) = event_tx
                             .send(NetworkEvent::Error("network connection error".to_string()))
                             .await
                         {
-                            warn!("failed to publish network error event: {err}");
+                            warn!(error = %err, "failed to publish network error event");
                         }
                     }
                     SwarmEvent::NewListenAddr { address, .. } => {
-                        info!("libp2p listening on {address}");
+                        info!(address = %address, "libp2p listening");
                     }
                     _ => {}
                 }
@@ -617,22 +634,39 @@ async fn run_swarm(
                 match command {
                     PairingCommand::SendMessage { peer_id, message } => {
                         let session_id = message.session_id().to_string();
+                        let message_kind = pairing_message_kind(&message);
                         let channel = {
                             let mut channels = pairing_response_channels.lock().await;
                             channels.remove(&session_id)
                         };
 
                         if let Some(channel) = channel {
-                            if let Err(err) = swarm.behaviour_mut().pairing.send_response(channel, message) {
-                                warn!("failed to send pairing response: {err:?}");
+                            let elapsed = channel.received_at.elapsed();
+                            if let Err(err) = swarm
+                                .behaviour_mut()
+                                .pairing
+                                .send_response(channel.channel, message)
+                            {
+                                warn!(
+                                    session_id = %session_id,
+                                    message_kind = %message_kind,
+                                    elapsed_ms = elapsed.as_millis(),
+                                    error = ?err,
+                                    "failed to send pairing response"
+                                );
                             }
                             continue;
                         }
+                        warn!(
+                            session_id = %session_id,
+                            message_kind = %message_kind,
+                            "pairing response channel missing; falling back to request"
+                        );
 
                         let peer = match peer_id.as_str().parse::<PeerId>() {
                             Ok(peer) => peer,
                             Err(err) => {
-                                warn!("invalid peer id for pairing message: {err}");
+                                warn!(error = %err, "invalid peer id for pairing message");
                                 continue;
                             }
                         };
@@ -646,7 +680,7 @@ async fn run_swarm(
                         let peer = match peer_id.as_str().parse::<PeerId>() {
                             Ok(peer) => peer,
                             Err(err) => {
-                                warn!("invalid peer id for business stream: {err}");
+                                warn!(error = %err, "invalid peer id for business stream");
                                 continue;
                             }
                         };
@@ -668,13 +702,13 @@ async fn run_swarm(
                         {
                             Ok(mut stream) => {
                                 if let Err(err) = stream.write_all(&data).await {
-                                    warn!("business stream write failed: {err}");
+                                    warn!(error = %err, "business stream write failed");
                                 } else if let Err(err) = stream.close().await {
-                                    warn!("business stream close failed: {err}");
+                                    warn!(error = %err, "business stream close failed");
                                 }
                             }
                             Err(err) => {
-                                warn!("business stream open failed: {err}");
+                                warn!(error = %err, "business stream open failed");
                             }
                         }
                     }
@@ -691,9 +725,9 @@ fn listen_on_swarm(
 ) -> Result<()> {
     if let Err(e) = swarm.listen_on(listen_addr) {
         let message = format!("failed to listen on tcp: {e}");
-        warn!("{message}");
+        warn!(message = %message, "failed to listen on tcp");
         if let Err(err) = event_tx.try_send(NetworkEvent::Error(message.clone())) {
-            warn!("failed to publish network error event: {err}");
+            warn!(error = %err, "failed to publish network error event");
         }
         return Err(anyhow!(message));
     }
@@ -707,7 +741,7 @@ fn try_send_event(
     label: &str,
 ) -> Result<(), mpsc::error::TrySendError<NetworkEvent>> {
     event_tx.try_send(event).map_err(|err| {
-        warn!("failed to send {label} event: {err}");
+        warn!(label = %label, error = %err, "failed to send event");
         err
     })
 }
