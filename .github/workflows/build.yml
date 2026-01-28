@@ -1,9 +1,6 @@
 name: 'Build Tauri App'
-run-name: "build-${{ inputs.platform || 'all' }}-v${{ inputs.version || github.ref_name }}"
+run-name: "build-${{ inputs.platform || 'all' }}-${{ github.run_number }}"
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       platform:
@@ -17,11 +14,6 @@ on:
           - 'windows-latest'
           - 'all'
         default: 'all'
-      version:
-        description: '版本号 (例如: 1.0.0)'
-        required: true
-        type: string
-        default: '1.0.0'
 
 jobs:
   setup-matrix:
@@ -49,8 +41,6 @@ jobs:
     name: Build ${{ matrix.target }}
     needs: setup-matrix
     runs-on: ${{ matrix.platform }}
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -84,19 +74,7 @@ jobs:
         run: bun install
 
       - name: build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          tagName: ${{ startsWith(inputs.version || github.ref_name, 'v') && (inputs.version || github.ref_name) || format('v{0}', inputs.version || github.ref_name) }}
-          releaseName: UniClipboard ${{ startsWith(inputs.version || github.ref_name, 'v') && (inputs.version || github.ref_name) || format('v{0}', inputs.version || github.ref_name) }}
-          releaseBody: See the assets to download this version and install.
-          releaseDraft: ${{ github.event_name == 'push' }}
-          prerelease: false
-          uploadUpdaterJson: true
-          args: ${{ matrix.args }}
+        run: bun run tauri build -- ${{ matrix.args }}
 
       - name: upload artifacts
         uses: actions/upload-artifact@v4
