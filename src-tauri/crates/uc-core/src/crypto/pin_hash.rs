@@ -19,8 +19,8 @@ pub const HASH_SIZE: usize = 32;
 /// Total size of the encoded hash (version + salt + hash).
 pub const ENCODED_SIZE: usize = 1 + SALT_SIZE + HASH_SIZE;
 
-fn argon_params() -> Params {
-    unsafe { Params::new(65536, 3, 4, None).unwrap_unchecked() }
+fn argon_params() -> Result<Params> {
+    Params::new(65536, 3, 4, None).map_err(|e| anyhow!("hardcoded Argon2 params are invalid: {e}"))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -97,7 +97,7 @@ fn generate_salt() -> [u8; SALT_SIZE] {
 
 fn argon2id_hash(pin: &str, salt: &[u8; SALT_SIZE]) -> Result<[u8; HASH_SIZE]> {
     let mut output = [0u8; HASH_SIZE];
-    let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, argon_params());
+    let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, argon_params()?);
     argon
         .hash_password_into(pin.as_bytes(), salt, &mut output)
         .map_err(|e| anyhow!("Argon2id hashing failed: {e}"))?;
@@ -118,6 +118,11 @@ mod tests {
     fn verify_pin_accepts_matching_pin() {
         let encoded = hash_pin("123456").expect("hash pin");
         assert!(verify_pin("123456", &encoded).expect("verify pin"));
+    }
+
+    #[test]
+    fn argon_params_are_valid() {
+        assert!(argon_params().is_ok());
     }
 
     #[test]
