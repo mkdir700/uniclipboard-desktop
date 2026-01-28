@@ -433,7 +433,7 @@ impl PairingStateMachine {
     /// 创建新的状态机实例
     pub fn new() -> Self {
         let policy = PairingPolicy::default();
-        let mut context = PairingContext::default();
+        let context = PairingContext::default();
         Self {
             state: PairingState::Idle,
             context,
