@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{async_runtime, AppHandle, Emitter, Runtime};
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::events::{
     forward_libp2p_start_failed, P2PPairingCompleteEvent, P2PPairingFailedEvent,
@@ -1098,6 +1098,12 @@ async fn handle_pairing_message<R: Runtime>(
 ) {
     match message {
         PairingMessage::Request(request) => {
+            info!(
+                session_id = %request.session_id,
+                peer_id = %peer_id,
+                message_kind = "Request",
+                "pairing message received"
+            );
             if let Some(app) = app_handle {
                 let payload = P2PPairingRequestEvent::deprecated(
                     &request.session_id,
@@ -1116,6 +1122,12 @@ async fn handle_pairing_message<R: Runtime>(
         }
         PairingMessage::Challenge(challenge) => {
             let session_id = challenge.session_id.clone();
+            info!(
+                session_id = %session_id,
+                peer_id = %peer_id,
+                message_kind = "Challenge",
+                "pairing message received"
+            );
             if let Err(err) = orchestrator
                 .handle_challenge(&session_id, &peer_id, challenge)
                 .await
@@ -1125,6 +1137,12 @@ async fn handle_pairing_message<R: Runtime>(
         }
         PairingMessage::Response(response) => {
             let session_id = response.session_id.clone();
+            info!(
+                session_id = %session_id,
+                peer_id = %peer_id,
+                message_kind = "Response",
+                "pairing message received"
+            );
             if let Err(err) = orchestrator
                 .handle_response(&session_id, &peer_id, response)
                 .await
@@ -1134,6 +1152,12 @@ async fn handle_pairing_message<R: Runtime>(
         }
         PairingMessage::Confirm(confirm) => {
             let session_id = confirm.session_id.clone();
+            info!(
+                session_id = %session_id,
+                peer_id = %peer_id,
+                message_kind = "Confirm",
+                "pairing message received"
+            );
             if let Err(err) = orchestrator
                 .handle_confirm(&session_id, &peer_id, confirm)
                 .await

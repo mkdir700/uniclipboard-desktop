@@ -51,6 +51,8 @@ pub fn get_builder() -> tauri_plugin_log::Builder {
         .level_for("libp2p_mdns::behaviour::iface", LevelFilter::Off)
         // Filter libp2p_mdns ERROR logs (harmless errors from proxy software virtual interfaces)
         .level_for("libp2p_mdns", LevelFilter::Warn)
+        // Suppress yamux ping/pong RTT noise
+        .level_for("yamux::connection::rtt", LevelFilter::Off)
         // Filter out tauri-plugin-log's own logs to avoid infinite loops
         // Webview target sends logs via log://log events, which would trigger themselves
         .filter(move |metadata| {
