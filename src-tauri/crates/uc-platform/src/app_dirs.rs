@@ -35,7 +35,6 @@ impl DirsAppDirsAdapter {
     ///
     /// ```
     /// use std::path::PathBuf;
-    /// use uc_core::ports::AppDirsPort;
     /// use uc_platform::app_dirs::DirsAppDirsAdapter;
     ///
     /// let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
@@ -55,15 +54,13 @@ impl DirsAppDirsAdapter {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use std::path::PathBuf;
-    /// use uc_core::ports::AppDirsPort;
-    /// use uc_platform::app_dirs::DirsAppDirsAdapter;
-    /// // For tests you can construct an adapter with an explicit base directory:
-    /// let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
-    /// assert_eq!(adapter.base_data_local_dir(), Some(PathBuf::from("/tmp")));
     /// ```
-    fn base_data_local_dir(&self) -> Option<PathBuf> {
+    /// use uc_platform::app_dirs::DirsAppDirsAdapter;
+    ///
+    /// let adapter = DirsAppDirsAdapter::new();
+    /// let _ = adapter.base_data_local_dir();
+    /// ```
+    pub fn base_data_local_dir(&self) -> Option<PathBuf> {
         if let Some(base) = &self.base_data_local_dir_override {
             return Some(base.clone());
         }
@@ -87,8 +84,7 @@ impl AppDirsPort for DirsAppDirsAdapter {
     ///
     /// # Examples
     ///
-    /// ```no_run
-    /// use std::path::PathBuf;
+    /// ```
     /// use uc_core::ports::AppDirsPort;
     /// use uc_platform::app_dirs::DirsAppDirsAdapter;
     ///

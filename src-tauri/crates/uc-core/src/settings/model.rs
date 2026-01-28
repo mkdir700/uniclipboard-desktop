@@ -118,6 +118,19 @@ pub struct SecuritySettings {
     pub auto_unlock_enabled: bool,
 }
 
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairingSettings {
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub step_timeout: Duration,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub user_verification_timeout: Duration,
+    #[serde_as(as = "DurationSeconds<u64>")]
+    pub session_timeout: Duration,
+    pub max_retries: u8,
+    pub protocol_version: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default = "current_schema_version")]
@@ -134,6 +147,9 @@ pub struct Settings {
 
     #[serde(default)]
     pub security: SecuritySettings,
+
+    #[serde(default)]
+    pub pairing: PairingSettings,
     // #[serde(default)]
     // pub network: NetworkSettings,
 }
@@ -158,7 +174,7 @@ pub fn current_schema_version() -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuleEvaluation, SecuritySettings, SyncFrequency};
+    use super::{RuleEvaluation, SecuritySettings, Settings, SyncFrequency};
     use serde_json::json;
 
     #[test]
@@ -186,5 +202,19 @@ mod tests {
         assert!(settings.encryption_enabled);
         assert!(settings.passphrase_configured);
         assert!(!settings.auto_unlock_enabled);
+    }
+
+    #[test]
+    fn test_pairing_settings_defaults_when_missing() {
+        let value = serde_json::json!({
+            "schema_version": 1
+        });
+
+        let settings: Settings = serde_json::from_value(value).expect("deserialize settings");
+        assert_eq!(settings.pairing.step_timeout.as_secs(), 15);
+        assert_eq!(settings.pairing.user_verification_timeout.as_secs(), 120);
+        assert_eq!(settings.pairing.session_timeout.as_secs(), 300);
+        assert_eq!(settings.pairing.max_retries, 3);
+        assert_eq!(settings.pairing.protocol_version, "1.0.0");
     }
 }

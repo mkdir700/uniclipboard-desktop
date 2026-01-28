@@ -14,7 +14,7 @@ pub enum ProtocolMessage {
 }
 
 /// Pairing protocol messages for secure device pairing with PIN verification
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PairingMessage {
     Request(PairingRequest),
     Challenge(PairingChallenge),
@@ -30,7 +30,7 @@ pub enum PairingMessage {
 /// # Fields
 /// - `device_id`: 6-digit stable device ID (from database devices.id)
 /// - `peer_id`: libp2p PeerId (network layer, changes on each restart)
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingRequest {
     pub session_id: String,
     pub device_name: String,
@@ -38,6 +38,10 @@ pub struct PairingRequest {
     pub device_id: String,
     /// Current libp2p PeerId for this session (network layer)
     pub peer_id: String,
+    /// Stable identity public key (Ed25519)
+    pub identity_pubkey: Vec<u8>,
+    /// Random nonce for short-code transcript
+    pub nonce: Vec<u8>,
 }
 
 /// Pairing challenge sent by responder with PIN
@@ -47,13 +51,17 @@ pub struct PairingRequest {
 ///
 /// # Fields
 /// - `device_id`: 6-digit stable device ID of the responder (from database devices.id)
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingChallenge {
     pub session_id: String,
     pub pin: String,
     pub device_name: String, // Responder's device name
     /// 6-digit stable device ID of the responder (from devices table)
     pub device_id: String,
+    /// Stable identity public key (Ed25519)
+    pub identity_pubkey: Vec<u8>,
+    /// Random nonce for short-code transcript
+    pub nonce: Vec<u8>,
 }
 
 /// Pairing response from initiator after PIN verification
@@ -100,7 +108,7 @@ pub struct PairingChallenge {
 /// let hash = argon2id_hash(pin, salt, params);
 /// let encoded = [0x01, salt..., hash...]; // 49 bytes total
 /// ```
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingResponse {
     pub session_id: String,
     /// Argon2id-derived key encoded as {version(1)||salt(16)||hash(32)} = 49 bytes
@@ -112,7 +120,7 @@ pub struct PairingResponse {
 ///
 /// Note: This no longer includes shared_secret as we've removed ECDH key exchange.
 /// All devices now use the same master key derived from the user's encryption password.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingConfirm {
     pub session_id: String,
     pub success: bool,
@@ -183,6 +191,17 @@ impl std::fmt::Debug for PairingMessage {
     }
 }
 
+impl PairingMessage {
+    pub fn session_id(&self) -> &str {
+        match self {
+            PairingMessage::Request(msg) => &msg.session_id,
+            PairingMessage::Challenge(msg) => &msg.session_id,
+            PairingMessage::Response(msg) => &msg.session_id,
+            PairingMessage::Confirm(msg) => &msg.session_id,
+        }
+    }
+}
+
 impl std::fmt::Debug for PairingRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PairingRequest")
@@ -190,6 +209,8 @@ impl std::fmt::Debug for PairingRequest {
             .field("device_name", &self.device_name)
             .field("device_id", &self.device_id)
             .field("peer_id", &self.peer_id)
+            .field("identity_pubkey_len", &self.identity_pubkey.len())
+            .field("nonce_len", &self.nonce.len())
             .finish()
     }
 }
@@ -201,6 +222,8 @@ impl std::fmt::Debug for PairingChallenge {
             .field("pin", &"[REDACTED]")
             .field("device_name", &self.device_name)
             .field("device_id", &self.device_id)
+            .field("identity_pubkey_len", &self.identity_pubkey.len())
+            .field("nonce_len", &self.nonce.len())
             .finish()
     }
 }
@@ -224,5 +247,99 @@ impl std::fmt::Debug for PairingConfirm {
             .field("sender_device_name", &self.sender_device_name)
             .field("device_id", &self.device_id)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn sample_request(session_id: &str) -> PairingRequest {
+        PairingRequest {
+            session_id: session_id.to_string(),
+            device_name: "Desk".to_string(),
+            device_id: "123456".to_string(),
+            peer_id: "peer-1".to_string(),
+            identity_pubkey: vec![1, 2, 3],
+            nonce: vec![4, 5, 6],
+        }
+    }
+
+    fn sample_challenge(session_id: &str) -> PairingChallenge {
+        PairingChallenge {
+            session_id: session_id.to_string(),
+            pin: "1234".to_string(),
+            device_name: "Laptop".to_string(),
+            device_id: "654321".to_string(),
+            identity_pubkey: vec![7, 8],
+            nonce: vec![9],
+        }
+    }
+
+    #[test]
+    fn pairing_message_session_id_returns_inner_id() {
+        let request = PairingMessage::Request(sample_request("s1"));
+        let challenge = PairingMessage::Challenge(sample_challenge("s2"));
+        let response = PairingMessage::Response(PairingResponse {
+            session_id: "s3".to_string(),
+            pin_hash: vec![1, 2, 3],
+            accepted: true,
+        });
+        let confirm = PairingMessage::Confirm(PairingConfirm {
+            session_id: "s4".to_string(),
+            success: true,
+            error: None,
+            sender_device_name: "Phone".to_string(),
+            device_id: "111111".to_string(),
+        });
+
+        assert_eq!(request.session_id(), "s1");
+        assert_eq!(challenge.session_id(), "s2");
+        assert_eq!(response.session_id(), "s3");
+        assert_eq!(confirm.session_id(), "s4");
+    }
+
+    #[test]
+    fn protocol_message_round_trip_device_announce() {
+        let message = ProtocolMessage::DeviceAnnounce(DeviceAnnounceMessage {
+            peer_id: "peer-9".to_string(),
+            device_name: "Desk".to_string(),
+            timestamp: Utc::now(),
+        });
+
+        let bytes = message.to_bytes().expect("serialize");
+        let decoded = ProtocolMessage::from_bytes(&bytes).expect("deserialize");
+
+        match decoded {
+            ProtocolMessage::DeviceAnnounce(decoded_message) => {
+                assert_eq!(decoded_message.peer_id, "peer-9");
+                assert_eq!(decoded_message.device_name, "Desk");
+            }
+            _ => panic!("expected DeviceAnnounce message"),
+        }
+    }
+
+    #[test]
+    fn debug_redacts_sensitive_fields() {
+        let request = sample_request("s5");
+        let request_debug = format!("{:?}", request);
+        assert!(request_debug.contains("identity_pubkey_len"));
+        assert!(request_debug.contains("nonce_len"));
+        assert!(!request_debug.contains("identity_pubkey:"));
+
+        let challenge = sample_challenge("s6");
+        let challenge_debug = format!("{:?}", challenge);
+        assert!(challenge_debug.contains("[REDACTED]"));
+        assert!(!challenge_debug.contains("1234"));
+
+        let response = PairingResponse {
+            session_id: "s7".to_string(),
+            pin_hash: vec![1, 2, 3],
+            accepted: true,
+        };
+        let response_debug = format!("{:?}", response);
+        assert!(response_debug.contains("[REDACTED]"));
+        assert!(!response_debug.contains("1, 2, 3"));
     }
 }

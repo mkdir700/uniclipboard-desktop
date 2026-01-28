@@ -14,6 +14,11 @@ Explicit error handling only. Tests are the only exception.
 No silent failures in async or event-driven code
 Errors must be logged and observable by upper layers.
 
+Command trace usage
+All Tauri commands must accept `_trace: Option<TraceMetadata>` when available.
+Each command must create an `info_span!` with `trace_id` and `trace_ts` fields,
+call `record_trace_fields(&span, &_trace)`, and `.instrument(span)` the async body.
+
 Tauri state must be managed before startup
 Any type accessed via tauri::State<T> must be registered with .manage().
 

@@ -76,9 +76,23 @@ The application has two separate configuration systems:
 ### 2. Settings (`settings.json`)
 
 - **Purpose**: User-configurable application settings
-- **Includes**: Theme, sync preferences, retention policies, device name
+- **Includes**: Theme, sync preferences, retention policies, device name, pairing timers
 - **Storage**: JSON file in data directory
 - **Managed by**: User through the UI
+
+### Pairing settings
+
+`settings.json` includes a `pairing` block. Timer values are expressed in seconds.
+
+```json
+"pairing": {
+  "step_timeout": 15,
+  "user_verification_timeout": 120,
+  "session_timeout": 300,
+  "max_retries": 3,
+  "protocol_version": "1.0.0"
+}
+```
 
 ## Migrating from Development to Production
 

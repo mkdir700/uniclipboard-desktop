@@ -36,20 +36,28 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::async_runtime;
+use tauri::{async_runtime, AppHandle, Emitter, Runtime};
 use tokio::sync::mpsc;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
+use crate::events::{
+    forward_libp2p_start_failed, P2PPairingCompleteEvent, P2PPairingFailedEvent,
+    P2PPairingRequestEvent, P2PPinReadyEvent,
+};
 use uc_app::app_paths::AppPaths;
+use uc_app::usecases::{PairingConfig, PairingOrchestrator, ResolveConnectionPolicy};
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ids::RepresentationId;
+use uc_core::network::pairing_state_machine::PairingAction;
+use uc_core::network::{NetworkEvent, PairingMessage};
 use uc_core::ports::clipboard::{
     ClipboardChangeOriginPort, ClipboardRepresentationNormalizerPort, RepresentationCachePort,
     SpoolQueuePort, SpoolRequest,
 };
 use uc_core::ports::*;
+use uc_core::settings::model::Settings;
 use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::{
     BackgroundBlobWorker, ClipboardRepresentationNormalizer, InMemoryClipboardChangeOrigin,
@@ -132,6 +140,7 @@ pub struct WiredDependencies {
 /// Background runtime components that must be started after async runtime is ready.
 /// 需要在异步运行时就绪后启动的后台组件。
 pub struct BackgroundRuntimeDeps {
+    pub libp2p_network: Arc<Libp2pNetworkAdapter>,
     pub representation_cache: Arc<RepresentationCache>,
     pub spool_manager: Arc<SpoolManager>,
     pub spool_rx: mpsc::Receiver<SpoolRequest>,
@@ -465,6 +474,7 @@ fn create_platform_layer(
     platform_cmd_tx: PlatformCommandSender,
     encryption: Arc<dyn EncryptionPort>,
     blob_repository: Arc<dyn BlobRepositoryPort>,
+    paired_device_repo: Arc<dyn PairedDeviceRepositoryPort>,
     clock: Arc<dyn ClockPort>,
     storage_config: Arc<ClipboardStorageConfig>,
     identity_store: Arc<dyn IdentityStorePort>,
@@ -498,9 +508,13 @@ fn create_platform_layer(
     // 为未实现的端口创建占位符实现
     let ui: Arc<dyn UiPort> = Arc::new(PlaceholderUiPort);
     let autostart: Arc<dyn AutostartPort> = Arc::new(PlaceholderAutostartPort);
-    let libp2p_network = Arc::new(Libp2pNetworkAdapter::new(identity_store).map_err(|e| {
-        WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}"))
-    })?);
+    let policy_resolver = Arc::new(ResolveConnectionPolicy::new(paired_device_repo.clone()));
+    let libp2p_network = Arc::new(
+        Libp2pNetworkAdapter::new(identity_store, policy_resolver).map_err(|e| {
+            WiringError::NetworkInit(format!("Failed to initialize libp2p identity: {e}"))
+        })?,
+    );
+    info!(peer_id = %libp2p_network.local_peer_id(), "Loaded libp2p identity");
     let network: Arc<dyn NetworkPort> = libp2p_network.clone();
     let encryption_session: Arc<dyn EncryptionSessionPort> =
         Arc::new(InMemoryEncryptionSessionPort::new());
@@ -768,6 +782,7 @@ pub fn wire_dependencies_with_identity_store(
         platform_cmd_tx,
         infra.encryption.clone(),
         infra.blob_repository.clone(),
+        infra.paired_device_repo.clone(),
         infra.clock.clone(),
         storage_config.clone(),
         identity_store,
@@ -879,6 +894,7 @@ pub fn wire_dependencies_with_identity_store(
     Ok(WiredDependencies {
         deps,
         background: BackgroundRuntimeDeps {
+            libp2p_network: platform.libp2p_network.clone(),
             representation_cache,
             spool_manager,
             spool_rx,
@@ -893,8 +909,15 @@ pub fn wire_dependencies_with_identity_store(
 
 /// Start background spooler and blob worker tasks.
 /// 启动后台假脱机写入和 blob 物化任务。
-pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps) {
+pub fn start_background_tasks<R: Runtime>(
+    background: BackgroundRuntimeDeps,
+    deps: &AppDeps,
+    app_handle: Option<AppHandle<R>>,
+    pairing_orchestrator: Arc<PairingOrchestrator>,
+    pairing_action_rx: mpsc::Receiver<PairingAction>,
+) {
     let BackgroundRuntimeDeps {
+        libp2p_network,
         representation_cache,
         spool_manager,
         spool_rx,
@@ -907,6 +930,19 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
 
     info!("Starting background clipboard spooler and blob worker");
 
+    let libp2p_app_handle = app_handle.clone();
+    let libp2p_network_spawn = libp2p_network.clone();
+    let pairing_app_handle = app_handle.clone();
+    async_runtime::spawn(async move {
+        if let Err(err) = libp2p_network_spawn.spawn_swarm() {
+            warn!(error = %err, "Failed to start libp2p swarm");
+            if let Some(app_handle) = libp2p_app_handle {
+                if let Err(emit_err) = forward_libp2p_start_failed(&app_handle, err.to_string()) {
+                    warn!("Failed to emit libp2p start failed event: {emit_err}");
+                }
+            }
+        }
+    });
     let representation_repo = deps.representation_repo.clone();
     let worker_tx = deps.worker_tx.clone();
     let blob_writer = deps.blob_writer.clone();
@@ -914,6 +950,7 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
     let clock = deps.clock.clone();
     let thumbnail_repo = deps.thumbnail_repo.clone();
     let thumbnail_generator = deps.thumbnail_generator.clone();
+    let pairing_network = deps.network.clone();
 
     async_runtime::spawn(async move {
         let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx.clone());
@@ -975,19 +1012,540 @@ pub fn start_background_tasks(background: BackgroundRuntimeDeps, deps: &AppDeps)
             }
         });
     });
+
+    async_runtime::spawn(async move {
+        let event_rx = match pairing_network.subscribe_events().await {
+            Ok(rx) => rx,
+            Err(err) => {
+                warn!(error = %err, "Failed to subscribe to network events for pairing");
+                return;
+            }
+        };
+
+        let action_network = pairing_network.clone();
+        let action_app_handle = pairing_app_handle.clone();
+        let action_orchestrator = pairing_orchestrator.clone();
+        async_runtime::spawn(async move {
+            run_pairing_action_loop(
+                pairing_action_rx,
+                action_network,
+                action_app_handle,
+                action_orchestrator,
+            )
+            .await;
+        });
+
+        run_pairing_event_loop(event_rx, pairing_orchestrator, pairing_app_handle).await;
+        warn!("Pairing event loop stopped");
+    });
+}
+
+const DEFAULT_PAIRING_DEVICE_NAME: &str = "Uniclipboard Device";
+
+pub async fn resolve_pairing_device_name(settings: Arc<dyn SettingsPort>) -> String {
+    match settings.load().await {
+        Ok(settings) => {
+            let name = settings.general.device_name.unwrap_or_default();
+            if name.trim().is_empty() {
+                DEFAULT_PAIRING_DEVICE_NAME.to_string()
+            } else {
+                name
+            }
+        }
+        Err(err) => {
+            warn!(error = %err, "Failed to load settings for pairing device name");
+            DEFAULT_PAIRING_DEVICE_NAME.to_string()
+        }
+    }
+}
+
+pub async fn resolve_pairing_config(settings: Arc<dyn SettingsPort>) -> PairingConfig {
+    match settings.load().await {
+        Ok(settings) => PairingConfig::from_settings(&settings),
+        Err(err) => {
+            warn!(error = %err, "Failed to load settings for pairing config");
+            PairingConfig::from_settings(&Settings::default())
+        }
+    }
+}
+
+async fn run_pairing_event_loop<R: Runtime>(
+    mut event_rx: mpsc::Receiver<NetworkEvent>,
+    orchestrator: Arc<PairingOrchestrator>,
+    app_handle: Option<AppHandle<R>>,
+) {
+    while let Some(event) = event_rx.recv().await {
+        match event {
+            NetworkEvent::PairingMessageReceived { peer_id, message } => {
+                handle_pairing_message(
+                    orchestrator.as_ref(),
+                    peer_id,
+                    message,
+                    app_handle.as_ref(),
+                )
+                .await;
+            }
+            _ => {}
+        }
+    }
+}
+
+async fn handle_pairing_message<R: Runtime>(
+    orchestrator: &PairingOrchestrator,
+    peer_id: String,
+    message: PairingMessage,
+    app_handle: Option<&AppHandle<R>>,
+) {
+    match message {
+        PairingMessage::Request(request) => {
+            if let Some(app) = app_handle {
+                let payload = P2PPairingRequestEvent::deprecated(
+                    &request.session_id,
+                    &peer_id,
+                    Some(request.device_name.clone()),
+                );
+                if let Err(err) = app.emit("p2p-pairing-request", payload) {
+                    warn!(error = %err, "Failed to emit deprecated pairing request event");
+                } else {
+                    warn!("Emitting deprecated pairing event: p2p-pairing-request");
+                }
+            }
+            if let Err(err) = orchestrator.handle_incoming_request(peer_id, request).await {
+                error!(error = %err, "Failed to handle pairing request");
+            }
+        }
+        PairingMessage::Challenge(challenge) => {
+            let session_id = challenge.session_id.clone();
+            if let Err(err) = orchestrator
+                .handle_challenge(&session_id, &peer_id, challenge)
+                .await
+            {
+                error!(error = %err, session_id = %session_id, "Failed to handle pairing challenge");
+            }
+        }
+        PairingMessage::Response(response) => {
+            let session_id = response.session_id.clone();
+            if let Err(err) = orchestrator
+                .handle_response(&session_id, &peer_id, response)
+                .await
+            {
+                error!(error = %err, session_id = %session_id, "Failed to handle pairing response");
+            }
+        }
+        PairingMessage::Confirm(confirm) => {
+            let session_id = confirm.session_id.clone();
+            if let Err(err) = orchestrator
+                .handle_confirm(&session_id, &peer_id, confirm)
+                .await
+            {
+                error!(error = %err, session_id = %session_id, "Failed to handle pairing confirm");
+            }
+        }
+    }
+}
+
+async fn run_pairing_action_loop<R: Runtime>(
+    mut action_rx: mpsc::Receiver<PairingAction>,
+    network: Arc<dyn NetworkPort>,
+    app_handle: Option<AppHandle<R>>,
+    orchestrator: Arc<PairingOrchestrator>,
+) {
+    while let Some(action) = action_rx.recv().await {
+        match action {
+            PairingAction::Send { peer_id, message } => {
+                if let PairingMessage::Challenge(challenge) = &message {
+                    if let Some(app) = app_handle.as_ref() {
+                        let payload = P2PPinReadyEvent::deprecated(
+                            &challenge.session_id,
+                            challenge.pin.clone(),
+                            None,
+                            None,
+                            None,
+                            None,
+                        );
+                        if let Err(err) = app.emit("p2p-pin-ready", payload) {
+                            warn!(error = %err, "Failed to emit deprecated pin ready event");
+                        } else {
+                            warn!("Emitting deprecated pairing event: p2p-pin-ready");
+                        }
+                    }
+                }
+                if let Err(err) = network.send_pairing_message(peer_id.clone(), message).await {
+                    error!(error = %err, peer_id = %peer_id, "Failed to send pairing message");
+                }
+            }
+            PairingAction::ShowVerification {
+                session_id,
+                short_code,
+                local_fingerprint,
+                peer_fingerprint,
+                peer_display_name,
+            } => {
+                if let Some(app) = app_handle.as_ref() {
+                    let payload = P2PPinReadyEvent::deprecated(
+                        &session_id,
+                        short_code.clone(),
+                        Some(peer_display_name),
+                        Some(short_code),
+                        Some(local_fingerprint),
+                        Some(peer_fingerprint),
+                    );
+                    if let Err(err) = app.emit("p2p-pin-ready", payload) {
+                        warn!(error = %err, "Failed to emit deprecated pin ready event");
+                    } else {
+                        warn!("Emitting deprecated pairing event: p2p-pin-ready");
+                    }
+                }
+            }
+            PairingAction::EmitResult {
+                session_id,
+                success,
+                error,
+            } => {
+                if let Some(app) = app_handle.as_ref() {
+                    if success {
+                        let peer_info = orchestrator.get_session_peer(&session_id).await;
+                        let (peer_id, device_name) = match peer_info {
+                            Some(info) => {
+                                let name = info
+                                    .device_name
+                                    .unwrap_or_else(|| "Unknown Device".to_string());
+                                (info.peer_id, name)
+                            }
+                            None => ("unknown".to_string(), "Unknown Device".to_string()),
+                        };
+                        let payload = P2PPairingCompleteEvent::deprecated(
+                            &session_id,
+                            &peer_id,
+                            Some(device_name),
+                        );
+                        if let Err(err) = app.emit("p2p-pairing-complete", payload) {
+                            warn!(error = %err, "Failed to emit deprecated pairing complete event");
+                        } else {
+                            warn!("Emitting deprecated pairing event: p2p-pairing-complete");
+                        }
+                    } else {
+                        let payload = P2PPairingFailedEvent::deprecated(
+                            &session_id,
+                            error.unwrap_or_else(|| "Pairing failed".to_string()),
+                        );
+                        if let Err(err) = app.emit("p2p-pairing-failed", payload) {
+                            warn!(error = %err, "Failed to emit deprecated pairing failed event");
+                        } else {
+                            warn!("Emitting deprecated pairing event: p2p-pairing-failed");
+                        }
+                    }
+                }
+            }
+            other => {
+                warn!(action = ?other, "Unhandled pairing action received");
+            }
+        }
+    }
+    warn!("Pairing action loop stopped");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use std::sync::Mutex;
+    use std::time::Duration;
+    use tauri::{Listener, Wry};
     use tokio::sync::mpsc;
+    use uc_app::usecases::PairingConfig;
+    use uc_core::network::paired_device::{PairedDevice, PairingState};
+    use uc_core::network::protocol::PairingRequest;
+    use uc_core::network::{ConnectedPeer, DiscoveredPeer, PairingMessage};
+    use uc_core::ports::NetworkPort;
 
     #[test]
     fn test_wiring_error_display() {
         let err = WiringError::DatabaseInit("connection failed".to_string());
         assert!(err.to_string().contains("Database initialization"));
         assert!(err.to_string().contains("connection failed"));
+    }
+
+    struct NoopPairedDeviceRepository;
+
+    struct NoopNetwork;
+
+    #[async_trait]
+    impl NetworkPort for NoopNetwork {
+        async fn send_clipboard(
+            &self,
+            _peer_id: &str,
+            _encrypted_data: Vec<u8>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn broadcast_clipboard(&self, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_clipboard(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<uc_core::network::ClipboardMessage>>
+        {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+
+        async fn get_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+            Ok(vec![])
+        }
+
+        async fn get_connected_peers(&self) -> anyhow::Result<Vec<ConnectedPeer>> {
+            Ok(vec![])
+        }
+
+        fn local_peer_id(&self) -> String {
+            "local-peer".to_string()
+        }
+
+        async fn send_pairing_message(
+            &self,
+            _peer_id: String,
+            _message: PairingMessage,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn unpair_device(&self, _peer_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_events(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<NetworkEvent>> {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+    }
+
+    #[async_trait]
+    impl PairedDeviceRepositoryPort for NoopPairedDeviceRepository {
+        async fn get_by_peer_id(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+        ) -> Result<Option<PairedDevice>, uc_core::ports::errors::PairedDeviceRepositoryError>
+        {
+            Ok(None)
+        }
+
+        async fn list_all(
+            &self,
+        ) -> Result<Vec<PairedDevice>, uc_core::ports::errors::PairedDeviceRepositoryError>
+        {
+            Ok(vec![])
+        }
+
+        async fn upsert(
+            &self,
+            _device: PairedDevice,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn set_state(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+            _state: PairingState,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn update_last_seen(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+            _last_seen_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn delete(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn pairing_event_loop_registers_session_on_request() {
+        let (event_tx, event_rx) = mpsc::channel(1);
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+
+        let loop_handle = tokio::spawn(run_pairing_event_loop::<Wry>(
+            event_rx,
+            orchestrator.clone(),
+            None,
+        ));
+
+        let request = PairingRequest {
+            session_id: "session-1".to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-999".to_string(),
+            peer_id: "peer-remote".to_string(),
+            identity_pubkey: vec![1; 32],
+            nonce: vec![2; 16],
+        };
+        let event = NetworkEvent::PairingMessageReceived {
+            peer_id: "peer-remote".to_string(),
+            message: PairingMessage::Request(request),
+        };
+
+        event_tx.send(event).await.expect("send pairing event");
+        tokio::task::yield_now().await;
+
+        let result = orchestrator.user_accept_pairing("session-1").await;
+        assert!(result.is_ok());
+
+        drop(event_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
+    }
+
+    #[tokio::test]
+    async fn pairing_action_loop_emits_complete_with_peer_info() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
+        let payload_tx_clone = payload_tx.clone();
+        app_handle.listen("p2p-pairing-complete", move |event: tauri::Event| {
+            let _ = payload_tx_clone.try_send(event.payload().to_string());
+        });
+
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+
+        let request = PairingRequest {
+            session_id: "session-1".to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-999".to_string(),
+            peer_id: "peer-remote".to_string(),
+            identity_pubkey: vec![1; 32],
+            nonce: vec![2; 16],
+        };
+        orchestrator
+            .handle_incoming_request("peer-remote".to_string(), request)
+            .await
+            .expect("handle incoming request");
+
+        let (action_tx, action_rx) = mpsc::channel(1);
+        let network = Arc::new(NoopNetwork);
+        let loop_handle = tokio::spawn(run_pairing_action_loop::<tauri::test::MockRuntime>(
+            action_rx,
+            network,
+            Some(app_handle.clone()),
+            orchestrator.clone(),
+        ));
+
+        action_tx
+            .send(PairingAction::EmitResult {
+                session_id: "session-1".to_string(),
+                success: true,
+                error: None,
+            })
+            .await
+            .expect("send action");
+
+        let payload = tokio::time::timeout(Duration::from_secs(1), payload_rx.recv())
+            .await
+            .expect("timeout waiting for payload")
+            .expect("payload received");
+        let value: serde_json::Value = serde_json::from_str(&payload).expect("payload json");
+        assert_eq!(value["sessionId"], "session-1");
+        assert_eq!(value["peerId"], "peer-remote");
+        assert_eq!(value["deviceName"], "PeerDevice");
+
+        drop(action_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
+    }
+
+    #[tokio::test]
+    async fn pairing_action_loop_emits_camelcase_payload() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
+        let payload_tx_clone = payload_tx.clone();
+        app_handle.listen("p2p-pairing-complete", move |event: tauri::Event| {
+            let _ = payload_tx_clone.try_send(event.payload().to_string());
+        });
+
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+
+        let request = PairingRequest {
+            session_id: "session-2".to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-999".to_string(),
+            peer_id: "peer-remote".to_string(),
+            identity_pubkey: vec![1; 32],
+            nonce: vec![2; 16],
+        };
+        orchestrator
+            .handle_incoming_request("peer-remote".to_string(), request)
+            .await
+            .expect("handle incoming request");
+
+        let (action_tx, action_rx) = mpsc::channel(1);
+        let network = Arc::new(NoopNetwork);
+        let loop_handle = tokio::spawn(run_pairing_action_loop::<tauri::test::MockRuntime>(
+            action_rx,
+            network,
+            Some(app_handle.clone()),
+            orchestrator.clone(),
+        ));
+
+        action_tx
+            .send(PairingAction::EmitResult {
+                session_id: "session-2".to_string(),
+                success: true,
+                error: None,
+            })
+            .await
+            .expect("send action");
+
+        let payload = tokio::time::timeout(Duration::from_secs(1), payload_rx.recv())
+            .await
+            .expect("timeout waiting for payload")
+            .expect("payload received");
+        let value: serde_json::Value = serde_json::from_str(&payload).expect("payload json");
+        assert!(value.get("sessionId").is_some());
+        assert!(value.get("peerId").is_some());
+        assert!(value.get("deviceName").is_some());
+        assert!(value.get("session_id").is_none());
+        assert!(value.get("peer_id").is_none());
+        assert!(value.get("device_name").is_none());
+
+        drop(action_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
     }
 
     #[test]
@@ -1204,11 +1762,15 @@ mod tests {
             // 创建缺失的依赖
             let encryption: Arc<dyn EncryptionPort> = Arc::new(EncryptionRepository);
             let db_pool = init_db_pool(":memory:").expect("create in-memory db pool");
+            let db_executor = Arc::new(DieselSqliteExecutor::new(db_pool));
             let blob_repository: Arc<dyn BlobRepositoryPort> = Arc::new(DieselBlobRepository::new(
-                Arc::new(DieselSqliteExecutor::new(db_pool)),
+                Arc::clone(&db_executor),
                 BlobRowMapper,
                 BlobRowMapper,
             ));
+            let paired_device_repo: Arc<dyn PairedDeviceRepositoryPort> = Arc::new(
+                DieselPairedDeviceRepository::new(Arc::clone(&db_executor), PairedDeviceRowMapper),
+            );
             let clock: Arc<dyn ClockPort> = Arc::new(SystemClock);
             let storage_config = Arc::new(ClipboardStorageConfig::defaults());
 
@@ -1218,6 +1780,7 @@ mod tests {
                 cmd_tx,
                 encryption,
                 blob_repository,
+                paired_device_repo,
                 clock,
                 storage_config,
                 test_identity_store(),

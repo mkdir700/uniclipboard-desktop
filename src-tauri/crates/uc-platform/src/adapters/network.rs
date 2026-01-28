@@ -4,7 +4,9 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use libp2p::PeerId;
-use uc_core::network::{ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent};
+use uc_core::network::{
+    ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage,
+};
 use uc_core::ports::IdentityStorePort;
 use uc_core::ports::{NetworkControlPort, NetworkPort};
 
@@ -67,27 +69,9 @@ impl NetworkPort for PlaceholderNetworkPort {
 
     // === Pairing operations ===
 
-    async fn initiate_pairing(&self, _peer_id: String, _device_name: String) -> Result<String> {
+    async fn send_pairing_message(&self, _peer_id: String, _message: PairingMessage) -> Result<()> {
         Err(anyhow::anyhow!(
-            "NetworkPort::initiate_pairing not implemented yet"
-        ))
-    }
-
-    async fn send_pin_response(&self, _session_id: String, _pin_match: bool) -> Result<()> {
-        Err(anyhow::anyhow!(
-            "NetworkPort::send_pin_response not implemented yet"
-        ))
-    }
-
-    async fn send_pairing_rejection(&self, _session_id: String, _peer_id: String) -> Result<()> {
-        Err(anyhow::anyhow!(
-            "NetworkPort::send_pairing_rejection not implemented yet"
-        ))
-    }
-
-    async fn accept_pairing(&self, _session_id: String) -> Result<()> {
-        Err(anyhow::anyhow!(
-            "NetworkPort::accept_pairing not implemented yet"
+            "NetworkPort::send_pairing_message not implemented yet"
         ))
     }
 

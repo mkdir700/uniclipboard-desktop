@@ -3,7 +3,9 @@
 //! This port defines the interface for network operations including
 //! clipboard messaging, peer discovery, device pairing, and event subscriptions.
 
-use crate::network::{ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent};
+use crate::network::{
+    ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage,
+};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -40,19 +42,8 @@ pub trait NetworkPort: Send + Sync {
 
     // === Pairing operations ===
 
-    /// Initiate pairing with a peer
-    ///
-    /// Returns the session ID for tracking this pairing attempt.
-    async fn initiate_pairing(&self, peer_id: String, device_name: String) -> Result<String>;
-
-    /// Send pairing PIN verification response
-    async fn send_pin_response(&self, session_id: String, pin_match: bool) -> Result<()>;
-
-    /// Send pairing rejection
-    async fn send_pairing_rejection(&self, session_id: String, peer_id: String) -> Result<()>;
-
-    /// Accept pairing request (responder side)
-    async fn accept_pairing(&self, session_id: String) -> Result<()>;
+    /// Send pairing protocol message to a specific peer
+    async fn send_pairing_message(&self, peer_id: String, message: PairingMessage) -> Result<()>;
 
     /// Unpair a device
     async fn unpair_device(&self, peer_id: String) -> Result<()>;

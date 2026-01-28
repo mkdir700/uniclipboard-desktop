@@ -90,6 +90,17 @@ export interface SecuritySettings {
 }
 
 /**
+ * 配对设置 - 对应 Rust PairingSettings
+ */
+export interface PairingSettings {
+  step_timeout: DurationSeconds
+  user_verification_timeout: DurationSeconds
+  session_timeout: DurationSeconds
+  max_retries: number
+  protocol_version: string
+}
+
+/**
  * 应用设置 - 对应 Rust Settings
  */
 export interface Settings {
@@ -98,6 +109,7 @@ export interface Settings {
   sync: SyncSettings
   retention_policy: RetentionPolicy
   security: SecuritySettings
+  pairing: PairingSettings
 }
 
 // ============================================================================

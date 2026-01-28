@@ -9,7 +9,7 @@ pub enum PairingState {
     Revoked,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairedDevice {
     pub peer_id: PeerId,
     pub pairing_state: PairingState,
