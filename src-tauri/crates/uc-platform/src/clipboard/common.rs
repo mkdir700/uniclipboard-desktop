@@ -1,5 +1,6 @@
 use anyhow::{anyhow, ensure, Result};
 use clipboard_rs::{common::RustImage, Clipboard, ContentFormat};
+use tracing::{debug, warn};
 use uc_core::clipboard::{MimeType, ObservedClipboardRepresentation, SystemClipboardSnapshot};
 use uc_core::ids::RepresentationId;
 
@@ -16,62 +17,121 @@ impl CommonClipboardImpl {
         ctx: &mut clipboard_rs::ClipboardContext,
     ) -> Result<SystemClipboardSnapshot> {
         let available = map_clipboard_err(ctx.available_formats())?;
+        debug!(formats = ?available, "Clipboard available formats");
 
         let mut reps = Vec::new();
 
         if ctx.has(ContentFormat::Text) {
-            if let std::result::Result::Ok(text) = ctx.get_text() {
-                reps.push(ObservedClipboardRepresentation {
-                    id: RepresentationId::new(),
-                    format_id: "text".into(),
-                    mime: Some(MimeType::text_plain()),
-                    bytes: text.into_bytes(),
-                });
+            match ctx.get_text() {
+                Ok(text) => {
+                    let bytes = text.into_bytes();
+                    debug!(
+                        format_id = "text",
+                        size_bytes = bytes.len(),
+                        "Read text representation"
+                    );
+                    reps.push(ObservedClipboardRepresentation {
+                        id: RepresentationId::new(),
+                        format_id: "text".into(),
+                        mime: Some(MimeType::text_plain()),
+                        bytes,
+                    });
+                }
+                Err(err) => {
+                    warn!(error = %err, "Failed to read text representation");
+                }
             }
         }
 
         if ctx.has(ContentFormat::Rtf) {
-            if let std::result::Result::Ok(rtf) = ctx.get_rich_text() {
-                reps.push(ObservedClipboardRepresentation {
-                    id: RepresentationId::new(),
-                    format_id: "rtf".into(),
-                    mime: Some(MimeType("text/rtf".to_string())),
-                    bytes: rtf.into_bytes(),
-                });
+            match ctx.get_rich_text() {
+                Ok(rtf) => {
+                    let bytes = rtf.into_bytes();
+                    debug!(
+                        format_id = "rtf",
+                        size_bytes = bytes.len(),
+                        "Read rtf representation"
+                    );
+                    reps.push(ObservedClipboardRepresentation {
+                        id: RepresentationId::new(),
+                        format_id: "rtf".into(),
+                        mime: Some(MimeType("text/rtf".to_string())),
+                        bytes,
+                    });
+                }
+                Err(err) => {
+                    warn!(error = %err, "Failed to read rtf representation");
+                }
             }
         }
 
         if ctx.has(ContentFormat::Html) {
-            if let std::result::Result::Ok(html) = ctx.get_html() {
-                reps.push(ObservedClipboardRepresentation {
-                    id: RepresentationId::new(),
-                    format_id: "html".into(),
-                    mime: Some(MimeType::text_html()),
-                    bytes: html.into_bytes(),
-                });
+            match ctx.get_html() {
+                Ok(html) => {
+                    let bytes = html.into_bytes();
+                    debug!(
+                        format_id = "html",
+                        size_bytes = bytes.len(),
+                        "Read html representation"
+                    );
+                    reps.push(ObservedClipboardRepresentation {
+                        id: RepresentationId::new(),
+                        format_id: "html".into(),
+                        mime: Some(MimeType::text_html()),
+                        bytes,
+                    });
+                }
+                Err(err) => {
+                    warn!(error = %err, "Failed to read html representation");
+                }
             }
         }
 
         if ctx.has(ContentFormat::Files) {
-            if let std::result::Result::Ok(files) = ctx.get_files() {
-                reps.push(ObservedClipboardRepresentation {
-                    id: RepresentationId::new(),
-                    format_id: "files".into(),
-                    mime: Some(MimeType("text/uri-list".to_string())),
-                    bytes: files.join("\n").into_bytes(),
-                });
+            match ctx.get_files() {
+                Ok(files) => {
+                    let bytes = files.join("\n").into_bytes();
+                    debug!(
+                        format_id = "files",
+                        size_bytes = bytes.len(),
+                        "Read files representation"
+                    );
+                    reps.push(ObservedClipboardRepresentation {
+                        id: RepresentationId::new(),
+                        format_id: "files".into(),
+                        mime: Some(MimeType("text/uri-list".to_string())),
+                        bytes,
+                    });
+                }
+                Err(err) => {
+                    warn!(error = %err, "Failed to read files representation");
+                }
             }
         }
 
         if ctx.has(ContentFormat::Image) {
-            if let std::result::Result::Ok(img) = ctx.get_image() {
-                if let std::result::Result::Ok(png) = img.to_png() {
-                    reps.push(ObservedClipboardRepresentation {
-                        id: RepresentationId::new(),
-                        format_id: "image".into(),
-                        mime: Some(MimeType("image/png".to_string())),
-                        bytes: png.get_bytes().to_vec(),
-                    });
+            match ctx.get_image() {
+                Ok(img) => match img.to_png() {
+                    Ok(png) => {
+                        let bytes = png.get_bytes().to_vec();
+                        debug!(
+                            format_id = "image",
+                            size_bytes = bytes.len(),
+                            "Read image representation"
+                        );
+                        reps.push(ObservedClipboardRepresentation {
+                            id: RepresentationId::new(),
+                            format_id: "image".into(),
+                            mime: Some(MimeType("image/png".to_string())),
+                            bytes,
+                        });
+                    }
+                    Err(err) => {
+                        warn!(error = %err, "Failed to convert image to png");
+                    }
+                },
+                Err(err) => {
+                    warn!(error = %err, "Failed to read image representation");
                 }
             }
         }
@@ -84,13 +144,27 @@ impl CommonClipboardImpl {
             if seen.contains(&format_id) {
                 continue;
             }
-            if let std::result::Result::Ok(buf) = ctx.get_buffer(&format_id) {
-                reps.push(ObservedClipboardRepresentation {
-                    id: RepresentationId::new(),
-                    format_id: format_id.into(),
-                    mime: None,
-                    bytes: buf,
-                });
+            match ctx.get_buffer(&format_id) {
+                Ok(buf) => {
+                    debug!(
+                        format_id = %format_id,
+                        size_bytes = buf.len(),
+                        "Read raw buffer representation"
+                    );
+                    reps.push(ObservedClipboardRepresentation {
+                        id: RepresentationId::new(),
+                        format_id: format_id.into(),
+                        mime: None,
+                        bytes: buf,
+                    });
+                }
+                Err(err) => {
+                    warn!(
+                        format_id = %format_id,
+                        error = %err,
+                        "Failed to read raw buffer representation"
+                    );
+                }
             }
         }
 

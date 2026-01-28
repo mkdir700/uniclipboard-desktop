@@ -34,39 +34,28 @@ impl RowMapper<ClipboardSelectionRow, ClipboardSelectionDecision> for ClipboardS
             ids::{EntryId, RepresentationId},
         };
 
-        // Parse secondary_rep_ids from comma-separated string with strict validation
-        // Reject empty tokens (e.g., "a,,b" or " a , b " with empty trimmed tokens)
-        if row.secondary_rep_ids.is_empty() {
-            return Err(anyhow::anyhow!(
-                "secondary_rep_ids cannot be empty for entry {}",
-                row.entry_id
-            ));
-        }
-
-        let secondary_rep_ids: Vec<RepresentationId> = row
-            .secondary_rep_ids
-            .split(',')
-            .enumerate()
-            .map(|(i, s)| {
-                let trimmed = s.trim();
-                if trimmed.is_empty() {
-                    Err(anyhow::anyhow!(
-                        "Empty token at position {} in secondary_rep_ids for entry {}",
-                        i,
-                        row.entry_id
-                    ))
-                } else {
-                    Ok(RepresentationId::from(trimmed.to_string()))
-                }
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        if secondary_rep_ids.is_empty() {
-            return Err(anyhow::anyhow!(
-                "secondary_rep_ids cannot be empty for entry {}",
-                row.entry_id
-            ));
-        }
+        // Parse secondary_rep_ids from comma-separated string with strict validation.
+        // Empty string is valid (no secondary representations), but empty tokens are not.
+        let secondary_rep_ids: Vec<RepresentationId> = if row.secondary_rep_ids.trim().is_empty() {
+            Vec::new()
+        } else {
+            row.secondary_rep_ids
+                .split(',')
+                .enumerate()
+                .map(|(i, s)| {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() {
+                        Err(anyhow::anyhow!(
+                            "Empty token at position {} in secondary_rep_ids for entry {}",
+                            i,
+                            row.entry_id
+                        ))
+                    } else {
+                        Ok(RepresentationId::from(trimmed.to_string()))
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?
+        };
 
         // Parse policy_version
         let policy_version = row.policy_version.parse().map_err(|_| {
@@ -151,11 +140,11 @@ mod tests {
     }
 
     #[test]
-    fn test_row_mapper_empty_secondary_rep_ids_fails() {
+    fn test_row_mapper_empty_secondary_rep_ids_ok() {
         let row = ClipboardSelectionRow {
             entry_id: "test-entry-3".to_string(),
             primary_rep_id: "rep-primary".to_string(),
-            secondary_rep_ids: "".to_string(), // Empty string should fail
+            secondary_rep_ids: "".to_string(),
             preview_rep_id: "rep-preview".to_string(),
             paste_rep_id: "rep-paste".to_string(),
             policy_version: "v1".to_string(),
@@ -164,14 +153,9 @@ mod tests {
         let mapper = ClipboardSelectionRowMapper;
         let result = mapper.to_domain(&row);
 
-        assert!(
-            result.is_err(),
-            "Empty secondary_rep_ids should return error"
-        );
-        let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("secondary_rep_ids cannot be empty"));
+        assert!(result.is_ok(), "Empty secondary_rep_ids should be allowed");
+        let decision = result.unwrap();
+        assert!(decision.selection.secondary_rep_ids.is_empty());
     }
 
     #[test]
