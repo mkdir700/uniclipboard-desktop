@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { formatPeerId } from '@/utils/formatters'
 
 interface GlobalPairingRequestDialogProps {
   open: boolean
@@ -65,7 +66,7 @@ export default function GlobalPairingRequestDialog({
           </div>
           <DialogDescription className="pt-2">
             {t('pairing.globalRequest.description', {
-              deviceName: request.deviceName || t('pairing.discovery.unknownDevice'),
+              deviceName: request.deviceName || formatPeerId(request.peerId),
             })}
           </DialogDescription>
         </DialogHeader>

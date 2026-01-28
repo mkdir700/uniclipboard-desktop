@@ -9,6 +9,7 @@ import {
   clearPairedDevicesError,
   updatePeerConnectionStatus,
 } from '@/store/slices/devicesSlice'
+import { formatPeerId } from '@/utils/formatters'
 
 const OtherDevice: React.FC = () => {
   const [expandedDevices, setExpandedDevices] = useState<Record<string, boolean>>({})
@@ -194,7 +195,7 @@ const OtherDevice: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-3">
                       <h4 className="text-lg font-semibold text-foreground tracking-tight">
-                        {device.deviceName || '未知设备'}
+                        {device.deviceName || formatPeerId(device.peerId)}
                       </h4>
                       <span
                         className={`px-2.5 py-0.5 text-xs font-medium rounded-full border ${iconColor}`}
@@ -203,7 +204,7 @@ const OtherDevice: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
-                      ID: {device.peerId.substring(0, 8)}...
+                      ID: {formatPeerId(device.peerId)}
                     </p>
                   </div>
                 </div>
@@ -269,7 +270,7 @@ const OtherDevice: React.FC = () => {
                     <div className="pt-6 border-t border-border/50 mt-6">
                       <DeviceSettingsPanel
                         deviceId={device.peerId}
-                        deviceName={device.deviceName || '未知设备'}
+                        deviceName={device.deviceName || formatPeerId(device.peerId)}
                       />
                     </div>
                   </motion.div>

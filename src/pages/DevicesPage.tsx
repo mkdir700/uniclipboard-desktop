@@ -16,6 +16,7 @@ import PairingPinDialog from '@/components/PairingPinDialog'
 import { captureUserIntent } from '@/observability/breadcrumbs'
 import { useAppDispatch } from '@/store/hooks'
 import { fetchPairedDevices } from '@/store/slices/devicesSlice'
+import { formatPeerId } from '@/utils/formatters'
 
 // P2P配对请求状态
 interface P2PPairingRequestWithPin extends P2PPairingRequestEvent {
@@ -244,10 +245,10 @@ const DevicesPage: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="font-medium text-sm">
-                        {pendingP2PRequest.deviceName || t('pairing.discovery.unknownDevice')}
+                        {pendingP2PRequest.deviceName || formatPeerId(pendingP2PRequest.peerId)}
                       </h4>
                       <p className="text-xs text-muted-foreground">
-                        ID: {pendingP2PRequest.peerId.substring(0, 8)}...
+                        ID: {formatPeerId(pendingP2PRequest.peerId)}
                       </p>
                     </div>
                   </div>

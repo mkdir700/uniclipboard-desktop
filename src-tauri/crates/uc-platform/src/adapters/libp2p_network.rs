@@ -75,6 +75,23 @@ impl PeerCaches {
         peer
     }
 
+    pub fn update_device_name(&mut self, peer_id: &str, device_name: &str) -> bool {
+        let name = device_name.trim();
+        if name.is_empty() {
+            return false;
+        }
+
+        match self.discovered_peers.get_mut(peer_id) {
+            Some(peer) => {
+                if peer.device_name.as_deref() != Some(name) {
+                    peer.device_name = Some(name.to_string());
+                }
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn remove_discovered(&mut self, peer_id: &str) -> Option<DiscoveredPeer> {
         self.reachable_peers.remove(peer_id);
         self.discovered_peers.remove(peer_id)
@@ -412,9 +429,11 @@ async fn handle_pairing_event(
     response_channels: &Arc<
         AsyncMutex<HashMap<String, request_response::ResponseChannel<PairingMessage>>>,
     >,
+    caches: &Arc<RwLock<PeerCaches>>,
     event_tx: &mpsc::Sender<NetworkEvent>,
 ) {
     if let request_response::Event::Message { peer, message, .. } = event {
+        let peer_id = peer.to_string();
         match message {
             request_response::Message::Request {
                 request, channel, ..
@@ -424,9 +443,13 @@ async fn handle_pairing_event(
                     let mut channels = response_channels.lock().await;
                     channels.insert(session_id.clone(), channel);
                 }
+                if let Some(device_name) = pairing_device_name(&request) {
+                    let mut caches = caches.write().await;
+                    caches.update_device_name(&peer_id, device_name);
+                }
                 if let Err(err) = event_tx
                     .send(NetworkEvent::PairingMessageReceived {
-                        peer_id: peer.to_string(),
+                        peer_id: peer_id.clone(),
                         message: request,
                     })
                     .await
@@ -435,9 +458,13 @@ async fn handle_pairing_event(
                 }
             }
             request_response::Message::Response { response, .. } => {
+                if let Some(device_name) = pairing_device_name(&response) {
+                    let mut caches = caches.write().await;
+                    caches.update_device_name(&peer_id, device_name);
+                }
                 if let Err(err) = event_tx
                     .send(NetworkEvent::PairingMessageReceived {
-                        peer_id: peer.to_string(),
+                        peer_id: peer_id.clone(),
                         message: response,
                     })
                     .await
@@ -446,6 +473,15 @@ async fn handle_pairing_event(
                 }
             }
         }
+    }
+}
+
+fn pairing_device_name(message: &PairingMessage) -> Option<&str> {
+    match message {
+        PairingMessage::Request(request) => Some(request.device_name.as_str()),
+        PairingMessage::Challenge(challenge) => Some(challenge.device_name.as_str()),
+        PairingMessage::Confirm(confirm) => Some(confirm.sender_device_name.as_str()),
+        PairingMessage::Response(_) => None,
     }
 }
 
@@ -553,6 +589,7 @@ async fn run_swarm(
                             &mut swarm,
                             event,
                             &pairing_response_channels,
+                            &caches,
                             &event_tx,
                         )
                         .await;
@@ -827,6 +864,29 @@ mod tests {
     }
 
     #[test]
+    fn cache_updates_device_name_for_discovered_peer() {
+        let mut caches = PeerCaches::new();
+        let discovered_at = Utc::now();
+
+        caches.upsert_discovered(
+            "peer-1".to_string(),
+            vec!["/ip4/192.168.1.2/tcp/4001".to_string()],
+            discovered_at,
+        );
+
+        let updated = caches.update_device_name("peer-1", "Desk");
+
+        assert!(updated);
+        assert_eq!(
+            caches
+                .discovered_peers
+                .get("peer-1")
+                .and_then(|peer| peer.device_name.as_deref()),
+            Some("Desk")
+        );
+    }
+
+    #[test]
     fn reachable_is_best_effort_and_requires_discovery() {
         let mut caches = PeerCaches::new();
         assert!(!caches.mark_reachable("peer-1"));
@@ -1058,6 +1118,7 @@ mod tests {
             .send_request(&peer_b, request);
 
         let response_channels = Arc::new(AsyncMutex::new(HashMap::new()));
+        let caches = Arc::new(RwLock::new(PeerCaches::new()));
         let (event_tx, mut event_rx) = mpsc::channel(1);
         let received = timeout(Duration::from_secs(10), async {
             loop {
@@ -1071,6 +1132,7 @@ mod tests {
                                 &mut swarm_b,
                                 event,
                                 &response_channels,
+                                &caches,
                                 &event_tx,
                             )
                             .await;
@@ -1118,6 +1180,7 @@ mod tests {
             .send_request(&peer_b, request);
 
         let response_channels = Arc::new(AsyncMutex::new(HashMap::new()));
+        let caches = Arc::new(RwLock::new(PeerCaches::new()));
         let (event_tx, mut event_rx) = mpsc::channel(1);
         let response = timeout(Duration::from_secs(10), async {
             let challenge = PairingMessage::Challenge(PairingChallenge {
@@ -1146,6 +1209,7 @@ mod tests {
                                 &mut swarm_b,
                                 event,
                                 &response_channels,
+                                &caches,
                                 &event_tx,
                             )
                             .await;
