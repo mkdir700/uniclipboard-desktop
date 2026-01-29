@@ -20,6 +20,9 @@ pub enum PairingMessage {
     Challenge(PairingChallenge),
     Response(PairingResponse),
     Confirm(PairingConfirm),
+    Reject(PairingReject),
+    Cancel(PairingCancel),
+    Busy(PairingBusy),
 }
 
 /// Initial pairing request sent by initiator
@@ -131,6 +134,27 @@ pub struct PairingConfirm {
     pub device_id: String,
 }
 
+/// Pairing rejection message
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairingReject {
+    pub session_id: String,
+    pub reason: Option<String>,
+}
+
+/// Pairing cancel message
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairingCancel {
+    pub session_id: String,
+    pub reason: Option<String>,
+}
+
+/// Pairing busy message
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairingBusy {
+    pub session_id: String,
+    pub reason: Option<String>,
+}
+
 /// Clipboard content broadcast via GossipSub
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardMessage {
@@ -187,6 +211,9 @@ impl std::fmt::Debug for PairingMessage {
             Self::Challenge(msg) => f.debug_tuple("Challenge").field(msg).finish(),
             Self::Response(msg) => f.debug_tuple("Response").field(msg).finish(),
             Self::Confirm(msg) => f.debug_tuple("Confirm").field(msg).finish(),
+            Self::Reject(msg) => f.debug_tuple("Reject").field(msg).finish(),
+            Self::Cancel(msg) => f.debug_tuple("Cancel").field(msg).finish(),
+            Self::Busy(msg) => f.debug_tuple("Busy").field(msg).finish(),
         }
     }
 }
@@ -198,6 +225,9 @@ impl PairingMessage {
             PairingMessage::Challenge(msg) => &msg.session_id,
             PairingMessage::Response(msg) => &msg.session_id,
             PairingMessage::Confirm(msg) => &msg.session_id,
+            PairingMessage::Reject(msg) => &msg.session_id,
+            PairingMessage::Cancel(msg) => &msg.session_id,
+            PairingMessage::Busy(msg) => &msg.session_id,
         }
     }
 }
@@ -246,6 +276,33 @@ impl std::fmt::Debug for PairingConfirm {
             .field("error", &self.error)
             .field("sender_device_name", &self.sender_device_name)
             .field("device_id", &self.device_id)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for PairingReject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingReject")
+            .field("session_id", &self.session_id)
+            .field("reason", &self.reason)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for PairingCancel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingCancel")
+            .field("session_id", &self.session_id)
+            .field("reason", &self.reason)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for PairingBusy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingBusy")
+            .field("session_id", &self.session_id)
+            .field("reason", &self.reason)
             .finish()
     }
 }
@@ -341,5 +398,25 @@ mod tests {
         let response_debug = format!("{:?}", response);
         assert!(response_debug.contains("[REDACTED]"));
         assert!(!response_debug.contains("1, 2, 3"));
+    }
+
+    #[test]
+    fn pairing_message_session_id_handles_cancel_and_reject() {
+        let reject = PairingMessage::Reject(PairingReject {
+            session_id: "s1".to_string(),
+            reason: Some("user".to_string()),
+        });
+        let cancel = PairingMessage::Cancel(PairingCancel {
+            session_id: "s2".to_string(),
+            reason: Some("timeout".to_string()),
+        });
+        let busy = PairingMessage::Busy(PairingBusy {
+            session_id: "s3".to_string(),
+            reason: Some("occupied".to_string()),
+        });
+
+        assert_eq!(reject.session_id(), "s1");
+        assert_eq!(cancel.session_id(), "s2");
+        assert_eq!(busy.session_id(), "s3");
     }
 }

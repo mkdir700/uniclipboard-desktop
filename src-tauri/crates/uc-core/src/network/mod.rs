@@ -20,7 +20,8 @@ pub use pairing_state_machine::{
     SessionId, TimeoutKind,
 };
 pub use protocol::{
-    ClipboardMessage, DeviceAnnounceMessage, HeartbeatMessage, PairingChallenge, PairingConfirm,
-    PairingMessage, PairingRequest, PairingResponse, ProtocolMessage,
+    ClipboardMessage, DeviceAnnounceMessage, HeartbeatMessage, PairingBusy, PairingCancel,
+    PairingChallenge, PairingConfirm, PairingMessage, PairingReject, PairingRequest,
+    PairingResponse, ProtocolMessage,
 };
 pub use protocol_ids::ProtocolId;
