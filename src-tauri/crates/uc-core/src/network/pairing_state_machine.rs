@@ -370,6 +370,8 @@ struct PairingContext {
     local_identity_pubkey: Option<Vec<u8>>,
     /// 对端身份公钥
     peer_identity_pubkey: Option<Vec<u8>>,
+    /// 对端设备名称
+    peer_device_name: Option<String>,
     /// 短码 (用户确认码)
     short_code: Option<String>,
     /// 当前 PIN
@@ -394,6 +396,7 @@ impl Default for PairingContext {
             peer_nonce: None,
             local_identity_pubkey: None,
             peer_identity_pubkey: None,
+            peer_device_name: None,
             short_code: None,
             pin: None,
             local_fingerprint: None,
@@ -595,6 +598,7 @@ impl PairingStateMachine {
                 self.context.peer_id = Some(request.peer_id.clone());
                 self.context.peer_nonce = Some(request.nonce.clone());
                 self.context.peer_identity_pubkey = Some(request.identity_pubkey.clone());
+                self.context.peer_device_name = Some(request.device_name.clone());
                 self.context.created_at = Some(now);
 
                 let deadline = now + Duration::seconds(self.policy.user_verification_timeout_secs);
@@ -978,6 +982,15 @@ impl PairingStateMachine {
                         )
                     }
                 };
+                let peer_identity_pubkey = match self.context.peer_identity_pubkey.clone() {
+                    Some(pubkey) => pubkey,
+                    None => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing peer identity pubkey".to_string()),
+                        )
+                    }
+                };
                 let peer_id = match self.context.peer_id.clone() {
                     Some(id) => id,
                     None => {
@@ -993,20 +1006,82 @@ impl PairingStateMachine {
                 self.context.pin = Some(pin.clone());
                 self.context.local_nonce = Some(nonce.clone());
 
+                let peer_nonce = match self.context.peer_nonce.clone() {
+                    Some(value) => value,
+                    None => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing peer nonce".to_string()),
+                        )
+                    }
+                };
+                let local_fingerprint =
+                    match IdentityFingerprint::from_public_key(&local_identity_pubkey) {
+                        Ok(fingerprint) => fingerprint.to_string(),
+                        Err(err) => {
+                            return self.fail_with_reason(
+                                session_id,
+                                FailureReason::CryptoError(err.to_string()),
+                            )
+                        }
+                    };
+                let peer_fingerprint =
+                    match IdentityFingerprint::from_public_key(&peer_identity_pubkey) {
+                        Ok(fingerprint) => fingerprint.to_string(),
+                        Err(err) => {
+                            return self.fail_with_reason(
+                                session_id,
+                                FailureReason::CryptoError(err.to_string()),
+                            )
+                        }
+                    };
+                let short_code = match ShortCodeGenerator::generate(
+                    &session_id,
+                    &nonce,
+                    &peer_nonce,
+                    &local_identity_pubkey,
+                    &peer_identity_pubkey,
+                    &self.policy.protocol_version,
+                ) {
+                    Ok(code) => code,
+                    Err(err) => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::CryptoError(err.to_string()),
+                        )
+                    }
+                };
+
+                self.context.short_code = Some(short_code.clone());
+                self.context.local_fingerprint = Some(local_fingerprint.clone());
+                self.context.peer_fingerprint = Some(peer_fingerprint.clone());
+
                 let challenge = PairingChallenge {
                     session_id: session_id.clone(),
                     pin,
                     device_name: local_device_name,
                     device_id: local_device_id,
-                    identity_pubkey: local_identity_pubkey,
+                    identity_pubkey: local_identity_pubkey.clone(),
                     nonce,
                 };
 
                 let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
+                let peer_display_name = self
+                    .context
+                    .peer_device_name
+                    .clone()
+                    .unwrap_or_else(|| "Unknown Device".to_string());
                 let actions = vec![
                     PairingAction::CancelTimer {
                         session_id: session_id.clone(),
                         kind: TimeoutKind::UserApproval,
+                    },
+                    PairingAction::ShowVerification {
+                        session_id: session_id.clone(),
+                        short_code,
+                        local_fingerprint,
+                        peer_fingerprint,
+                        peer_display_name,
                     },
                     PairingAction::Send {
                         peer_id,
