@@ -1,13 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  onP2PPairingRequest,
-  onP2PPinReady,
-  onP2PPairingComplete,
-  onP2PPairingFailed,
+  onP2PPairingVerification,
   verifyP2PPairingPin,
   rejectP2PPairing,
-  type P2PPairingRequestEvent,
+  type P2PPairingVerificationEvent,
 } from '@/api/p2p'
 import { DeviceList, DeviceHeader } from '@/components'
 import { DeviceTab } from '@/components/device/Header'
@@ -18,7 +15,7 @@ import { useAppDispatch } from '@/store/hooks'
 import { fetchPairedDevices } from '@/store/slices/devicesSlice'
 
 // P2P配对请求状态
-interface P2PPairingRequestWithPin extends P2PPairingRequestEvent {
+type P2PPairingRequestWithPin = (P2PPairingVerificationEvent & { kind: 'request' }) & {
   pin?: string
   peerDeviceName?: string
 }
@@ -44,46 +41,41 @@ const DevicesPage: React.FC = () => {
 
   const setupP2PRequestListener = useCallback(async () => {
     try {
-      const unlisten = await onP2PPairingRequest(request => {
-        console.log('Received P2P pairing request:', request)
-        setPendingP2PRequest({
-          ...request,
-          pin: undefined,
-          peerDeviceName: undefined,
-        })
-        // 自动切换到请求标签页
-        setActiveTab('requests')
-      })
-      cleanupRefs.current.push(unlisten)
+      const unlisten = await onP2PPairingVerification(event => {
+        if (event.kind === 'request') {
+          console.log('Received P2P pairing request:', event)
+          const requestEvent = event as P2PPairingVerificationEvent & { kind: 'request' }
+          setPendingP2PRequest({
+            ...requestEvent,
+            pin: undefined,
+            peerDeviceName: undefined,
+          })
+          setActiveTab('requests')
+          return
+        }
 
-      // 监听 PIN 就绪事件（接收方）
-      const unlistenPin = await onP2PPinReady(event => {
-        console.log('Received P2P PIN ready event (responder):', event)
-        // 接收方收到自己生成的 PIN
-        setPinCode(event.pin)
-        setPinPeerDeviceName(event.peerDeviceName || t('pairing.discovery.unknownDevice'))
-        setPairingSessionId(event.sessionId)
-        setShowPinDialog(true)
-      })
-      cleanupRefs.current.push(unlistenPin)
+        if (event.kind === 'verification') {
+          console.log('Received P2P verification event (responder):', event)
+          setPinCode(event.code ?? '')
+          setPinPeerDeviceName(event.deviceName || t('pairing.discovery.unknownDevice'))
+          setPairingSessionId(event.sessionId)
+          setShowPinDialog(true)
+          return
+        }
 
-      // 监听配对完成事件
-      const unlistenComplete = await onP2PPairingComplete(() => {
-        console.log('P2P pairing completed')
-        setShowPinDialog(false)
-        setPendingP2PRequest(null)
-        // 刷新设备列表
-        dispatch(fetchPairedDevices())
-      })
-      cleanupRefs.current.push(unlistenComplete)
+        if (event.kind === 'complete') {
+          console.log('P2P pairing completed')
+          setShowPinDialog(false)
+          setPendingP2PRequest(null)
+          dispatch(fetchPairedDevices())
+          return
+        }
 
-      // 监听配对失败事件
-      const unlistenFailed = await onP2PPairingFailed(event => {
         console.error('P2P pairing failed:', event)
         setShowPinDialog(false)
         setPendingP2PRequest(null)
       })
-      cleanupRefs.current.push(unlistenFailed)
+      cleanupRefs.current.push(unlisten)
     } catch (error) {
       console.error('Failed to setup P2P pairing request listener:', error)
     }
@@ -95,7 +87,9 @@ const DevicesPage: React.FC = () => {
 
     return () => {
       // 清理事件监听
-      cleanupRefs.current.forEach(cleanup => cleanup())
+      cleanupRefs.current.forEach(cleanup => {
+        cleanup()
+      })
       cleanupRefs.current = []
     }
   }, [setupP2PRequestListener])
@@ -115,8 +109,8 @@ const DevicesPage: React.FC = () => {
   }
 
   const handleAcceptPairing = async () => {
-    // 接收方点击接受后，后端会自动生成 PIN 并发送 p2p-pin-ready 事件
-    // 前端只需要等待 PIN 事件即可
+    // 接收方点击接受后，后端会自动生成验证码并发送 p2p-pairing-verification 事件
+    // 前端只需要等待 verification 事件即可
     captureUserIntent('pair_device', { source: 'request' })
     console.log('Accepting pairing request, waiting for PIN...')
   }
@@ -124,7 +118,11 @@ const DevicesPage: React.FC = () => {
   const handleRejectPairing = async () => {
     if (pendingP2PRequest) {
       try {
-        await rejectP2PPairing(pendingP2PRequest.sessionId, pendingP2PRequest.peerId)
+        if (pendingP2PRequest.peerId) {
+          await rejectP2PPairing(pendingP2PRequest.sessionId, pendingP2PRequest.peerId)
+        } else {
+          console.warn('Missing peerId for pairing rejection')
+        }
         setPendingP2PRequest(null)
       } catch (error) {
         console.error('Failed to reject pairing:', error)
@@ -156,7 +154,7 @@ const DevicesPage: React.FC = () => {
 
   const handleTabChange = (tab: DeviceTab) => {
     setActiveTab(tab)
-    let targetRef
+    let targetRef: React.RefObject<HTMLDivElement> | undefined
     switch (tab) {
       case 'connected':
         targetRef = connectedRef
@@ -229,6 +227,7 @@ const DevicesPage: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                       <svg
+                        aria-hidden="true"
                         className="w-5 h-5 text-primary"
                         fill="none"
                         stroke="currentColor"
@@ -247,18 +246,20 @@ const DevicesPage: React.FC = () => {
                         {pendingP2PRequest.deviceName || t('pairing.discovery.unknownDevice')}
                       </h4>
                       <p className="text-xs text-muted-foreground">
-                        ID: {pendingP2PRequest.peerId.substring(0, 8)}...
+                        ID: {(pendingP2PRequest.peerId ?? '').substring(0, 8)}...
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={handleRejectPairing}
                       className="px-3 py-1.5 text-sm font-medium rounded-md border border-border bg-background hover:bg-muted transition-colors"
                     >
                       {t('pairing.requests.reject')}
                     </button>
                     <button
+                      type="button"
                       onClick={handleAcceptPairing}
                       className="px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                     >

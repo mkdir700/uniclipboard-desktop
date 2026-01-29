@@ -13,9 +13,7 @@ import {
   getP2PPeers,
   initiateP2PPairing,
   verifyP2PPairingPin,
-  onP2PPinReady,
-  onP2PPairingComplete,
-  onP2PPairingFailed,
+  onP2PPairingVerification,
   type P2PPeerInfo,
 } from '@/api/p2p'
 import { Button } from '@/components/ui/button'
@@ -53,58 +51,40 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
   const cleanupRefs = React.useRef<(() => void)[]>([])
 
   // Reset state when dialog opens
-  useEffect(() => {
-    if (open) {
-      setStep('discovery')
-      setPeers([])
-      setSelectedPeer(null)
-      setPairingSessionId(null)
-      setPinCode('')
-      setErrorMsg('')
-      loadPeers()
-      setupListeners()
-    } else {
-      // Cleanup listeners when closed
-      cleanupRefs.current.forEach(cleanup => cleanup())
-      cleanupRefs.current = []
-    }
-  }, [open])
-
-  const setupListeners = async () => {
+  const setupListeners = React.useCallback(async () => {
     try {
-      // Listen for PIN ready
-      const unlistenPin = await onP2PPinReady(event => {
-        console.log('PIN Ready:', event)
-        setPairingSessionId(event.sessionId)
-        setPinCode(event.pin)
-        setStep('pin-verify')
-      })
-      cleanupRefs.current.push(unlistenPin)
+      const unlistenVerification = await onP2PPairingVerification(event => {
+        if (event.kind === 'verification') {
+          console.log('Pairing verification:', event)
+          setPairingSessionId(event.sessionId)
+          setPinCode(event.code ?? '')
+          setStep('pin-verify')
+          return
+        }
 
-      // Listen for Pairing Complete
-      const unlistenComplete = await onP2PPairingComplete(event => {
-        console.log('Pairing Complete:', event)
-        setStep('success')
-        setTimeout(() => {
-          onPairingSuccess?.()
-          onClose()
-        }, 2000)
-      })
-      cleanupRefs.current.push(unlistenComplete)
+        if (event.kind === 'complete') {
+          console.log('Pairing Complete:', event)
+          setStep('success')
+          setTimeout(() => {
+            onPairingSuccess?.()
+            onClose()
+          }, 2000)
+          return
+        }
 
-      // Listen for Pairing Failed
-      const unlistenFailed = await onP2PPairingFailed(event => {
-        console.error('Pairing Failed:', event)
-        setErrorMsg(event.error)
-        setStep('failed')
+        if (event.kind === 'failed') {
+          console.error('Pairing Failed:', event)
+          setErrorMsg(event.error ?? '')
+          setStep('failed')
+        }
       })
-      cleanupRefs.current.push(unlistenFailed)
+      cleanupRefs.current.push(unlistenVerification)
     } catch (err) {
       console.error('Failed to setup listeners:', err)
     }
-  }
+  }, [onClose, onPairingSuccess])
 
-  const loadPeers = async () => {
+  const loadPeers = React.useCallback(async () => {
     setLoading(true)
     setErrorMsg('')
     try {
@@ -118,7 +98,26 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
     } finally {
       setLoading(false)
     }
-  }
+  }, [t])
+
+  useEffect(() => {
+    if (open) {
+      setStep('discovery')
+      setPeers([])
+      setSelectedPeer(null)
+      setPairingSessionId(null)
+      setPinCode('')
+      setErrorMsg('')
+      loadPeers()
+      setupListeners()
+    } else {
+      // Cleanup listeners when closed
+      cleanupRefs.current.forEach(cleanup => {
+        cleanup()
+      })
+      cleanupRefs.current = []
+    }
+  }, [open, loadPeers, setupListeners])
 
   const handleConnect = async (peer: P2PPeerInfo) => {
     setSelectedPeer(peer)
@@ -224,10 +223,17 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
                   </div>
                   <div className="space-y-2 overflow-y-auto max-h-[300px]">
                     {peers.map(peer => (
-                      <div
+                      <button
                         key={peer.peerId}
+                        type="button"
                         className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer group"
                         onClick={() => handleConnect(peer)}
+                        onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            handleConnect(peer)
+                          }
+                        }}
                       >
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-primary/10 rounded-full text-primary">
@@ -249,7 +255,7 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
                         >
                           {t('pairing.discovery.connect')}
                         </Button>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
