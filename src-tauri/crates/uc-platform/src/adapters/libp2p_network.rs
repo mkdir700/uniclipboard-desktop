@@ -791,6 +791,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tokio::time::{sleep, timeout, Duration};
     use tokio_util::compat::TokioAsyncReadCompatExt;
+    use uc_core::network::PairingReject;
     use uc_core::network::{ConnectionPolicy, PairingState, ResolvedConnectionPolicy};
     use uc_core::network::{PairingChallenge, PairingRequest};
     use uc_core::ports::{ConnectionPolicyResolverError, ConnectionPolicyResolverPort};
@@ -1171,6 +1172,85 @@ mod tests {
         .expect("response timeout");
 
         assert!(matches!(response, PairingMessage::Challenge(_)));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pairing_reject_uses_stored_channel() {
+        let keypair_a = identity::Keypair::generate_ed25519();
+        let keypair_b = identity::Keypair::generate_ed25519();
+        let peer_b = PeerId::from(keypair_b.public());
+
+        let mut swarm_a = build_swarm(keypair_a);
+        let mut swarm_b = build_swarm(keypair_b);
+
+        let addr_b = listen_on_random(&mut swarm_b).await;
+        let _addr_a = listen_on_random(&mut swarm_a).await;
+        let dial_addr = addr_b.with(Protocol::P2p(peer_b));
+        swarm_a.dial(dial_addr).expect("dial b");
+
+        let request = PairingMessage::Request(PairingRequest {
+            session_id: "session-3".to_string(),
+            device_name: "device-a".to_string(),
+            device_id: "device-a".to_string(),
+            peer_id: "peer-a".to_string(),
+            identity_pubkey: vec![1; 32],
+            nonce: vec![2; 16],
+        });
+        swarm_a
+            .behaviour_mut()
+            .pairing
+            .send_request(&peer_b, request);
+
+        let response_channels = Arc::new(AsyncMutex::new(HashMap::new()));
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+        let response = timeout(Duration::from_secs(10), async {
+            let reject = PairingMessage::Reject(PairingReject {
+                session_id: "session-3".to_string(),
+                reason: Some("user_reject".to_string()),
+            });
+
+            loop {
+                tokio::select! {
+                    event = swarm_a.select_next_some() => {
+                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
+                            if let request_response::Event::Message { message, .. } = event {
+                                if let request_response::Message::Response { response, .. } = message {
+                                    return response;
+                                }
+                            }
+                        }
+                    }
+                    event = swarm_b.select_next_some() => {
+                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
+                            handle_pairing_event(
+                                &mut swarm_b,
+                                event,
+                                &response_channels,
+                                &event_tx,
+                            )
+                            .await;
+                        }
+                    }
+                    event = event_rx.recv() => {
+                        if let Some(NetworkEvent::PairingMessageReceived { message, .. }) = event {
+                            if matches!(message, PairingMessage::Request(_)) {
+                                let channel = {
+                                    let mut channels = response_channels.lock().await;
+                                    channels.remove("session-3")
+                                };
+                                if let Some(channel) = channel {
+                                    let _ = swarm_b.behaviour_mut().pairing.send_response(channel, reject.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        })
+        .await
+        .expect("response timeout");
+
+        assert!(matches!(response, PairingMessage::Reject(_)));
     }
 
     #[tokio::test]
