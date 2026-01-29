@@ -83,50 +83,28 @@ export interface P2PPinVerifyRequest {
   pinMatches: boolean
 }
 
-/**
- * P2P 配对请求事件数据
- */
-export interface P2PPairingRequestEvent {
-  /** Session ID */
-  sessionId: string
-  /** Peer ID of the requester */
-  peerId: string
-  /** Device name of the requester */
-  deviceName?: string
-}
+export type P2PPairingVerificationKind = 'request' | 'verification' | 'complete' | 'failed'
 
 /**
- * P2P PIN 就绪事件数据
+ * P2P 配对验证事件数据
  */
-export interface P2PPinReadyEvent {
+export interface P2PPairingVerificationEvent {
   /** Session ID */
   sessionId: string
-  /** PIN to verify */
-  pin: string
-  /** Peer device name */
-  peerDeviceName?: string
-}
-
-/**
- * P2P 配对完成事件数据
- */
-export interface P2PPairingCompleteEvent {
-  /** Session ID */
-  sessionId: string
+  /** Event kind */
+  kind: P2PPairingVerificationKind
   /** Peer ID */
-  peerId: string
+  peerId?: string
   /** Device name */
-  deviceName: string
-}
-
-/**
- * P2P 配对失败事件数据
- */
-export interface P2PPairingFailedEvent {
-  /** Session ID */
-  sessionId: string
+  deviceName?: string
+  /** Verification code (short code) */
+  code?: string
+  /** Local fingerprint */
+  localFingerprint?: string
+  /** Peer fingerprint */
+  peerFingerprint?: string
   /** Error message */
-  error: string
+  error?: string
 }
 
 /**
@@ -237,81 +215,24 @@ export async function acceptP2PPairing(sessionId: string): Promise<void> {
 }
 
 /**
- * 监听 P2P 配对请求事件
+ * 监听 P2P 配对验证事件
  */
-export async function onP2PPairingRequest(
-  callback: (request: P2PPairingRequestEvent) => void
+export async function onP2PPairingVerification(
+  callback: (event: P2PPairingVerificationEvent) => void
 ): Promise<() => void> {
   try {
-    const unlisten = await listen<P2PPairingRequestEvent>('p2p-pairing-request', event => {
-      callback(event.payload)
-    })
+    const unlisten = await listen<P2PPairingVerificationEvent>(
+      'p2p-pairing-verification',
+      event => {
+        callback(event.payload)
+      }
+    )
 
     return () => {
       unlisten()
     }
   } catch (error) {
-    console.error('Failed to setup P2P pairing request listener:', error)
-    return () => {}
-  }
-}
-
-/**
- * 监听 P2P PIN 就绪事件
- */
-export async function onP2PPinReady(
-  callback: (event: P2PPinReadyEvent) => void
-): Promise<() => void> {
-  try {
-    const unlisten = await listen<P2PPinReadyEvent>('p2p-pin-ready', event => {
-      callback(event.payload)
-    })
-
-    return () => {
-      unlisten()
-    }
-  } catch (error) {
-    console.error('Failed to setup P2P PIN ready listener:', error)
-    return () => {}
-  }
-}
-
-/**
- * 监听 P2P 配对完成事件
- */
-export async function onP2PPairingComplete(
-  callback: (event: P2PPairingCompleteEvent) => void
-): Promise<() => void> {
-  try {
-    const unlisten = await listen<P2PPairingCompleteEvent>('p2p-pairing-complete', event => {
-      callback(event.payload)
-    })
-
-    return () => {
-      unlisten()
-    }
-  } catch (error) {
-    console.error('Failed to setup P2P pairing complete listener:', error)
-    return () => {}
-  }
-}
-
-/**
- * 监听 P2P 配对失败事件
- */
-export async function onP2PPairingFailed(
-  callback: (event: P2PPairingFailedEvent) => void
-): Promise<() => void> {
-  try {
-    const unlisten = await listen<P2PPairingFailedEvent>('p2p-pairing-failed', event => {
-      callback(event.payload)
-    })
-
-    return () => {
-      unlisten()
-    }
-  } catch (error) {
-    console.error('Failed to setup P2P pairing failed listener:', error)
+    console.error('Failed to setup P2P pairing verification listener:', error)
     return () => {}
   }
 }
