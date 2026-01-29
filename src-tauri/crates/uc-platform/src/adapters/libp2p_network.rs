@@ -176,7 +176,12 @@ impl Libp2pNetworkAdapter {
         let keypair = load_or_create_identity(identity_store.as_ref())
             .map_err(|e| anyhow!("failed to load libp2p identity: {e}"))?;
         let local_peer_id = PeerId::from(keypair.public()).to_string();
-        let local_identity_pubkey = keypair.public().encode_protobuf();
+        let local_identity_pubkey = keypair
+            .public()
+            .try_into_ed25519()
+            .map_err(|err| anyhow!("failed to extract ed25519 public key: {err}"))?
+            .to_bytes()
+            .to_vec();
         let (event_tx, event_rx) = mpsc::channel(64);
         let (clipboard_tx, clipboard_rx) = mpsc::channel(64);
         let (pairing_tx, pairing_rx) = mpsc::channel(64);
@@ -1396,6 +1401,18 @@ mod tests {
             .expect("subscribe clipboard");
 
         assert!(!receiver.is_closed());
+    }
+
+    #[test]
+    fn adapter_exposes_raw_identity_pubkey() {
+        let adapter = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter");
+
+        let pubkey = adapter.local_identity_pubkey();
+        assert_eq!(pubkey.len(), 32);
     }
 
     async fn wait_for_discovery(
