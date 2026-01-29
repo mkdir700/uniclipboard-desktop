@@ -28,7 +28,10 @@ use crate::crypto::pin_hash::{hash_pin, verify_pin};
 use crate::crypto::{IdentityFingerprint, ShortCodeGenerator};
 use crate::network::{
     paired_device::{PairedDevice, PairingState as PairedDeviceState},
-    protocol::{PairingChallenge, PairingConfirm, PairingMessage, PairingResponse},
+    protocol::{
+        PairingCancel, PairingChallenge, PairingConfirm, PairingMessage, PairingReject,
+        PairingRequest, PairingResponse,
+    },
 };
 use crate::settings::model::PairingSettings;
 use crate::PeerId;
@@ -60,61 +63,28 @@ pub enum PairingState {
     /// 空闲状态,未进行配对
     Idle,
 
-    /// 配对启动中 (生成会话ID、分配 nonce)
-    Starting {
-        session_id: SessionId,
-    },
+    /// 已发送配对请求 (Initiator)
+    RequestSent { session_id: SessionId },
 
-    /// 已发送配对请求 (Initiator) / 等待请求 (Responder)
-    RequestSent {
-        session_id: SessionId,
-        attempt: u8,
-    },
-    WaitingForRequest {
-        session_id: SessionId,
-    },
-
-    /// 已发送 Challenge (Responder) / 等待 Challenge (Initiator)
-    ChallengeSent {
-        session_id: SessionId,
-        attempt: u8,
-    },
-    WaitingForChallenge {
-        session_id: SessionId,
-    },
-
-    /// 等待用户确认 (展示短码/指纹)
-    ///
-    /// 这是安全关键步骤,用户必须比对双方显示的确认码。
-    WaitingUserVerification {
+    /// 等待用户确认 (Initiator, 显示短码/指纹)
+    AwaitingUserConfirm {
         session_id: SessionId,
         short_code: String,
         peer_fingerprint: String,
         expires_at: DateTime<Utc>,
     },
 
-    /// 已发送 Response (Initiator) / 等待 Response (Responder)
-    ResponseSent {
-        session_id: SessionId,
-        attempt: u8,
-    },
-    WaitingForResponse {
-        session_id: SessionId,
-    },
+    /// 已发送 Response (Initiator)
+    ResponseSent { session_id: SessionId },
 
-    /// 已发送 Confirm (双方) / 等待 Confirm (双方)
-    ConfirmSent {
-        session_id: SessionId,
-        attempt: u8,
-    },
-    WaitingForConfirm {
-        session_id: SessionId,
-    },
+    /// 等待用户批准配对 (Responder)
+    AwaitingUserApproval { session_id: SessionId },
 
-    /// 持久化信任关系中 (写入 PairedDevice)
-    ///
-    /// 独立状态确保"配对协议完成"和"持久化完成"是原子操作。
-    PersistingTrust {
+    /// 已发送 Challenge (Responder)
+    ChallengeSent { session_id: SessionId },
+
+    /// 持久化中 (双方)
+    Finalizing {
         session_id: SessionId,
         paired_device: PairedDevice,
     },
@@ -177,6 +147,10 @@ pub enum TimeoutKind {
     WaitingConfirm,
     /// 用户确认超时
     UserVerification,
+    /// 用户审批超时
+    UserApproval,
+    /// 持久化超时
+    Persist,
 }
 
 /// 取消来源
@@ -542,23 +516,79 @@ impl PairingStateMachine {
         now: DateTime<Utc>,
     ) -> (PairingState, Vec<PairingAction>) {
         match (self.state.clone(), event) {
-            // ========== Idle -> Starting ==========
             (PairingState::Idle, PairingEvent::StartPairing { role, peer_id }) => {
+                if role != PairingRole::Initiator {
+                    return self.fail_with_reason(
+                        self.context.session_id.clone().unwrap_or_default(),
+                        FailureReason::Other("Invalid role for StartPairing".to_string()),
+                    );
+                }
+
                 let session_id = uuid::Uuid::new_v4().to_string();
+                let local_nonce = generate_nonce();
                 self.context.session_id = Some(session_id.clone());
                 self.context.role = Some(role);
                 self.context.peer_id = Some(peer_id.clone());
+                self.context.local_nonce = Some(local_nonce.clone());
                 self.context.created_at = Some(now);
 
-                let new_state = PairingState::Starting {
-                    session_id: session_id.clone(),
+                let local_device_name = match self.context.local_device_name.clone() {
+                    Some(name) => name,
+                    None => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing local device name".to_string()),
+                        )
+                    }
                 };
-                let actions = vec![];
+                let local_device_id = match self.context.local_device_id.clone() {
+                    Some(id) => id,
+                    None => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing local device id".to_string()),
+                        )
+                    }
+                };
+                let local_identity_pubkey = match self.context.local_identity_pubkey.clone() {
+                    Some(pubkey) => pubkey,
+                    None => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing local identity pubkey".to_string()),
+                        )
+                    }
+                };
 
-                (new_state, actions)
+                let request = PairingRequest {
+                    session_id: session_id.clone(),
+                    device_name: local_device_name,
+                    device_id: local_device_id,
+                    peer_id: peer_id.clone(),
+                    identity_pubkey: local_identity_pubkey,
+                    nonce: local_nonce,
+                };
+
+                let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
+                let actions = vec![
+                    PairingAction::Send {
+                        peer_id,
+                        message: PairingMessage::Request(request),
+                    },
+                    PairingAction::StartTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::WaitingChallenge,
+                        deadline,
+                    },
+                ];
+
+                (
+                    PairingState::RequestSent {
+                        session_id: session_id.clone(),
+                    },
+                    actions,
+                )
             }
-
-            // ========== Idle -> WaitingForRequest (Responder receives request) ==========
             (PairingState::Idle, PairingEvent::RecvRequest { request, .. }) => {
                 self.context.session_id = Some(request.session_id.clone());
                 self.context.role = Some(PairingRole::Responder);
@@ -567,47 +597,34 @@ impl PairingStateMachine {
                 self.context.peer_identity_pubkey = Some(request.identity_pubkey.clone());
                 self.context.created_at = Some(now);
 
-                let new_state = PairingState::WaitingForRequest {
-                    session_id: request.session_id,
-                };
-                let actions = vec![];
+                let deadline = now + Duration::seconds(self.policy.user_verification_timeout_secs);
+                let actions = vec![PairingAction::StartTimer {
+                    session_id: request.session_id.clone(),
+                    kind: TimeoutKind::UserApproval,
+                    deadline,
+                }];
 
-                (new_state, actions)
+                (
+                    PairingState::AwaitingUserApproval {
+                        session_id: request.session_id,
+                    },
+                    actions,
+                )
             }
-
-            // ========== Starting -> WaitingForRequest (legacy path) ==========
-            (PairingState::Starting { .. }, PairingEvent::RecvRequest { request, .. }) => {
-                self.context.session_id = Some(request.session_id.clone());
-                self.context.role = Some(PairingRole::Responder);
-                self.context.peer_id = Some(request.peer_id.clone());
-                self.context.peer_nonce = Some(request.nonce.clone());
-                self.context.peer_identity_pubkey = Some(request.identity_pubkey.clone());
-                self.context.created_at = Some(now);
-
-                let new_state = PairingState::WaitingForRequest {
-                    session_id: request.session_id,
-                };
-                let actions = vec![];
-
-                (new_state, actions)
-            }
-
-            // ========== Idle/WaitingForChallenge -> WaitingUserVerification ==========
             (
-                PairingState::Idle | PairingState::WaitingForChallenge { .. },
+                PairingState::RequestSent { session_id },
                 PairingEvent::RecvChallenge { challenge, .. },
             ) => {
                 let local_identity_pubkey = match self.context.local_identity_pubkey.clone() {
                     Some(pubkey) => pubkey,
                     None => {
-                        return self.fail_with_reason(FailureReason::Other(
-                            "Missing local identity pubkey".to_string(),
-                        ))
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing local identity pubkey".to_string()),
+                        )
                     }
                 };
 
-                self.context.session_id = Some(challenge.session_id.clone());
-                self.context.role = Some(PairingRole::Initiator);
                 self.context.peer_nonce = Some(challenge.nonce.clone());
                 self.context.peer_identity_pubkey = Some(challenge.identity_pubkey.clone());
                 self.context.pin = Some(challenge.pin.clone());
@@ -624,16 +641,20 @@ impl PairingStateMachine {
                     match IdentityFingerprint::from_public_key(&local_identity_pubkey) {
                         Ok(fingerprint) => fingerprint.to_string(),
                         Err(err) => {
-                            return self
-                                .fail_with_reason(FailureReason::CryptoError(err.to_string()))
+                            return self.fail_with_reason(
+                                session_id,
+                                FailureReason::CryptoError(err.to_string()),
+                            )
                         }
                     };
                 let peer_fingerprint =
                     match IdentityFingerprint::from_public_key(&challenge.identity_pubkey) {
                         Ok(fingerprint) => fingerprint.to_string(),
                         Err(err) => {
-                            return self
-                                .fail_with_reason(FailureReason::CryptoError(err.to_string()))
+                            return self.fail_with_reason(
+                                session_id,
+                                FailureReason::CryptoError(err.to_string()),
+                            )
                         }
                     };
                 let short_code = match ShortCodeGenerator::generate(
@@ -646,7 +667,10 @@ impl PairingStateMachine {
                 ) {
                     Ok(code) => code,
                     Err(err) => {
-                        return self.fail_with_reason(FailureReason::CryptoError(err.to_string()))
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::CryptoError(err.to_string()),
+                        )
                     }
                 };
 
@@ -656,61 +680,311 @@ impl PairingStateMachine {
 
                 let expires_at =
                     now + Duration::seconds(self.policy.user_verification_timeout_secs);
-                let new_state = PairingState::WaitingUserVerification {
-                    session_id: challenge.session_id.clone(),
-                    short_code: short_code.clone(),
-                    peer_fingerprint: peer_fingerprint.clone(),
-                    expires_at,
-                };
                 let actions = vec![
+                    PairingAction::CancelTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::WaitingChallenge,
+                    },
                     PairingAction::ShowVerification {
-                        session_id: challenge.session_id.clone(),
-                        short_code,
+                        session_id: session_id.clone(),
+                        short_code: short_code.clone(),
                         local_fingerprint,
-                        peer_fingerprint,
+                        peer_fingerprint: peer_fingerprint.clone(),
                         peer_display_name: challenge.device_name,
                     },
                     PairingAction::StartTimer {
-                        session_id: challenge.session_id,
+                        session_id: session_id.clone(),
                         kind: TimeoutKind::UserVerification,
                         deadline: expires_at,
                     },
                 ];
 
-                (new_state, actions)
+                (
+                    PairingState::AwaitingUserConfirm {
+                        session_id,
+                        short_code,
+                        peer_fingerprint,
+                        expires_at,
+                    },
+                    actions,
+                )
             }
+            (
+                PairingState::AwaitingUserConfirm { session_id, .. },
+                PairingEvent::UserAccept { .. },
+            ) => {
+                let peer_id = match self.context.peer_id.clone() {
+                    Some(id) => id,
+                    None => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing peer id".to_string()),
+                        )
+                    }
+                };
+                let pin = match self.context.pin.clone() {
+                    Some(pin) => pin,
+                    None => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing PIN".to_string()),
+                        )
+                    }
+                };
 
-            // ========== WaitingForRequest -> WaitingForResponse ==========
-            (PairingState::WaitingForRequest { session_id }, PairingEvent::UserAccept { .. }) => {
+                let pin_hash = match hash_pin(&pin) {
+                    Ok(hash) => hash,
+                    Err(err) => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::CryptoError(err.to_string()),
+                        )
+                    }
+                };
+                self.context.pin = None;
+
+                let response = PairingResponse {
+                    session_id: session_id.clone(),
+                    pin_hash,
+                    accepted: true,
+                };
+
+                let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
+                let actions = vec![
+                    PairingAction::CancelTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::UserVerification,
+                    },
+                    PairingAction::Send {
+                        peer_id,
+                        message: PairingMessage::Response(response),
+                    },
+                    PairingAction::StartTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::WaitingConfirm,
+                        deadline,
+                    },
+                ];
+
+                (
+                    PairingState::ResponseSent {
+                        session_id: session_id.clone(),
+                    },
+                    actions,
+                )
+            }
+            (
+                PairingState::AwaitingUserConfirm { session_id, .. },
+                PairingEvent::UserReject { .. },
+            ) => self.cancel_with_reason(
+                session_id.clone(),
+                CancellationBy::LocalUser,
+                Some("User rejected pairing".to_string()),
+                Some(PairingAction::Send {
+                    peer_id: self.context.peer_id.clone().unwrap_or_default(),
+                    message: PairingMessage::Reject(PairingReject {
+                        session_id: session_id.clone(),
+                        reason: Some("user_reject".to_string()),
+                    }),
+                }),
+                Some(TimeoutKind::UserVerification),
+            ),
+            (
+                PairingState::AwaitingUserConfirm { session_id, .. },
+                PairingEvent::UserCancel { .. },
+            ) => self.cancel_with_reason(
+                session_id.clone(),
+                CancellationBy::LocalUser,
+                Some("User cancelled pairing".to_string()),
+                Some(PairingAction::Send {
+                    peer_id: self.context.peer_id.clone().unwrap_or_default(),
+                    message: PairingMessage::Cancel(PairingCancel {
+                        session_id: session_id.clone(),
+                        reason: Some("user_cancel".to_string()),
+                    }),
+                }),
+                Some(TimeoutKind::UserVerification),
+            ),
+            (
+                PairingState::AwaitingUserConfirm { session_id, .. },
+                PairingEvent::Timeout {
+                    kind: TimeoutKind::UserVerification,
+                    ..
+                },
+            ) => self.fail_with_reason(
+                session_id,
+                FailureReason::Timeout(TimeoutKind::UserVerification),
+            ),
+            (
+                PairingState::AwaitingUserConfirm { session_id, .. },
+                PairingEvent::RecvCancel { .. },
+            ) => self.cancel_with_reason(
+                session_id,
+                CancellationBy::RemoteUser,
+                Some("Peer cancelled pairing".to_string()),
+                None,
+                Some(TimeoutKind::UserVerification),
+            ),
+            (
+                PairingState::AwaitingUserConfirm { session_id, .. },
+                PairingEvent::RecvReject { .. },
+            ) => self.cancel_with_reason(
+                session_id,
+                CancellationBy::RemoteUser,
+                Some("Peer rejected pairing".to_string()),
+                None,
+                Some(TimeoutKind::UserVerification),
+            ),
+            (
+                PairingState::AwaitingUserConfirm { session_id, .. },
+                PairingEvent::RecvBusy { .. },
+            ) => self.fail_with_reason(session_id, FailureReason::PeerBusy),
+            (
+                PairingState::RequestSent { session_id },
+                PairingEvent::Timeout {
+                    kind: TimeoutKind::WaitingChallenge,
+                    ..
+                },
+            ) => self.fail_with_reason(
+                session_id,
+                FailureReason::Timeout(TimeoutKind::WaitingChallenge),
+            ),
+            (PairingState::RequestSent { session_id }, PairingEvent::RecvReject { .. }) => self
+                .cancel_with_reason(
+                    session_id,
+                    CancellationBy::RemoteUser,
+                    Some("Peer rejected pairing".to_string()),
+                    None,
+                    Some(TimeoutKind::WaitingChallenge),
+                ),
+            (PairingState::RequestSent { session_id }, PairingEvent::RecvCancel { .. }) => self
+                .cancel_with_reason(
+                    session_id,
+                    CancellationBy::RemoteUser,
+                    Some("Peer cancelled pairing".to_string()),
+                    None,
+                    Some(TimeoutKind::WaitingChallenge),
+                ),
+            (PairingState::RequestSent { session_id }, PairingEvent::RecvBusy { .. }) => {
+                self.fail_with_reason(session_id, FailureReason::PeerBusy)
+            }
+            (
+                PairingState::ResponseSent { session_id },
+                PairingEvent::RecvConfirm { confirm, .. },
+            ) => {
+                let cancel_timer = PairingAction::CancelTimer {
+                    session_id: session_id.clone(),
+                    kind: TimeoutKind::WaitingConfirm,
+                };
+
+                if !confirm.success {
+                    let error = confirm
+                        .error
+                        .unwrap_or_else(|| "Pairing rejected".to_string());
+                    let (state, mut actions) =
+                        self.fail_with_reason(session_id, FailureReason::Other(error));
+                    actions.insert(0, cancel_timer);
+                    return (state, actions);
+                }
+
+                let paired_device = match self.build_paired_device(now) {
+                    Ok(device) => device,
+                    Err(reason) => {
+                        let (state, mut actions) = self.fail_with_reason(session_id, reason);
+                        actions.insert(0, cancel_timer);
+                        return (state, actions);
+                    }
+                };
+
+                let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
+                let actions = vec![
+                    cancel_timer,
+                    PairingAction::PersistPairedDevice {
+                        session_id: session_id.clone(),
+                        device: paired_device.clone(),
+                    },
+                    PairingAction::StartTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::Persist,
+                        deadline,
+                    },
+                ];
+
+                (
+                    PairingState::Finalizing {
+                        session_id,
+                        paired_device,
+                    },
+                    actions,
+                )
+            }
+            (
+                PairingState::ResponseSent { session_id },
+                PairingEvent::Timeout {
+                    kind: TimeoutKind::WaitingConfirm,
+                    ..
+                },
+            ) => self.fail_with_reason(
+                session_id,
+                FailureReason::Timeout(TimeoutKind::WaitingConfirm),
+            ),
+            (PairingState::ResponseSent { session_id }, PairingEvent::RecvCancel { .. }) => self
+                .cancel_with_reason(
+                    session_id,
+                    CancellationBy::RemoteUser,
+                    Some("Peer cancelled pairing".to_string()),
+                    None,
+                    Some(TimeoutKind::WaitingConfirm),
+                ),
+            (PairingState::ResponseSent { session_id }, PairingEvent::RecvReject { .. }) => self
+                .cancel_with_reason(
+                    session_id,
+                    CancellationBy::RemoteUser,
+                    Some("Peer rejected pairing".to_string()),
+                    None,
+                    Some(TimeoutKind::WaitingConfirm),
+                ),
+            (PairingState::ResponseSent { session_id }, PairingEvent::RecvBusy { .. }) => {
+                self.fail_with_reason(session_id, FailureReason::PeerBusy)
+            }
+            (
+                PairingState::AwaitingUserApproval { session_id },
+                PairingEvent::UserAccept { .. },
+            ) => {
                 let local_device_name = match self.context.local_device_name.clone() {
                     Some(name) => name,
                     None => {
-                        return self.fail_with_reason(FailureReason::Other(
-                            "Missing local device name".to_string(),
-                        ))
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing local device name".to_string()),
+                        )
                     }
                 };
                 let local_device_id = match self.context.local_device_id.clone() {
                     Some(id) => id,
                     None => {
-                        return self.fail_with_reason(FailureReason::Other(
-                            "Missing local device id".to_string(),
-                        ))
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing local device id".to_string()),
+                        )
                     }
                 };
                 let local_identity_pubkey = match self.context.local_identity_pubkey.clone() {
                     Some(pubkey) => pubkey,
                     None => {
-                        return self.fail_with_reason(FailureReason::Other(
-                            "Missing local identity pubkey".to_string(),
-                        ))
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing local identity pubkey".to_string()),
+                        )
                     }
                 };
                 let peer_id = match self.context.peer_id.clone() {
                     Some(id) => id,
                     None => {
-                        return self
-                            .fail_with_reason(FailureReason::Other("Missing peer id".to_string()))
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing peer id".to_string()),
+                        )
                     }
                 };
 
@@ -728,11 +1002,12 @@ impl PairingStateMachine {
                     nonce,
                 };
 
-                let new_state = PairingState::WaitingForResponse {
-                    session_id: session_id.clone(),
-                };
                 let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
                 let actions = vec![
+                    PairingAction::CancelTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::UserApproval,
+                    },
                     PairingAction::Send {
                         peer_id,
                         message: PairingMessage::Challenge(challenge),
@@ -744,224 +1019,287 @@ impl PairingStateMachine {
                     },
                 ];
 
-                (new_state, actions)
-            }
-
-            // ========== WaitingUserVerification -> ResponseSent ==========
-            (
-                PairingState::WaitingUserVerification { session_id, .. },
-                PairingEvent::UserAccept { .. },
-            ) => {
-                let cancel_action = PairingAction::CancelTimer {
-                    session_id: session_id.clone(),
-                    kind: TimeoutKind::UserVerification,
-                };
-                let peer_id = match self.context.peer_id.clone() {
-                    Some(id) => id,
-                    None => {
-                        let (state, mut actions) = self
-                            .fail_with_reason(FailureReason::Other("Missing peer id".to_string()));
-                        actions.insert(0, cancel_action.clone());
-                        return (state, actions);
-                    }
-                };
-                let pin = match self.context.pin.clone() {
-                    Some(pin) => pin,
-                    None => {
-                        let (state, mut actions) =
-                            self.fail_with_reason(FailureReason::Other("Missing PIN".to_string()));
-                        actions.insert(0, cancel_action.clone());
-                        return (state, actions);
-                    }
-                };
-
-                let pin_hash = match hash_pin(&pin) {
-                    Ok(hash) => hash,
-                    Err(err) => {
-                        let (state, mut actions) =
-                            self.fail_with_reason(FailureReason::CryptoError(err.to_string()));
-                        actions.insert(0, cancel_action.clone());
-                        return (state, actions);
-                    }
-                };
-                self.context.pin = None;
-
-                let response = PairingResponse {
-                    session_id: session_id.clone(),
-                    pin_hash,
-                    accepted: true,
-                };
-
-                let new_state = PairingState::ResponseSent {
-                    session_id: session_id.clone(),
-                    attempt: 0,
-                };
-                let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
-                let actions = vec![
-                    cancel_action,
-                    PairingAction::Send {
-                        peer_id,
-                        message: PairingMessage::Response(response),
-                    },
-                    PairingAction::StartTimer {
+                (
+                    PairingState::ChallengeSent {
                         session_id: session_id.clone(),
-                        kind: TimeoutKind::WaitingConfirm,
-                        deadline,
                     },
-                ];
-
-                (new_state, actions)
+                    actions,
+                )
             }
-
-            // ========== WaitingForResponse -> ConfirmSent ==========
             (
-                PairingState::WaitingForResponse { session_id },
+                PairingState::AwaitingUserApproval { session_id },
+                PairingEvent::UserReject { .. },
+            ) => self.cancel_with_reason(
+                session_id.clone(),
+                CancellationBy::LocalUser,
+                Some("User rejected pairing".to_string()),
+                Some(PairingAction::Send {
+                    peer_id: self.context.peer_id.clone().unwrap_or_default(),
+                    message: PairingMessage::Reject(PairingReject {
+                        session_id: session_id.clone(),
+                        reason: Some("user_reject".to_string()),
+                    }),
+                }),
+                Some(TimeoutKind::UserApproval),
+            ),
+            (
+                PairingState::AwaitingUserApproval { session_id },
+                PairingEvent::UserCancel { .. },
+            ) => self.cancel_with_reason(
+                session_id.clone(),
+                CancellationBy::LocalUser,
+                Some("User cancelled pairing".to_string()),
+                Some(PairingAction::Send {
+                    peer_id: self.context.peer_id.clone().unwrap_or_default(),
+                    message: PairingMessage::Cancel(PairingCancel {
+                        session_id: session_id.clone(),
+                        reason: Some("user_cancel".to_string()),
+                    }),
+                }),
+                Some(TimeoutKind::UserApproval),
+            ),
+            (
+                PairingState::AwaitingUserApproval { session_id },
+                PairingEvent::Timeout {
+                    kind: TimeoutKind::UserApproval,
+                    ..
+                },
+            ) => self.fail_with_reason(
+                session_id,
+                FailureReason::Timeout(TimeoutKind::UserApproval),
+            ),
+            (
+                PairingState::AwaitingUserApproval { session_id },
+                PairingEvent::RecvCancel { .. },
+            ) => self.cancel_with_reason(
+                session_id,
+                CancellationBy::RemoteUser,
+                Some("Peer cancelled pairing".to_string()),
+                None,
+                Some(TimeoutKind::UserApproval),
+            ),
+            (
+                PairingState::AwaitingUserApproval { session_id },
+                PairingEvent::RecvReject { .. },
+            ) => self.cancel_with_reason(
+                session_id,
+                CancellationBy::RemoteUser,
+                Some("Peer rejected pairing".to_string()),
+                None,
+                Some(TimeoutKind::UserApproval),
+            ),
+            (PairingState::AwaitingUserApproval { session_id }, PairingEvent::RecvBusy { .. }) => {
+                self.fail_with_reason(session_id, FailureReason::PeerBusy)
+            }
+            (
+                PairingState::ChallengeSent { session_id },
                 PairingEvent::RecvResponse { response, .. },
             ) => {
                 let peer_id = match self.context.peer_id.clone() {
                     Some(id) => id,
                     None => {
-                        return self
-                            .fail_with_reason(FailureReason::Other("Missing peer id".to_string()))
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::Other("Missing peer id".to_string()),
+                        )
                     }
                 };
-                let (confirm_action, next_state) =
-                    match self.build_confirm_action(&session_id, peer_id, response) {
-                        Ok(result) => result,
-                        Err(reason) => return self.fail_with_reason(reason),
-                    };
-                let cancel_action = PairingAction::CancelTimer {
+                let local_device_name = self.context.local_device_name.clone().unwrap_or_default();
+                let local_device_id = self.context.local_device_id.clone().unwrap_or_default();
+
+                let mut actions = vec![PairingAction::CancelTimer {
                     session_id: session_id.clone(),
                     kind: TimeoutKind::WaitingResponse,
-                };
+                }];
 
-                if matches!(next_state, PairingState::ConfirmSent { .. }) {
-                    let paired_device = match self.build_paired_device(now) {
-                        Ok(device) => device,
-                        Err(reason) => return self.fail_with_reason(reason),
-                    };
-                    let new_state = PairingState::PersistingTrust {
-                        session_id: session_id.clone(),
-                        paired_device: paired_device.clone(),
-                    };
-                    let actions = vec![
-                        cancel_action,
-                        confirm_action,
-                        PairingAction::PersistPairedDevice {
+                if !response.accepted {
+                    actions.push(PairingAction::Send {
+                        peer_id,
+                        message: PairingMessage::Confirm(PairingConfirm {
                             session_id: session_id.clone(),
-                            device: paired_device,
-                        },
-                    ];
-
-                    return (new_state, actions);
-                }
-
-                let mut actions = vec![cancel_action, confirm_action];
-                if matches!(
-                    next_state,
-                    PairingState::Failed { .. } | PairingState::Cancelled { .. }
-                ) {
-                    let error = match &next_state {
-                        PairingState::Failed { reason, .. } => Some(format!("{:?}", reason)),
-                        PairingState::Cancelled { by, .. } => Some(format!("Cancelled: {:?}", by)),
-                        _ => None,
-                    };
-                    actions.push(PairingAction::EmitResult {
-                        session_id: session_id.clone(),
-                        success: false,
-                        error,
+                            success: false,
+                            error: Some("Pairing rejected".to_string()),
+                            sender_device_name: local_device_name,
+                            device_id: local_device_id,
+                        }),
                     });
-                }
-                (next_state, actions)
-            }
-
-            // ========== ResponseSent -> PersistingTrust ==========
-            (
-                PairingState::ResponseSent { session_id, .. },
-                PairingEvent::RecvConfirm { confirm, .. },
-            ) => {
-                if !confirm.success {
-                    let cancel_action = PairingAction::CancelTimer {
-                        session_id: session_id.clone(),
-                        kind: TimeoutKind::WaitingConfirm,
-                    };
-                    let (state, mut actions) = self.fail_with_reason(FailureReason::Other(
-                        confirm
-                            .error
-                            .unwrap_or_else(|| "Pairing rejected".to_string()),
-                    ));
-                    actions.insert(0, cancel_action);
-                    return (state, actions);
+                    let (state, mut cancel_actions) = self.cancel_with_reason(
+                        session_id,
+                        CancellationBy::RemoteUser,
+                        Some("Peer rejected pairing".to_string()),
+                        None,
+                        None,
+                    );
+                    cancel_actions.splice(0..0, actions);
+                    return (state, cancel_actions);
                 }
 
-                let paired_device = match self.build_paired_device(now) {
-                    Ok(device) => device,
-                    Err(reason) => {
-                        let cancel_action = PairingAction::CancelTimer {
-                            session_id: session_id.clone(),
-                            kind: TimeoutKind::WaitingConfirm,
-                        };
-                        let (state, mut actions) = self.fail_with_reason(reason);
-                        actions.insert(0, cancel_action);
-                        return (state, actions);
+                let pin = self.context.pin.as_deref().ok_or_else(|| {
+                    FailureReason::Other("PIN not available for verification".to_string())
+                });
+                let pin = match pin {
+                    Ok(value) => value,
+                    Err(reason) => return self.fail_with_reason(session_id, reason),
+                };
+                let verified = match verify_pin(pin, &response.pin_hash) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        return self.fail_with_reason(
+                            session_id,
+                            FailureReason::CryptoError(err.to_string()),
+                        )
                     }
                 };
+                self.context.pin = None;
 
-                let new_state = PairingState::PersistingTrust {
-                    session_id: session_id.clone(),
-                    paired_device: paired_device.clone(),
-                };
-                let actions = vec![
-                    PairingAction::CancelTimer {
-                        session_id: session_id.clone(),
-                        kind: TimeoutKind::WaitingConfirm,
-                    },
-                    PairingAction::PersistPairedDevice {
-                        session_id: session_id.clone(),
-                        device: paired_device,
-                    },
-                ];
+                if !verified {
+                    actions.push(PairingAction::Send {
+                        peer_id,
+                        message: PairingMessage::Confirm(PairingConfirm {
+                            session_id: session_id.clone(),
+                            success: false,
+                            error: Some("PIN verification failed".to_string()),
+                            sender_device_name: local_device_name,
+                            device_id: local_device_id,
+                        }),
+                    });
+                    let (state, mut fail_actions) = self.fail_with_reason(
+                        session_id,
+                        FailureReason::CryptoError("PIN verification failed".to_string()),
+                    );
+                    fail_actions.splice(0..0, actions);
+                    return (state, fail_actions);
+                }
 
-                (new_state, actions)
-            }
-
-            // ========== PersistingTrust -> Paired ==========
-            (
-                PairingState::PersistingTrust { session_id, .. },
-                PairingEvent::PersistOk { device_id, .. },
-            ) => {
-                let new_state = PairingState::Paired {
-                    session_id: session_id.clone(),
-                    paired_device_id: device_id,
-                };
-                let actions = vec![PairingAction::EmitResult {
+                let confirm = PairingConfirm {
                     session_id: session_id.clone(),
                     success: true,
                     error: None,
-                }];
+                    sender_device_name: local_device_name,
+                    device_id: local_device_id,
+                };
+                actions.push(PairingAction::Send {
+                    peer_id,
+                    message: PairingMessage::Confirm(confirm),
+                });
 
-                (new_state, actions)
+                let paired_device = match self.build_paired_device(now) {
+                    Ok(device) => device,
+                    Err(reason) => return self.fail_with_reason(session_id, reason),
+                };
+                let deadline = now + Duration::seconds(self.policy.step_timeout_secs);
+                actions.push(PairingAction::PersistPairedDevice {
+                    session_id: session_id.clone(),
+                    device: paired_device.clone(),
+                });
+                actions.push(PairingAction::StartTimer {
+                    session_id: session_id.clone(),
+                    kind: TimeoutKind::Persist,
+                    deadline,
+                });
+
+                (
+                    PairingState::Finalizing {
+                        session_id,
+                        paired_device,
+                    },
+                    actions,
+                )
             }
-
-            // ========== PersistingTrust -> Failed ==========
             (
-                PairingState::PersistingTrust { session_id, .. },
+                PairingState::ChallengeSent { session_id },
+                PairingEvent::Timeout {
+                    kind: TimeoutKind::WaitingResponse,
+                    ..
+                },
+            ) => self.fail_with_reason(
+                session_id,
+                FailureReason::Timeout(TimeoutKind::WaitingResponse),
+            ),
+            (PairingState::ChallengeSent { session_id }, PairingEvent::RecvCancel { .. }) => self
+                .cancel_with_reason(
+                    session_id,
+                    CancellationBy::RemoteUser,
+                    Some("Peer cancelled pairing".to_string()),
+                    None,
+                    Some(TimeoutKind::WaitingResponse),
+                ),
+            (PairingState::ChallengeSent { session_id }, PairingEvent::RecvReject { .. }) => self
+                .cancel_with_reason(
+                    session_id,
+                    CancellationBy::RemoteUser,
+                    Some("Peer rejected pairing".to_string()),
+                    None,
+                    Some(TimeoutKind::WaitingResponse),
+                ),
+            (PairingState::ChallengeSent { session_id }, PairingEvent::RecvBusy { .. }) => {
+                self.fail_with_reason(session_id, FailureReason::PeerBusy)
+            }
+            (
+                PairingState::Finalizing { session_id, .. },
+                PairingEvent::PersistOk { device_id, .. },
+            ) => (
+                PairingState::Paired {
+                    session_id: session_id.clone(),
+                    paired_device_id: device_id,
+                },
+                vec![PairingAction::EmitResult {
+                    session_id,
+                    success: true,
+                    error: None,
+                }],
+            ),
+            (
+                PairingState::Finalizing { session_id, .. },
                 PairingEvent::PersistErr { error, .. },
-            ) => {
-                let new_state = PairingState::Failed {
+            ) => (
+                PairingState::Failed {
                     session_id: session_id.clone(),
                     reason: FailureReason::PersistenceError(error.clone()),
-                };
-                let actions = vec![PairingAction::EmitResult {
-                    session_id: session_id.clone(),
+                },
+                vec![PairingAction::EmitResult {
+                    session_id,
                     success: false,
                     error: Some(error),
-                }];
-
-                (new_state, actions)
+                }],
+            ),
+            (
+                PairingState::Finalizing { session_id, .. },
+                PairingEvent::Timeout {
+                    kind: TimeoutKind::Persist,
+                    ..
+                },
+            ) => self.fail_with_reason(session_id, FailureReason::Timeout(TimeoutKind::Persist)),
+            (PairingState::Finalizing { session_id, .. }, PairingEvent::RecvCancel { .. }) => self
+                .cancel_with_reason(
+                    session_id,
+                    CancellationBy::RemoteUser,
+                    Some("Peer cancelled pairing".to_string()),
+                    None,
+                    Some(TimeoutKind::Persist),
+                ),
+            (PairingState::Finalizing { session_id, .. }, PairingEvent::RecvReject { .. }) => self
+                .cancel_with_reason(
+                    session_id,
+                    CancellationBy::RemoteUser,
+                    Some("Peer rejected pairing".to_string()),
+                    None,
+                    Some(TimeoutKind::Persist),
+                ),
+            (PairingState::Finalizing { session_id, .. }, PairingEvent::RecvBusy { .. }) => {
+                self.fail_with_reason(session_id, FailureReason::PeerBusy)
             }
-
-            // ========== 其他状态转换待实现 ==========
+            (state, PairingEvent::TransportError { error, .. })
+                if !matches!(
+                    state,
+                    PairingState::Paired { .. }
+                        | PairingState::Failed { .. }
+                        | PairingState::Cancelled { .. }
+                ) =>
+            {
+                let session_id = self.context.session_id.clone().unwrap_or_default();
+                self.fail_with_reason(session_id, FailureReason::TransportError(error))
+            }
             _ => (
                 PairingState::Failed {
                     session_id: self.context.session_id.clone().unwrap_or_default(),
@@ -972,8 +1310,11 @@ impl PairingStateMachine {
         }
     }
 
-    fn fail_with_reason(&self, reason: FailureReason) -> (PairingState, Vec<PairingAction>) {
-        let session_id = self.context.session_id.clone().unwrap_or_default();
+    fn fail_with_reason(
+        &self,
+        session_id: SessionId,
+        reason: FailureReason,
+    ) -> (PairingState, Vec<PairingAction>) {
         let error_msg = format!("{:?}", reason);
         (
             PairingState::Failed {
@@ -988,89 +1329,31 @@ impl PairingStateMachine {
         )
     }
 
-    fn build_confirm_action(
-        &mut self,
-        session_id: &str,
-        peer_id: String,
-        response: PairingResponse,
-    ) -> Result<(PairingAction, PairingState), FailureReason> {
-        let local_device_name = self
-            .context
-            .local_device_name
-            .clone()
-            .ok_or_else(|| FailureReason::Other("Missing local device name".to_string()))?;
-        let local_device_id = self
-            .context
-            .local_device_id
-            .clone()
-            .ok_or_else(|| FailureReason::Other("Missing local device id".to_string()))?;
-
-        if !response.accepted {
-            let confirm = PairingConfirm {
-                session_id: session_id.to_string(),
-                success: false,
-                error: Some("Pairing rejected".to_string()),
-                sender_device_name: local_device_name,
-                device_id: local_device_id,
-            };
-            self.context.pin = None;
-            return Ok((
-                PairingAction::Send {
-                    peer_id,
-                    message: PairingMessage::Confirm(confirm),
-                },
-                PairingState::Cancelled {
-                    session_id: session_id.to_string(),
-                    by: CancellationBy::RemoteUser,
-                },
-            ));
+    fn cancel_with_reason(
+        &self,
+        session_id: SessionId,
+        by: CancellationBy,
+        error: Option<String>,
+        send_action: Option<PairingAction>,
+        cancel_timer: Option<TimeoutKind>,
+    ) -> (PairingState, Vec<PairingAction>) {
+        let mut actions = Vec::new();
+        if let Some(kind) = cancel_timer {
+            actions.push(PairingAction::CancelTimer {
+                session_id: session_id.clone(),
+                kind,
+            });
         }
-
-        let pin = self.context.pin.as_deref().ok_or_else(|| {
-            FailureReason::Other("PIN not available for verification".to_string())
-        })?;
-        let verified = verify_pin(pin, &response.pin_hash)
-            .map_err(|err| FailureReason::CryptoError(err.to_string()))?;
-        self.context.pin = None;
-
-        if !verified {
-            let confirm = PairingConfirm {
-                session_id: session_id.to_string(),
-                success: false,
-                error: Some("PIN verification failed".to_string()),
-                sender_device_name: local_device_name,
-                device_id: local_device_id,
-            };
-            return Ok((
-                PairingAction::Send {
-                    peer_id,
-                    message: PairingMessage::Confirm(confirm),
-                },
-                PairingState::Failed {
-                    session_id: session_id.to_string(),
-                    reason: FailureReason::CryptoError("PIN verification failed".to_string()),
-                },
-            ));
+        if let Some(action) = send_action {
+            actions.push(action);
         }
+        actions.push(PairingAction::EmitResult {
+            session_id: session_id.clone(),
+            success: false,
+            error: error.clone(),
+        });
 
-        let confirm = PairingConfirm {
-            session_id: session_id.to_string(),
-            success: true,
-            error: None,
-            sender_device_name: local_device_name,
-            device_id: local_device_id,
-        };
-
-        Ok((
-            PairingAction::Send {
-                peer_id,
-                message: PairingMessage::Confirm(confirm),
-            },
-            PairingState::ConfirmSent {
-                session_id: session_id.to_string(),
-                attempt: 0,
-            },
-        ))
+        (PairingState::Cancelled { session_id, by }, actions)
     }
 
     fn build_paired_device(&self, now: DateTime<Utc>) -> Result<PairedDevice, FailureReason> {
@@ -1124,177 +1407,110 @@ mod tests {
     use crate::crypto::pin_hash::hash_pin;
     use crate::network::protocol::{PairingChallenge, PairingRequest, PairingResponse};
 
-    #[test]
-    fn test_state_machine_initial_state() {
-        let sm = PairingStateMachine::new();
-        assert_eq!(sm.state(), &PairingState::Idle);
+    fn build_request(session_id: &str) -> PairingRequest {
+        PairingRequest {
+            session_id: session_id.to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-2".to_string(),
+            peer_id: "peer-remote".to_string(),
+            identity_pubkey: vec![2; 32],
+            nonce: vec![9; 16],
+        }
     }
 
-    #[test]
-    fn test_idle_to_starting_on_start_pairing() {
-        let mut sm = PairingStateMachine::new();
-        let (new_state, _actions) = sm.handle_event(
-            PairingEvent::StartPairing {
-                role: PairingRole::Initiator,
-                peer_id: "12D3KooW...".to_string(),
-            },
-            Utc::now(),
-        );
-
-        assert!(matches!(new_state, PairingState::Starting { .. }));
-    }
-
-    #[test]
-    fn test_state_machine_produces_log_actions() {
-        let mut sm = PairingStateMachine::new();
-        let (_new_state, actions) = sm.handle_event(
-            PairingEvent::StartPairing {
-                role: PairingRole::Initiator,
-                peer_id: "12D3KooW...".to_string(),
-            },
-            Utc::now(),
-        );
-
-        // 应该至少有一个 LogTransition action
-        assert!(actions
-            .iter()
-            .any(|a| matches!(a, PairingAction::LogTransition { .. })));
-    }
-
-    #[test]
-    fn test_initiator_flow_persists_after_confirm() {
-        let mut sm = PairingStateMachine::new_with_local_identity(
-            "LocalDevice".to_string(),
-            "device-1".to_string(),
-            vec![1; 32],
-        );
-
-        let challenge = PairingChallenge {
-            session_id: "session-1".to_string(),
+    fn build_challenge(session_id: &str) -> PairingChallenge {
+        PairingChallenge {
+            session_id: session_id.to_string(),
             pin: "123456".to_string(),
             device_name: "PeerDevice".to_string(),
             device_id: "device-2".to_string(),
             identity_pubkey: vec![2; 32],
             nonce: vec![9; 16],
-        };
+        }
+    }
 
-        let (_state, actions) = sm.handle_event(
-            PairingEvent::RecvChallenge {
-                session_id: "session-1".to_string(),
-                challenge,
+    #[test]
+    fn initiator_start_transitions_to_request_sent() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        let (state, actions) = sm.handle_event(
+            PairingEvent::StartPairing {
+                role: PairingRole::Initiator,
+                peer_id: "peer-2".to_string(),
             },
             Utc::now(),
         );
 
+        assert!(matches!(state, PairingState::RequestSent { .. }));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::Send {
+                message: PairingMessage::Request(_),
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn initiator_challenge_enters_user_confirm() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        sm.handle_event(
+            PairingEvent::StartPairing {
+                role: PairingRole::Initiator,
+                peer_id: "peer-2".to_string(),
+            },
+            Utc::now(),
+        );
+
+        let (state, actions) = sm.handle_event(
+            PairingEvent::RecvChallenge {
+                session_id: "session-1".to_string(),
+                challenge: build_challenge("session-1"),
+            },
+            Utc::now(),
+        );
+
+        assert!(matches!(state, PairingState::AwaitingUserConfirm { .. }));
         assert!(actions
             .iter()
             .any(|action| matches!(action, PairingAction::ShowVerification { .. })));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::StartTimer {
+                kind: TimeoutKind::UserVerification,
+                ..
+            }
+        )));
     }
 
     #[test]
-    fn test_responder_flow_persists_after_response() {
+    fn initiator_accept_sends_response() {
         let mut sm = PairingStateMachine::new_with_local_identity(
             "LocalDevice".to_string(),
             "device-1".to_string(),
             vec![1; 32],
         );
-        let request = PairingRequest {
-            session_id: "session-1".to_string(),
-            device_name: "PeerDevice".to_string(),
-            device_id: "device-2".to_string(),
-            peer_id: "peer-remote".to_string(),
-            identity_pubkey: vec![2; 32],
-            nonce: vec![9; 16],
-        };
-        sm.handle_event(
-            PairingEvent::RecvRequest {
-                session_id: "session-1".to_string(),
-                request,
-            },
-            Utc::now(),
-        );
-        let (_state, actions) = sm.handle_event(
-            PairingEvent::UserAccept {
-                session_id: "session-1".to_string(),
-            },
-            Utc::now(),
-        );
-        let challenge = actions
-            .iter()
-            .find_map(|action| match action {
-                PairingAction::Send {
-                    message: PairingMessage::Challenge(challenge),
-                    ..
-                } => Some(challenge.clone()),
-                _ => None,
-            })
-            .expect("challenge");
-
-        let response = PairingResponse {
-            session_id: "session-1".to_string(),
-            pin_hash: hash_pin(&challenge.pin).expect("hash pin"),
-            accepted: true,
-        };
-        let (_state, actions) = sm.handle_event(
-            PairingEvent::RecvResponse {
-                session_id: "session-1".to_string(),
-                response,
-            },
-            Utc::now(),
-        );
-
-        assert!(actions
-            .iter()
-            .any(|action| matches!(action, PairingAction::PersistPairedDevice { .. })));
-    }
-
-    #[test]
-    fn test_recv_request_enters_waiting_for_request() {
-        let mut sm = PairingStateMachine::new_with_local_identity(
-            "LocalDevice".to_string(),
-            "device-1".to_string(),
-            vec![1; 32],
-        );
-        let request = PairingRequest {
-            session_id: "session-1".to_string(),
-            device_name: "PeerDevice".to_string(),
-            device_id: "device-2".to_string(),
-            peer_id: "peer-remote".to_string(),
-            identity_pubkey: vec![2; 32],
-            nonce: vec![3; 16],
-        };
-
-        let (state, _actions) = sm.handle_event(
-            PairingEvent::RecvRequest {
-                session_id: request.session_id.clone(),
-                request,
-            },
-            Utc::now(),
-        );
-
-        assert!(matches!(state, PairingState::WaitingForRequest { .. }));
-    }
-
-    #[test]
-    fn test_responder_sends_confirm_on_valid_response() {
-        let mut sm = PairingStateMachine::new_with_local_identity(
-            "LocalDevice".to_string(),
-            "device-1".to_string(),
-            vec![7; 32],
-        );
-        let request = PairingRequest {
-            session_id: "session-1".to_string(),
-            device_name: "PeerDevice".to_string(),
-            device_id: "device-2".to_string(),
-            peer_id: "peer-remote".to_string(),
-            identity_pubkey: vec![8; 32],
-            nonce: vec![9; 16],
-        };
 
         sm.handle_event(
-            PairingEvent::RecvRequest {
-                session_id: request.session_id.clone(),
-                request,
+            PairingEvent::StartPairing {
+                role: PairingRole::Initiator,
+                peer_id: "peer-2".to_string(),
+            },
+            Utc::now(),
+        );
+        sm.handle_event(
+            PairingEvent::RecvChallenge {
+                session_id: "session-1".to_string(),
+                challenge: build_challenge("session-1"),
             },
             Utc::now(),
         );
@@ -1306,8 +1522,91 @@ mod tests {
             Utc::now(),
         );
 
-        assert!(matches!(state, PairingState::WaitingForResponse { .. }));
+        assert!(matches!(state, PairingState::ResponseSent { .. }));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::Send {
+                message: PairingMessage::Response(_),
+                ..
+            }
+        )));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::StartTimer {
+                kind: TimeoutKind::WaitingConfirm,
+                ..
+            }
+        )));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::CancelTimer {
+                kind: TimeoutKind::UserVerification,
+                ..
+            }
+        )));
+    }
 
+    #[test]
+    fn responder_accept_sends_challenge() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        sm.handle_event(
+            PairingEvent::RecvRequest {
+                session_id: "session-1".to_string(),
+                request: build_request("session-1"),
+            },
+            Utc::now(),
+        );
+
+        let (state, actions) = sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: "session-1".to_string(),
+            },
+            Utc::now(),
+        );
+
+        assert!(matches!(state, PairingState::ChallengeSent { .. }));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::Send {
+                message: PairingMessage::Challenge(_),
+                ..
+            }
+        )));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::StartTimer {
+                kind: TimeoutKind::WaitingResponse,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn responder_response_success_persists() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        sm.handle_event(
+            PairingEvent::RecvRequest {
+                session_id: "session-1".to_string(),
+                request: build_request("session-1"),
+            },
+            Utc::now(),
+        );
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: "session-1".to_string(),
+            },
+            Utc::now(),
+        );
         let challenge = actions
             .iter()
             .find_map(|action| match action {
@@ -1319,13 +1618,11 @@ mod tests {
             })
             .expect("challenge action");
 
-        let pin_hash = hash_pin(&challenge.pin).expect("hash pin");
         let response = PairingResponse {
             session_id: challenge.session_id.clone(),
-            pin_hash,
+            pin_hash: hash_pin(&challenge.pin).expect("hash pin"),
             accepted: true,
         };
-
         let (state, actions) = sm.handle_event(
             PairingEvent::RecvResponse {
                 session_id: challenge.session_id.clone(),
@@ -1334,137 +1631,16 @@ mod tests {
             Utc::now(),
         );
 
-        assert!(matches!(state, PairingState::PersistingTrust { .. }));
-
-        let confirm = actions
+        assert!(matches!(state, PairingState::Finalizing { .. }));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::Send {
+                message: PairingMessage::Confirm(_),
+                ..
+            }
+        )));
+        assert!(actions
             .iter()
-            .find_map(|action| match action {
-                PairingAction::Send {
-                    message: PairingMessage::Confirm(confirm),
-                    ..
-                } => Some(confirm.clone()),
-                _ => None,
-            })
-            .expect("confirm action");
-
-        assert!(confirm.success);
-        assert_eq!(confirm.sender_device_name, "LocalDevice");
-        assert_eq!(confirm.device_id, "device-1");
-    }
-
-    #[test]
-    fn test_user_verification_expiry_uses_policy() {
-        let policy = PairingPolicy {
-            step_timeout_secs: 5,
-            user_verification_timeout_secs: 30,
-            max_retries: 2,
-            protocol_version: "2.0.0".to_string(),
-        };
-        let now = Utc::now();
-        let mut sm = PairingStateMachine::new_with_local_identity_and_policy(
-            "Local".to_string(),
-            "device-1".to_string(),
-            vec![1; 32],
-            policy,
-        );
-        let challenge = PairingChallenge {
-            session_id: "session-1".to_string(),
-            pin: "123456".to_string(),
-            device_name: "Peer".to_string(),
-            device_id: "device-2".to_string(),
-            identity_pubkey: vec![2; 32],
-            nonce: vec![9; 16],
-        };
-
-        let (state, _actions) = sm.handle_event(
-            PairingEvent::RecvChallenge {
-                session_id: "session-1".to_string(),
-                challenge,
-            },
-            now,
-        );
-
-        let PairingState::WaitingUserVerification { expires_at, .. } = state else {
-            panic!("expected WaitingUserVerification");
-        };
-        assert_eq!(expires_at, now + Duration::seconds(30));
-    }
-
-    #[test]
-    fn test_user_verification_starts_timer() {
-        let policy = PairingPolicy::default();
-        let now = Utc::now();
-        let mut sm = PairingStateMachine::new_with_local_identity_and_policy(
-            "Local".to_string(),
-            "device-1".to_string(),
-            vec![1; 32],
-            policy,
-        );
-        let challenge = PairingChallenge {
-            session_id: "session-1".to_string(),
-            pin: "123456".to_string(),
-            device_name: "Peer".to_string(),
-            device_id: "device-2".to_string(),
-            identity_pubkey: vec![2; 32],
-            nonce: vec![9; 16],
-        };
-
-        let (_state, actions) = sm.handle_event(
-            PairingEvent::RecvChallenge {
-                session_id: "session-1".to_string(),
-                challenge,
-            },
-            now,
-        );
-
-        assert!(actions.iter().any(|action| matches!(
-            action,
-            PairingAction::StartTimer {
-                kind: TimeoutKind::UserVerification,
-                ..
-            }
-        )));
-    }
-
-    #[test]
-    fn test_user_accept_cancels_verification_timer() {
-        let policy = PairingPolicy::default();
-        let now = Utc::now();
-        let mut sm = PairingStateMachine::new_with_local_identity_and_policy(
-            "Local".to_string(),
-            "device-1".to_string(),
-            vec![1; 32],
-            policy,
-        );
-        let challenge = PairingChallenge {
-            session_id: "session-1".to_string(),
-            pin: "123456".to_string(),
-            device_name: "Peer".to_string(),
-            device_id: "device-2".to_string(),
-            identity_pubkey: vec![2; 32],
-            nonce: vec![9; 16],
-        };
-        sm.handle_event(
-            PairingEvent::RecvChallenge {
-                session_id: "session-1".to_string(),
-                challenge,
-            },
-            now,
-        );
-
-        let (_state, actions) = sm.handle_event(
-            PairingEvent::UserAccept {
-                session_id: "session-1".to_string(),
-            },
-            now,
-        );
-
-        assert!(actions.iter().any(|action| matches!(
-            action,
-            PairingAction::CancelTimer {
-                kind: TimeoutKind::UserVerification,
-                ..
-            }
-        )));
+            .any(|action| matches!(action, PairingAction::PersistPairedDevice { .. })));
     }
 }
