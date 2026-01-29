@@ -9,10 +9,10 @@ use libp2p::{
     tcp, yamux, Multiaddr, PeerId, StreamProtocol, SwarmBuilder,
 };
 use libp2p_stream as stream;
-use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, Mutex as AsyncMutex, RwLock};
+use tracing::{debug, error, info, warn};
 use uc_core::network::{
     ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage, PairingState,
     ProtocolDenyReason, ProtocolDirection, ProtocolId, ProtocolKind, ResolvedConnectionPolicy,
