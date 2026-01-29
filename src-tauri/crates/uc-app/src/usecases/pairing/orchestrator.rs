@@ -29,10 +29,10 @@ use tracing::{info_span, Instrument};
 use uc_core::{
     network::{
         pairing_state_machine::{
-            PairingAction, PairingEvent, PairingPolicy, PairingRole, PairingStateMachine,
-            SessionId, TimeoutKind,
+            PairingAction, PairingEvent, PairingPolicy, PairingRole, PairingState,
+            PairingStateMachine, SessionId, TimeoutKind,
         },
-        protocol::{PairingChallenge, PairingConfirm, PairingMessage, PairingRequest},
+        protocol::{PairingChallenge, PairingConfirm, PairingRequest},
     },
     ports::PairedDeviceRepositoryPort,
     settings::model::Settings,
@@ -121,8 +121,6 @@ struct LocalDeviceInfo {
     device_name: String,
     /// 设备ID
     device_id: String,
-    /// 本地PeerID
-    peer_id: String,
     /// 本地身份公钥
     identity_pubkey: Vec<u8>,
 }
@@ -134,7 +132,7 @@ impl PairingOrchestrator {
         device_repo: Arc<dyn PairedDeviceRepositoryPort + Send + Sync + 'static>,
         local_device_name: String,
         local_device_id: String,
-        local_peer_id: String,
+        _local_peer_id: String,
         local_identity_pubkey: Vec<u8>,
     ) -> (Self, mpsc::Receiver<PairingAction>) {
         let (action_tx, action_rx) = mpsc::channel(100);
@@ -147,7 +145,6 @@ impl PairingOrchestrator {
             local_identity: LocalDeviceInfo {
                 device_name: local_device_name,
                 device_id: local_device_id,
-                peer_id: local_peer_id,
                 identity_pubkey: local_identity_pubkey,
             },
             action_tx,
@@ -158,16 +155,11 @@ impl PairingOrchestrator {
 
     /// 发起配对 (Initiator)
     pub async fn initiate_pairing(&self, peer_id: String) -> Result<SessionId> {
-        let session_id = uuid::Uuid::new_v4().to_string();
         let span = info_span!(
             "pairing.initiate",
-            session_id = %session_id,
             peer_id = %peer_id
         );
         async {
-            self.record_session_peer(&session_id, peer_id.clone(), None)
-                .await;
-
             let policy = self.build_policy();
             let mut state_machine = PairingStateMachine::new_with_local_identity_and_policy(
                 self.local_identity.device_name.clone(),
@@ -175,13 +167,25 @@ impl PairingOrchestrator {
                 self.local_identity.identity_pubkey.clone(),
                 policy,
             );
-            let _ = state_machine.handle_event(
+            let (state, actions) = state_machine.handle_event(
                 PairingEvent::StartPairing {
                     role: PairingRole::Initiator,
                     peer_id: peer_id.clone(),
                 },
                 Utc::now(),
             );
+
+            let session_id = match state {
+                PairingState::RequestSent { session_id } => session_id,
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "unexpected state after StartPairing: {:?}",
+                        state
+                    ))
+                }
+            };
+            self.record_session_peer(&session_id, peer_id.clone(), None)
+                .await;
 
             let context = PairingSessionContext {
                 state_machine,
@@ -194,18 +198,9 @@ impl PairingOrchestrator {
                 .await
                 .insert(session_id.clone(), context);
 
-            let nonce = uuid::Uuid::new_v4().as_bytes().to_vec();
-            let request = PairingRequest {
-                session_id: session_id.clone(),
-                device_name: self.local_identity.device_name.clone(),
-                device_id: self.local_identity.device_id.clone(),
-                peer_id: self.local_identity.peer_id.clone(),
-                identity_pubkey: self.local_identity.identity_pubkey.clone(),
-                nonce,
-            };
-
-            self.send_message(&peer_id, PairingMessage::Request(request))
-                .await?;
+            for action in actions {
+                self.execute_action(&session_id, &peer_id, action).await?;
+            }
 
             Ok(session_id)
         }
@@ -248,18 +243,21 @@ impl PairingOrchestrator {
                 Utc::now(),
             );
 
-            // 执行动作(如果有)
-            for action in actions {
-                self.execute_action(&session_id, &peer_id, action).await?;
-            }
-
             let context = PairingSessionContext {
                 state_machine,
                 created_at: Utc::now(),
                 timers: Mutex::new(HashMap::new()),
             };
 
-            self.sessions.write().await.insert(session_id, context);
+            self.sessions
+                .write()
+                .await
+                .insert(session_id.clone(), context);
+
+            // 执行动作(如果有)
+            for action in actions {
+                self.execute_action(&session_id, &peer_id, action).await?;
+            }
 
             Ok(())
         }
@@ -418,6 +416,96 @@ impl PairingOrchestrator {
                     PairingEvent::RecvConfirm {
                         session_id: session_id.to_string(),
                         confirm,
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
+
+            for action in actions {
+                self.execute_action(session_id, peer_id, action).await?;
+            }
+
+            Ok(())
+        }
+        .instrument(span)
+        .await
+    }
+
+    /// 处理收到的Reject (双方)
+    pub async fn handle_reject(&self, session_id: &str, peer_id: &str) -> Result<()> {
+        let span = info_span!(
+            "pairing.handle_reject",
+            session_id = %session_id,
+            peer_id = %peer_id
+        );
+        async {
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                let context = sessions.get_mut(session_id).context("Session not found")?;
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::RecvReject {
+                        session_id: session_id.to_string(),
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
+
+            for action in actions {
+                self.execute_action(session_id, peer_id, action).await?;
+            }
+
+            Ok(())
+        }
+        .instrument(span)
+        .await
+    }
+
+    /// 处理收到的Cancel (双方)
+    pub async fn handle_cancel(&self, session_id: &str, peer_id: &str) -> Result<()> {
+        let span = info_span!(
+            "pairing.handle_cancel",
+            session_id = %session_id,
+            peer_id = %peer_id
+        );
+        async {
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                let context = sessions.get_mut(session_id).context("Session not found")?;
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::RecvCancel {
+                        session_id: session_id.to_string(),
+                    },
+                    Utc::now(),
+                );
+                actions
+            };
+
+            for action in actions {
+                self.execute_action(session_id, peer_id, action).await?;
+            }
+
+            Ok(())
+        }
+        .instrument(span)
+        .await
+    }
+
+    /// 处理收到的Busy (双方)
+    pub async fn handle_busy(&self, session_id: &str, peer_id: &str) -> Result<()> {
+        let span = info_span!(
+            "pairing.handle_busy",
+            session_id = %session_id,
+            peer_id = %peer_id
+        );
+        async {
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                let context = sessions.get_mut(session_id).context("Session not found")?;
+                let (_state, actions) = context.state_machine.handle_event(
+                    PairingEvent::RecvBusy {
+                        session_id: session_id.to_string(),
                     },
                     Utc::now(),
                 );
@@ -632,20 +720,6 @@ impl PairingOrchestrator {
         peers.get(session_id).cloned()
     }
 
-    /// 发送消息到对端
-    async fn send_message(&self, peer_id: &str, message: PairingMessage) -> Result<()> {
-        // TODO: 通过网络层发送
-        let action_tx = self.action_tx.clone();
-        action_tx
-            .send(PairingAction::Send {
-                peer_id: peer_id.to_string(),
-                message,
-            })
-            .await
-            .context("Failed to queue send action")?;
-        Ok(())
-    }
-
     fn build_policy(&self) -> PairingPolicy {
         PairingPolicy {
             step_timeout_secs: self.config.step_timeout_secs,
@@ -843,6 +917,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn initiate_pairing_emits_request_action() {
+        let config = PairingConfig::default();
+        let device_repo = Arc::new(MockDeviceRepository);
+        let (orchestrator, mut action_rx) = PairingOrchestrator::new(
+            config,
+            device_repo,
+            "Local".to_string(),
+            "device-1".to_string(),
+            "peer-local".to_string(),
+            vec![1; 32],
+        );
+
+        let _session_id = orchestrator
+            .initiate_pairing("peer-remote".to_string())
+            .await
+            .expect("initiate pairing");
+
+        let action = timeout(Duration::from_secs(1), action_rx.recv())
+            .await
+            .expect("action timeout")
+            .expect("action missing");
+
+        assert!(matches!(
+            action,
+            PairingAction::Send {
+                message: PairingMessage::Request(_),
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
     async fn test_cleanup_uses_configured_session_timeout() {
         let config = PairingConfig {
             step_timeout_secs: 1,
@@ -908,7 +1014,7 @@ mod tests {
             let mut sessions = orchestrator.sessions.write().await;
             let context = sessions.get_mut(&session_id).expect("session context");
             let mut timers = context.timers.lock().await;
-            timers.insert(TimeoutKind::WaitingChallenge, abort_handle);
+            timers.insert(TimeoutKind::Persist, abort_handle);
         }
 
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
