@@ -1,69 +1,67 @@
 import React, { useState, useCallback, useEffect, useRef, ReactNode } from 'react'
 import {
-  onP2PPairingRequest,
-  onP2PPinReady,
-  onP2PPairingComplete,
-  onP2PPairingFailed,
+  onP2PPairingVerification,
   verifyP2PPairingPin,
   acceptP2PPairing,
   rejectP2PPairing,
-  type P2PPairingRequestEvent,
-  type P2PPinReadyEvent,
+  type P2PPairingVerificationEvent,
 } from '@/api/p2p'
 import { P2PContext, type P2PContextType } from '@/types/p2p'
 
 export const P2PProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [pendingRequest, setPendingRequest] = useState<P2PPairingRequestEvent | null>(null)
+  const [pendingRequest, setPendingRequest] = useState<
+    (P2PPairingVerificationEvent & { kind: 'request' }) | null
+  >(null)
   const [showRequestDialog, setShowRequestDialog] = useState(false)
   const [showPinDialog, setShowPinDialog] = useState(false)
-  const [pinData, setPinData] = useState<P2PPinReadyEvent | null>(null)
+  const [pinData, setPinData] = useState<
+    (P2PPairingVerificationEvent & { kind: 'verification' }) | null
+  >(null)
 
   const cleanupRefs = useRef<(() => void)[]>([])
 
   // Setup event listeners
   useEffect(() => {
     const setupListeners = async () => {
-      // Listen for pairing requests
-      const unlistenRequest = await onP2PPairingRequest(request => {
-        console.log('Received P2P pairing request:', request)
-        setPendingRequest(request)
-        setShowRequestDialog(true)
-      })
-      cleanupRefs.current.push(unlistenRequest)
+      const unlistenVerification = await onP2PPairingVerification(event => {
+        if (event.kind === 'request') {
+          console.log('Received P2P pairing request:', event)
+          setPendingRequest(event as P2PPairingVerificationEvent & { kind: 'request' })
+          setShowRequestDialog(true)
+          return
+        }
 
-      // Listen for PIN ready
-      const unlistenPin = await onP2PPinReady(event => {
-        console.log('Received P2P PIN ready event:', event)
-        setPinData(event)
-        setShowPinDialog(true)
-        setShowRequestDialog(false) // Close request dialog
-      })
-      cleanupRefs.current.push(unlistenPin)
+        if (event.kind === 'verification') {
+          console.log('Received P2P verification event:', event)
+          setPinData(event as P2PPairingVerificationEvent & { kind: 'verification' })
+          setShowPinDialog(true)
+          setShowRequestDialog(false)
+          return
+        }
 
-      // Listen for pairing complete
-      const unlistenComplete = await onP2PPairingComplete(() => {
-        console.log('P2P pairing completed')
-        setShowPinDialog(false)
-        setPendingRequest(null)
-        setPinData(null)
-      })
-      cleanupRefs.current.push(unlistenComplete)
+        if (event.kind === 'complete') {
+          console.log('P2P pairing completed')
+          setShowPinDialog(false)
+          setPendingRequest(null)
+          setPinData(null)
+          return
+        }
 
-      // Listen for pairing failed
-      const unlistenFailed = await onP2PPairingFailed(event => {
         console.error('P2P pairing failed:', event)
         setShowPinDialog(false)
         setShowRequestDialog(false)
         setPendingRequest(null)
         setPinData(null)
       })
-      cleanupRefs.current.push(unlistenFailed)
+      cleanupRefs.current.push(unlistenVerification)
     }
 
     setupListeners()
 
     return () => {
-      cleanupRefs.current.forEach(cleanup => cleanup())
+      cleanupRefs.current.forEach(cleanup => {
+        cleanup()
+      })
       cleanupRefs.current = []
     }
   }, [])
@@ -85,7 +83,11 @@ export const P2PProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!pendingRequest) return
 
     try {
-      await rejectP2PPairing(pendingRequest.sessionId, pendingRequest.peerId)
+      if (pendingRequest.peerId) {
+        await rejectP2PPairing(pendingRequest.sessionId, pendingRequest.peerId)
+      } else {
+        console.warn('Missing peerId for pairing rejection')
+      }
     } catch (error) {
       console.error('Failed to reject pairing request:', error)
     } finally {

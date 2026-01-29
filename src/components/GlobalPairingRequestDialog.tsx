@@ -1,7 +1,7 @@
 import { Bell, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { P2PPairingRequestEvent } from '@/api/p2p'
+import type { P2PPairingVerificationEvent } from '@/api/p2p'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,7 +14,7 @@ import {
 
 interface GlobalPairingRequestDialogProps {
   open: boolean
-  request: P2PPairingRequestEvent | null
+  request: (P2PPairingVerificationEvent & { kind: 'request' }) | null
   onAccept: () => Promise<void>
   onReject: () => Promise<void>
 }
