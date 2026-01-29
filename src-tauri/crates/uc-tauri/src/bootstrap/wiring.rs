@@ -40,10 +40,7 @@ use tauri::{async_runtime, AppHandle, Emitter, Runtime};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
-use crate::events::{
-    forward_libp2p_start_failed, P2PPairingCompleteEvent, P2PPairingFailedEvent,
-    P2PPairingRequestEvent, P2PPinReadyEvent,
-};
+use crate::events::{forward_libp2p_start_failed, P2PPairingVerificationEvent};
 use uc_app::app_paths::AppPaths;
 use uc_app::usecases::{PairingConfig, PairingOrchestrator, ResolveConnectionPolicy};
 use uc_app::AppDeps;
@@ -1099,15 +1096,13 @@ async fn handle_pairing_message<R: Runtime>(
     match message {
         PairingMessage::Request(request) => {
             if let Some(app) = app_handle {
-                let payload = P2PPairingRequestEvent::deprecated(
+                let payload = P2PPairingVerificationEvent::request(
                     &request.session_id,
-                    &peer_id,
+                    peer_id.clone(),
                     Some(request.device_name.clone()),
                 );
-                if let Err(err) = app.emit("p2p-pairing-request", payload) {
-                    warn!(error = %err, "Failed to emit deprecated pairing request event");
-                } else {
-                    warn!("Emitting deprecated pairing event: p2p-pairing-request");
+                if let Err(err) = app.emit("p2p-pairing-verification", payload) {
+                    warn!(error = %err, "Failed to emit pairing verification event");
                 }
             }
             if let Err(err) = orchestrator.handle_incoming_request(peer_id, request).await {
@@ -1171,23 +1166,6 @@ async fn run_pairing_action_loop<R: Runtime>(
     while let Some(action) = action_rx.recv().await {
         match action {
             PairingAction::Send { peer_id, message } => {
-                if let PairingMessage::Challenge(challenge) = &message {
-                    if let Some(app) = app_handle.as_ref() {
-                        let payload = P2PPinReadyEvent::deprecated(
-                            &challenge.session_id,
-                            challenge.pin.clone(),
-                            None,
-                            None,
-                            None,
-                            None,
-                        );
-                        if let Err(err) = app.emit("p2p-pin-ready", payload) {
-                            warn!(error = %err, "Failed to emit deprecated pin ready event");
-                        } else {
-                            warn!("Emitting deprecated pairing event: p2p-pin-ready");
-                        }
-                    }
-                }
                 if let Err(err) = network.send_pairing_message(peer_id.clone(), message).await {
                     error!(error = %err, peer_id = %peer_id, "Failed to send pairing message");
                 }
@@ -1200,18 +1178,15 @@ async fn run_pairing_action_loop<R: Runtime>(
                 peer_display_name,
             } => {
                 if let Some(app) = app_handle.as_ref() {
-                    let payload = P2PPinReadyEvent::deprecated(
+                    let payload = P2PPairingVerificationEvent::verification(
                         &session_id,
-                        short_code.clone(),
                         Some(peer_display_name),
-                        Some(short_code),
-                        Some(local_fingerprint),
-                        Some(peer_fingerprint),
+                        short_code,
+                        local_fingerprint,
+                        peer_fingerprint,
                     );
-                    if let Err(err) = app.emit("p2p-pin-ready", payload) {
-                        warn!(error = %err, "Failed to emit deprecated pin ready event");
-                    } else {
-                        warn!("Emitting deprecated pairing event: p2p-pin-ready");
+                    if let Err(err) = app.emit("p2p-pairing-verification", payload) {
+                        warn!(error = %err, "Failed to emit pairing verification event");
                     }
                 }
             }
@@ -1232,25 +1207,21 @@ async fn run_pairing_action_loop<R: Runtime>(
                             }
                             None => ("unknown".to_string(), "Unknown Device".to_string()),
                         };
-                        let payload = P2PPairingCompleteEvent::deprecated(
+                        let payload = P2PPairingVerificationEvent::complete(
                             &session_id,
-                            &peer_id,
+                            peer_id,
                             Some(device_name),
                         );
-                        if let Err(err) = app.emit("p2p-pairing-complete", payload) {
-                            warn!(error = %err, "Failed to emit deprecated pairing complete event");
-                        } else {
-                            warn!("Emitting deprecated pairing event: p2p-pairing-complete");
+                        if let Err(err) = app.emit("p2p-pairing-verification", payload) {
+                            warn!(error = %err, "Failed to emit pairing verification event");
                         }
                     } else {
-                        let payload = P2PPairingFailedEvent::deprecated(
+                        let payload = P2PPairingVerificationEvent::failed(
                             &session_id,
                             error.unwrap_or_else(|| "Pairing failed".to_string()),
                         );
-                        if let Err(err) = app.emit("p2p-pairing-failed", payload) {
-                            warn!(error = %err, "Failed to emit deprecated pairing failed event");
-                        } else {
-                            warn!("Emitting deprecated pairing event: p2p-pairing-failed");
+                        if let Err(err) = app.emit("p2p-pairing-verification", payload) {
+                            warn!(error = %err, "Failed to emit pairing verification event");
                         }
                     }
                 }
@@ -1439,7 +1410,7 @@ mod tests {
         let app_handle = app.handle();
         let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
         let payload_tx_clone = payload_tx.clone();
-        app_handle.listen("p2p-pairing-complete", move |event: tauri::Event| {
+        app_handle.listen("p2p-pairing-verification", move |event: tauri::Event| {
             let _ = payload_tx_clone.try_send(event.payload().to_string());
         });
 
@@ -1491,6 +1462,7 @@ mod tests {
             .expect("payload received");
         let value: serde_json::Value = serde_json::from_str(&payload).expect("payload json");
         assert_eq!(value["sessionId"], "session-1");
+        assert_eq!(value["kind"], "complete");
         assert_eq!(value["peerId"], "peer-remote");
         assert_eq!(value["deviceName"], "PeerDevice");
 
@@ -1504,7 +1476,7 @@ mod tests {
         let app_handle = app.handle();
         let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
         let payload_tx_clone = payload_tx.clone();
-        app_handle.listen("p2p-pairing-complete", move |event: tauri::Event| {
+        app_handle.listen("p2p-pairing-verification", move |event: tauri::Event| {
             let _ = payload_tx_clone.try_send(event.payload().to_string());
         });
 
