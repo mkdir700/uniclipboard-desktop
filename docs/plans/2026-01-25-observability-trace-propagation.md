@@ -344,7 +344,6 @@ Update each API module to import and call `invokeWithTrace` instead of `invoke`:
 - `src/api/p2p.ts`
 - `src/api/vault.ts`
 - `src/contexts/SettingContext.tsx`
-- `src/main.tsx` (for `frontend_ready`)
 
 **Step 3: Update tests to mock wrapper**
 

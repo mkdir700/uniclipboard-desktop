@@ -2,35 +2,24 @@
 //! 启动流程编排命令
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
-use crate::commands::record_trace_fields;
-use tauri::{AppHandle, Manager, State};
-use tracing::{info, info_span, warn, Instrument};
-use uc_core::ports::observability::TraceMetadata;
+use tauri::{AppHandle, Manager};
+use tracing::{info, warn};
 
-/// Startup barrier used to coordinate "frontend ready" and "backend ready".
+/// Startup barrier used to coordinate backend readiness.
 ///
-/// 用于协调“前端就绪”和“后端就绪”的启动门闩。
+/// 用于协调后端就绪的启动门闩。
 ///
 /// # Behavior / 行为
-/// - When both sides are ready, it shows the main window and closes the splashscreen window.
-/// - 当两侧都就绪时，显示主窗口并关闭启动页窗口。
+/// - When backend is ready, it shows the main window.
+/// - 当后端就绪时，显示主窗口。
 #[derive(Default)]
 pub struct StartupBarrier {
-    frontend_ready: AtomicBool,
     backend_ready: AtomicBool,
     finished: AtomicBool,
 }
 
 impl StartupBarrier {
-    /// Mark the frontend as ready.
-    ///
-    /// 标记前端已就绪。
-    pub fn mark_frontend_ready(&self) {
-        self.frontend_ready.store(true, Ordering::SeqCst);
-    }
-
     /// Mark the backend as ready.
     ///
     /// 标记后端已就绪。
@@ -46,21 +35,10 @@ impl StartupBarrier {
             return;
         }
 
-        let frontend_ready = self.frontend_ready.load(Ordering::SeqCst);
         let backend_ready = self.backend_ready.load(Ordering::SeqCst);
         if !backend_ready {
-            info!(
-                frontend_ready,
-                backend_ready, "StartupBarrier not ready to finish yet"
-            );
+            info!(backend_ready, "StartupBarrier not ready to finish yet");
             return;
-        }
-
-        if !frontend_ready {
-            info!(
-                frontend_ready,
-                backend_ready, "StartupBarrier finishing without frontend_ready"
-            );
         }
 
         if self
@@ -92,38 +70,5 @@ impl StartupBarrier {
         } else {
             warn!("Main window not found (startup barrier)");
         }
-
-        if let Some(splash_window) = app_handle.get_webview_window("splashscreen") {
-            if let Err(e) = splash_window.close() {
-                warn!("Failed to close splashscreen: {}", e);
-            } else {
-                info!("Splashscreen closed (startup barrier)");
-            }
-        }
     }
-}
-
-/// Notify backend that the frontend has finished initial mounting.
-///
-/// 通知后端：前端已完成初次挂载。
-#[tauri::command]
-pub async fn frontend_ready(
-    app_handle: AppHandle,
-    barrier: State<'_, Arc<StartupBarrier>>,
-    _trace: Option<TraceMetadata>,
-) -> Result<(), String> {
-    let span = info_span!(
-        "command.startup.frontend_ready",
-        trace_id = tracing::field::Empty,
-        trace_ts = tracing::field::Empty,
-    );
-    record_trace_fields(&span, &_trace);
-    async {
-        info!("Received frontend_ready handshake");
-        barrier.mark_frontend_ready();
-        barrier.try_finish(&app_handle);
-        Ok(())
-    }
-    .instrument(span)
-    .await
 }

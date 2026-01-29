@@ -3,15 +3,12 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
-
-use serde::Serialize;
 use tauri::http::header::{
     HeaderValue, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
 };
 use tauri::http::{Request, Response, StatusCode};
 use tauri::webview::PageLoadEvent;
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_single_instance;
 use tauri_plugin_stronghold;
@@ -426,8 +423,6 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::autostart::enable_autostart,
             uc_tauri::commands::autostart::disable_autostart,
             uc_tauri::commands::autostart::is_autostart_enabled,
-            // Startup commands
-            uc_tauri::commands::startup::frontend_ready,
             // macOS-specific commands (conditionally compiled)
             #[cfg(target_os = "macos")]
             plugins::mac_rounded_corners::enable_rounded_corners,
@@ -493,8 +488,7 @@ fn run_app(config: AppConfig) {
     );
     let pairing_orchestrator = Arc::new(pairing_orchestrator);
 
-    // Startup barrier used to coordinate splashscreen close timing.
-    // NOTE: Must be managed before startup to be available via tauri::State<T>.
+    // Startup barrier used to coordinate backend readiness and main window show timing.
     let startup_barrier = Arc::new(uc_tauri::commands::startup::StartupBarrier::default());
 
     // Create clipboard handler from runtime (AppRuntime implements ClipboardChangeHandler)
@@ -509,7 +503,6 @@ fn run_app(config: AppConfig) {
         // Register AppRuntime for Tauri commands
         .manage(runtime_for_tauri)
         .manage(pairing_orchestrator.clone())
-        .manage(startup_barrier.clone())
         .on_page_load(|webview, payload| {
             if webview.label() != "main" {
                 return;
@@ -559,7 +552,8 @@ fn run_app(config: AppConfig) {
             info!("AppHandle set on AppRuntime for event emission");
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
 
             // Start background spooler and blob worker tasks
             start_background_tasks(
@@ -573,122 +567,6 @@ fn run_app(config: AppConfig) {
             // Clone handles for async blocks
             let app_handle_for_startup = app.handle().clone();
             let startup_barrier_for_backend = startup_barrier.clone();
-            let startup_barrier_for_timeout = startup_barrier.clone();
-
-            if app.get_webview_window("splashscreen").is_none() {
-                // Load settings BEFORE creating the window to avoid race condition
-                info!("=== [LAYER 1] SPLASHSCREEN: Starting settings load ===");
-                let runtime_clone = runtime_for_handler.clone();
-                let (theme_color, theme_mode) = tauri::async_runtime::block_on(async move {
-                    info!("=== [LAYER 1] SPLASHSCREEN: Inside async block, calling settings.load() ===");
-                    let settings_result = runtime_clone.deps.settings.load().await;
-                    info!("=== [LAYER 1] SPLASHSCREEN: Settings load completed, is_ok={} ===", settings_result.is_ok());
-                    match settings_result {
-                        Ok(settings) => {
-                            let color = settings.general.theme_color.as_deref().unwrap_or("zinc").to_string();
-                            let mode = settings.general.theme.clone();
-                            info!("=== [LAYER 1] SPLASHSCREEN: Raw data - theme_color={:?}, theme_mode={:?} ===",
-                                settings.general.theme_color, mode);
-                            info!("=== [LAYER 1] SPLASHSCREEN: Processed - color={}, mode={:?} ===", color, mode);
-                            (color, mode)
-                        }
-                        Err(e) => {
-                            error!("=== [LAYER 1] SPLASHSCREEN: Failed to load settings: {} ===", e);
-                            warn!("Failed to load settings for splashscreen theme: {}", e);
-                            ("zinc".to_string(), uc_core::settings::model::Theme::System)
-                        }
-                    }
-                });
-                info!("=== [LAYER 1] SPLASHSCREEN: block_on completed, theme_color={}, theme_mode={:?} ===", theme_color, theme_mode);
-
-                match WebviewWindowBuilder::new(
-                    app,
-                    "splashscreen",
-                    WebviewUrl::App("/splashscreen.html".into()),
-                )
-                // IMPORTANT: splashscreen.html 在页面脚本里会同步读取 window.__SPLASH_THEME__
-                // 必须在 document 脚本执行前注入，避免退化为默认主题 + 跟随系统深浅色。
-                .initialization_script({
-                    #[derive(Serialize)]
-                    struct SplashTheme<'a> {
-                        theme_color: &'a str,
-                        #[serde(skip_serializing_if = "Option::is_none")]
-                        mode: Option<&'a str>,
-                    }
-
-                    let mode_str = match theme_mode {
-                        uc_core::settings::model::Theme::Light => Some("light"),
-                        uc_core::settings::model::Theme::Dark => Some("dark"),
-                        uc_core::settings::model::Theme::System => None,
-                    };
-
-                    let payload = SplashTheme {
-                        theme_color: theme_color.as_str(),
-                        mode: mode_str,
-                    };
-
-                    match serde_json::to_string(&payload) {
-                        Ok(json) => format!("window.__SPLASH_THEME__ = {};", json),
-                        Err(e) => {
-                            warn!(
-                                "Failed to serialize splashscreen theme payload, falling back to defaults: {}",
-                                e
-                            );
-                            "window.__SPLASH_THEME__ = { theme_color: 'zinc' };".to_string()
-                        }
-                    }
-                })
-                .title("UniClipboard")
-                .inner_size(800.0, 600.0)
-                .resizable(false)
-                .decorations(false)
-                .always_on_top(true)
-                .skip_taskbar(true)
-                .build()
-                {
-                    Ok(window) => {
-                        info!("=== [LAYER 2] SPLASHSCREEN: Window created successfully ===");
-
-                        // Ensure splashscreen is visible immediately (explicit is better than implicit).
-                        if let Err(e) = window.show() {
-                            warn!("Failed to show splashscreen window: {}", e);
-                        }
-
-                        // Apply rounded corners to splashscreen window (macOS only)
-                        #[cfg(target_os = "macos")]
-                        if let Err(e) = plugins::mac_rounded_corners::apply_modern_window_style(
-                            &window,
-                            plugins::mac_rounded_corners::WindowStyleConfig {
-                                corner_radius: 16.0,
-                                has_shadow: true,
-                                ..Default::default()
-                            },
-                        ) {
-                            warn!("Failed to apply rounded corners to splashscreen: {}", e);
-                        } else {
-                            info!("Applied rounded corners to splashscreen window");
-                        }
-                    }
-                    Err(e) => warn!("Failed to create splashscreen window: {}", e),
-                }
-            }
-
-            // Dev-only safety net: avoid getting stuck on splashscreen if the frontend handshake doesn't arrive.
-            // In release builds, we prefer strict coordination to avoid showing a blank main window.
-            #[cfg(debug_assertions)]
-            {
-                let app_handle_timeout = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(15)).await;
-                    if app_handle_timeout.get_webview_window("splashscreen").is_some() {
-                        warn!(
-                            "frontend_ready handshake not received in time; forcing startup barrier completion (debug)"
-                        );
-                        startup_barrier_for_timeout.mark_frontend_ready();
-                        startup_barrier_for_timeout.try_finish(&app_handle_timeout);
-                    }
-                });
-            }
 
             // Spawn the initialization task immediately (don't wait for frontend)
             let runtime = runtime_for_handler.clone();
@@ -732,13 +610,14 @@ fn run_app(config: AppConfig) {
                 let runtime_for_auto_unlock = runtime.clone();
                 let app_handle_for_unlock = app_handle_for_startup.clone();
                 tauri::async_runtime::spawn(async move {
-                    let auto_unlock_enabled = match runtime_for_auto_unlock.deps.settings.load().await {
-                        Ok(settings) => settings.security.auto_unlock_enabled,
-                        Err(e) => {
-                            warn!("[Startup] Failed to load settings for auto unlock: {}", e);
-                            false
-                        }
-                    };
+                    let auto_unlock_enabled =
+                        match runtime_for_auto_unlock.deps.settings.load().await {
+                            Ok(settings) => settings.security.auto_unlock_enabled,
+                            Err(e) => {
+                                warn!("[Startup] Failed to load settings for auto unlock: {}", e);
+                                false
+                            }
+                        };
 
                     if !auto_unlock_enabled {
                         info!("[Startup] Auto unlock disabled by settings");
