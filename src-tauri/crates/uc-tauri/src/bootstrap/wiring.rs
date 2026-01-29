@@ -1141,6 +1141,24 @@ async fn handle_pairing_message<R: Runtime>(
                 error!(error = %err, session_id = %session_id, "Failed to handle pairing confirm");
             }
         }
+        PairingMessage::Reject(reject) => {
+            let session_id = reject.session_id.clone();
+            if let Err(err) = orchestrator.handle_reject(&session_id, &peer_id).await {
+                error!(error = %err, session_id = %session_id, "Failed to handle pairing reject");
+            }
+        }
+        PairingMessage::Cancel(cancel) => {
+            let session_id = cancel.session_id.clone();
+            if let Err(err) = orchestrator.handle_cancel(&session_id, &peer_id).await {
+                error!(error = %err, session_id = %session_id, "Failed to handle pairing cancel");
+            }
+        }
+        PairingMessage::Busy(busy) => {
+            let session_id = busy.session_id.clone();
+            if let Err(err) = orchestrator.handle_busy(&session_id, &peer_id).await {
+                error!(error = %err, session_id = %session_id, "Failed to handle pairing busy");
+            }
+        }
     }
 }
 
