@@ -1,0 +1,41 @@
+import { SetupError } from '@/api/onboarding'
+
+export interface StepProps {
+  error?: SetupError | null
+  loading?: boolean
+}
+
+export interface WelcomeStepProps extends StepProps {
+  onCreate: () => void
+  onJoin: () => void
+}
+
+export interface CreatePassphraseStepProps extends StepProps {
+  onSubmit: (pass1: string, pass2: string) => void
+  onBack: () => void
+}
+
+export interface JoinPickDeviceStepProps extends StepProps {
+  onSelectPeer: (peerId: string) => void
+  onBack: () => void
+  onRefresh: () => void
+  peers: Array<{ id: string; name: string; device_type: string }> // Simplified for now
+}
+
+export interface JoinVerifyPassphraseStepProps extends StepProps {
+  peerId: string
+  onSubmit: (passphrase: string) => void
+  onBack: () => void
+}
+
+export interface PairingConfirmStepProps extends StepProps {
+  shortCode: string
+  sessionId: string
+  peerFingerprint?: string | null
+  onConfirm: () => void
+  onCancel: () => void
+}
+
+export interface SetupDoneStepProps extends StepProps {
+  onComplete: () => void
+}
