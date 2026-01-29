@@ -1,19 +1,19 @@
 import { createContext } from 'react'
-import type { P2PPairingRequestEvent, P2PPinReadyEvent } from '@/api/p2p'
+import type { P2PPairingVerificationEvent } from '@/api/p2p'
 
 /**
  * P2P context type definition.
  */
 export interface P2PContextType {
   // Receiver pairing request
-  pendingRequest: P2PPairingRequestEvent | null
+  pendingRequest: (P2PPairingVerificationEvent & { kind: 'request' }) | null
   showRequestDialog: boolean
   acceptRequest: () => Promise<void>
   rejectRequest: () => Promise<void>
 
   // PIN verification
   showPinDialog: boolean
-  pinData: P2PPinReadyEvent | null
+  pinData: (P2PPairingVerificationEvent & { kind: 'verification' }) | null
   verifyPin: (matches: boolean) => Promise<void>
   closePinDialog: () => void
 }
