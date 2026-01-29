@@ -4,4 +4,4 @@
 
 pub mod state_machine;
 
-pub use state_machine::{SetupAction, SetupEvent, SetupState, SetupStateMachine};
+pub use state_machine::{SetupAction, SetupError, SetupEvent, SetupState, SetupStateMachine};
