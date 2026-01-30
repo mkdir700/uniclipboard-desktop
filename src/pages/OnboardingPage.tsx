@@ -1,5 +1,7 @@
 import { AnimatePresence } from 'framer-motion'
-import { useEffect, useState, useCallback } from 'react'
+import { Loader2, Shield, Wifi, Key } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import CreatePassphraseStep from './onboarding/CreatePassphraseStep'
@@ -16,15 +18,19 @@ import {
   SetupEvent,
 } from '@/api/onboarding'
 import { getP2PPeers, P2PPeerInfo } from '@/api/p2p'
+import { useOnboarding } from '@/contexts/onboarding-context'
 
 export default function OnboardingPage() {
+  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.page' })
+  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'onboarding.common' })
   const navigate = useNavigate()
+  const { refreshStatus } = useOnboarding()
   const [setupState, setSetupState] = useState<SetupState | null>(null)
   const [loading, setLoading] = useState(false)
+  const [completing, setCompleting] = useState(false)
   const [peers, setPeers] = useState<Array<{ id: string; name: string; device_type: string }>>([])
   const [peersLoading, setPeersLoading] = useState(false)
 
-  // Load initial state
   useEffect(() => {
     const loadState = async () => {
       try {
@@ -32,36 +38,32 @@ export default function OnboardingPage() {
         setSetupState(state)
       } catch (error) {
         console.error('Failed to load setup state:', error)
-        toast.error('加载设置状态失败')
+        toast.error(t('errors.loadSetupStateFailed'))
       }
     }
     loadState()
-  }, [])
+  }, [t])
 
   const handleRefreshPeers = useCallback(async () => {
     setPeersLoading(true)
     try {
-      // Dispatch refresh event to backend to trigger discovery
       await dispatchSetupEvent('NetworkScanRefresh')
-
-      // Then fetch the list
       const peerList = await getP2PPeers()
       setPeers(
         peerList.map((p: P2PPeerInfo) => ({
           id: p.peerId,
-          name: p.deviceName || '未知设备',
-          device_type: 'desktop', // TODO: Get actual device type if available
+          name: p.deviceName || tCommon('unknownDevice'),
+          device_type: 'desktop',
         }))
       )
     } catch (error) {
       console.error('Failed to refresh peers:', error)
-      toast.error('刷新设备列表失败')
+      toast.error(t('errors.refreshPeersFailed'))
     } finally {
       setPeersLoading(false)
     }
-  }, [])
+  }, [t, tCommon])
 
-  // Fetch peers when entering JoinSpacePickDevice state
   useEffect(() => {
     if (setupState && typeof setupState === 'object' && 'JoinSpacePickDevice' in setupState) {
       handleRefreshPeers()
@@ -75,14 +77,23 @@ export default function OnboardingPage() {
       setSetupState(newState)
     } catch (error) {
       console.error('Failed to dispatch event:', error)
-      toast.error('操作失败，请重试')
+      toast.error(t('errors.operationFailed'))
     } finally {
       setLoading(false)
     }
   }
 
   const renderStep = () => {
-    if (!setupState) return null
+    if (!setupState) {
+      return (
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t('loadingSetupState')}
+          </div>
+        </div>
+      )
+    }
 
     if (setupState === 'Welcome') {
       return (
@@ -98,15 +109,19 @@ export default function OnboardingPage() {
       return (
         <SetupDoneStep
           onComplete={async () => {
+            setCompleting(true)
             try {
               await completeOnboarding()
+              await refreshStatus()
               navigate('/', { replace: true })
             } catch (error) {
               console.error('Failed to complete onboarding:', error)
-              toast.error('完成设置失败')
+              toast.error(t('errors.completeSetupFailed'))
+            } finally {
+              setCompleting(false)
             }
           }}
-          loading={loading}
+          loading={completing}
         />
       )
     }
@@ -168,15 +183,46 @@ export default function OnboardingPage() {
       }
     }
 
-    return <div>Unknown state: {JSON.stringify(setupState)}</div>
+    return <div>{t('unknownState', { state: JSON.stringify(setupState) })}</div>
   }
 
+  const stepKey = useMemo(() => {
+    if (!setupState) return 'loading'
+    if (typeof setupState === 'string') return setupState
+    return Object.keys(setupState)[0] ?? 'unknown'
+  }, [setupState])
+
   return (
-    <div className="h-full w-full bg-background flex flex-col">
-      <div className="flex-1 flex flex-col items-center justify-center px-8 max-w-2xl mx-auto py-8 min-h-0 overflow-y-auto">
-        <AnimatePresence mode="wait" initial={false}>
-          {renderStep()}
-        </AnimatePresence>
+    <div className="relative h-full w-full overflow-hidden bg-background">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-muted/20" />
+        <div className="absolute -top-32 -left-32 h-96 w-96 bg-primary/5 blur-3xl" />
+        <div className="absolute -bottom-32 -right-32 h-96 w-96 bg-emerald-500/5 blur-3xl" />
+      </div>
+
+      <div className="relative flex h-full w-full flex-col">
+        <main className="flex flex-1 items-center overflow-y-auto px-6 py-12 lg:px-16">
+          <div className="mx-auto w-full max-w-2xl">
+            <AnimatePresence mode="wait" initial={false}>
+              <div key={stepKey}>{renderStep()}</div>
+            </AnimatePresence>
+          </div>
+        </main>
+
+        <div className="pointer-events-none absolute bottom-6 right-6 hidden flex-col gap-2 text-[10px] text-muted-foreground/60 lg:flex">
+          <div className="flex items-center gap-1.5">
+            <Shield className="h-3 w-3" />
+            <span>{t('badges.e2ee')}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Key className="h-3 w-3" />
+            <span>{t('badges.localKeys')}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Wifi className="h-3 w-3" />
+            <span>{t('badges.lanDiscovery')}</span>
+          </div>
+        </div>
       </div>
     </div>
   )

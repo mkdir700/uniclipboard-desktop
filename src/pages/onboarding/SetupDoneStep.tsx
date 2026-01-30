@@ -1,31 +1,32 @@
 import { motion } from 'framer-motion'
 import { CheckCircle2, ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { SetupDoneStepProps } from './types'
 import { Button } from '@/components/ui/button'
 
-export default function SetupDoneStep({ onComplete }: SetupDoneStepProps) {
+export default function SetupDoneStep({ onComplete, loading }: SetupDoneStepProps) {
+  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.done' })
+
   return (
     <motion.div
-      initial={{ scale: 0.9, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.9, opacity: 0 }}
-      className="w-full max-w-md mx-auto text-center"
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      className="w-full"
     >
-      <div className="mb-8 flex justify-center">
-        <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center">
-          <CheckCircle2 className="w-10 h-10 text-green-500" />
+      <div className="flex flex-col items-center text-center">
+        <div className="mb-8 flex h-20 w-20 items-center justify-center text-green-500">
+          <CheckCircle2 className="h-16 w-16" />
         </div>
+
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
+        <p className="mt-2 max-w-sm text-muted-foreground">{t('subtitle')}</p>
+
+        <Button onClick={onComplete} disabled={loading} className="mt-10 min-w-40">
+          {t('actions.enter')}
+          <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
       </div>
-
-      <h1 className="text-2xl font-bold text-foreground mb-2">已完成设置</h1>
-      <p className="text-muted-foreground text-sm mb-8">
-        你的设备已准备就绪，现在可以安全共享剪贴板了。
-      </p>
-
-      <Button onClick={onComplete} className="w-full h-12 shadow-lg shadow-primary/20">
-        进入主页
-        <ArrowRight className="w-4 h-4 ml-2" />
-      </Button>
     </motion.div>
   )
 }

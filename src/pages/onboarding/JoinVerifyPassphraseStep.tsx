@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { AlertCircle, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { JoinVerifyPassphraseStepProps } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +15,9 @@ export default function JoinVerifyPassphraseStep({
   error,
   loading,
 }: JoinVerifyPassphraseStepProps) {
+  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.joinVerifyPassphrase' })
+  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'onboarding.common' })
+
   const [passphrase, setPassphrase] = useState('')
   const [showPassphrase, setShowPassphrase] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
@@ -29,51 +33,94 @@ export default function JoinVerifyPassphraseStep({
     if (error === 'PassphraseInvalidOrMismatch') {
       setLocalError(null)
     } else if (error === 'NetworkTimeout') {
-      setLocalError('验证超时，请检查网络后重试。')
+      setLocalError(t('errors.timeout'))
     } else if (error === 'PeerUnavailable') {
-      setLocalError('对方设备不可用，请确认已打开 UniClipboard。')
+      setLocalError(t('errors.peerUnavailable'))
     } else {
-      setLocalError('验证失败，请重试。')
+      setLocalError(t('errors.generic'))
     }
-  }, [error])
+  }, [error, t])
 
   const handleSubmit = () => {
     if (!passphrase) {
-      setLocalError('请输入加密口令。')
+      setLocalError(t('errors.empty'))
       return
     }
     onSubmit(passphrase)
   }
 
+  if (error === 'PassphraseInvalidOrMismatch' && showMismatchHelp) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="w-full"
+      >
+        <button
+          onClick={onBack}
+          className="mb-8 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t('actions.backToPick')}
+        </button>
+
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {t('mismatchHelp.title')}
+            </h1>
+            <p className="mt-2 text-muted-foreground">{t('mismatchHelp.subtitle')}</p>
+          </div>
+
+          <div className="text-sm text-muted-foreground">
+            <p>{t('mismatchHelp.p1')}</p>
+            <p className="mt-2">{t('mismatchHelp.p2')}</p>
+            <ul className="mt-2 list-disc pl-5 space-y-1">
+              <li>{t('mismatchHelp.option1')}</li>
+              <li>{t('mismatchHelp.option2')}</li>
+            </ul>
+          </div>
+
+          <div className="flex flex-col gap-3 pt-4">
+            <Button onClick={() => setShowMismatchHelp(false)} disabled={loading}>
+              {t('mismatchHelp.retry')}
+            </Button>
+            <Button variant="outline" onClick={onCreateNew} disabled={loading}>
+              {t('mismatchHelp.createNew')}
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
   return (
     <motion.div
-      initial={{ x: 300, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: -300, opacity: 0 }}
-      className="w-full max-w-md mx-auto"
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="w-full"
     >
-      <div className="mb-8">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="pl-0 hover:bg-transparent text-muted-foreground hover:text-foreground"
-          onClick={onBack}
-        >
-          <ArrowLeft className="w-4 h-4 mr-1" />
-          返回选择设备
-        </Button>
-        <h1 className="text-2xl font-bold text-foreground mt-2">输入加密口令</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          请输入与你已有设备相同的加密口令，用于加入同一个加密空间并解密剪贴板数据。
-        </p>
-        <p className="text-xs text-muted-foreground mt-1 font-mono">
-          目标设备 ID: {peerId.substring(0, 8)}...
+      <button
+        onClick={onBack}
+        className="mb-8 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        {t('actions.backToPick')}
+      </button>
+
+      <div className="mb-10">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
+        <p className="mt-2 text-muted-foreground">{t('subtitle')}</p>
+        <p className="mt-1 font-mono text-xs text-muted-foreground">
+          {t('targetDevice', { peerShort: peerId.substring(0, 8) })}
         </p>
       </div>
 
-      <div className="space-y-5 mb-8">
+      <div className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="passphrase">加密口令</Label>
+          <Label htmlFor="passphrase">{tCommon('encryptPassphraseLabel')}</Label>
           <div className="relative">
             <Input
               id="passphrase"
@@ -82,60 +129,43 @@ export default function JoinVerifyPassphraseStep({
               onChange={e => setPassphrase(e.target.value)}
               disabled={loading}
               className="pr-10"
-              placeholder="输入加密口令"
+              placeholder={tCommon('encryptPassphrasePlaceholder')}
               onKeyDown={e => e.key === 'Enter' && handleSubmit()}
             />
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
               onClick={() => setShowPassphrase(!showPassphrase)}
+              className="absolute right-0 top-0 flex h-full items-center px-3 text-muted-foreground transition-colors hover:text-foreground"
             >
-              {showPassphrase ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </Button>
+              {showPassphrase ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           </div>
         </div>
 
         {localError && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center gap-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center gap-2 text-sm text-destructive"
           >
-            <AlertCircle className="w-4 h-4 shrink-0" />
+            <AlertCircle className="h-4 w-4 shrink-0" />
             {localError}
           </motion.div>
         )}
       </div>
 
-      {error === 'PassphraseInvalidOrMismatch' && showMismatchHelp ? (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-            <div className="font-semibold">无法加入加密空间</div>
-            <p className="text-xs mt-1">
-              当前输入的加密口令与已有设备使用的口令不一致。只有使用相同口令的设备才能加入同一个加密空间。
-            </p>
-          </div>
-          <Button className="w-full" onClick={() => setShowMismatchHelp(false)} disabled={loading}>
-            重新输入加密口令
-          </Button>
-          <Button variant="outline" className="w-full" onClick={onCreateNew} disabled={loading}>
-            创建新的加密空间
-          </Button>
-        </div>
-      ) : (
-        <Button className="w-full" onClick={handleSubmit} disabled={loading}>
+      <div className="mt-10 flex items-center gap-4">
+        <Button onClick={handleSubmit} disabled={loading} className="min-w-32">
           {loading ? (
             <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              验证中...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {t('actions.verifying')}
             </>
           ) : (
-            '验证并继续'
+            t('actions.verify')
           )}
         </Button>
-      )}
+      </div>
     </motion.div>
   )
 }

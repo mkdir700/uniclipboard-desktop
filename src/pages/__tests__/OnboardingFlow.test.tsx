@@ -1,7 +1,8 @@
 import { render, screen, act } from '@testing-library/react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getSetupState, dispatchSetupEvent } from '@/api/onboarding'
+import i18n from '@/i18n'
 import OnboardingPage from '@/pages/OnboardingPage'
 
 // Mock the API
@@ -49,6 +50,10 @@ vi.mock('framer-motion', () => ({
 }))
 
 describe('Onboarding flow', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('zh-CN')
+  })
+
   it('renders welcome step for SetupState.Welcome', async () => {
     // mock getSetupState() to return 'Welcome'
     vi.mocked(getSetupState).mockResolvedValue('Welcome')
@@ -56,8 +61,14 @@ describe('Onboarding flow', () => {
     render(<OnboardingPage />)
 
     expect(await screen.findByText('欢迎使用 UniClipboard')).toBeInTheDocument()
-    expect(screen.getByText('你想如何开始？')).toBeInTheDocument()
+    expect(screen.getByText('选择一种方式开始设置你的加密空间')).toBeInTheDocument()
     expect(screen.getByText('创建新的加密空间')).toBeInTheDocument()
+
+    await act(async () => {
+      await i18n.changeLanguage('en-US')
+    })
+
+    expect(await screen.findByText('Welcome to UniClipboard')).toBeInTheDocument()
   })
 
   it('shows passphrase mismatch error text', async () => {

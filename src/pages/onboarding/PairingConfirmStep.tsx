@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { AlertCircle, Check, X, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { PairingConfirmStepProps } from './types'
 import { Button } from '@/components/ui/button'
 
@@ -12,59 +13,61 @@ export default function PairingConfirmStep({
   error,
   loading,
 }: PairingConfirmStepProps) {
+  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.pairingConfirm' })
+
   return (
     <motion.div
-      initial={{ scale: 0.9, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.9, opacity: 0 }}
-      className="w-full max-w-md mx-auto text-center"
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      className="w-full"
     >
-      <h1 className="text-2xl font-bold text-foreground mb-2">确认配对</h1>
-      <p className="text-muted-foreground text-sm mb-8">
-        请确认两台设备显示的验证码一致，以确保你连接的是正确的设备。
-      </p>
+      <div className="mb-10 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
+        <p className="mt-2 text-muted-foreground">{t('subtitle')}</p>
+      </div>
 
-      <div className="bg-muted/30 rounded-2xl p-8 mb-8 border border-border/50">
-        <div className="text-4xl font-mono font-bold tracking-widest text-primary mb-2">
+      <div className="mb-10 text-center">
+        <div className="text-5xl font-mono font-semibold tracking-widest text-primary">
           {shortCode}
         </div>
-        <div className="text-xs text-muted-foreground font-mono opacity-70">
-          Session ID: {sessionId.substring(0, 8)}...
+        <div className="mt-4 font-mono text-xs text-muted-foreground">
+          {t('session', { sessionShort: sessionId.substring(0, 8) })}
         </div>
         {peerFingerprint && (
-          <div className="mt-4 pt-4 border-t border-border/30">
-            <div className="text-xs text-muted-foreground mb-1">对方设备指纹</div>
-            <div className="text-xs font-mono break-all opacity-80">{peerFingerprint}</div>
+          <div className="mt-6 pt-6 border-t border-border/30">
+            <div className="text-xs text-muted-foreground mb-1">{t('peerFingerprint')}</div>
+            <div className="font-mono text-xs break-all opacity-70">{peerFingerprint}</div>
           </div>
         )}
       </div>
 
       {error && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center justify-center gap-2"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mb-6 flex items-center justify-center gap-2 text-sm text-destructive"
         >
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error === 'PairingRejected' ? '配对已取消。' : '配对失败，请重试。'}
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error === 'PairingRejected' ? t('errors.rejected') : t('errors.generic')}
         </motion.div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <Button variant="outline" onClick={onCancel} disabled={loading} className="h-12">
-          <X className="w-4 h-4 mr-2" />
-          取消
+      <div className="flex justify-center gap-4">
+        <Button variant="outline" onClick={onCancel} disabled={loading}>
+          <X className="mr-2 h-4 w-4" />
+          {t('actions.cancel')}
         </Button>
-        <Button onClick={onConfirm} disabled={loading} className="h-12">
+        <Button onClick={onConfirm} disabled={loading}>
           {loading ? (
             <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              确认中...
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {t('actions.confirming')}
             </>
           ) : (
             <>
-              <Check className="w-4 h-4 mr-2" />
-              验证码一致，继续
+              <Check className="mr-2 h-4 w-4" />
+              {t('actions.confirm')}
             </>
           )}
         </Button>

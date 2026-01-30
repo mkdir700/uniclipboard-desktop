@@ -1,59 +1,67 @@
 import { motion } from 'framer-motion'
-import { Shield, Smartphone } from 'lucide-react'
+import { Shield, Smartphone, ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { WelcomeStepProps } from './types'
-import { Button } from '@/components/ui/button'
 
 export default function WelcomeStep({ onCreate, onJoin, loading }: WelcomeStepProps) {
+  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.welcome' })
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-2xl mx-auto text-center"
+      exit={{ opacity: 0, y: -16 }}
+      className="w-full"
     >
-      <h1 className="text-3xl font-bold text-foreground mb-2 tracking-tight">
-        欢迎使用 UniClipboard
-      </h1>
-      <p className="text-base text-foreground/80 mb-3">你想如何开始？</p>
-      <p className="text-sm text-muted-foreground mb-8 max-w-xl mx-auto">
-        UniClipboard
-        使用端到端加密。你可以创建一个新的加密空间，或加入已存在的空间，与其他设备安全共享剪贴板。
-      </p>
+      <div className="mb-12 text-center lg:text-left">
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground lg:text-4xl">
+          {t('title')}
+        </h1>
+        <p className="mt-4 text-lg text-muted-foreground">{t('subtitle')}</p>
+      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 max-w-xl mx-auto">
-        <Button
-          variant="outline"
-          className="h-auto p-6 flex flex-col items-center gap-4 hover:bg-primary/5 hover:border-primary/30 transition-all group"
+      <div className="grid gap-4 md:grid-cols-2">
+        <button
           onClick={onCreate}
           disabled={loading}
+          className="group relative flex flex-col items-start gap-6 p-8 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
         >
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-            <Shield className="w-6 h-6 text-primary" />
+          <div className="flex h-12 w-12 items-center justify-center text-primary">
+            <Shield className="h-7 w-7" />
           </div>
-          <div className="space-y-1">
-            <h3 className="font-semibold text-foreground">创建新的加密空间</h3>
-            <p className="text-xs text-muted-foreground">
-              适用于这是你的第一台设备，或你想从一个全新的空间开始。
+          <div className="space-y-2">
+            <h3 className="text-lg font-medium text-foreground">{t('create.title')}</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {t('create.description')}
             </p>
           </div>
-        </Button>
+          <div className="mt-2 flex items-center gap-2 text-sm font-medium text-primary">
+            {t('create.cta')}
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </div>
+        </button>
 
-        <Button
-          variant="outline"
-          className="h-auto p-6 flex flex-col items-center gap-4 hover:bg-primary/5 hover:border-primary/30 transition-all group"
+        <button
           onClick={onJoin}
           disabled={loading}
+          className="group relative flex flex-col items-start gap-6 p-8 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
         >
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-            <Smartphone className="w-6 h-6 text-primary" />
+          <div className="flex h-12 w-12 items-center justify-center text-primary">
+            <Smartphone className="h-7 w-7" />
           </div>
-          <div className="space-y-1">
-            <h3 className="font-semibold text-foreground">加入已有的加密空间</h3>
-            <p className="text-xs text-muted-foreground">
-              如果你已经在另一台设备上使用 UniClipboard，选择此项即可加入并同步。
-            </p>
+          <div className="space-y-2">
+            <h3 className="text-lg font-medium text-foreground">{t('join.title')}</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">{t('join.description')}</p>
           </div>
-        </Button>
+          <div className="mt-2 flex items-center gap-2 text-sm font-medium text-primary">
+            {t('join.cta')}
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </div>
+        </button>
+      </div>
+
+      <div className="mt-12 text-center text-xs text-muted-foreground lg:text-left">
+        {t('footer')}
       </div>
     </motion.div>
   )
