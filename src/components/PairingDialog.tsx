@@ -24,6 +24,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { toast } from '@/components/ui/toast'
 // import { getLocalDeviceName } from '@/api/deviceConnection' // Assuming we'll add this or use existing
 
 // Mock getLocalDeviceName if not available yet, or import if available
@@ -65,6 +66,7 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
         if (event.kind === 'complete') {
           console.log('Pairing Complete:', event)
           setStep('success')
+          toast.success(t('pairing.success.title'))
           setTimeout(() => {
             onPairingSuccess?.()
             onClose()
@@ -76,13 +78,16 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
           console.error('Pairing Failed:', event)
           setErrorMsg(event.error ?? '')
           setStep('failed')
+          toast.error(t('pairing.failed.title'), {
+            description: event.error ?? '',
+          })
         }
       })
       cleanupRefs.current.push(unlistenVerification)
     } catch (err) {
       console.error('Failed to setup listeners:', err)
     }
-  }, [onClose, onPairingSuccess])
+  }, [onClose, onPairingSuccess, t])
 
   const loadPeers = React.useCallback(async () => {
     setLoading(true)
