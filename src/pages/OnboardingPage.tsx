@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import CreatePassphraseStep from './onboarding/CreatePassphraseStep'
-import JoinPickDeviceStep from './onboarding/JoinPickDeviceStep'
-import JoinVerifyPassphraseStep from './onboarding/JoinVerifyPassphraseStep'
-import PairingConfirmStep from './onboarding/PairingConfirmStep'
-import SetupDoneStep from './onboarding/SetupDoneStep'
-import WelcomeStep from './onboarding/WelcomeStep'
+import CreatePassphraseStep from '@/pages/onboarding/CreatePassphraseStep'
+import JoinPickDeviceStep from '@/pages/onboarding/JoinPickDeviceStep'
+import JoinVerifyPassphraseStep from '@/pages/onboarding/JoinVerifyPassphraseStep'
+import PairingConfirmStep from '@/pages/onboarding/PairingConfirmStep'
+import SetupDoneStep from '@/pages/onboarding/SetupDoneStep'
+import WelcomeStep from '@/pages/onboarding/WelcomeStep'
 import {
   getSetupState,
   dispatchSetupEvent,
