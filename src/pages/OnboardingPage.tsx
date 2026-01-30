@@ -209,7 +209,7 @@ export default function OnboardingPage() {
           </div>
         </main>
 
-        <div className="pointer-events-none absolute bottom-6 right-6 hidden flex-col gap-2 text-[10px] text-muted-foreground/60 lg:flex">
+        <div className="pointer-events-none absolute bottom-6 right-6 hidden flex-col gap-2 text-[0.625rem] text-muted-foreground/60 lg:flex">
           <div className="flex items-center gap-1.5">
             <Shield className="h-3 w-3" />
             <span>{t('badges.e2ee')}</span>
