@@ -35,6 +35,7 @@ const DevicesPage: React.FC = () => {
   const [pinCode, setPinCode] = useState('')
   const [pinPeerDeviceName, setPinPeerDeviceName] = useState<string>('')
   const [pairingSessionId, setPairingSessionId] = useState<string>('')
+  const [_pinPhase, setPinPhase] = useState<'display' | 'verifying'>('display')
   const cleanupRefs = useRef<(() => void)[]>([])
 
   // Refs for scrolling
@@ -63,6 +64,16 @@ const DevicesPage: React.FC = () => {
           setPinCode(event.code ?? '')
           setPinPeerDeviceName(event.deviceName || t('pairing.discovery.unknownDevice'))
           setPairingSessionId(event.sessionId)
+          setPinPhase('display')
+          setShowPinDialog(true)
+          return
+        }
+
+        if (event.kind === 'verifying') {
+          console.log('Received P2P verifying event (responder):', event)
+          setPinPeerDeviceName(event.deviceName || t('pairing.discovery.unknownDevice'))
+          setPairingSessionId(event.sessionId)
+          setPinPhase('verifying')
           setShowPinDialog(true)
           return
         }
@@ -72,6 +83,7 @@ const DevicesPage: React.FC = () => {
           setShowPinDialog(false)
           setPendingP2PRequest(null)
           setAcceptingP2PRequest(false)
+          setPinPhase('display')
           toast.success(t('pairing.success.title'))
           dispatch(fetchPairedDevices())
           return
@@ -81,6 +93,7 @@ const DevicesPage: React.FC = () => {
         setShowPinDialog(false)
         setPendingP2PRequest(null)
         setAcceptingP2PRequest(false)
+        setPinPhase('display')
         toast.error(t('pairing.failed.title'), {
           description: event.error || '',
         })

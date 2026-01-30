@@ -83,7 +83,12 @@ export interface P2PPinVerifyRequest {
   pinMatches: boolean
 }
 
-export type P2PPairingVerificationKind = 'request' | 'verification' | 'complete' | 'failed'
+export type P2PPairingVerificationKind =
+  | 'request'
+  | 'verification'
+  | 'verifying'
+  | 'complete'
+  | 'failed'
 
 /**
  * P2P 配对验证事件数据
