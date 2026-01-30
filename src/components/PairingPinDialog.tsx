@@ -10,7 +10,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 
-type PinVerifyStep = 'display' | 'confirm'
+type PinVerifyStep = 'display' | 'verifying' | 'success'
 
 interface PairingPinDialogProps {
   open: boolean
@@ -19,6 +19,7 @@ interface PairingPinDialogProps {
   peerDeviceName?: string
   isInitiator: boolean
   onConfirm: (matches: boolean) => void
+  phase?: PinVerifyStep
 }
 
 /**
@@ -35,18 +36,19 @@ export default function PairingPinDialog({
   peerDeviceName,
   isInitiator,
   onConfirm,
+  phase,
 }: PairingPinDialogProps) {
   const { t } = useTranslation()
   const [step, setStep] = useState<PinVerifyStep>('display')
 
   useEffect(() => {
     if (open) {
-      setStep('display')
+      setStep(phase ?? 'display')
     }
-  }, [open])
+  }, [open, phase])
 
   const handleConfirm = (matches: boolean) => {
-    setStep('confirm')
+    setStep('verifying')
     onConfirm(matches)
   }
 
@@ -63,7 +65,7 @@ export default function PairingPinDialog({
   }
 
   const getDescription = () => {
-    if (step === 'confirm') {
+    if (step === 'verifying') {
       return t('pairing.pinVerify.pleaseWait')
     }
     if (isInitiator) {
@@ -72,12 +74,15 @@ export default function PairingPinDialog({
     return t('pairing.pinVerify.responderDescription', { deviceName: peerDeviceName })
   }
 
+  const title = step === 'success' ? t('pairing.success.title') : getTitle()
+  const description = step === 'success' ? '' : getDescription()
+
   return (
     <Dialog open={open} onOpenChange={open => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{getTitle()}</DialogTitle>
-          <DialogDescription>{getDescription()}</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
         {step === 'display' && (
@@ -115,12 +120,21 @@ export default function PairingPinDialog({
           </div>
         )}
 
-        {step === 'confirm' && (
+        {step === 'verifying' && (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
               <ShieldCheck className="w-8 h-8 text-primary animate-pulse" />
             </div>
             <p className="mt-4 text-sm text-muted-foreground">{t('pairing.pinVerify.verifying')}</p>
+          </div>
+        )}
+
+        {step === 'success' && (
+          <div className="flex flex-col items-center justify-center py-12 text-green-600">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <h3 className="mt-4 text-lg font-medium">{t('pairing.success.title')}</h3>
           </div>
         )}
       </DialogContent>

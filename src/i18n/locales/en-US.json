@@ -498,7 +498,7 @@
       "initiatorTitle": "Verify PIN Code",
       "initiatorDescription": "Check if this PIN matches the one shown on {{deviceName}}",
       "responderTitle": "Your PIN Code",
-      "responderDescription": "Compare this PIN with the one on {{deviceName}}. Confirm the match on the initiating device.",
+      "responderDescription": "Compare this PIN with the one on {{deviceName}} and confirm the match on the initiating device.",
       "verifying": "Verifying...",
       "pleaseWait": "Please wait...",
       "pinLabel": "Pairing PIN Code",
