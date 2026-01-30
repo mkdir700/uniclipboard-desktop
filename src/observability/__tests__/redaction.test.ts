@@ -5,6 +5,8 @@ describe('redactSensitiveArgs', () => {
   it('masks sensitive keys recursively', () => {
     const input = {
       password: 'secret',
+      pass1: 'alpha',
+      pass2: 'beta',
       nested: { passphrase: 'hello' },
       list: [{ token: 'abc' }],
       safe: 'ok',
@@ -14,6 +16,8 @@ describe('redactSensitiveArgs', () => {
 
     expect(output).toEqual({
       password: '[REDACTED]',
+      pass1: '[REDACTED]',
+      pass2: '[REDACTED]',
       nested: { passphrase: '[REDACTED]' },
       list: [{ token: '[REDACTED]' }],
       safe: 'ok',

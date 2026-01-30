@@ -1,4 +1,14 @@
-const sensitiveKeys = ['password', 'passphrase', 'secret', 'token', 'auth', 'api_key', 'apikey']
+const sensitiveKeys = [
+  'password',
+  'passphrase',
+  'pass1',
+  'pass2',
+  'secret',
+  'token',
+  'auth',
+  'api_key',
+  'apikey',
+]
 
 export function redactSensitiveArgs(value: unknown): unknown {
   return redactValue(value, new WeakMap())
