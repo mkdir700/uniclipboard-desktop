@@ -405,10 +405,7 @@ mod tests {
         );
     }
 
-    /// Tracks how many times the encryption is initialized.
-    struct CountingMockEncryption {
-        init_count: AtomicUsize,
-    }
+    struct CountingMockEncryption;
 
     #[async_trait]
     impl EncryptionPort for CountingMockEncryption {
@@ -548,9 +545,7 @@ mod tests {
         // Start from CreateSpacePassphrase state instead of Welcome
         let orchestrator = Arc::new(SetupOrchestrator::with_state(
             SetupState::CreateSpacePassphrase { error: None },
-            Arc::new(CountingMockEncryption {
-                init_count: AtomicUsize::new(0),
-            }),
+            Arc::new(CountingMockEncryption),
             key_material.clone(),
             Arc::new(MockKeyScope {
                 scope: KeyScope {
