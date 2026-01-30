@@ -1190,6 +1190,20 @@ async fn run_pairing_action_loop<R: Runtime>(
                     }
                 }
             }
+            PairingAction::ShowVerifying {
+                session_id,
+                peer_display_name,
+            } => {
+                if let Some(app) = app_handle.as_ref() {
+                    let payload = P2PPairingVerificationEvent::verifying(
+                        &session_id,
+                        Some(peer_display_name),
+                    );
+                    if let Err(err) = app.emit("p2p-pairing-verification", payload) {
+                        warn!(error = %err, "Failed to emit pairing verification event");
+                    }
+                }
+            }
             PairingAction::EmitResult {
                 session_id,
                 success,
@@ -1533,6 +1547,57 @@ mod tests {
         assert!(value.get("session_id").is_none());
         assert!(value.get("peer_id").is_none());
         assert!(value.get("device_name").is_none());
+
+        drop(action_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
+    }
+
+    #[tokio::test]
+    async fn pairing_action_loop_emits_verifying_kind() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
+        let payload_tx_clone = payload_tx.clone();
+        app_handle.listen("p2p-pairing-verification", move |event: tauri::Event| {
+            let _ = payload_tx_clone.try_send(event.payload().to_string());
+        });
+
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+
+        let (action_tx, action_rx) = mpsc::channel(1);
+        let network = Arc::new(NoopNetwork);
+        let loop_handle = tokio::spawn(run_pairing_action_loop::<tauri::test::MockRuntime>(
+            action_rx,
+            network,
+            Some(app_handle.clone()),
+            orchestrator.clone(),
+        ));
+
+        action_tx
+            .send(PairingAction::ShowVerifying {
+                session_id: "session-1".to_string(),
+                peer_display_name: "PeerDevice".to_string(),
+            })
+            .await
+            .expect("send action");
+
+        let payload = tokio::time::timeout(Duration::from_secs(1), payload_rx.recv())
+            .await
+            .expect("timeout waiting for payload")
+            .expect("payload received");
+        let value: serde_json::Value = serde_json::from_str(&payload).expect("payload json");
+        assert_eq!(value["sessionId"], "session-1");
+        assert_eq!(value["kind"], "verifying");
+        assert_eq!(value["deviceName"], "PeerDevice");
 
         drop(action_tx);
         let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;

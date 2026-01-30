@@ -564,7 +564,9 @@ impl PairingOrchestrator {
                             .await
                             .context("Failed to queue send action")?;
                     }
-                    PairingAction::ShowVerification { .. } | PairingAction::EmitResult { .. } => {
+                    PairingAction::ShowVerification { .. }
+                    | PairingAction::ShowVerifying { .. }
+                    | PairingAction::EmitResult { .. } => {
                         action_tx
                             .send(action)
                             .await

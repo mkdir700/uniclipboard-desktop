@@ -18,6 +18,7 @@ pub struct P2PPairingVerificationEvent {
 pub enum P2PPairingVerificationKind {
     Request,
     Verification,
+    Verifying,
     Complete,
     Failed,
 }
@@ -51,6 +52,19 @@ impl P2PPairingVerificationEvent {
             code: Some(code),
             local_fingerprint: Some(local_fingerprint),
             peer_fingerprint: Some(peer_fingerprint),
+            error: None,
+        }
+    }
+
+    pub fn verifying(session_id: &str, device_name: Option<String>) -> Self {
+        Self {
+            session_id: session_id.to_string(),
+            kind: P2PPairingVerificationKind::Verifying,
+            peer_id: None,
+            device_name,
+            code: None,
+            local_fingerprint: None,
+            peer_fingerprint: None,
             error: None,
         }
     }
@@ -95,5 +109,21 @@ mod tests {
         );
         let value = serde_json::to_value(payload).expect("serialize event");
         assert_eq!(value["kind"], "request");
+    }
+
+    #[test]
+    fn verification_event_serializes_verifying_kind() {
+        let payload = P2PPairingVerificationEvent {
+            session_id: "session-1".to_string(),
+            kind: P2PPairingVerificationKind::Verifying,
+            peer_id: None,
+            device_name: Some("Device".to_string()),
+            code: None,
+            local_fingerprint: None,
+            peer_fingerprint: None,
+            error: None,
+        };
+        let value = serde_json::to_value(payload).expect("serialize event");
+        assert_eq!(value["kind"], "verifying");
     }
 }
