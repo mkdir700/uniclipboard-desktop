@@ -54,6 +54,32 @@ Implement onboarding flow following Hexagonal Architecture (Ports and Adapters) 
 | `CompleteOnboardingUseCase`              | Mark onboarding complete       | `OnboardingContext.complete()`    |
 | `InitializeEncryptionUseCase` (existing) | Initialize encryption password | `OnboardingContext.setPassword()` |
 
+## Setup State Machine (2026-01-29)
+
+The onboarding flow now includes a setup state machine to drive create-space and join-space
+flows. The join-space branch is explicitly TODO for now.
+
+**Core (uc-core)**
+
+- `src-tauri/crates/uc-core/src/setup/state_machine.rs`: `SetupState`, `SetupEvent`, `SetupAction`, `SetupError`
+
+**Application (uc-app)**
+
+- `src-tauri/crates/uc-app/src/usecases/setup/orchestrator.rs`: `SetupOrchestrator` drives state
+  and executes actions. Only create-space actions are implemented today.
+
+**Tauri (uc-tauri)**
+
+- `src-tauri/crates/uc-tauri/src/commands/setup.rs`: `get_setup_state`, `dispatch_setup_event`
+- Runtime stores `SetupOrchestrator` and exposes it via `UseCases` accessor
+
+**Frontend API**
+
+- `src/api/onboarding.ts`: `getSetupState()`, `dispatchSetupEvent(event)`
+- DTOs: `SetupState`, `SetupEvent`, `SetupError`
+
+**Plan reference**: `docs/plans/2026-01-29-setup-state-machine.md`
+
 ## Implementation Steps
 
 ### Phase 1: Domain Layer (uc-core)
