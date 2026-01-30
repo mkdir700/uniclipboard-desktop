@@ -41,10 +41,12 @@ pub enum SetupState {
     Done,
 }
 
+use std::fmt;
+
 /// Events that drive the setup flow.
 ///
 /// 驱动设置流程的事件。
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SetupEvent {
     /// User chooses to create a new space.
     ///
@@ -94,6 +96,38 @@ pub enum SetupEvent {
     ///
     /// 重新扫描设备。
     NetworkScanRefresh,
+}
+
+impl fmt::Debug for SetupEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SetupEvent::ChooseCreateSpace => f.write_str("ChooseCreateSpace"),
+            SetupEvent::ChooseJoinSpace => f.write_str("ChooseJoinSpace"),
+            SetupEvent::Back => f.write_str("Back"),
+            SetupEvent::SubmitCreatePassphrase { .. } => f
+                .debug_struct("SubmitCreatePassphrase")
+                .field("pass1", &"[REDACTED]")
+                .field("pass2", &"[REDACTED]")
+                .finish(),
+            SetupEvent::SelectPeer { peer_id } => f
+                .debug_struct("SelectPeer")
+                .field("peer_id", peer_id)
+                .finish(),
+            SetupEvent::SubmitJoinPassphrase { .. } => f
+                .debug_struct("SubmitJoinPassphrase")
+                .field("passphrase", &"[REDACTED]")
+                .finish(),
+            SetupEvent::PairingUserConfirm => f.write_str("PairingUserConfirm"),
+            SetupEvent::PairingUserCancel => f.write_str("PairingUserCancel"),
+            SetupEvent::PairingSucceeded => f.write_str("PairingSucceeded"),
+            SetupEvent::PairingFailed { reason } => f
+                .debug_struct("PairingFailed")
+                .field("reason", reason)
+                .finish(),
+            SetupEvent::PassphraseMismatch => f.write_str("PassphraseMismatch"),
+            SetupEvent::NetworkScanRefresh => f.write_str("NetworkScanRefresh"),
+        }
+    }
 }
 
 /// Side-effects produced by state transitions.
@@ -303,6 +337,19 @@ mod tests {
             }
         );
         assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn setup_event_debug_redacts_passphrase() {
+        let event = SetupEvent::SubmitCreatePassphrase {
+            pass1: "super-secret".to_string(),
+            pass2: "super-secret".to_string(),
+        };
+
+        let output = format!("{event:?}");
+
+        assert!(output.contains("SubmitCreatePassphrase"));
+        assert!(!output.contains("super-secret"));
     }
 }
 
