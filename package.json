@@ -4,11 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "UNICLIPBOARD_ENV=development vite",
+    "dev": "cross-env UNICLIPBOARD_ENV=development vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "UNICLIPBOARD_ENV=development tauri dev",
+    "tauri:dev": "cross-env UNICLIPBOARD_ENV=development tauri dev",
     "test": "vitest",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
