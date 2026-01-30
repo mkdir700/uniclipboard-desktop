@@ -24,7 +24,7 @@ export default function WelcomeStep({ onCreate, onJoin, loading }: WelcomeStepPr
         <button
           onClick={onCreate}
           disabled={loading}
-          className="group relative flex flex-col items-start gap-6 p-8 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+          className="group relative flex flex-col items-start gap-6 rounded-xl border bg-card p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg active:translate-y-0 active:shadow-sm disabled:opacity-50"
         >
           <div className="flex h-12 w-12 items-center justify-center text-primary">
             <Shield className="h-7 w-7" />
@@ -44,7 +44,7 @@ export default function WelcomeStep({ onCreate, onJoin, loading }: WelcomeStepPr
         <button
           onClick={onJoin}
           disabled={loading}
-          className="group relative flex flex-col items-start gap-6 p-8 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+          className="group relative flex flex-col items-start gap-6 rounded-xl border bg-card p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg active:translate-y-0 active:shadow-sm disabled:opacity-50"
         >
           <div className="flex h-12 w-12 items-center justify-center text-primary">
             <Smartphone className="h-7 w-7" />
