@@ -270,6 +270,12 @@ pub enum PairingAction {
         peer_display_name: String,
     },
 
+    /// 展示正在验证状态给用户 (用于等待持久化/完成)
+    ShowVerifying {
+        session_id: SessionId,
+        peer_display_name: String,
+    },
+
     /// 持久化配对设备
     PersistPairedDevice {
         session_id: SessionId,
@@ -1037,10 +1043,10 @@ impl PairingStateMachine {
                     };
                 let short_code = match ShortCodeGenerator::generate(
                     &session_id,
-                    &nonce,
                     &peer_nonce,
-                    &local_identity_pubkey,
+                    &nonce,
                     &peer_identity_pubkey,
+                    &local_identity_pubkey,
                     &self.policy.protocol_version,
                 ) {
                     Ok(code) => code,
@@ -1186,6 +1192,16 @@ impl PairingStateMachine {
                     session_id: session_id.clone(),
                     kind: TimeoutKind::WaitingResponse,
                 }];
+
+                let peer_display_name = self
+                    .context
+                    .peer_device_name
+                    .clone()
+                    .unwrap_or_else(|| "".to_string());
+                actions.push(PairingAction::ShowVerifying {
+                    session_id: session_id.clone(),
+                    peer_display_name,
+                });
 
                 if !response.accepted {
                     actions.push(PairingAction::Send {
@@ -1505,6 +1521,82 @@ mod tests {
     }
 
     #[test]
+    fn responder_short_code_matches_initiator_ordering() {
+        let policy = PairingPolicy {
+            step_timeout_secs: 10,
+            user_verification_timeout_secs: 10,
+            max_retries: 1,
+            protocol_version: "1.0.0".to_string(),
+        };
+
+        // Local identity = responder
+        let responder_pubkey = vec![1; 32];
+        let mut sm = PairingStateMachine::new_with_local_identity_and_policy(
+            "ResponderDevice".to_string(),
+            "device-responder".to_string(),
+            responder_pubkey.clone(),
+            policy.clone(),
+        );
+
+        // Peer identity = initiator
+        let initiator_nonce = vec![9; 16];
+        let initiator_pubkey = vec![2; 32];
+        let session_id = "session-1";
+        let request = PairingRequest {
+            session_id: session_id.to_string(),
+            device_name: "InitiatorDevice".to_string(),
+            device_id: "device-initiator".to_string(),
+            peer_id: "peer-initiator".to_string(),
+            identity_pubkey: initiator_pubkey.clone(),
+            nonce: initiator_nonce.clone(),
+        };
+
+        let (state, _actions) = sm.handle_event(
+            PairingEvent::RecvRequest {
+                session_id: session_id.to_string(),
+                request: request.clone(),
+            },
+            Utc::now(),
+        );
+        assert!(matches!(state, PairingState::AwaitingUserApproval { .. }));
+
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: session_id.to_string(),
+            },
+            Utc::now(),
+        );
+
+        let show_code = actions.iter().find_map(|action| match action {
+            PairingAction::ShowVerification { short_code, .. } => Some(short_code.clone()),
+            _ => None,
+        });
+        let show_code = show_code.expect("ShowVerification action missing");
+
+        let challenge = actions.iter().find_map(|action| match action {
+            PairingAction::Send {
+                message: PairingMessage::Challenge(challenge),
+                ..
+            } => Some(challenge.clone()),
+            _ => None,
+        });
+        let challenge = challenge.expect("Challenge message missing");
+
+        // Expected transcript ordering is ALWAYS initiator-first, responder-second.
+        let expected = ShortCodeGenerator::generate(
+            session_id,
+            &initiator_nonce,
+            &challenge.nonce,
+            &initiator_pubkey,
+            &challenge.identity_pubkey,
+            &policy.protocol_version,
+        )
+        .expect("generate short code");
+
+        assert_eq!(show_code, expected);
+    }
+
+    #[test]
     fn initiator_start_transitions_to_request_sent() {
         let mut sm = PairingStateMachine::new_with_local_identity(
             "LocalDevice".to_string(),
@@ -1659,6 +1751,64 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn responder_recv_response_emits_show_verifying() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        sm.handle_event(
+            PairingEvent::RecvRequest {
+                session_id: "session-1".to_string(),
+                request: build_request("session-1"),
+            },
+            Utc::now(),
+        );
+
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: "session-1".to_string(),
+            },
+            Utc::now(),
+        );
+
+        let challenge_pin = actions
+            .iter()
+            .find_map(|action| match action {
+                PairingAction::Send {
+                    message: PairingMessage::Challenge(challenge),
+                    ..
+                } => Some(challenge.pin.clone()),
+                _ => None,
+            })
+            .expect("challenge pin");
+
+        let response = PairingResponse {
+            session_id: "session-1".to_string(),
+            pin_hash: hash_pin(&challenge_pin).expect("hash pin"),
+            accepted: true,
+        };
+
+        let (state, actions) = sm.handle_event(
+            PairingEvent::RecvResponse {
+                session_id: "session-1".to_string(),
+                response,
+            },
+            Utc::now(),
+        );
+
+        assert!(
+            matches!(state, PairingState::Finalizing { .. }),
+            "state: {:?}",
+            state
+        );
+        assert!(actions
+            .iter()
+            .any(|action| matches!(action, PairingAction::ShowVerifying { .. })));
     }
 
     #[test]
