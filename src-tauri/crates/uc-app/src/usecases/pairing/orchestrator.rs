@@ -321,15 +321,27 @@ impl PairingOrchestrator {
             peer_id = %peer_id
         );
         async {
+            tracing::info!(
+                session_id = %session_id,
+                peer_id = %peer_id,
+                accepted = %response.accepted,
+                "Handling pairing response from initiator"
+            );
             let actions = {
                 let mut sessions = self.sessions.write().await;
                 let context = sessions.get_mut(session_id).context("Session not found")?;
-                let (_state, actions) = context.state_machine.handle_event(
+                let (new_state, actions) = context.state_machine.handle_event(
                     PairingEvent::RecvResponse {
                         session_id: session_id.to_string(),
                         response,
                     },
                     Utc::now(),
+                );
+                tracing::debug!(
+                    session_id = %session_id,
+                    new_state = ?new_state,
+                    num_actions = actions.len(),
+                    "Response handled, new state and actions generated"
                 );
                 actions
             };
@@ -409,15 +421,28 @@ impl PairingOrchestrator {
             peer_id = %peer_id
         );
         async {
+            tracing::info!(
+                session_id = %session_id,
+                peer_id = %peer_id,
+                success = %confirm.success,
+                error = ?confirm.error,
+                "Handling pairing confirm message"
+            );
             let actions = {
                 let mut sessions = self.sessions.write().await;
                 let context = sessions.get_mut(session_id).context("Session not found")?;
-                let (_state, actions) = context.state_machine.handle_event(
+                let (new_state, actions) = context.state_machine.handle_event(
                     PairingEvent::RecvConfirm {
                         session_id: session_id.to_string(),
                         confirm,
                     },
                     Utc::now(),
+                );
+                tracing::debug!(
+                    session_id = %session_id,
+                    new_state = ?new_state,
+                    num_actions = actions.len(),
+                    "Confirm handled, new state and actions generated"
                 );
                 actions
             };
@@ -565,19 +590,53 @@ impl PairingOrchestrator {
                             .context("Failed to queue send action")?;
                     }
                     PairingAction::ShowVerification { .. }
-                    | PairingAction::ShowVerifying { .. }
-                    | PairingAction::EmitResult { .. } => {
+                    | PairingAction::ShowVerifying { .. } => {
+                        tracing::debug!(
+                            session_id = %session_id,
+                            action = ?action,
+                            "Sending UI action to frontend"
+                        );
                         action_tx
                             .send(action)
                             .await
                             .context("Failed to queue ui action")?;
                     }
+                    PairingAction::EmitResult {
+                        session_id: result_session_id,
+                        success,
+                        error,
+                    } => {
+                        tracing::info!(
+                            session_id = %result_session_id,
+                            success = %success,
+                            error = ?error,
+                            "Emitting pairing result to frontend"
+                        );
+                        action_tx
+                            .send(PairingAction::EmitResult {
+                                session_id: result_session_id,
+                                success,
+                                error,
+                            })
+                            .await
+                            .context("Failed to queue emit result action")?;
+                    }
                     PairingAction::PersistPairedDevice {
                         session_id: _,
                         device,
                     } => {
+                        tracing::info!(
+                            session_id = %session_id,
+                            peer_id = %device.peer_id,
+                            "Starting to persist paired device"
+                        );
                         match device_repo.upsert(device.clone()).await {
                             Ok(()) => {
+                                tracing::info!(
+                                    session_id = %session_id,
+                                    peer_id = %device.peer_id,
+                                    "Paired device persisted successfully"
+                                );
                                 // 通知状态机持久化成功
                                 let actions = {
                                     let mut sessions = sessions.write().await;
@@ -589,6 +648,11 @@ impl PairingOrchestrator {
                                             },
                                             Utc::now(),
                                         );
+                                        tracing::debug!(
+                                            session_id = %session_id,
+                                            num_actions = actions.len(),
+                                            "PersistOk event generated actions"
+                                        );
                                         actions
                                     } else {
                                         vec![]
@@ -597,6 +661,12 @@ impl PairingOrchestrator {
                                 queue.extend(actions);
                             }
                             Err(err) => {
+                                tracing::error!(
+                                    session_id = %session_id,
+                                    peer_id = %device.peer_id,
+                                    error = ?err,
+                                    "Failed to persist paired device"
+                                );
                                 let actions = {
                                     let mut sessions = sessions.write().await;
                                     if let Some(context) = sessions.get_mut(&session_id) {
