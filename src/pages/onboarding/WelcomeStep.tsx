@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Shield, Smartphone, ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { WelcomeStepProps } from './types'
+import { WelcomeStepProps } from '@/pages/onboarding/types'
 
 export default function WelcomeStep({ onCreate, onJoin, loading }: WelcomeStepProps) {
   const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.welcome' })
