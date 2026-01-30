@@ -29,7 +29,7 @@ pub fn detect_storage_capability() -> SecureStorageCapability {
     #[cfg(target_os = "macos")]
     {
         if dev_env_forces_file_storage() {
-            log::warn!("⚠️  macOS dev environment detected. Using file-based secure storage.");
+            tracing::warn!("⚠️  macOS dev environment detected. Using file-based secure storage.");
             return SecureStorageCapability::FileBasedKeystore;
         }
         return SecureStorageCapability::SystemKeyring;
