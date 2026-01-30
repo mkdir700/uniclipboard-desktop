@@ -47,25 +47,42 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
   const [pairingSessionId, setPairingSessionId] = useState<string | null>(null)
   const [pinCode, setPinCode] = useState<string>('')
   const [errorMsg, setErrorMsg] = useState<string>('')
+  const [isPinVerifying, setIsPinVerifying] = useState(false)
 
   // Cleanup refs
   const cleanupRefs = React.useRef<(() => void)[]>([])
+  const listenerRegistered = React.useRef(false)
 
   // Reset state when dialog opens
   const setupListeners = React.useCallback(async () => {
+    // 防止重复注册
+    if (listenerRegistered.current) {
+      console.log('[PairingDialog] Listener already registered, skipping')
+      return
+    }
+
+    console.log('[PairingDialog] Setting up listeners')
     try {
       const unlistenVerification = await onP2PPairingVerification(event => {
+        console.log('[PairingDialog] Event received:', {
+          kind: event.kind,
+          sessionId: event.sessionId,
+          timestamp: new Date().toISOString(),
+        })
+
         if (event.kind === 'verification') {
-          console.log('Pairing verification:', event)
+          console.log('[PairingDialog] Verification event:', event)
           setPairingSessionId(event.sessionId)
           setPinCode(event.code ?? '')
           setStep('pin-verify')
+          setIsPinVerifying(false)
           return
         }
 
         if (event.kind === 'complete') {
-          console.log('Pairing Complete:', event)
+          console.log('[PairingDialog] Complete event:', event)
           setStep('success')
+          setIsPinVerifying(false)
           toast.success(t('pairing.success.title'))
           setTimeout(() => {
             onPairingSuccess?.()
@@ -75,17 +92,20 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
         }
 
         if (event.kind === 'failed') {
-          console.error('Pairing Failed:', event)
+          console.error('[PairingDialog] Failed event:', event)
           setErrorMsg(event.error ?? '')
           setStep('failed')
+          setIsPinVerifying(false)
           toast.error(t('pairing.failed.title'), {
             description: event.error ?? '',
           })
         }
       })
       cleanupRefs.current.push(unlistenVerification)
+      listenerRegistered.current = true
+      console.log('[PairingDialog] Listener registered successfully')
     } catch (err) {
-      console.error('Failed to setup listeners:', err)
+      console.error('[PairingDialog] Failed to setup listeners:', err)
     }
   }, [onClose, onPairingSuccess, t])
 
@@ -107,20 +127,38 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
 
   useEffect(() => {
     if (open) {
+      console.log('[PairingDialog] Dialog opened, initializing...')
+
+      // 先清理旧监听器（防止重复注册）
+      if (cleanupRefs.current.length > 0) {
+        console.log('[PairingDialog] Cleaning up old listeners')
+        cleanupRefs.current.forEach(cleanup => cleanup())
+        cleanupRefs.current = []
+        listenerRegistered.current = false
+      }
+
+      // 重置状态
       setStep('discovery')
       setPeers([])
       setSelectedPeer(null)
       setPairingSessionId(null)
       setPinCode('')
       setErrorMsg('')
+      setIsPinVerifying(false)
+
+      // 加载对等设备
       loadPeers()
+
+      // 设置监听器（只注册一次）
       setupListeners()
     } else {
       // Cleanup listeners when closed
+      console.log('[PairingDialog] Dialog closed, cleaning up listeners')
       cleanupRefs.current.forEach(cleanup => {
         cleanup()
       })
       cleanupRefs.current = []
+      listenerRegistered.current = false
     }
   }, [open, loadPeers, setupListeners])
 
@@ -146,12 +184,14 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
 
   const handlePinConfirm = async (matches: boolean) => {
     if (!pairingSessionId) return
+    setIsPinVerifying(true)
     try {
       await verifyP2PPairingPin({
         sessionId: pairingSessionId,
         pinMatches: matches,
       })
       if (!matches) {
+        setIsPinVerifying(false)
         onClose() // User rejected
       }
       // If matches, wait for 'success' or 'failed' event
@@ -159,6 +199,7 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
       console.error('Failed to verify PIN:', err)
       setErrorMsg(t('pairing.failed.errors.verifyPin'))
       setStep('failed')
+      setIsPinVerifying(false)
     }
   }
 
@@ -308,11 +349,23 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
                   variant="outline"
                   className="flex-1"
                   onClick={() => handlePinConfirm(false)}
+                  disabled={isPinVerifying}
                 >
                   {t('pairing.pinVerify.notMatch')}
                 </Button>
-                <Button className="flex-1" onClick={() => handlePinConfirm(true)}>
-                  {t('pairing.pinVerify.match')}
+                <Button
+                  className="flex-1"
+                  onClick={() => handlePinConfirm(true)}
+                  disabled={isPinVerifying}
+                >
+                  {isPinVerifying ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t('pairing.pinVerify.verifying')}
+                    </span>
+                  ) : (
+                    t('pairing.pinVerify.match')
+                  )}
                 </Button>
               </div>
             </div>
