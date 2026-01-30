@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  acceptP2PPairing,
   onP2PPairingVerification,
   verifyP2PPairingPin,
   rejectP2PPairing,
@@ -10,6 +11,7 @@ import { DeviceList, DeviceHeader } from '@/components'
 import { DeviceTab } from '@/components/device/Header'
 import PairingDialog from '@/components/PairingDialog'
 import PairingPinDialog from '@/components/PairingPinDialog'
+import { toast } from '@/components/ui/toast'
 import { captureUserIntent } from '@/observability/breadcrumbs'
 import { useAppDispatch } from '@/store/hooks'
 import { fetchPairedDevices } from '@/store/slices/devicesSlice'
@@ -28,6 +30,7 @@ const DevicesPage: React.FC = () => {
 
   // P2P配对请求相关状态
   const [pendingP2PRequest, setPendingP2PRequest] = useState<P2PPairingRequestWithPin | null>(null)
+  const [acceptingP2PRequest, setAcceptingP2PRequest] = useState(false)
   const [showPinDialog, setShowPinDialog] = useState(false)
   const [pinCode, setPinCode] = useState('')
   const [pinPeerDeviceName, setPinPeerDeviceName] = useState<string>('')
@@ -50,6 +53,7 @@ const DevicesPage: React.FC = () => {
             pin: undefined,
             peerDeviceName: undefined,
           })
+          setAcceptingP2PRequest(false)
           setActiveTab('requests')
           return
         }
@@ -67,6 +71,8 @@ const DevicesPage: React.FC = () => {
           console.log('P2P pairing completed')
           setShowPinDialog(false)
           setPendingP2PRequest(null)
+          setAcceptingP2PRequest(false)
+          toast.success(t('pairing.success.title'))
           dispatch(fetchPairedDevices())
           return
         }
@@ -74,6 +80,10 @@ const DevicesPage: React.FC = () => {
         console.error('P2P pairing failed:', event)
         setShowPinDialog(false)
         setPendingP2PRequest(null)
+        setAcceptingP2PRequest(false)
+        toast.error(t('pairing.failed.title'), {
+          description: event.error || '',
+        })
       })
       cleanupRefs.current.push(unlisten)
     } catch (error) {
@@ -109,10 +119,20 @@ const DevicesPage: React.FC = () => {
   }
 
   const handleAcceptPairing = async () => {
-    // 接收方点击接受后，后端会自动生成验证码并发送 p2p-pairing-verification 事件
-    // 前端只需要等待 verification 事件即可
+    if (!pendingP2PRequest) return
+
     captureUserIntent('pair_device', { source: 'request' })
-    console.log('Accepting pairing request, waiting for PIN...')
+    setAcceptingP2PRequest(true)
+    try {
+      await acceptP2PPairing(pendingP2PRequest.sessionId)
+      // After accepting, backend will emit `verification` event with PIN.
+    } catch (error) {
+      console.error('Failed to accept pairing request:', error)
+      setAcceptingP2PRequest(false)
+      toast.error(t('pairing.failed.title'), {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   const handleRejectPairing = async () => {
@@ -254,6 +274,7 @@ const DevicesPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleRejectPairing}
+                      disabled={acceptingP2PRequest}
                       className="px-3 py-1.5 text-sm font-medium rounded-md border border-border bg-background hover:bg-muted transition-colors"
                     >
                       {t('pairing.requests.reject')}
@@ -261,9 +282,12 @@ const DevicesPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleAcceptPairing}
-                      className="px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      disabled={acceptingP2PRequest}
+                      className="px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {t('pairing.requests.accept')}
+                      {acceptingP2PRequest
+                        ? t('pairing.requests.accepting')
+                        : t('pairing.requests.accept')}
                     </button>
                   </div>
                 </div>

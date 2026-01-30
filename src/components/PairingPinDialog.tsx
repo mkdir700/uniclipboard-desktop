@@ -96,14 +96,22 @@ export default function PairingPinDialog({
               {t('pairing.pinVerify.warning')}
             </div>
 
-            <div className="flex gap-4 w-full">
-              <Button variant="outline" className="flex-1" onClick={() => handleConfirm(false)}>
-                {t('pairing.pinVerify.notMatch')}
-              </Button>
-              <Button className="flex-1" onClick={() => handleConfirm(true)}>
-                {t('pairing.pinVerify.match')}
-              </Button>
-            </div>
+            {isInitiator ? (
+              <div className="flex gap-4 w-full">
+                <Button variant="outline" className="flex-1" onClick={() => handleConfirm(false)}>
+                  {t('pairing.pinVerify.notMatch')}
+                </Button>
+                <Button className="flex-1" onClick={() => handleConfirm(true)}>
+                  {t('pairing.pinVerify.match')}
+                </Button>
+              </div>
+            ) : (
+              <div className="w-full">
+                <Button variant="outline" className="w-full" onClick={() => handleConfirm(false)}>
+                  {t('dialogs.cancelLabel')}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

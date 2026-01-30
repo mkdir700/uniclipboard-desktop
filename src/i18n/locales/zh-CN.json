@@ -498,7 +498,7 @@
       "initiatorTitle": "验证 PIN 码",
       "initiatorDescription": "检查此 PIN 码是否与 {{deviceName}} 上显示的一致",
       "responderTitle": "您的 PIN 码",
-      "responderDescription": "将此 PIN 码提供给 {{deviceName}} 的用户",
+      "responderDescription": "请与 {{deviceName}} 上显示的 PIN 码进行比对，并在发起设备上确认是否匹配",
       "verifying": "正在验证...",
       "pleaseWait": "请稍候...",
       "pinLabel": "配对 PIN 码",

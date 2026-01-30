@@ -3,18 +3,14 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { type EncryptionSessionStatus } from '@/api/security'
 import { TitleBar } from '@/components'
-import GlobalPairingRequestDialog from '@/components/GlobalPairingRequestDialog'
-import PairingPinDialog from '@/components/PairingPinDialog'
 import { Toaster } from '@/components/ui/sonner'
 import { useOnboarding } from '@/contexts/onboarding-context'
 import { OnboardingProvider } from '@/contexts/OnboardingContext'
-import { P2PProvider } from '@/contexts/P2PContext'
 import { useSearch } from '@/contexts/search-context'
 import { SearchProvider } from '@/contexts/SearchContext'
 import { SettingProvider } from '@/contexts/SettingContext'
 import { ShortcutProvider } from '@/contexts/ShortcutContext'
 import { UpdateProvider } from '@/contexts/UpdateContext'
-import { useP2P } from '@/hooks/useP2P'
 import { usePlatform } from '@/hooks/usePlatform'
 import { MainLayout, SettingsFullLayout, WindowShell } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
@@ -25,33 +21,6 @@ import UnlockPage from '@/pages/UnlockPage'
 import { useGetEncryptionSessionStatusQuery } from '@/store/api'
 import './App.css'
 
-// Global pairing dialogs component
-const GlobalPairingDialogs = () => {
-  const p2p = useP2P()
-
-  return (
-    <>
-      {/* Global pairing request dialog */}
-      <GlobalPairingRequestDialog
-        open={p2p.showRequestDialog}
-        request={p2p.pendingRequest}
-        onAccept={p2p.acceptRequest}
-        onReject={p2p.rejectRequest}
-      />
-
-      {/* PIN verification dialog */}
-      <PairingPinDialog
-        open={p2p.showPinDialog}
-        onClose={p2p.closePinDialog}
-        pinCode={p2p.pinData?.pin || ''}
-        peerDeviceName={p2p.pinData?.peerDeviceName}
-        isInitiator={false}
-        onConfirm={p2p.verifyPin}
-      />
-    </>
-  )
-}
-
 // 认证布局包装器 - 保持 Sidebar 持久化
 const AuthenticatedLayout = () => {
   return (
@@ -59,11 +28,6 @@ const AuthenticatedLayout = () => {
       <Outlet />
     </MainLayout>
   )
-}
-
-// Global overlays that must be rendered regardless of route/layout
-const GlobalOverlays = () => {
-  return <GlobalPairingDialogs />
 }
 
 // 主应用程序内容
@@ -143,27 +107,24 @@ const AppContent = () => {
 
   return (
     <ShortcutProvider>
-      <P2PProvider>
-        <GlobalOverlays />
-        <Routes>
-          <Route element={<AuthenticatedLayout />}>
-            <Route
-              path="/"
-              element={
-                <div className="w-full h-full">
-                  <DashboardPage />
-                </div>
-              }
-            />
-            <Route path="/devices" element={<DevicesPage />} />
-          </Route>
-          <Route element={<SettingsFullLayout />}>
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        <Toaster />
-      </P2PProvider>
+      <Routes>
+        <Route element={<AuthenticatedLayout />}>
+          <Route
+            path="/"
+            element={
+              <div className="w-full h-full">
+                <DashboardPage />
+              </div>
+            }
+          />
+          <Route path="/devices" element={<DevicesPage />} />
+        </Route>
+        <Route element={<SettingsFullLayout />}>
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <Toaster />
     </ShortcutProvider>
   )
 }
