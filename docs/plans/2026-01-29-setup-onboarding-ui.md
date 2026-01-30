@@ -10,46 +10,14 @@
 
 ---
 
-### Task 1: Add failing tests for new multi-step onboarding
+## Task 1: Add failing tests for new multi-step onboarding
 
 **Files:**
 
 - Create: `src/pages/__tests__/OnboardingFlow.test.tsx`
 - Modify: `src/pages/__tests__/OnboardingPage.test.tsx` (if needed to align with new structure)
 
-**Step 1: Write the failing test**
-
-```tsx
-import { render, screen } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
-import OnboardingPage from '@/pages/OnboardingPage'
-
-vi.mock('@/api/onboarding', () => ({
-  getSetupState: vi.fn(),
-  dispatchSetupEvent: vi.fn(),
-}))
-
-describe('Onboarding flow', () => {
-  it('renders welcome step for SetupState.Welcome', async () => {
-    // mock getSetupState() to return 'Welcome'
-    // assert welcome title and CTA are visible
-  })
-})
-```
-
-**Step 2: Run test to verify it fails**
-
-Run: `npm test -- src/pages/__tests__/OnboardingFlow.test.tsx`
-Expected: FAIL with missing API mocks or missing UI text.
-
-**Step 3: Write minimal implementation**
-
-- Create step components and render them based on `SetupState` (see Task 2)
-
-**Step 4: Run test to verify it passes**
-
-Run: `npm test -- src/pages/__tests__/OnboardingFlow.test.tsx`
-Expected: PASS
+#### Step 1: Write the failing test
 
 **Step 5: Commit**
 
