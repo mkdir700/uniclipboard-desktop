@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { CheckCircle2, ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { SetupDoneStepProps } from './types'
+import { SetupDoneStepProps } from '@/pages/onboarding/types'
 import { Button } from '@/components/ui/button'
 
 export default function SetupDoneStep({ onComplete, loading }: SetupDoneStepProps) {
