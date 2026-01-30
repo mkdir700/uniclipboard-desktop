@@ -49,7 +49,7 @@ export default function OnboardingPage() {
       setPeers(
         peerList.map((p: P2PPeerInfo) => ({
           id: p.peerId,
-          name: p.deviceName || 'Unknown Device',
+          name: p.deviceName || '未知设备',
           device_type: 'desktop', // TODO: Get actual device type if available
         }))
       )
@@ -145,6 +145,7 @@ export default function OnboardingPage() {
             peerId={peer_id}
             onSubmit={passphrase => handleDispatch({ SubmitJoinPassphrase: { passphrase } })}
             onBack={() => handleDispatch('Back')}
+            onCreateNew={() => handleDispatch('ChooseCreateSpace')}
             error={error}
             loading={loading}
           />

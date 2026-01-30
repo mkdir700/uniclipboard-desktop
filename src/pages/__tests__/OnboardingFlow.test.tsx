@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { getSetupState, dispatchSetupEvent } from '@/api/onboarding'
 import OnboardingPage from '@/pages/OnboardingPage'
@@ -38,11 +39,11 @@ vi.mock('react-router-dom', async () => {
 
 // Mock framer-motion to avoid animation issues in tests
 vi.mock('framer-motion', () => ({
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
   motion: new Proxy(
     {},
     {
-      get: () => (props: React.HTMLAttributes<HTMLDivElement>) => <div {...props} />,
+      get: () => (props: HTMLAttributes<HTMLDivElement>) => <div {...props} />,
     }
   ),
 }))
@@ -54,15 +55,8 @@ describe('Onboarding flow', () => {
 
     render(<OnboardingPage />)
 
-    // Wait for the state to load and render
-    // We expect to see the new Welcome step content
-    // Based on the plan, we should look for "欢迎使用 UniClipboard" and "创建新的加密空间"
-    // But currently OnboardingPage renders the old UI.
-    // So this test should fail because the old UI has "欢迎来到 UniClipboard" (slightly different)
-    // or we can look for the specific new buttons.
-
-    // Let's look for the new text from the plan/spec (implied)
     expect(await screen.findByText('欢迎使用 UniClipboard')).toBeInTheDocument()
+    expect(screen.getByText('你想如何开始？')).toBeInTheDocument()
     expect(screen.getByText('创建新的加密空间')).toBeInTheDocument()
   })
 
@@ -75,15 +69,18 @@ describe('Onboarding flow', () => {
     render(<OnboardingPage />)
 
     // Wait for the error message to appear
-    expect(await screen.findByText('两次输入的密码不一致')).toBeInTheDocument()
+    expect(await screen.findByText('两次输入不一致，请重新确认。')).toBeInTheDocument()
   })
 
   it('dispatches ChooseCreateSpace when clicking create CTA', async () => {
     vi.mocked(getSetupState).mockResolvedValue('Welcome')
+    vi.mocked(dispatchSetupEvent).mockResolvedValue('Welcome')
     render(<OnboardingPage />)
 
     const createBtn = await screen.findByText('创建新的加密空间')
-    createBtn.click()
+    await act(async () => {
+      createBtn.click()
+    })
 
     expect(dispatchSetupEvent).toHaveBeenCalledWith('ChooseCreateSpace')
   })
