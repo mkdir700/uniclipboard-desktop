@@ -406,6 +406,9 @@ macro_rules! generate_invoke_handler {
             uc_tauri::commands::onboarding::get_onboarding_state,
             uc_tauri::commands::onboarding::complete_onboarding,
             uc_tauri::commands::onboarding::initialize_onboarding,
+            // Setup commands
+            uc_tauri::commands::setup::get_setup_state,
+            uc_tauri::commands::setup::dispatch_setup_event,
             // Pairing commands
             uc_tauri::commands::pairing::get_local_peer_id,
             uc_tauri::commands::pairing::get_p2p_peers,
