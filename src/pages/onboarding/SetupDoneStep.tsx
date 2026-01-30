@@ -17,28 +17,13 @@ export default function SetupDoneStep({ onComplete }: SetupDoneStepProps) {
         </div>
       </div>
 
-      <h1 className="text-2xl font-bold text-foreground mb-2">设置完成</h1>
-      <p className="text-muted-foreground text-sm mb-8">您的设备已成功连接并加密，可以开始使用了</p>
-
-      <div className="space-y-3 mb-8">
-        {['剪贴板内容将自动加密同步', '支持文本、图片和文件传输', '随时在设置中管理已连接设备'].map(
-          (text, i) => (
-            <motion.div
-              key={text}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 + i * 0.1 }}
-              className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/40 text-sm text-left"
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0 ml-2" />
-              <span className="text-foreground/80">{text}</span>
-            </motion.div>
-          )
-        )}
-      </div>
+      <h1 className="text-2xl font-bold text-foreground mb-2">已完成设置</h1>
+      <p className="text-muted-foreground text-sm mb-8">
+        你的设备已准备就绪，现在可以安全共享剪贴板了。
+      </p>
 
       <Button onClick={onComplete} className="w-full h-12 shadow-lg shadow-primary/20">
-        开始使用
+        进入主页
         <ArrowRight className="w-4 h-4 ml-2" />
       </Button>
     </motion.div>

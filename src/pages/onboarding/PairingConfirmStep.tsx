@@ -20,7 +20,9 @@ export default function PairingConfirmStep({
       className="w-full max-w-md mx-auto text-center"
     >
       <h1 className="text-2xl font-bold text-foreground mb-2">确认配对</h1>
-      <p className="text-muted-foreground text-sm mb-8">请确认另一台设备上显示的配对码是否一致</p>
+      <p className="text-muted-foreground text-sm mb-8">
+        请确认两台设备显示的验证码一致，以确保你连接的是正确的设备。
+      </p>
 
       <div className="bg-muted/30 rounded-2xl p-8 mb-8 border border-border/50">
         <div className="text-4xl font-mono font-bold tracking-widest text-primary mb-2">
@@ -44,7 +46,7 @@ export default function PairingConfirmStep({
           className="mb-6 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center justify-center gap-2"
         >
           <AlertCircle className="w-4 h-4 shrink-0" />
-          {error === 'PairingRejected' ? '对方拒绝了配对请求' : '配对失败，请重试'}
+          {error === 'PairingRejected' ? '配对已取消。' : '配对失败，请重试。'}
         </motion.div>
       )}
 
@@ -62,7 +64,7 @@ export default function PairingConfirmStep({
           ) : (
             <>
               <Check className="w-4 h-4 mr-2" />
-              确认配对
+              验证码一致，继续
             </>
           )}
         </Button>

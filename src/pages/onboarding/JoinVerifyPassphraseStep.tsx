@@ -10,28 +10,36 @@ export default function JoinVerifyPassphraseStep({
   peerId,
   onSubmit,
   onBack,
+  onCreateNew,
   error,
   loading,
 }: JoinVerifyPassphraseStepProps) {
   const [passphrase, setPassphrase] = useState('')
   const [showPassphrase, setShowPassphrase] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
+  const [showMismatchHelp, setShowMismatchHelp] = useState(true)
 
   useEffect(() => {
     if (!error) {
       setLocalError(null)
+      setShowMismatchHelp(true)
       return
     }
+    setShowMismatchHelp(true)
     if (error === 'PassphraseInvalidOrMismatch') {
-      setLocalError('密码错误，请重试')
+      setLocalError(null)
+    } else if (error === 'NetworkTimeout') {
+      setLocalError('验证超时，请检查网络后重试。')
+    } else if (error === 'PeerUnavailable') {
+      setLocalError('对方设备不可用，请确认已打开 UniClipboard。')
     } else {
-      setLocalError('验证失败，请重试')
+      setLocalError('验证失败，请重试。')
     }
   }, [error])
 
   const handleSubmit = () => {
     if (!passphrase) {
-      setLocalError('请输入密码')
+      setLocalError('请输入加密口令。')
       return
     }
     onSubmit(passphrase)
@@ -52,10 +60,12 @@ export default function JoinVerifyPassphraseStep({
           onClick={onBack}
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
-          返回
+          返回选择设备
         </Button>
-        <h1 className="text-2xl font-bold text-foreground mt-2">输入密码</h1>
-        <p className="text-muted-foreground text-sm mt-1">请输入目标设备的加密密码以进行配对</p>
+        <h1 className="text-2xl font-bold text-foreground mt-2">输入加密口令</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          请输入与你已有设备相同的加密口令，用于加入同一个加密空间并解密剪贴板数据。
+        </p>
         <p className="text-xs text-muted-foreground mt-1 font-mono">
           目标设备 ID: {peerId.substring(0, 8)}...
         </p>
@@ -63,7 +73,7 @@ export default function JoinVerifyPassphraseStep({
 
       <div className="space-y-5 mb-8">
         <div className="space-y-2">
-          <Label htmlFor="passphrase">密码</Label>
+          <Label htmlFor="passphrase">加密口令</Label>
           <div className="relative">
             <Input
               id="passphrase"
@@ -72,7 +82,7 @@ export default function JoinVerifyPassphraseStep({
               onChange={e => setPassphrase(e.target.value)}
               disabled={loading}
               className="pr-10"
-              placeholder="输入密码"
+              placeholder="输入加密口令"
               onKeyDown={e => e.key === 'Enter' && handleSubmit()}
             />
             <Button
@@ -99,16 +109,33 @@ export default function JoinVerifyPassphraseStep({
         )}
       </div>
 
-      <Button className="w-full" onClick={handleSubmit} disabled={loading}>
-        {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            验证中...
-          </>
-        ) : (
-          '验证并加入'
-        )}
-      </Button>
+      {error === 'PassphraseInvalidOrMismatch' && showMismatchHelp ? (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+            <div className="font-semibold">无法加入加密空间</div>
+            <p className="text-xs mt-1">
+              当前输入的加密口令与已有设备使用的口令不一致。只有使用相同口令的设备才能加入同一个加密空间。
+            </p>
+          </div>
+          <Button className="w-full" onClick={() => setShowMismatchHelp(false)} disabled={loading}>
+            重新输入加密口令
+          </Button>
+          <Button variant="outline" className="w-full" onClick={onCreateNew} disabled={loading}>
+            创建新的加密空间
+          </Button>
+        </div>
+      ) : (
+        <Button className="w-full" onClick={handleSubmit} disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              验证中...
+            </>
+          ) : (
+            '验证并继续'
+          )}
+        </Button>
+      )}
     </motion.div>
   )
 }

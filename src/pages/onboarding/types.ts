@@ -26,6 +26,7 @@ export interface JoinVerifyPassphraseStepProps extends StepProps {
   peerId: string
   onSubmit: (passphrase: string) => void
   onBack: () => void
+  onCreateNew: () => void
 }
 
 export interface PairingConfirmStepProps extends StepProps {

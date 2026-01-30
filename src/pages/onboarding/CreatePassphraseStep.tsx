@@ -26,11 +26,11 @@ export default function CreatePassphraseStep({
     }
 
     if (error === 'PassphraseMismatch') {
-      setLocalError('两次输入的密码不一致')
+      setLocalError('两次输入不一致，请重新确认。')
     } else if (typeof error === 'object' && 'PassphraseTooShort' in error) {
-      setLocalError(`密码长度至少为 ${error.PassphraseTooShort.min_len} 位`)
+      setLocalError(`口令太短，请至少输入 ${error.PassphraseTooShort.min_len} 位。`)
     } else if (error === 'PassphraseEmpty') {
-      setLocalError('密码不能为空')
+      setLocalError('请输入加密口令。')
     } else {
       setLocalError('设置失败，请重试')
     }
@@ -38,11 +38,11 @@ export default function CreatePassphraseStep({
 
   const handleSubmit = () => {
     if (!pass1) {
-      setLocalError('请输入密码')
+      setLocalError('请输入加密口令。')
       return
     }
     if (pass1 !== pass2) {
-      setLocalError('两次输入的密码不一致')
+      setLocalError('两次输入不一致，请重新确认。')
       return
     }
     onSubmit(pass1, pass2)
@@ -65,13 +65,16 @@ export default function CreatePassphraseStep({
           <ArrowLeft className="w-4 h-4 mr-1" />
           返回
         </Button>
-        <h1 className="text-2xl font-bold text-foreground mt-2">创建您的密码</h1>
-        <p className="text-muted-foreground text-sm mt-1">设置一个密码来加密您的剪贴板数据</p>
+        <h1 className="text-2xl font-bold text-foreground mt-2">设置加密口令</h1>
+        <p className="text-muted-foreground text-sm mt-1">这个口令将创建你的加密空间。</p>
+        <p className="text-xs text-muted-foreground mt-3">
+          之后想在其他设备上使用 UniClipboard，需要输入相同的口令才能加入这个空间并共享剪贴板。
+        </p>
       </div>
 
       <div className="space-y-5 mb-8">
         <div className="space-y-2">
-          <Label htmlFor="pass1">密码</Label>
+          <Label htmlFor="pass1">加密口令</Label>
           <div className="relative">
             <Input
               id="pass1"
@@ -80,7 +83,7 @@ export default function CreatePassphraseStep({
               onChange={e => setPass1(e.target.value)}
               disabled={loading}
               className="pr-10"
-              placeholder="至少 8 位字符"
+              placeholder="输入加密口令"
             />
             <Button
               type="button"
@@ -95,7 +98,7 @@ export default function CreatePassphraseStep({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="pass2">确认密码</Label>
+          <Label htmlFor="pass2">确认口令</Label>
           <div className="relative">
             <Input
               id="pass2"
@@ -104,7 +107,7 @@ export default function CreatePassphraseStep({
               onChange={e => setPass2(e.target.value)}
               disabled={loading}
               className="pr-10"
-              placeholder="再次输入密码"
+              placeholder="再次输入"
               onKeyDown={e => e.key === 'Enter' && handleSubmit()}
             />
             <Button
@@ -131,6 +134,10 @@ export default function CreatePassphraseStep({
         )}
       </div>
 
+      <p className="text-xs text-muted-foreground mb-6">
+        建议选择一个你愿意在所有设备上使用、并且能记住的口令。
+      </p>
+
       <Button className="w-full" onClick={handleSubmit} disabled={loading}>
         {loading ? (
           <>
@@ -138,7 +145,7 @@ export default function CreatePassphraseStep({
             设置中...
           </>
         ) : (
-          '继续'
+          '创建并进入'
         )}
       </Button>
     </motion.div>

@@ -40,7 +40,7 @@ export default function JoinPickDeviceStep({
           返回
         </Button>
         <div className="flex items-center justify-between mt-2">
-          <h1 className="text-2xl font-bold text-foreground">选择设备</h1>
+          <h1 className="text-2xl font-bold text-foreground">加入已有的加密空间</h1>
           <Button
             variant="ghost"
             size="icon"
@@ -51,30 +51,42 @@ export default function JoinPickDeviceStep({
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
-        <p className="text-muted-foreground text-sm mt-1">请选择一台已登录的设备进行配对</p>
+        <p className="text-muted-foreground text-sm mt-1">
+          请选择一台已经在使用 UniClipboard 的设备。
+        </p>
       </div>
 
       {error && (
         <div className="mb-6 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
-          {error === 'NetworkTimeout' ? '网络连接超时，请重试' : '获取设备列表失败'}
+          {error === 'NetworkTimeout' ? '扫描超时，请重试。' : '获取设备列表失败'}
         </div>
       )}
 
       <div className="space-y-3">
         {peers.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-xl border border-border/50">
-            <p>未发现局域网内的其他设备</p>
-            <p className="text-xs mt-2 opacity-70">请确保设备在同一网络下并已开启应用</p>
+            <p className="text-base text-foreground">未发现可加入的设备</p>
+            <p className="text-xs mt-2 opacity-70">
+              请确认两台设备在同一网络下，并且另一台设备已打开 UniClipboard。
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              disabled={loading}
+              className="mt-4 gap-2"
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+              重新扫描
+            </Button>
           </div>
         ) : (
           peers.map(peer => (
-            <button
-              type="button"
+            <div
               key={peer.id}
-              className="w-full flex items-center gap-4 p-4 rounded-xl border border-border/50 bg-card hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-              onClick={() => onSelectPeer(peer.id)}
-              disabled={loading}
+              className="w-full flex items-center gap-4 p-4 rounded-xl border border-border/50 bg-card"
             >
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
                 {getIcon(peer.device_type)}
@@ -85,7 +97,15 @@ export default function JoinPickDeviceStep({
                   {peer.id.substring(0, 8)}...
                 </div>
               </div>
-            </button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => onSelectPeer(peer.id)}
+                disabled={loading}
+              >
+                继续
+              </Button>
+            </div>
           ))
         )}
       </div>
