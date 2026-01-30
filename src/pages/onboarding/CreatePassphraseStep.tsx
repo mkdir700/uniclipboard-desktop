@@ -72,8 +72,10 @@ export default function CreatePassphraseStep({
       </div>
 
       <div className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="pass1">{t('labels.pass1')}</Label>
+        <div className="space-y-4">
+          <Label htmlFor="pass1" className="block">
+            {t('labels.pass1')}
+          </Label>
           <div className="relative">
             <Input
               id="pass1"
@@ -94,8 +96,10 @@ export default function CreatePassphraseStep({
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="pass2">{t('labels.pass2')}</Label>
+        <div className="space-y-4">
+          <Label htmlFor="pass2" className="block">
+            {t('labels.pass2')}
+          </Label>
           <div className="relative">
             <Input
               id="pass2"
