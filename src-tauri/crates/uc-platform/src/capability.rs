@@ -28,6 +28,10 @@ pub fn detect_storage_capability() -> SecureStorageCapability {
     // macOS: Always has Keychain
     #[cfg(target_os = "macos")]
     {
+        if dev_env_forces_file_storage() {
+            log::warn!("⚠️  macOS dev environment detected. Using file-based secure storage.");
+            return SecureStorageCapability::FileBasedKeystore;
+        }
         return SecureStorageCapability::SystemKeyring;
     }
 
@@ -60,6 +64,13 @@ pub fn detect_storage_capability() -> SecureStorageCapability {
         log::error!("❌ Unsupported platform for secure storage");
         SecureStorageCapability::Unsupported
     }
+}
+
+#[cfg(target_os = "macos")]
+fn dev_env_forces_file_storage() -> bool {
+    std::env::var("UNICLIPBOARD_ENV")
+        .map(|value| value == "development")
+        .unwrap_or(false)
 }
 
 /// Detect if running under WSL (Windows Subsystem for Linux).
@@ -105,10 +116,58 @@ mod tests {
     #[cfg(target_os = "linux")]
     use std::sync::{Mutex, OnceLock};
 
+    #[cfg(target_os = "macos")]
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    use std::sync::{Mutex, OnceLock};
+
     #[cfg(target_os = "linux")]
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[cfg(target_os = "macos")]
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn macos_dev_env_forces_file_based_keystore() {
+        let _lock = env_lock();
+        let original = std::env::var("UNICLIPBOARD_ENV");
+        std::env::set_var("UNICLIPBOARD_ENV", "development");
+
+        let capability = detect_storage_capability();
+
+        if let Ok(value) = original {
+            std::env::set_var("UNICLIPBOARD_ENV", value);
+        } else {
+            std::env::remove_var("UNICLIPBOARD_ENV");
+        }
+
+        assert_eq!(capability, SecureStorageCapability::FileBasedKeystore);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn macos_default_uses_system_keyring() {
+        let _lock = env_lock();
+        let original = std::env::var("UNICLIPBOARD_ENV");
+        std::env::remove_var("UNICLIPBOARD_ENV");
+
+        let capability = detect_storage_capability();
+
+        if let Ok(value) = original {
+            std::env::set_var("UNICLIPBOARD_ENV", value);
+        } else {
+            std::env::remove_var("UNICLIPBOARD_ENV");
+        }
+
+        assert_eq!(capability, SecureStorageCapability::SystemKeyring);
     }
 
     #[test]
