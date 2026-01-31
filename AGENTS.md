@@ -1,94 +1,154 @@
-Fix root causes, not symptoms
-No patchy or workaround-driven solutions.
+# AGENTS.md
 
-Respect Hexagonal Architecture
-uc-app → uc-core ← uc-infra / uc-platform
-The core must not depend on external implementations.
+## Engineering Principles
 
-All external capabilities go through Ports
-DB, FS, Clipboard, Network, Crypto — no exceptions.
+- **Fix root causes, not symptoms.** No patchy or workaround-driven solutions.
+- **Do not “fix feelings”, fix structure.** Repeated workarounds indicate architectural flaws.
+- **Short-term compromises must be reversible.**
+- **Never break boundaries.** If something must be deferred, leave an explicit `TODO`.
 
-No unwrap() or expect() in production code
-Explicit error handling only. Tests are the only exception.
+## Hexagonal Architecture Boundaries (Strict)
 
-No silent failures in async or event-driven code
-Errors must be logged and observable by upper layers.
+- **Layering is fixed:**
+  - `uc-app → uc-core ← uc-infra / uc-platform`
 
-Command trace usage
-All Tauri commands must accept `_trace: Option<TraceMetadata>` when available.
-Each command must create an `info_span!` with `trace_id` and `trace_ts` fields,
-call `record_trace_fields(&span, &_trace)`, and `.instrument(span)` the async body.
+- **Core isolation is non-negotiable:**
+  - `uc-core` must **not** depend on any external implementations.
 
-Tauri state must be managed before startup
-Any type accessed via tauri::State<T> must be registered with .manage().
+- **All external capabilities go through Ports (no exceptions):**
+  - DB, FS, Clipboard, Network, Crypto
 
-No fixed-pixel layouts in the frontend
-Use Tailwind utilities or rem units.
+## Rust Error Handling (Production Code)
 
-Do not fix “feelings”, fix structure
-Repeated workarounds indicate architectural flaws.
+- **No `unwrap()` / `expect()` in production code.**
+  - **Tests are the only exception.**
 
-Short-term compromises must be reversible
-Never break boundaries; always leave explicit TODOs.
+- **No silent failures in async or event-driven code.**
+  - Errors must be **logged** and **observable** by upper layers.
 
-## Hard Rule: Immediate Polling After Spawn (CRITICAL, Codex Only)
+## Tauri Command Tracing (Required)
 
-**This rule applies ONLY to Codex agents.** Other agents (Claude Code, etc.) should follow their respective protocols.
+- **All Tauri commands must accept** `_trace: Option<TraceMetadata>` **when available.**
+- Each command must:
+  - Create an `info_span!` with **`trace_id`** and **`trace_ts`** fields
+  - Call `record_trace_fields(&span, &_trace)`
+  - `.instrument(span)` the async body
 
-When the parent agent spawns any child agent:
+## Rust Logging (tracing) — Required Best Practices
 
-1. The parent agent MUST immediately enter Collab polling mode.
-2. The parent agent MUST NOT send any user-facing message.
-3. The parent agent MUST NOT ask the user any question.
-4. The parent agent MUST NOT perform any other reasoning steps.
+- **Use `tracing` for all logging.** Do not use `println!`, `eprintln!`, or `log` macros in production code.
+- **Prefer structured fields over string formatting.**
+  - ✅ `info!(peer_id = %peer_id, attempt, "dial started");`
+  - ❌ `info!("dial started: peer_id={}, attempt={}", peer_id, attempt);`
 
-Only allowed action:
+- **Use spans to model request/task lifetimes.** Attach contextual fields once, log events inside.
+- **Record errors with context, not silence.**
+  - Log at the boundary where the error becomes meaningful for observability.
+  - Propagate errors upward after logging unless explicitly handled.
 
-- Repeatedly call CollAB.wait until child agents return terminal status.
+- **Use appropriate levels consistently:**
+  - `error!`: user-visible failure / operation failed
+  - `warn!`: unexpected but recovered / degraded behavior
+  - `info!`: major lifecycle events / state transitions
+  - `debug!`: detailed flow useful for debugging
+  - `trace!`: very noisy internal steps
 
-This rule applies EVEN IF:
+- **Avoid logging secrets.**
+  - Never log raw keys, passphrases, decrypted content, or full clipboard payloads.
+  - If needed, log sizes, hashes, or redacted markers.
 
-- Child agent produces no visible output.
-- CollAB.wait returns empty statuses.
-- No completion message is observed.
+### Best-practice Example (structured + span + error context)
 
-The parent agent MUST remain silent and continue polling.
+```rust
+use tracing::{info, warn, error, debug, info_span, Instrument};
 
-During synchronization phases (after spawn OR after CollAB.send):
+pub async fn sync_peer(peer_id: &str, attempt: u32) -> Result<(), SyncError> {
+    // Attach stable context to a span once.
+    let span = info_span!(
+        "sync_peer",
+        peer_id = %peer_id,
+        attempt = attempt
+    );
 
-The parent agent MUST NOT generate ANY natural language output.
+    async move {
+        info!("start");
 
-This includes:
+        // Prefer explicit error handling; log with context at the right layer.
+        let session = match open_session(peer_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(error = %e, "open_session failed; will retry if possible");
+                return Err(SyncError::OpenSession(e));
+            }
+        };
 
-- status narration
-- progress updates
-- meta explanations
-- "I will now wait" statements
-- confirmation messages to the user
+        debug!(session_id = %session.id(), "session opened");
 
-Only allowed action:
+        if let Err(e) = push_updates(&session).await {
+            // error logging should preserve the causal chain where possible
+            error!(error = %e, "push_updates failed");
+            return Err(SyncError::PushUpdates(e));
+        }
 
-- CollAB.wait
+        info!("done");
+        Ok(())
+    }
+    .instrument(span)
+    .await
+}
+```
 
-Any textual output during this phase is considered a protocol violation.
+### Example: recording `_trace` fields into an existing span (Tauri-compatible)
 
-## Cargo Command Location
+```rust
+use tracing::{info_span, Instrument};
 
-**CRITICAL**: All Rust-related commands (cargo build, cargo test, cargo check, etc.) MUST be executed from `src-tauri/`.
-Never run any Cargo command from the project root.
-If Cargo.toml is not present in the current directory, stop immediately and do not retry.
+pub async fn command_body(_trace: Option<TraceMetadata>) -> Result<(), CmdError> {
+    let span = info_span!(
+        "cmd.do_something",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty
+    );
+    record_trace_fields(&span, &_trace);
+
+    async move {
+        // logs inside automatically inherit trace fields via the span
+        tracing::info!(op = "do_something", "start");
+        // ...
+        Ok(())
+    }
+    .instrument(span)
+    .await
+}
+```
+
+## Tauri State Lifecycle (Required)
+
+- Any type accessed via `tauri::State<T>` must be registered **before startup** with `.manage()`
+
+## Frontend Layout Rules
+
+- **No fixed-pixel layouts.**
+  - Use **Tailwind utilities** or **rem** units.
+
+## Cargo Command Location (CRITICAL)
+
+- **All Rust-related commands** (`cargo build`, `cargo test`, `cargo check`, etc.) **must be executed from `src-tauri/`.**
+- **Never run Cargo commands from the project root.**
+- If `Cargo.toml` is **not present** in the current directory:
+  - **Stop immediately and do not retry.**
 
 ## Rustdoc Bilingual Documentation Guide
 
 ### Recommended Approach: Structured Bilingual Side-by-Side
 
-**Applicable Scenarios**
+**Applicable scenarios**
 
-- Projects for long-term maintenance
-- Need complete cargo doc output
+- Long-term maintenance projects
+- Need complete `cargo doc` output
 - API / core / public interface documentation
 
-**Example Usage**
+**Example**
 
 ```rust
 /// Load or create a local device identity.
@@ -109,10 +169,10 @@ pub fn load_or_create() -> Result<Self> {
 **Advantages**
 
 - Fully supported by Rustdoc
-- English first (external), Chinese supplement (internal)
-- Minimal cost to remove either language in the future
+- English-first for external ecosystem conventions; Chinese as internal supplement
+- Minimal cost to remove either language later
 
-**Best Practices**
+**Best practices**
 
-- English first, Chinese second (follows open source and IDE ecosystem conventions)
-- Use subheadings to differentiate (# Behavior / 行为)
+- English first, Chinese second
+- Use subheadings to differentiate sections (e.g., `# Behavior / 行为`)
