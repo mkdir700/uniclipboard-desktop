@@ -216,6 +216,8 @@ impl PairingStreamService {
     {
         let permits = self.acquire_permits(&peer_id).await?;
         let first_payload = self.read_frame(&mut stream).await?;
+        let first_payload =
+            first_payload.ok_or_else(|| anyhow!("stream closed before first message"))?;
         let first_message = self.decode_message(&peer_id, &first_payload)?;
         let session_id = first_message.session_id().to_string();
         self.spawn_session(peer_id, session_id, stream, Some(first_message), permits)
@@ -313,7 +315,7 @@ impl PairingStreamService {
         Ok(SessionPermits { global, peer })
     }
 
-    async fn read_frame<R>(&self, reader: &mut R) -> Result<Vec<u8>>
+    async fn read_frame<R>(&self, reader: &mut R) -> Result<Option<Vec<u8>>>
     where
         R: AsyncRead + Unpin,
     {
@@ -445,6 +447,10 @@ where
                     warn!("pairing read failed peer={peer_id} session={session_id}: {err}");
                     err
                 })?;
+                let payload = match payload {
+                    Some(p) => p,
+                    None => return Ok(()),
+                };
                 let message = inner.decode_message(&peer_id, &payload).map_err(|err| {
                     warn!("pairing decode failed peer={peer_id} session={session_id}: {err}");
                     err
@@ -520,7 +526,7 @@ fn record_trace_fields(span: &Span, trace: &Option<TraceMetadata>) {
     }
 }
 impl PairingStreamServiceInner {
-    async fn read_frame<R>(&self, reader: &mut R) -> Result<Vec<u8>>
+    async fn read_frame<R>(&self, reader: &mut R) -> Result<Option<Vec<u8>>>
     where
         R: AsyncRead + Unpin,
     {

@@ -53,22 +53,38 @@ where
 }
 
 /// Read a single length-prefixed frame enforcing an upper bound.
-pub async fn read_length_prefixed<R>(reader: &mut R, max_frame_bytes: usize) -> Result<Vec<u8>>
+///
+/// Returns `Ok(None)` if the stream ends cleanly before reading the length prefix.
+pub async fn read_length_prefixed<R>(
+    reader: &mut R,
+    max_frame_bytes: usize,
+) -> Result<Option<Vec<u8>>>
 where
     R: AsyncRead + Unpin,
 {
     let mut len_buf = [0u8; 4];
     trace!(stage = "read_len_prefix", "reading frame length");
-    if let Err(e) = reader.read_exact(&mut len_buf).await {
-        if e.kind() == io::ErrorKind::UnexpectedEof {
-            warn!(
-                stage = "read_len_prefix",
-                error = %e,
-                expected = 4,
-                "unexpected eof reading length"
-            );
+
+    // Read the first chunk to detect clean EOF.
+    let n = reader.read(&mut len_buf).await?;
+    if n == 0 {
+        return Ok(None);
+    }
+
+    // If we read partial length, finish reading it.
+    if n < 4 {
+        if let Err(e) = reader.read_exact(&mut len_buf[n..]).await {
+            if e.kind() == io::ErrorKind::UnexpectedEof {
+                warn!(
+                    stage = "read_len_prefix",
+                    error = %e,
+                    expected = 4,
+                    read = n,
+                    "unexpected eof reading length"
+                );
+            }
+            return Err(e.into());
         }
-        return Err(e.into());
     }
 
     let len = u32::from_be_bytes(len_buf) as usize;
@@ -89,7 +105,7 @@ where
         }
         return Err(e.into());
     }
-    Ok(buf)
+    Ok(Some(buf))
 }
 
 #[cfg(test)]
