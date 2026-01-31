@@ -98,6 +98,7 @@ where
                         identity_fingerprint.eq(row.identity_fingerprint.clone()),
                         paired_at.eq(row.paired_at),
                         last_seen_at.eq(row.last_seen_at),
+                        device_name.eq(row.device_name.clone()),
                     ))
                     .execute(conn)
                     .map_err(|e| PairedDeviceRepositoryError::Storage(e.to_string()))?;
@@ -205,6 +206,7 @@ mod tests {
             identity_fingerprint: "fp".to_string(),
             paired_at: chrono::Utc::now(),
             last_seen_at: None,
+            device_name: "Test Device".to_string(),
         };
 
         repo.upsert(device.clone()).await.unwrap();
@@ -217,5 +219,7 @@ mod tests {
 
         let loaded = fresh_repo.get_by_peer_id(&device.peer_id).await.unwrap();
         assert!(loaded.is_some());
+        let loaded_device = loaded.unwrap();
+        assert_eq!(loaded_device.device_name, "Test Device");
     }
 }

@@ -1463,12 +1463,19 @@ impl PairingStateMachine {
             Err(err) => return Err(FailureReason::CryptoError(err.to_string())),
         };
 
+        let device_name = self
+            .context
+            .peer_device_name
+            .clone()
+            .unwrap_or_else(|| "Unknown Device".to_string());
+
         Ok(PairedDevice {
             peer_id: PeerId::from(peer_id),
             pairing_state: PairedDeviceState::Trusted,
             identity_fingerprint: fingerprint,
             paired_at: now,
             last_seen_at: None,
+            device_name,
         })
     }
 }
@@ -1867,5 +1874,100 @@ mod tests {
         assert!(actions
             .iter()
             .any(|action| matches!(action, PairingAction::PersistPairedDevice { .. })));
+    }
+
+    #[test]
+    fn build_paired_device_includes_peer_device_name() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        // Simulate receiving a request which sets peer_device_name
+        let request = PairingRequest {
+            session_id: "session-1".to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-2".to_string(),
+            peer_id: "peer-remote".to_string(),
+            identity_pubkey: vec![2; 32],
+            nonce: vec![9; 16],
+        };
+
+        sm.handle_event(
+            PairingEvent::RecvRequest {
+                session_id: "session-1".to_string(),
+                request,
+            },
+            Utc::now(),
+        );
+
+        // Accept and send challenge
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: "session-1".to_string(),
+            },
+            Utc::now(),
+        );
+
+        let challenge = actions
+            .iter()
+            .find_map(|action| match action {
+                PairingAction::Send {
+                    message: PairingMessage::Challenge(challenge),
+                    ..
+                } => Some(challenge.clone()),
+                _ => None,
+            })
+            .expect("challenge action");
+
+        // Receive response to trigger build_paired_device
+        let response = PairingResponse {
+            session_id: "session-1".to_string(),
+            pin_hash: hash_pin(&challenge.pin).expect("hash pin"),
+            accepted: true,
+        };
+
+        let (state, _actions) = sm.handle_event(
+            PairingEvent::RecvResponse {
+                session_id: "session-1".to_string(),
+                response,
+            },
+            Utc::now(),
+        );
+
+        // Extract the paired_device from Finalizing state
+        if let PairingState::Finalizing { paired_device, .. } = state {
+            assert_eq!(paired_device.device_name, "PeerDevice");
+        } else {
+            panic!("Expected Finalizing state, got {:?}", state);
+        }
+    }
+
+    #[test]
+    fn build_paired_device_uses_unknown_device_when_name_missing() {
+        // Create a state machine and manually set required context fields
+        // without setting peer_device_name to test the fallback
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        // Manually set context fields to simulate a state where peer_device_name is None
+        sm.context.peer_id = Some("peer-remote".to_string());
+        sm.context.peer_identity_pubkey = Some(vec![2; 32]);
+        // peer_device_name is intentionally left as None
+
+        // Call build_paired_device directly to test the fallback
+        let now = Utc::now();
+        let result = sm.build_paired_device(now);
+
+        match result {
+            Ok(device) => {
+                assert_eq!(device.device_name, "Unknown Device");
+            }
+            Err(e) => panic!("Expected Ok, got Err: {:?}", e),
+        }
     }
 }

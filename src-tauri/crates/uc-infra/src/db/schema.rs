@@ -88,6 +88,7 @@ diesel::table! {
         identity_fingerprint -> Text,
         paired_at -> BigInt,
         last_seen_at -> Nullable<BigInt>,
+        device_name -> Text,
     }
 }
 

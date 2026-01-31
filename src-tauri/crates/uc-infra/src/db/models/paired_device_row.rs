@@ -9,6 +9,7 @@ pub struct PairedDeviceRow {
     pub identity_fingerprint: String,
     pub paired_at: i64,
     pub last_seen_at: Option<i64>,
+    pub device_name: String,
 }
 
 #[derive(Debug, Insertable)]
@@ -19,4 +20,5 @@ pub struct NewPairedDeviceRow {
     pub identity_fingerprint: String,
     pub paired_at: i64,
     pub last_seen_at: Option<i64>,
+    pub device_name: String,
 }
