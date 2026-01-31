@@ -125,6 +125,16 @@ export interface P2PPeerConnectionEvent {
 }
 
 /**
+ * P2P 设备名称更新事件数据
+ */
+export interface P2PPeerNameUpdatedEvent {
+  /** Peer ID */
+  peerId: string
+  /** Device name */
+  deviceName: string
+}
+
+/**
  * 获取本地 Peer ID
  */
 export async function getLocalPeerId(): Promise<string> {
@@ -258,6 +268,26 @@ export async function onP2PPeerConnectionChanged(
     }
   } catch (error) {
     console.error('Failed to setup P2P peer connection changed listener:', error)
+    return () => {}
+  }
+}
+
+/**
+ * 监听 P2P 设备名称更新事件
+ */
+export async function onP2PPeerNameUpdated(
+  callback: (event: P2PPeerNameUpdatedEvent) => void
+): Promise<() => void> {
+  try {
+    const unlisten = await listen<P2PPeerNameUpdatedEvent>('p2p-peer-name-updated', event => {
+      callback(event.payload)
+    })
+
+    return () => {
+      unlisten()
+    }
+  } catch (error) {
+    console.error('Failed to setup P2P peer name updated listener:', error)
     return () => {}
   }
 }

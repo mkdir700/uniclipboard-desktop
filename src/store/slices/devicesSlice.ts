@@ -62,11 +62,20 @@ const devicesSlice = createSlice({
     },
     updatePeerConnectionStatus: (
       state,
-      action: { payload: { peerId: string; connected: boolean } }
+      action: { payload: { peerId: string; connected: boolean; deviceName?: string | null } }
     ) => {
       const peer = state.pairedDevices.find(d => d.peerId === action.payload.peerId)
       if (peer) {
         peer.connected = action.payload.connected
+        if (action.payload.deviceName) {
+          peer.deviceName = action.payload.deviceName
+        }
+      }
+    },
+    updatePeerDeviceName: (state, action: { payload: { peerId: string; deviceName: string } }) => {
+      const peer = state.pairedDevices.find(d => d.peerId === action.payload.peerId)
+      if (peer) {
+        peer.deviceName = action.payload.deviceName
       }
     },
   },
@@ -103,6 +112,10 @@ const devicesSlice = createSlice({
   },
 })
 
-export const { clearLocalDeviceError, clearPairedDevicesError, updatePeerConnectionStatus } =
-  devicesSlice.actions
+export const {
+  clearLocalDeviceError,
+  clearPairedDevicesError,
+  updatePeerConnectionStatus,
+  updatePeerDeviceName,
+} = devicesSlice.actions
 export default devicesSlice.reducer
