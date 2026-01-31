@@ -1117,6 +1117,18 @@ async fn run_pairing_event_loop<R: Runtime>(
                 )
                 .await;
             }
+            NetworkEvent::PairingFailed {
+                session_id,
+                peer_id,
+                error,
+            } => {
+                if let Err(err) = orchestrator
+                    .handle_transport_error(&session_id, &peer_id, error)
+                    .await
+                {
+                    error!(error = %err, session_id = %session_id, "Failed to handle pairing transport error");
+                }
+            }
             NetworkEvent::PeerReady { ref peer_id }
             | NetworkEvent::PeerNotReady { ref peer_id } => {
                 let connected = matches!(event, NetworkEvent::PeerReady { .. });

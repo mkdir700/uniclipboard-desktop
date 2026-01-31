@@ -421,6 +421,17 @@ where
                 "pairing session ended with error: peer_id={} session_id={} source={} error={}",
                 peer_id, session_id, source, err
             );
+            if let Err(e) = inner
+                .event_tx
+                .send(NetworkEvent::PairingFailed {
+                    session_id: session_id.clone(),
+                    peer_id: peer_id.clone(),
+                    error: err.to_string(),
+                })
+                .await
+            {
+                warn!("failed to emit pairing failed event: {}", e);
+            }
         }
     }
 
