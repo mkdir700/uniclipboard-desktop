@@ -12,6 +12,7 @@ import { DeviceTab } from '@/components/device/Header'
 import PairingDialog from '@/components/PairingDialog'
 import PairingPinDialog from '@/components/PairingPinDialog'
 import { toast } from '@/components/ui/toast'
+import { formatPeerIdForDisplay } from '@/lib/utils'
 import { captureUserIntent } from '@/observability/breadcrumbs'
 import { useAppDispatch } from '@/store/hooks'
 import { fetchPairedDevices } from '@/store/slices/devicesSlice'
@@ -326,7 +327,7 @@ const DevicesPage: React.FC = () => {
                         {pendingP2PRequest.deviceName || t('pairing.discovery.unknownDevice')}
                       </h4>
                       <p className="text-xs text-muted-foreground">
-                        ID: {(pendingP2PRequest.peerId ?? '').substring(0, 8)}...
+                        ID: {formatPeerIdForDisplay(pendingP2PRequest.peerId)}
                       </p>
                     </div>
                   </div>

@@ -25,6 +25,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
+import { formatPeerIdForDisplay } from '@/lib/utils'
 // import { getLocalDeviceName } from '@/api/deviceConnection' // Assuming we'll add this or use existing
 
 // Mock getLocalDeviceName if not available yet, or import if available
@@ -291,7 +292,7 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
                               {peer.deviceName || t('pairing.discovery.unknownDevice')}
                             </h4>
                             <p className="text-xs text-muted-foreground truncate w-40">
-                              ID: {peer.peerId.substring(0, 8)}...
+                              ID: {formatPeerIdForDisplay(peer.peerId)}
                             </p>
                           </div>
                         </div>

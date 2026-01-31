@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Laptop, Settings, RefreshCw } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import DeviceSettingsPanel from './DeviceSettingsPanel'
+import { formatPeerIdForDisplay } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { fetchLocalDeviceInfo, clearLocalDeviceError } from '@/store/slices/devicesSlice'
 
@@ -99,7 +100,7 @@ const CurrentDevice: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  ID: {localDevice.peerId.substring(0, 8)}...
+                  ID: {formatPeerIdForDisplay(localDevice.peerId)}
                 </p>
               </div>
             </div>
