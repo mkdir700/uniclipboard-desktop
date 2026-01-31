@@ -32,14 +32,14 @@ pub enum PairingMessage {
 ///
 /// # Fields
 /// - `device_id`: 6-digit stable device ID (from database devices.id)
-/// - `peer_id`: libp2p PeerId (network layer, changes on each restart)
+/// - `peer_id`: libp2p PeerId (network layer, stable while identity is persisted)
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairingRequest {
     pub session_id: String,
     pub device_name: String,
     /// 6-digit stable device ID (from devices table)
     pub device_id: String,
-    /// Current libp2p PeerId for this session (network layer)
+    /// Current libp2p PeerId for this session (stable while identity is persisted)
     pub peer_id: String,
     /// Stable identity public key (Ed25519)
     pub identity_pubkey: Vec<u8>,
