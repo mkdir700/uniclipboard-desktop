@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
-import { ArrowUpCircle, Home, Monitor, Settings } from 'lucide-react'
+import { ArrowUpCircle, Home, MessageSquare, Monitor, Settings } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
+import { FeedbackDialog } from '@/components/feedback/FeedbackDialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useSetting } from '@/hooks/useSetting'
 import { useUpdate } from '@/hooks/useUpdate'
 import { cn } from '@/lib/utils'
+import { sentryEnabled } from '@/observability/sentry'
 
 const NavButton: React.FC<{
   to: string
@@ -69,6 +71,7 @@ const Sidebar: React.FC = () => {
   const { setting } = useSetting()
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const { updateInfo, isCheckingUpdate } = useUpdate()
 
   const navItems = [
@@ -155,6 +158,36 @@ const Sidebar: React.FC = () => {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          )}
+          {sentryEnabled && (
+            <>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t('nav.feedback')}
+                      data-tauri-drag-region="false"
+                      className="relative group"
+                      onClick={() => setFeedbackOpen(true)}
+                    >
+                      <div
+                        className={cn(
+                          'relative flex items-center justify-center w-12 h-12 rounded-lg transition-colors duration-200 z-10',
+                          'text-muted-foreground group-hover:text-primary group-hover:bg-muted'
+                        )}
+                      >
+                        <MessageSquare className="w-5 h-5" />
+                      </div>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center" className="font-medium">
+                    <p>{t('nav.feedback')}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+            </>
           )}
           <NavButton
             to="/settings"

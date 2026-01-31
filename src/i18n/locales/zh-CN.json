@@ -12,7 +12,8 @@
     "devices": "设备管理",
     "settings": "设置",
     "updateAvailable": "有新版本",
-    "back": "返回"
+    "back": "返回",
+    "feedback": "反馈"
   },
   "update": {
     "title": "发现新版本",
@@ -543,6 +544,24 @@
       "accept": "接受",
       "close": "关闭",
       "retry": "重试"
+    }
+  },
+  "feedback": {
+    "modal": {
+      "title": "发送反馈",
+      "description": "您的反馈将帮助我们改进 UniClipboard。请在下方描述您的问题或建议。",
+      "label": {
+        "content": "反馈内容",
+        "email": "电子邮箱（选填）"
+      },
+      "placeholder": {
+        "content": "请输入您的反馈内容...",
+        "email": "your@email.com"
+      },
+      "submit": "提交反馈",
+      "useSavedEmail": "使用已保存邮箱",
+      "success": "反馈发送成功，感谢您的支持！",
+      "error": "反馈发送失败，请稍后重试。"
     }
   }
 }

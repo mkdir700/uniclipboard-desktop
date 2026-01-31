@@ -12,7 +12,8 @@
     "devices": "Devices",
     "settings": "Settings",
     "updateAvailable": "Update available",
-    "back": "Back"
+    "back": "Back",
+    "feedback": "Feedback"
   },
   "update": {
     "title": "Update available",
@@ -543,6 +544,24 @@
       "accept": "Accept",
       "close": "Close",
       "retry": "Retry"
+    }
+  },
+  "feedback": {
+    "modal": {
+      "title": "Send Feedback",
+      "description": "Your feedback helps us improve UniClipboard. Please describe your issue or suggestion below.",
+      "label": {
+        "content": "Feedback Content",
+        "email": "Email Address (Optional)"
+      },
+      "placeholder": {
+        "content": "Please enter your feedback here...",
+        "email": "your@email.com"
+      },
+      "submit": "Submit Feedback",
+      "useSavedEmail": "Use saved email",
+      "success": "Feedback sent successfully. Thank you!",
+      "error": "Failed to send feedback. Please try again later."
     }
   }
 }
