@@ -245,4 +245,10 @@
   body {
     @apply bg-background text-foreground;
   }
+  input[type='password'] {
+    letter-spacing: 0.2em;
+  }
+  input[type='password']::placeholder {
+    letter-spacing: 0;
+  }
 }

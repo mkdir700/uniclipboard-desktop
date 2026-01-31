@@ -29,8 +29,9 @@
 //! 2. Add a method to `UseCases` that calls `new()` with deps
 //! 3. Commands can now call `runtime.usecases().your_use_case()`
 
+use std::sync::Arc;
 use tauri::Emitter;
-use uc_app::{App, AppDeps};
+use uc_app::{usecases::SetupOrchestrator, App, AppDeps};
 use uc_core::config::AppConfig;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_core::{ClipboardChangeOrigin, SystemClipboardSnapshot};
@@ -74,15 +75,25 @@ pub struct AppRuntime {
     /// Tauri AppHandle for emitting events (optional, set after Tauri setup)
     /// Uses RwLock for interior mutability since Arc<AppRuntime> is shared
     app_handle: std::sync::RwLock<Option<tauri::AppHandle>>,
+    setup_orchestrator: Arc<SetupOrchestrator>,
 }
 
 impl AppRuntime {
     /// Create a new AppRuntime from dependencies.
     /// 从依赖创建新的 AppRuntime。
     pub fn new(deps: AppDeps) -> Self {
+        let setup_orchestrator = Arc::new(SetupOrchestrator::from_ports(
+            deps.encryption.clone(),
+            deps.key_material.clone(),
+            deps.key_scope.clone(),
+            deps.encryption_state.clone(),
+            deps.encryption_session.clone(),
+            deps.onboarding_state.clone(),
+        ));
         Self {
             deps,
             app_handle: std::sync::RwLock::new(None),
+            setup_orchestrator,
         }
     }
 
@@ -115,6 +126,10 @@ impl AppRuntime {
     /// 获取用例访问器。
     pub fn usecases(&self) -> UseCases<'_> {
         UseCases::new(self)
+    }
+
+    pub fn setup_orchestrator(&self) -> Arc<SetupOrchestrator> {
+        self.setup_orchestrator.clone()
     }
 }
 
@@ -447,6 +462,10 @@ impl<'a> UseCases<'a> {
         uc_app::usecases::onboarding::CompleteOnboarding::from_ports(
             self.runtime.deps.onboarding_state.clone(),
         )
+    }
+
+    pub fn setup_orchestrator(&self) -> Arc<SetupOrchestrator> {
+        self.runtime.setup_orchestrator()
     }
 
     /// Settings use cases / 设置用例

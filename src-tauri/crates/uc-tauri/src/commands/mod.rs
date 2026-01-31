@@ -5,6 +5,7 @@ pub mod error;
 pub mod onboarding;
 pub mod pairing;
 pub mod settings;
+pub mod setup;
 pub mod startup;
 
 use tracing::Span;
@@ -17,6 +18,7 @@ pub use encryption::*;
 pub use onboarding::*;
 pub use pairing::*;
 pub use settings::*;
+pub use setup::*;
 pub use startup::*;
 
 pub use error::map_err;
@@ -109,5 +111,11 @@ mod tests {
             output.contains("trace_ts=1737100000000"),
             "missing trace_ts"
         );
+    }
+
+    #[test]
+    fn setup_commands_are_registered() {
+        let _ = crate::commands::setup::get_setup_state;
+        let _ = crate::commands::setup::dispatch_setup_event;
     }
 }

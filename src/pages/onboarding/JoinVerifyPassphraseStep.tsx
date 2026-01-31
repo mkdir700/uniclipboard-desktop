@@ -1,0 +1,171 @@
+import { motion } from 'framer-motion'
+import { AlertCircle, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { JoinVerifyPassphraseStepProps } from './types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+export default function JoinVerifyPassphraseStep({
+  peerId,
+  onSubmit,
+  onBack,
+  onCreateNew,
+  error,
+  loading,
+}: JoinVerifyPassphraseStepProps) {
+  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.joinVerifyPassphrase' })
+  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'onboarding.common' })
+
+  const [passphrase, setPassphrase] = useState('')
+  const [showPassphrase, setShowPassphrase] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
+  const [showMismatchHelp, setShowMismatchHelp] = useState(true)
+
+  useEffect(() => {
+    if (!error) {
+      setLocalError(null)
+      setShowMismatchHelp(true)
+      return
+    }
+    setShowMismatchHelp(true)
+    if (error === 'PassphraseInvalidOrMismatch') {
+      setLocalError(null)
+    } else if (error === 'NetworkTimeout') {
+      setLocalError(t('errors.timeout'))
+    } else if (error === 'PeerUnavailable') {
+      setLocalError(t('errors.peerUnavailable'))
+    } else {
+      setLocalError(t('errors.generic'))
+    }
+  }, [error, t])
+
+  const handleSubmit = () => {
+    if (!passphrase) {
+      setLocalError(t('errors.empty'))
+      return
+    }
+    onSubmit(passphrase)
+  }
+
+  if (error === 'PassphraseInvalidOrMismatch' && showMismatchHelp) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="w-full"
+      >
+        <button
+          onClick={onBack}
+          className="mb-8 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t('actions.backToPick')}
+        </button>
+
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {t('mismatchHelp.title')}
+            </h1>
+            <p className="mt-2 text-muted-foreground">{t('mismatchHelp.subtitle')}</p>
+          </div>
+
+          <div className="text-sm text-muted-foreground">
+            <p>{t('mismatchHelp.p1')}</p>
+            <p className="mt-2">{t('mismatchHelp.p2')}</p>
+            <ul className="mt-2 list-disc pl-5 space-y-1">
+              <li>{t('mismatchHelp.option1')}</li>
+              <li>{t('mismatchHelp.option2')}</li>
+            </ul>
+          </div>
+
+          <div className="flex flex-col gap-3 pt-4">
+            <Button onClick={() => setShowMismatchHelp(false)} disabled={loading}>
+              {t('mismatchHelp.retry')}
+            </Button>
+            <Button variant="outline" onClick={onCreateNew} disabled={loading}>
+              {t('mismatchHelp.createNew')}
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="w-full"
+    >
+      <button
+        onClick={onBack}
+        className="mb-8 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        {t('actions.backToPick')}
+      </button>
+
+      <div className="mb-10">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
+        <p className="mt-2 text-muted-foreground">{t('subtitle')}</p>
+        <p className="mt-1 font-mono text-xs text-muted-foreground">
+          {t('targetDevice', { peerShort: peerId.substring(0, 8) })}
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="passphrase">{tCommon('encryptPassphraseLabel')}</Label>
+          <div className="relative">
+            <Input
+              id="passphrase"
+              type={showPassphrase ? 'text' : 'password'}
+              value={passphrase}
+              onChange={e => setPassphrase(e.target.value)}
+              disabled={loading}
+              className="pr-10"
+              placeholder={tCommon('encryptPassphrasePlaceholder')}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassphrase(!showPassphrase)}
+              className="absolute right-0 top-0 flex h-full items-center px-3 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {showPassphrase ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {localError && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center gap-2 text-sm text-destructive"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {localError}
+          </motion.div>
+        )}
+      </div>
+
+      <div className="mt-10 flex items-center gap-4">
+        <Button onClick={handleSubmit} disabled={loading} className="min-w-32">
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {t('actions.verifying')}
+            </>
+          ) : (
+            t('actions.verify')
+          )}
+        </Button>
+      </div>
+    </motion.div>
+  )
+}

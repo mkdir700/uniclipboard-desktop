@@ -17,6 +17,7 @@ pub mod onboarding;
 pub mod ports;
 pub mod security;
 pub mod settings;
+pub mod setup;
 
 // Re-export commonly used types at the crate root
 pub use blob::Blob;

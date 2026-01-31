@@ -25,6 +25,7 @@ pub mod list_clipboard_entries;
 pub mod onboarding;
 pub mod pairing;
 pub mod settings;
+pub mod setup;
 pub mod start_clipboard_watcher;
 pub mod start_network;
 pub mod start_network_after_unlock;
@@ -44,6 +45,7 @@ pub use pairing::{
     LocalDeviceInfo, PairingConfig, PairingOrchestrator, ResolveConnectionPolicy, SetPairingState,
     UnpairDevice,
 };
+pub use setup::{SetupOrchestrator, SetupOrchestratorError};
 pub use start_clipboard_watcher::StartClipboardWatcher;
 pub use start_network::StartNetwork;
 pub use start_network_after_unlock::StartNetworkAfterUnlock;

@@ -6,6 +6,45 @@ export interface OnboardingStatus {
   device_registered: boolean
 }
 
+export type SetupError =
+  | 'PassphraseMismatch'
+  | { PassphraseTooShort: { min_len: number } }
+  | 'PassphraseEmpty'
+  | 'PassphraseInvalidOrMismatch'
+  | 'NetworkTimeout'
+  | 'PeerUnavailable'
+  | 'PairingRejected'
+  | 'PairingFailed'
+
+export type SetupState =
+  | 'Welcome'
+  | 'Done'
+  | { CreateSpacePassphrase: { error: SetupError | null } }
+  | { JoinSpacePickDevice: { error: SetupError | null } }
+  | { JoinSpaceVerifyPassphrase: { peer_id: string; error: SetupError | null } }
+  | {
+      PairingConfirm: {
+        session_id: string
+        short_code: string
+        peer_fingerprint?: string | null
+        error: SetupError | null
+      }
+    }
+
+export type SetupEvent =
+  | 'ChooseCreateSpace'
+  | 'ChooseJoinSpace'
+  | 'Back'
+  | { SubmitCreatePassphrase: { pass1: string; pass2: string } }
+  | { SelectPeer: { peer_id: string } }
+  | { SubmitJoinPassphrase: { passphrase: string } }
+  | 'PairingUserConfirm'
+  | 'PairingUserCancel'
+  | 'PairingSucceeded'
+  | { PairingFailed: { reason: SetupError } }
+  | 'PassphraseMismatch'
+  | 'NetworkScanRefresh'
+
 /**
  * Get current onboarding state
  * 获取当前入门引导状态
@@ -28,6 +67,22 @@ export async function initializeOnboarding(): Promise<OnboardingStatus> {
  */
 export async function completeOnboarding(): Promise<void> {
   return await invokeWithTrace('complete_onboarding')
+}
+
+/**
+ * Get current setup state
+ * 获取当前设置流程状态
+ */
+export async function getSetupState(): Promise<SetupState> {
+  return await invokeWithTrace('get_setup_state')
+}
+
+/**
+ * Dispatch a setup event
+ * 分发设置事件
+ */
+export async function dispatchSetupEvent(event: SetupEvent): Promise<SetupState> {
+  return await invokeWithTrace('dispatch_setup_event', { event })
 }
 
 /**
