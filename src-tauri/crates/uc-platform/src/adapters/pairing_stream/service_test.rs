@@ -1,9 +1,62 @@
-use super::framing::{write_length_prefixed, MAX_PAIRING_FRAME_BYTES};
+use super::framing::{read_length_prefixed, write_length_prefixed, MAX_PAIRING_FRAME_BYTES};
 use super::service::{PairingStreamConfig, PairingStreamService};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
 use uc_core::network::{NetworkEvent, PairingMessage, PairingRequest};
+
+#[tokio::test]
+async fn shutdown_drains_outbound_queue() {
+    let (event_tx, _event_rx) = mpsc::channel(1);
+    let service = PairingStreamService::for_tests(event_tx, PairingStreamConfig::default());
+    let (mut client, server) = tokio::io::duplex(64 * 1024);
+
+    // Start session
+    let handle = service.handle_incoming_stream("peer-drain".to_string(), server);
+
+    let init_msg = PairingMessage::Request(PairingRequest {
+        session_id: "session-drain".to_string(),
+        device_name: "device-drain".to_string(),
+        device_id: "device-drain".to_string(),
+        peer_id: "peer-drain".to_string(),
+        identity_pubkey: vec![5; 32],
+        nonce: vec![6; 16],
+    });
+    let payload = serde_json::to_vec(&init_msg).expect("serialize");
+    write_length_prefixed(&mut client, &payload)
+        .await
+        .expect("write init");
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let drain_msg = PairingMessage::Confirm(uc_core::network::PairingConfirm {
+        session_id: "session-drain".to_string(),
+        success: true,
+        error: None,
+        sender_device_name: "device-drain".to_string(),
+        device_id: "device-drain".to_string(),
+    });
+    service
+        .send_pairing_on_session("session-drain".to_string(), drain_msg.clone())
+        .await
+        .expect("send");
+
+    service
+        .close_pairing_session("session-drain".to_string(), None)
+        .await
+        .expect("close");
+
+    let received_payload = read_length_prefixed(&mut client, MAX_PAIRING_FRAME_BYTES)
+        .await
+        .expect("read")
+        .expect("some");
+    let received_msg: PairingMessage =
+        serde_json::from_slice(&received_payload).expect("deserialize");
+
+    assert!(matches!(received_msg, PairingMessage::Confirm(_)));
+
+    handle.await.expect("task join").expect("task result");
+}
 
 #[tokio::test]
 async fn inbound_stream_emits_pairing_message() {

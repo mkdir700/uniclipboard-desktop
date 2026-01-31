@@ -464,6 +464,34 @@ where
     }
 }
 
+async fn write_message<W>(
+    inner: &PairingStreamServiceInner,
+    peer_id: &str,
+    session_id: &str,
+    writer: &mut W,
+    message: PairingMessage,
+) -> Result<()>
+where
+    W: AsyncWrite + Unpin,
+{
+    let payload =
+        serde_json::to_vec(&message).map_err(|err| anyhow!("pairing encode failed: {err}"))?;
+    if payload.len() > inner.config.max_frame_bytes {
+        let err = anyhow!(
+            "pairing frame exceeds max: {} > {}",
+            payload.len(),
+            inner.config.max_frame_bytes
+        );
+        warn!("pairing write failed peer={peer_id} session={session_id}: {err}");
+        return Err(err);
+    }
+    if let Err(err) = write_length_prefixed(writer, &payload).await {
+        warn!("pairing write failed peer={peer_id} session={session_id}: {err}");
+        return Err(err);
+    }
+    Ok(())
+}
+
 async fn write_loop<W>(
     inner: Arc<PairingStreamServiceInner>,
     peer_id: String,
@@ -478,31 +506,49 @@ where
     loop {
         tokio::select! {
             _ = shutdown_rx.changed() => {
-                return Ok(());
+                break;
             }
             message = write_rx.recv() => {
                 let message = match message {
                     Some(message) => message,
                     None => return Ok(()),
                 };
-                let payload = serde_json::to_vec(&message)
-                    .map_err(|err| anyhow!("pairing encode failed: {err}"))?;
-                if payload.len() > inner.config.max_frame_bytes {
-                    let err = anyhow!(
-                        "pairing frame exceeds max: {} > {}",
-                        payload.len(),
-                        inner.config.max_frame_bytes
-                    );
-                    warn!("pairing write failed peer={peer_id} session={session_id}: {err}");
-                    return Err(err);
-                }
-                if let Err(err) = write_length_prefixed(&mut writer, &payload).await {
-                    warn!("pairing write failed peer={peer_id} session={session_id}: {err}");
-                    return Err(err);
-                }
+                write_message(&inner, &peer_id, &session_id, &mut writer, message).await?;
             }
         }
     }
+
+    // Drain phase
+    let drain_timeout = Duration::from_millis(250);
+    let drain_start = tokio::time::Instant::now();
+
+    loop {
+        if drain_start.elapsed() > drain_timeout {
+            warn!(
+                "pairing session drain timed out: peer_id={} session_id={}",
+                peer_id, session_id
+            );
+            break;
+        }
+
+        let remaining = drain_timeout.saturating_sub(drain_start.elapsed());
+        if remaining.is_zero() {
+            break;
+        }
+
+        match timeout(remaining, write_rx.recv()).await {
+            Ok(Some(message)) => {
+                write_message(&inner, &peer_id, &session_id, &mut writer, message).await?;
+            }
+            Ok(None) => break,
+            Err(_) => {
+                // Timeout waiting for next message, treat as done
+                break;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn emit_pairing_event(
