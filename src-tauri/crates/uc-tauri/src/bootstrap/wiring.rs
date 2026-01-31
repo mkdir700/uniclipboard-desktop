@@ -1117,12 +1117,13 @@ async fn run_pairing_event_loop<R: Runtime>(
                 )
                 .await;
             }
-            NetworkEvent::PeerReady { peer_id } | NetworkEvent::PeerNotReady { peer_id } => {
+            NetworkEvent::PeerReady { ref peer_id }
+            | NetworkEvent::PeerNotReady { ref peer_id } => {
                 let connected = matches!(event, NetworkEvent::PeerReady { .. });
-                let device_name = resolve_device_name_for_peer(&network, &peer_id).await;
+                let device_name = resolve_device_name_for_peer(&network, peer_id).await;
                 if let Some(app) = app_handle.as_ref() {
                     let payload = P2PPeerConnectionEvent {
-                        peer_id,
+                        peer_id: peer_id.clone(),
                         device_name,
                         connected,
                     };
