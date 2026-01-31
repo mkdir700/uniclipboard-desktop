@@ -37,6 +37,35 @@ fn is_development() -> bool {
     cfg!(debug_assertions)
 }
 
+/// Build the default filter directives for tracing
+///
+/// ## Behavior / 行为
+/// - **Development**: debug level for app, info for libp2p_mdns
+/// - **Production**: info level for app, info for libp2p_mdns
+/// - **mDNS**: Always set to info to see discovery events, but keep iface=off
+fn build_filter_directives(is_dev: bool) -> Vec<String> {
+    vec![
+        if is_dev { "debug" } else { "info" }.to_string(),
+        "libp2p_mdns::behaviour::iface=off".to_string(), // Suppress iface send errors (No route to host)
+        "libp2p_mdns=info".to_string(),                  // Set to info to see discovery events
+        "tauri=warn".to_string(),                        // Filter noisy setup spans (app::setup)
+        "wry=off".to_string(), // Filter Tauri internal spans (custom_protocol)
+        "ipc::request=off".to_string(), // Filter Tauri IPC handler spans
+        if is_dev {
+            "uc_platform=debug"
+        } else {
+            "uc_platform=info"
+        }
+        .to_string(),
+        if is_dev {
+            "uc_infra=debug"
+        } else {
+            "uc_infra=info"
+        }
+        .to_string(),
+    ]
+}
+
 /// Initialize the tracing subscriber with appropriate configuration
 ///
 /// ## Behavior / 行为
@@ -84,26 +113,9 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     // - Defaults to debug in dev, info in prod
     // - Filters libp2p_mdns warnings (noisy proxy software errors)
     // - Can be overridden with RUST_LOG environment variable
-    let filter_directives = [
-        if is_dev { "debug" } else { "info" },
-        "libp2p_mdns::behaviour::iface=off", // Suppress iface send errors (No route to host)
-        "libp2p_mdns=warn",                  // Filter noisy proxy errors
-        "tauri=warn",                        // Filter noisy setup spans (app::setup)
-        "wry=off",                           // Filter Tauri internal spans (custom_protocol)
-        "ipc::request=off",                  // Filter Tauri IPC handler spans
-        if is_dev {
-            "uc_platform=debug"
-        } else {
-            "uc_platform=info"
-        },
-        if is_dev {
-            "uc_infra=debug"
-        } else {
-            "uc_infra=info"
-        },
-    ];
-    let env_filter = tracing_subscriber::EnvFilter::try_new(filter_directives.join(","))
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::from_default_env());
+    let filter_directives = build_filter_directives(is_dev);
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(filter_directives.join(",")));
 
     // Step 2: Initialize Sentry
     // - Only if SENTRY_DSN is set
@@ -207,5 +219,20 @@ mod tests {
         // For now, just verify the function compiles
         let is_dev = is_development();
         let _ = is_dev; // Suppress unused warning
+    }
+
+    #[test]
+    fn test_build_filter_directives() {
+        let dev_directives = build_filter_directives(true);
+        assert!(dev_directives.contains(&"debug".to_string()));
+        assert!(dev_directives.contains(&"libp2p_mdns=info".to_string()));
+        assert!(dev_directives.contains(&"libp2p_mdns::behaviour::iface=off".to_string()));
+        assert!(dev_directives.contains(&"uc_platform=debug".to_string()));
+
+        let prod_directives = build_filter_directives(false);
+        assert!(prod_directives.contains(&"info".to_string()));
+        assert!(prod_directives.contains(&"libp2p_mdns=info".to_string()));
+        assert!(prod_directives.contains(&"libp2p_mdns::behaviour::iface=off".to_string()));
+        assert!(prod_directives.contains(&"uc_platform=info".to_string()));
     }
 }

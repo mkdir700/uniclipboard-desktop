@@ -11,6 +11,7 @@ use libp2p::{
 use libp2p_stream as stream;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 use uc_core::network::{
@@ -181,9 +182,15 @@ impl From<()> for Libp2pBehaviourEvent {
     }
 }
 
+fn build_mdns_config() -> mdns::Config {
+    let mut config = mdns::Config::default();
+    config.query_interval = Duration::from_secs(5);
+    config
+}
+
 impl Libp2pBehaviour {
     fn new(local_peer_id: PeerId) -> Result<Self> {
-        let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)
+        let mdns = mdns::tokio::Behaviour::new(build_mdns_config(), local_peer_id)
             .map_err(|e| anyhow!("failed to create mdns behaviour: {e}"))?;
         let stream = stream::Behaviour::new();
         Ok(Self { mdns, stream })
@@ -1043,6 +1050,12 @@ mod tests {
     use tokio_util::compat::TokioAsyncReadCompatExt;
     use uc_core::network::{ConnectionPolicy, PairingState, ResolvedConnectionPolicy};
     use uc_core::ports::{ConnectionPolicyResolverError, ConnectionPolicyResolverPort};
+
+    #[test]
+    fn mdns_config_has_5s_query_interval() {
+        let config = build_mdns_config();
+        assert_eq!(config.query_interval, Duration::from_secs(5));
+    }
 
     #[test]
     fn cache_inserts_discovered_peer_with_addresses() {
