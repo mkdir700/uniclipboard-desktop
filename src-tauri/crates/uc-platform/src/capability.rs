@@ -45,23 +45,23 @@ pub fn detect_storage_capability() -> SecureStorageCapability {
     #[cfg(target_os = "linux")]
     {
         if is_wsl() {
-            log::warn!("⚠️  WSL environment detected. Using file-based KEK storage (Dev Mode)");
+            tracing::warn!("⚠️  WSL environment detected. Using file-based KEK storage (Dev Mode)");
             return SecureStorageCapability::FileBasedKeystore;
         }
 
         if has_desktop_environment() {
-            log::info!("✅ Linux desktop environment detected. Using system keyring.");
+            tracing::info!("✅ Linux desktop environment detected. Using system keyring.");
             return SecureStorageCapability::SystemKeyring;
         }
 
-        log::warn!("⚠️  No desktop environment detected. Using file-based KEK storage");
+        tracing::warn!("⚠️  No desktop environment detected. Using file-based KEK storage");
         SecureStorageCapability::FileBasedKeystore
     }
 
     // Unsupported platforms
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        log::error!("❌ Unsupported platform for secure storage");
+        tracing::error!("❌ Unsupported platform for secure storage");
         SecureStorageCapability::Unsupported
     }
 }
