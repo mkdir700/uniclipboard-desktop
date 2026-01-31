@@ -1173,6 +1173,10 @@ mod tests {
             "noop".to_string()
         }
 
+        async fn announce_device_name(&self, _device_name: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
         async fn open_pairing_session(
             &self,
             _peer_id: String,
