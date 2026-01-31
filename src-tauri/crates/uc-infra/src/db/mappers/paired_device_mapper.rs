@@ -15,6 +15,7 @@ impl InsertMapper<PairedDevice, NewPairedDeviceRow> for PairedDeviceRowMapper {
             identity_fingerprint: domain.identity_fingerprint.clone(),
             paired_at: domain.paired_at.timestamp(),
             last_seen_at: domain.last_seen_at.map(|dt| dt.timestamp()),
+            device_name: domain.device_name.clone(),
         })
     }
 }
@@ -33,6 +34,7 @@ impl RowMapper<PairedDeviceRow, PairedDevice> for PairedDeviceRowMapper {
             identity_fingerprint: row.identity_fingerprint.clone(),
             paired_at,
             last_seen_at,
+            device_name: row.device_name.clone(),
         })
     }
 }

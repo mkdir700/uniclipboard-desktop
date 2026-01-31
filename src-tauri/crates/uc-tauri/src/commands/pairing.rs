@@ -248,26 +248,44 @@ pub async fn get_paired_peers_with_status(
             .map(|device| {
                 let peer_id = device.peer_id.to_string();
                 let discovered_peer = discovered_map.get(&peer_id);
-                let device_name = discovered_peer
-                    .and_then(|peer| peer.device_name.clone())
-                    .unwrap_or_else(|| "Unknown Device".to_string());
-                let addresses = discovered_peer
-                    .map(|peer| peer.addresses.clone())
-                    .unwrap_or_default();
-                PairedPeer {
-                    peer_id,
-                    device_name,
-                    shared_secret: vec![],
-                    paired_at: device.paired_at.to_rfc3339(),
-                    last_seen: device.last_seen_at.map(|time| time.to_rfc3339()),
-                    last_known_addresses: addresses,
-                    connected: connected_map.contains_key(&device.peer_id.to_string()),
-                }
+                let connected = connected_map.contains_key(&peer_id);
+                map_paired_device_to_peer(device, discovered_peer, connected)
             })
             .collect())
     }
     .instrument(span)
     .await
+}
+
+fn map_paired_device_to_peer(
+    device: PairedDevice,
+    discovered_peer: Option<&DiscoveredPeer>,
+    connected: bool,
+) -> PairedPeer {
+    let peer_id = device.peer_id.to_string();
+
+    // Use persisted device_name as primary, fallback to discovered name, then to "Unknown Device"
+    let device_name = if !device.device_name.is_empty() {
+        device.device_name.clone()
+    } else {
+        discovered_peer
+            .and_then(|peer| peer.device_name.clone())
+            .unwrap_or_else(|| "Unknown Device".to_string())
+    };
+
+    let addresses = discovered_peer
+        .map(|peer| peer.addresses.clone())
+        .unwrap_or_default();
+
+    PairedPeer {
+        peer_id,
+        device_name,
+        shared_secret: vec![],
+        paired_at: device.paired_at.to_rfc3339(),
+        last_seen: device.last_seen_at.map(|time| time.to_rfc3339()),
+        last_known_addresses: addresses,
+        connected,
+    }
 }
 
 /// Update pairing state for a peer
@@ -484,4 +502,83 @@ fn connected_peer_ids(peers: &[ConnectedPeer]) -> HashMap<String, ConnectedPeer>
         .iter()
         .map(|peer| (peer.peer_id.clone(), peer.clone()))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uc_core::network::{DiscoveredPeer, PairedDevice, PairingState};
+    use uc_core::PeerId;
+
+    #[test]
+    fn test_map_paired_device_to_peer_uses_persisted_name() {
+        let device = PairedDevice {
+            peer_id: PeerId::from("peer-1"),
+            pairing_state: PairingState::Trusted,
+            identity_fingerprint: "fp".to_string(),
+            paired_at: Utc::now(),
+            last_seen_at: None,
+            device_name: "Persisted Name".to_string(),
+        };
+
+        let discovered = DiscoveredPeer {
+            peer_id: "peer-1".to_string(),
+            device_name: Some("Discovered Name".to_string()),
+            device_id: None,
+            addresses: vec!["127.0.0.1:1234".to_string()],
+            discovered_at: Utc::now(),
+            last_seen: Utc::now(),
+            is_paired: true,
+        };
+
+        let result = map_paired_device_to_peer(device, Some(&discovered), true);
+
+        assert_eq!(result.device_name, "Persisted Name");
+        assert_eq!(result.last_known_addresses, vec!["127.0.0.1:1234"]);
+        assert!(result.connected);
+    }
+
+    #[test]
+    fn test_map_paired_device_to_peer_falls_back_to_discovered_name() {
+        let device = PairedDevice {
+            peer_id: PeerId::from("peer-1"),
+            pairing_state: PairingState::Trusted,
+            identity_fingerprint: "fp".to_string(),
+            paired_at: Utc::now(),
+            last_seen_at: None,
+            device_name: "".to_string(),
+        };
+
+        let discovered = DiscoveredPeer {
+            peer_id: "peer-1".to_string(),
+            device_name: Some("Discovered Name".to_string()),
+            device_id: None,
+            addresses: vec![],
+            discovered_at: Utc::now(),
+            last_seen: Utc::now(),
+            is_paired: true,
+        };
+
+        let result = map_paired_device_to_peer(device, Some(&discovered), false);
+
+        assert_eq!(result.device_name, "Discovered Name");
+        assert!(!result.connected);
+    }
+
+    #[test]
+    fn test_map_paired_device_to_peer_falls_back_to_unknown_device() {
+        let device = PairedDevice {
+            peer_id: PeerId::from("peer-1"),
+            pairing_state: PairingState::Trusted,
+            identity_fingerprint: "fp".to_string(),
+            paired_at: Utc::now(),
+            last_seen_at: None,
+            device_name: "".to_string(),
+        };
+
+        let result = map_paired_device_to_peer(device, None, false);
+
+        assert_eq!(result.device_name, "Unknown Device");
+    }
 }

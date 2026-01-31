@@ -16,6 +16,7 @@ pub struct PairedDevice {
     pub identity_fingerprint: String,
     pub paired_at: DateTime<Utc>,
     pub last_seen_at: Option<DateTime<Utc>>,
+    pub device_name: String,
 }
 
 #[cfg(test)]
@@ -30,6 +31,7 @@ mod tests {
             identity_fingerprint: "fp".to_string(),
             paired_at: Utc::now(),
             last_seen_at: None,
+            device_name: "Test Device".to_string(),
         };
 
         let json = serde_json::to_string(&device).unwrap();
@@ -37,5 +39,6 @@ mod tests {
 
         assert_eq!(restored.pairing_state, PairingState::Trusted);
         assert_eq!(restored.identity_fingerprint, device.identity_fingerprint);
+        assert_eq!(restored.device_name, device.device_name);
     }
 }

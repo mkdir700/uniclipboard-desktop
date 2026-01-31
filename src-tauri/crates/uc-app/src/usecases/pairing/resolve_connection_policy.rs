@@ -95,6 +95,7 @@ mod tests {
                 identity_fingerprint: "fp".to_string(),
                 paired_at: chrono::Utc::now(),
                 last_seen_at: None,
+                device_name: "Mock Device".to_string(),
             }))
         }
 
