@@ -172,7 +172,11 @@ const OtherDevice: React.FC = () => {
         </div>
         <div className="flex flex-col items-center justify-center p-12 border border-dashed border-border/50 rounded-lg bg-muted/5 text-muted-foreground">
           <p className="text-sm">暂无已配对的设备</p>
-          <p className="text-xs mt-2">点击右上角的"添加设备"按钮开始配对</p>
+          <p className="text-xs mt-2 flex items-center gap-2">
+            <RefreshCw className="h-3 w-3 animate-spin" />
+            正在发现设备... (可能需要几秒钟)
+          </p>
+          <p className="text-xs mt-1">点击右上角的"添加设备"按钮开始配对</p>
         </div>
       </div>
     )
