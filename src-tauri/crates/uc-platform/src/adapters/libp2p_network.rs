@@ -4,14 +4,13 @@ use chrono::{DateTime, Utc};
 use libp2p::{
     futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt},
     identity, mdns, noise,
-    request_response::{self, ProtocolSupport},
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, StreamProtocol, SwarmBuilder,
 };
 use libp2p_stream as stream;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use tokio::sync::{mpsc, Mutex as AsyncMutex, RwLock};
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 use uc_core::network::{
     ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage, PairingState,
@@ -21,18 +20,11 @@ use uc_core::ports::{
     ConnectionPolicyResolverPort, IdentityStorePort, NetworkControlPort, NetworkPort,
 };
 
+use super::pairing_stream::service::{
+    PairingStreamConfig, PairingStreamError, PairingStreamService,
+};
 use crate::identity_store::load_or_create_identity;
-
-const PAIRING_PROTOCOL_ID: &str = ProtocolId::Pairing.as_str();
 const BUSINESS_PROTOCOL_ID: &str = ProtocolId::Business.as_str();
-
-#[derive(Debug)]
-enum PairingCommand {
-    SendMessage {
-        peer_id: uc_core::PeerId,
-        message: PairingMessage,
-    },
-}
 
 #[derive(Debug)]
 enum BusinessCommand {
@@ -98,26 +90,18 @@ impl PeerCaches {
 #[behaviour(out_event = "Libp2pBehaviourEvent")]
 struct Libp2pBehaviour {
     mdns: mdns::tokio::Behaviour,
-    pairing: request_response::json::Behaviour<PairingMessage, PairingMessage>,
     stream: stream::Behaviour,
 }
 
 #[derive(Debug)]
 enum Libp2pBehaviourEvent {
     Mdns(mdns::Event),
-    Pairing(request_response::Event<PairingMessage, PairingMessage>),
     Stream,
 }
 
 impl From<mdns::Event> for Libp2pBehaviourEvent {
     fn from(event: mdns::Event) -> Self {
         Self::Mdns(event)
-    }
-}
-
-impl From<request_response::Event<PairingMessage, PairingMessage>> for Libp2pBehaviourEvent {
-    fn from(event: request_response::Event<PairingMessage, PairingMessage>) -> Self {
-        Self::Pairing(event)
     }
 }
 
@@ -131,21 +115,8 @@ impl Libp2pBehaviour {
     fn new(local_peer_id: PeerId) -> Result<Self> {
         let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)
             .map_err(|e| anyhow!("failed to create mdns behaviour: {e}"))?;
-        let config = request_response::Config::default()
-            .with_request_timeout(std::time::Duration::from_secs(10));
-        let pairing = request_response::json::Behaviour::new(
-            [(
-                StreamProtocol::new(PAIRING_PROTOCOL_ID),
-                ProtocolSupport::Full,
-            )],
-            config,
-        );
         let stream = stream::Behaviour::new();
-        Ok(Self {
-            mdns,
-            pairing,
-            stream,
-        })
+        Ok(Self { mdns, stream })
     }
 }
 
@@ -157,15 +128,12 @@ pub struct Libp2pNetworkAdapter {
     event_rx: Mutex<Option<mpsc::Receiver<NetworkEvent>>>,
     clipboard_tx: mpsc::Sender<ClipboardMessage>,
     clipboard_rx: Mutex<Option<mpsc::Receiver<ClipboardMessage>>>,
-    pairing_tx: mpsc::Sender<PairingCommand>,
-    pairing_rx: Mutex<Option<mpsc::Receiver<PairingCommand>>>,
     business_tx: mpsc::Sender<BusinessCommand>,
     business_rx: Mutex<Option<mpsc::Receiver<BusinessCommand>>>,
     keypair: Mutex<Option<identity::Keypair>>,
     policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
     stream_control: Mutex<Option<stream::Control>>,
-    pairing_response_channels:
-        Arc<AsyncMutex<HashMap<String, request_response::ResponseChannel<PairingMessage>>>>,
+    pairing_service: Mutex<Option<PairingStreamService>>,
 }
 
 impl Libp2pNetworkAdapter {
@@ -184,9 +152,8 @@ impl Libp2pNetworkAdapter {
             .to_vec();
         let (event_tx, event_rx) = mpsc::channel(64);
         let (clipboard_tx, clipboard_rx) = mpsc::channel(64);
-        let (pairing_tx, pairing_rx) = mpsc::channel(64);
         let (business_tx, business_rx) = mpsc::channel(64);
-        let pairing_response_channels = Arc::new(AsyncMutex::new(HashMap::new()));
+        let pairing_service = Mutex::new(None);
 
         Ok(Self {
             local_peer_id,
@@ -196,14 +163,12 @@ impl Libp2pNetworkAdapter {
             event_rx: Mutex::new(Some(event_rx)),
             clipboard_tx,
             clipboard_rx: Mutex::new(Some(clipboard_rx)),
-            pairing_tx,
-            pairing_rx: Mutex::new(Some(pairing_rx)),
             business_tx,
             business_rx: Mutex::new(Some(business_rx)),
             keypair: Mutex::new(Some(keypair)),
             policy_resolver,
             stream_control: Mutex::new(None),
-            pairing_response_channels,
+            pairing_service,
         })
     }
 
@@ -230,11 +195,26 @@ impl Libp2pNetworkAdapter {
             .build();
 
         let stream_control = swarm.behaviour().stream.new_control();
-        let mut guard = self
-            .stream_control
-            .lock()
-            .map_err(|_| anyhow!("stream control mutex poisoned"))?;
-        *guard = Some(stream_control.clone());
+        let pairing_service = PairingStreamService::new(
+            stream_control.clone(),
+            self.event_tx.clone(),
+            PairingStreamConfig::default(),
+        );
+        pairing_service.spawn_accept_loop();
+        {
+            let mut guard = self
+                .stream_control
+                .lock()
+                .map_err(|_| anyhow!("stream control mutex poisoned"))?;
+            *guard = Some(stream_control.clone());
+        }
+        {
+            let mut guard = self
+                .pairing_service
+                .lock()
+                .map_err(|_| anyhow!("pairing service mutex poisoned"))?;
+            *guard = Some(pairing_service);
+        }
 
         spawn_business_stream_echo(
             stream_control.clone(),
@@ -253,20 +233,9 @@ impl Libp2pNetworkAdapter {
         let caches = self.caches.clone();
         let event_tx = self.event_tx.clone();
         let policy_resolver = self.policy_resolver.clone();
-        let pairing_response_channels = self.pairing_response_channels.clone();
-        let pairing_rx = Self::take_receiver(&self.pairing_rx, "pairing command")?;
         let business_rx = Self::take_receiver(&self.business_rx, "business command")?;
         tokio::spawn(async move {
-            run_swarm(
-                swarm,
-                caches,
-                event_tx,
-                policy_resolver,
-                pairing_response_channels,
-                pairing_rx,
-                business_rx,
-            )
-            .await;
+            run_swarm(swarm, caches, event_tx, policy_resolver, business_rx).await;
         });
         Ok(())
     }
@@ -333,18 +302,64 @@ impl NetworkPort for Libp2pNetworkAdapter {
         self.local_peer_id.clone()
     }
 
-    async fn send_pairing_message(&self, peer_id: String, message: PairingMessage) -> Result<()> {
-        let peer = uc_core::PeerId::from(peer_id.clone());
-
-        self.pairing_tx
-            .send(PairingCommand::SendMessage {
-                peer_id: peer,
-                message,
-            })
+    async fn open_pairing_session(&self, peer_id: String, session_id: String) -> Result<()> {
+        let service = {
+            let guard = self
+                .pairing_service
+                .lock()
+                .map_err(|_| anyhow!("pairing service mutex poisoned"))?;
+            guard
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| anyhow!("pairing service not initialized"))?
+        };
+        match service
+            .open_pairing_session(peer_id.clone(), session_id)
             .await
-            .map_err(|err| anyhow!("failed to queue pairing message: {err}"))?;
+        {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                handle_pairing_open_error(&self.policy_resolver, &self.event_tx, &peer_id, &err)
+                    .await;
+                Err(err)
+            }
+        }
+    }
 
-        Ok(())
+    async fn send_pairing_on_session(
+        &self,
+        session_id: String,
+        message: PairingMessage,
+    ) -> Result<()> {
+        let service = {
+            let guard = self
+                .pairing_service
+                .lock()
+                .map_err(|_| anyhow!("pairing service mutex poisoned"))?;
+            guard
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| anyhow!("pairing service not initialized"))?
+        };
+        service.send_pairing_on_session(session_id, message).await
+    }
+
+    async fn close_pairing_session(
+        &self,
+        session_id: String,
+        reason: Option<String>,
+    ) -> Result<()> {
+        let service = {
+            let guard = self
+                .pairing_service
+                .lock()
+                .map_err(|_| anyhow!("pairing service mutex poisoned"))?;
+            guard
+                .as_ref()
+                .cloned()
+                .ok_or_else(|| anyhow!("pairing service not initialized"))?
+        };
+        service.close_pairing_session(session_id, reason).await
     }
 
     async fn unpair_device(&self, _peer_id: String) -> Result<()> {
@@ -411,52 +426,10 @@ fn spawn_business_stream_echo(
     });
 }
 
-async fn handle_pairing_event(
-    _swarm: &mut Swarm<Libp2pBehaviour>,
-    event: request_response::Event<PairingMessage, PairingMessage>,
-    response_channels: &Arc<
-        AsyncMutex<HashMap<String, request_response::ResponseChannel<PairingMessage>>>,
-    >,
-    event_tx: &mpsc::Sender<NetworkEvent>,
-) {
-    if let request_response::Event::Message { peer, message, .. } = event {
-        match message {
-            request_response::Message::Request {
-                request, channel, ..
-            } => {
-                let session_id = request.session_id().to_string();
-                {
-                    let mut channels = response_channels.lock().await;
-                    channels.insert(session_id.clone(), channel);
-                }
-                if let Err(err) = event_tx
-                    .send(NetworkEvent::PairingMessageReceived {
-                        peer_id: peer.to_string(),
-                        message: request,
-                    })
-                    .await
-                {
-                    warn!("failed to emit pairing message: {err}");
-                }
-            }
-            request_response::Message::Response { response, .. } => {
-                if let Err(err) = event_tx
-                    .send(NetworkEvent::PairingMessageReceived {
-                        peer_id: peer.to_string(),
-                        message: response,
-                    })
-                    .await
-                {
-                    warn!("failed to emit pairing response: {err}");
-                }
-            }
-        }
-    }
-}
-
 async fn emit_protocol_denied(
     event_tx: &mpsc::Sender<NetworkEvent>,
     peer_id: String,
+    protocol_id: &str,
     pairing_state: PairingState,
     direction: ProtocolDirection,
     reason: ProtocolDenyReason,
@@ -464,7 +437,7 @@ async fn emit_protocol_denied(
     if let Err(err) = event_tx
         .send(NetworkEvent::ProtocolDenied {
             peer_id,
-            protocol_id: BUSINESS_PROTOCOL_ID.to_string(),
+            protocol_id: protocol_id.to_string(),
             pairing_state,
             direction,
             reason,
@@ -472,6 +445,35 @@ async fn emit_protocol_denied(
         .await
     {
         warn!("failed to emit protocol denied event: {err}");
+    }
+}
+
+async fn handle_pairing_open_error(
+    policy_resolver: &Arc<dyn ConnectionPolicyResolverPort>,
+    event_tx: &mpsc::Sender<NetworkEvent>,
+    peer_id: &str,
+    error: &anyhow::Error,
+) {
+    if let Some(pairing_error) = error.downcast_ref::<PairingStreamError>() {
+        if matches!(pairing_error, PairingStreamError::UnsupportedProtocol) {
+            let peer = uc_core::PeerId::from(peer_id);
+            let pairing_state = match policy_resolver.resolve_for_peer(&peer).await {
+                Ok(resolved) => resolved.pairing_state,
+                Err(err) => {
+                    warn!("policy resolver failed for pairing protocol peer={peer_id}: {err}");
+                    PairingState::Pending
+                }
+            };
+            emit_protocol_denied(
+                event_tx,
+                peer_id.to_string(),
+                ProtocolId::Pairing.as_str(),
+                pairing_state,
+                ProtocolDirection::Outbound,
+                ProtocolDenyReason::NotSupported,
+            )
+            .await;
+        }
     }
 }
 
@@ -490,6 +492,7 @@ async fn check_business_allowed(
                 emit_protocol_denied(
                     event_tx,
                     peer_id.to_string(),
+                    BUSINESS_PROTOCOL_ID,
                     resolved.pairing_state,
                     direction,
                     ProtocolDenyReason::NotTrusted,
@@ -502,6 +505,7 @@ async fn check_business_allowed(
             emit_protocol_denied(
                 event_tx,
                 peer_id.to_string(),
+                BUSINESS_PROTOCOL_ID,
                 PairingState::Pending,
                 direction,
                 ProtocolDenyReason::RepoError,
@@ -517,10 +521,6 @@ async fn run_swarm(
     caches: Arc<RwLock<PeerCaches>>,
     event_tx: mpsc::Sender<NetworkEvent>,
     policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
-    pairing_response_channels: Arc<
-        AsyncMutex<HashMap<String, request_response::ResponseChannel<PairingMessage>>>,
-    >,
-    mut pairing_rx: mpsc::Receiver<PairingCommand>,
     mut business_rx: mpsc::Receiver<BusinessCommand>,
 ) {
     info!("libp2p mDNS swarm started");
@@ -553,15 +553,6 @@ async fn run_swarm(
                             }
                         }
                     },
-                    SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) => {
-                        handle_pairing_event(
-                            &mut swarm,
-                            event,
-                            &pairing_response_channels,
-                            &event_tx,
-                        )
-                        .await;
-                    }
                     SwarmEvent::Behaviour(Libp2pBehaviourEvent::Stream) => {}
                     SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                         let peer_id = peer_id.to_string();
@@ -616,33 +607,6 @@ async fn run_swarm(
                         info!("libp2p listening on {address}");
                     }
                     _ => {}
-                }
-            }
-            Some(command) = pairing_rx.recv() => {
-                match command {
-                    PairingCommand::SendMessage { peer_id, message } => {
-                        let session_id = message.session_id().to_string();
-                        let channel = {
-                            let mut channels = pairing_response_channels.lock().await;
-                            channels.remove(&session_id)
-                        };
-
-                        if let Some(channel) = channel {
-                            if let Err(err) = swarm.behaviour_mut().pairing.send_response(channel, message) {
-                                warn!("failed to send pairing response: {err:?}");
-                            }
-                            continue;
-                        }
-
-                        let peer = match peer_id.as_str().parse::<PeerId>() {
-                            Ok(peer) => peer,
-                            Err(err) => {
-                                warn!("invalid peer id for pairing message: {err}");
-                                continue;
-                            }
-                        };
-                        swarm.behaviour_mut().pairing.send_request(&peer, message);
-                    }
                 }
             }
             Some(command) = business_rx.recv() => {
@@ -791,14 +755,11 @@ mod tests {
     use super::*;
     use libp2p::futures::{AsyncReadExt, AsyncWriteExt};
     use libp2p::identity;
-    use libp2p::multiaddr::Protocol;
     use libp2p::Multiaddr;
     use std::sync::{Arc, Mutex};
     use tokio::time::{sleep, timeout, Duration};
     use tokio_util::compat::TokioAsyncReadCompatExt;
-    use uc_core::network::PairingReject;
     use uc_core::network::{ConnectionPolicy, PairingState, ResolvedConnectionPolicy};
-    use uc_core::network::{PairingChallenge, PairingRequest};
     use uc_core::ports::{ConnectionPolicyResolverError, ConnectionPolicyResolverPort};
 
     #[test]
@@ -996,266 +957,11 @@ mod tests {
         }
     }
 
-    fn build_swarm(keypair: identity::Keypair) -> Swarm<Libp2pBehaviour> {
-        let local_peer_id = PeerId::from(keypair.public());
-        let behaviour = Libp2pBehaviour::new(local_peer_id).expect("behaviour");
-        SwarmBuilder::with_existing_identity(keypair)
-            .with_tokio()
-            .with_tcp(
-                tcp::Config::default().nodelay(true),
-                noise::Config::new,
-                yamux::Config::default,
-            )
-            .expect("tcp config")
-            .with_behaviour(move |_| behaviour)
-            .expect("attach behaviour")
-            .build()
-    }
-
-    async fn listen_on_random(swarm: &mut Swarm<Libp2pBehaviour>) -> Multiaddr {
-        swarm
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().expect("listen addr"))
-            .expect("listen on addr");
-        loop {
-            match swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } => return address,
-                _ => {}
-            }
-        }
-    }
-
     #[tokio::test]
     async fn adapter_constructs_with_policy_resolver() {
         let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(FakeResolver);
         let adapter = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()), resolver);
         assert!(adapter.is_ok());
-    }
-
-    #[test]
-    fn libp2p_request_response_feature_available() {
-        let _ = libp2p::request_response::Config::default();
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn pairing_request_emits_event() {
-        let keypair_a = identity::Keypair::generate_ed25519();
-        let keypair_b = identity::Keypair::generate_ed25519();
-        let peer_b = PeerId::from(keypair_b.public());
-
-        let mut swarm_a = build_swarm(keypair_a);
-        let mut swarm_b = build_swarm(keypair_b);
-
-        let addr_b = listen_on_random(&mut swarm_b).await;
-        let _addr_a = listen_on_random(&mut swarm_a).await;
-        let dial_addr = addr_b.with(Protocol::P2p(peer_b));
-        swarm_a.dial(dial_addr).expect("dial b");
-
-        let request = PairingMessage::Request(PairingRequest {
-            session_id: "session-1".to_string(),
-            device_name: "device-a".to_string(),
-            device_id: "device-a".to_string(),
-            peer_id: "peer-a".to_string(),
-            identity_pubkey: vec![1; 32],
-            nonce: vec![2; 16],
-        });
-        swarm_a
-            .behaviour_mut()
-            .pairing
-            .send_request(&peer_b, request);
-
-        let response_channels = Arc::new(AsyncMutex::new(HashMap::new()));
-        let (event_tx, mut event_rx) = mpsc::channel(1);
-        let received = timeout(Duration::from_secs(10), async {
-            loop {
-                tokio::select! {
-                    event = swarm_a.select_next_some() => {
-                        let _ = event;
-                    }
-                    event = swarm_b.select_next_some() => {
-                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
-                            handle_pairing_event(
-                                &mut swarm_b,
-                                event,
-                                &response_channels,
-                                &event_tx,
-                            )
-                            .await;
-                        }
-                    }
-                    event = event_rx.recv() => {
-                        if let Some(NetworkEvent::PairingMessageReceived { message, .. }) = event {
-                            return message;
-                        }
-                    }
-                }
-            }
-        })
-        .await
-        .expect("event timeout");
-
-        assert!(matches!(received, PairingMessage::Request(_)));
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn pairing_response_uses_stored_channel() {
-        let keypair_a = identity::Keypair::generate_ed25519();
-        let keypair_b = identity::Keypair::generate_ed25519();
-        let peer_b = PeerId::from(keypair_b.public());
-
-        let mut swarm_a = build_swarm(keypair_a);
-        let mut swarm_b = build_swarm(keypair_b);
-
-        let addr_b = listen_on_random(&mut swarm_b).await;
-        let _addr_a = listen_on_random(&mut swarm_a).await;
-        let dial_addr = addr_b.with(Protocol::P2p(peer_b));
-        swarm_a.dial(dial_addr).expect("dial b");
-
-        let request = PairingMessage::Request(PairingRequest {
-            session_id: "session-2".to_string(),
-            device_name: "device-a".to_string(),
-            device_id: "device-a".to_string(),
-            peer_id: "peer-a".to_string(),
-            identity_pubkey: vec![1; 32],
-            nonce: vec![2; 16],
-        });
-        swarm_a
-            .behaviour_mut()
-            .pairing
-            .send_request(&peer_b, request);
-
-        let response_channels = Arc::new(AsyncMutex::new(HashMap::new()));
-        let (event_tx, mut event_rx) = mpsc::channel(1);
-        let response = timeout(Duration::from_secs(10), async {
-            let challenge = PairingMessage::Challenge(PairingChallenge {
-                session_id: "session-2".to_string(),
-                pin: "123456".to_string(),
-                device_name: "device-b".to_string(),
-                device_id: "device-b".to_string(),
-                identity_pubkey: vec![3; 32],
-                nonce: vec![4; 16],
-            });
-
-            loop {
-                tokio::select! {
-                    event = swarm_a.select_next_some() => {
-                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
-                            if let request_response::Event::Message { message, .. } = event {
-                                if let request_response::Message::Response { response, .. } = message {
-                                    return response;
-                                }
-                            }
-                        }
-                    }
-                    event = swarm_b.select_next_some() => {
-                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
-                            handle_pairing_event(
-                                &mut swarm_b,
-                                event,
-                                &response_channels,
-                                &event_tx,
-                            )
-                            .await;
-                        }
-                    }
-                    event = event_rx.recv() => {
-                        if let Some(NetworkEvent::PairingMessageReceived { message, .. }) = event {
-                            if matches!(message, PairingMessage::Request(_)) {
-                                let channel = {
-                                    let mut channels = response_channels.lock().await;
-                                    channels.remove("session-2")
-                                };
-                                if let Some(channel) = channel {
-                                    let _ = swarm_b.behaviour_mut().pairing.send_response(channel, challenge.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        })
-        .await
-        .expect("response timeout");
-
-        assert!(matches!(response, PairingMessage::Challenge(_)));
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn pairing_reject_uses_stored_channel() {
-        let keypair_a = identity::Keypair::generate_ed25519();
-        let keypair_b = identity::Keypair::generate_ed25519();
-        let peer_b = PeerId::from(keypair_b.public());
-
-        let mut swarm_a = build_swarm(keypair_a);
-        let mut swarm_b = build_swarm(keypair_b);
-
-        let addr_b = listen_on_random(&mut swarm_b).await;
-        let _addr_a = listen_on_random(&mut swarm_a).await;
-        let dial_addr = addr_b.with(Protocol::P2p(peer_b));
-        swarm_a.dial(dial_addr).expect("dial b");
-
-        let request = PairingMessage::Request(PairingRequest {
-            session_id: "session-3".to_string(),
-            device_name: "device-a".to_string(),
-            device_id: "device-a".to_string(),
-            peer_id: "peer-a".to_string(),
-            identity_pubkey: vec![1; 32],
-            nonce: vec![2; 16],
-        });
-        swarm_a
-            .behaviour_mut()
-            .pairing
-            .send_request(&peer_b, request);
-
-        let response_channels = Arc::new(AsyncMutex::new(HashMap::new()));
-        let (event_tx, mut event_rx) = mpsc::channel(1);
-        let response = timeout(Duration::from_secs(10), async {
-            let reject = PairingMessage::Reject(PairingReject {
-                session_id: "session-3".to_string(),
-                reason: Some("user_reject".to_string()),
-            });
-
-            loop {
-                tokio::select! {
-                    event = swarm_a.select_next_some() => {
-                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
-                            if let request_response::Event::Message { message, .. } = event {
-                                if let request_response::Message::Response { response, .. } = message {
-                                    return response;
-                                }
-                            }
-                        }
-                    }
-                    event = swarm_b.select_next_some() => {
-                        if let SwarmEvent::Behaviour(Libp2pBehaviourEvent::Pairing(event)) = event {
-                            handle_pairing_event(
-                                &mut swarm_b,
-                                event,
-                                &response_channels,
-                                &event_tx,
-                            )
-                            .await;
-                        }
-                    }
-                    event = event_rx.recv() => {
-                        if let Some(NetworkEvent::PairingMessageReceived { message, .. }) = event {
-                            if matches!(message, PairingMessage::Request(_)) {
-                                let channel = {
-                                    let mut channels = response_channels.lock().await;
-                                    channels.remove("session-3")
-                                };
-                                if let Some(channel) = channel {
-                                    let _ = swarm_b.behaviour_mut().pairing.send_response(channel, reject.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        })
-        .await
-        .expect("response timeout");
-
-        assert!(matches!(response, PairingMessage::Reject(_)));
     }
 
     #[tokio::test]
@@ -1295,8 +1001,12 @@ mod tests {
         let event = event_rx.recv().await.expect("protocol denied event");
         match event {
             NetworkEvent::ProtocolDenied {
-                direction, reason, ..
+                protocol_id,
+                direction,
+                reason,
+                ..
             } => {
+                assert_eq!(protocol_id, BUSINESS_PROTOCOL_ID);
                 assert_eq!(direction, ProtocolDirection::Outbound);
                 assert_eq!(reason, ProtocolDenyReason::NotTrusted);
             }
@@ -1318,8 +1028,12 @@ mod tests {
         let event = event_rx.recv().await.expect("protocol denied event");
         match event {
             NetworkEvent::ProtocolDenied {
-                direction, reason, ..
+                protocol_id,
+                direction,
+                reason,
+                ..
             } => {
+                assert_eq!(protocol_id, BUSINESS_PROTOCOL_ID);
                 assert_eq!(direction, ProtocolDirection::Inbound);
                 assert_eq!(reason, ProtocolDenyReason::NotTrusted);
             }
@@ -1328,37 +1042,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_pairing_message_queues_command() {
-        let adapter = Libp2pNetworkAdapter::new(
-            Arc::new(TestIdentityStore::default()),
-            Arc::new(FakeResolver),
-        )
-        .expect("create adapter");
+    async fn legacy_pairing_denied_emits_protocol_id() {
+        let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(FakeResolver);
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+        let error = anyhow::Error::new(PairingStreamError::UnsupportedProtocol);
 
-        let message = PairingMessage::Request(PairingRequest {
-            session_id: "session-1".to_string(),
-            device_name: "device".to_string(),
-            device_id: "device".to_string(),
-            peer_id: "peer-local".to_string(),
-            identity_pubkey: vec![1; 32],
-            nonce: vec![2; 16],
-        });
-        adapter
-            .send_pairing_message("peer-1".to_string(), message.clone())
-            .await
-            .expect("send pairing message");
+        handle_pairing_open_error(&resolver, &event_tx, "peer-legacy", &error).await;
 
-        let mut rx = Libp2pNetworkAdapter::take_receiver(&adapter.pairing_rx, "pairing")
-            .expect("pairing receiver");
-        let command = rx.recv().await.expect("pairing command");
-        match command {
-            PairingCommand::SendMessage {
+        let event = event_rx.recv().await.expect("protocol denied event");
+        match event {
+            NetworkEvent::ProtocolDenied {
                 peer_id,
-                message: queued,
+                protocol_id,
+                pairing_state,
+                direction,
+                reason,
             } => {
-                assert_eq!(peer_id.as_str(), "peer-1");
-                assert_eq!(queued.session_id(), "session-1");
+                assert_eq!(peer_id, "peer-legacy");
+                assert_eq!(protocol_id, ProtocolId::Pairing.as_str());
+                assert_eq!(pairing_state, PairingState::Trusted);
+                assert_eq!(direction, ProtocolDirection::Outbound);
+                assert_eq!(reason, ProtocolDenyReason::NotSupported);
             }
+            _ => panic!("expected ProtocolDenied"),
         }
     }
 

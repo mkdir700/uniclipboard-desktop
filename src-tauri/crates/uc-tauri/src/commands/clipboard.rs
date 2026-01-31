@@ -125,7 +125,12 @@ mod restore_tests {
 /// # use std::sync::Arc;
 /// # async fn example(runtime: tauri::State<'_, Arc<uc_tauri::bootstrap::AppRuntime>>) {
 /// // Tauri provides `State<Arc<AppRuntime>>` when invoking commands from the frontend.
-/// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(runtime, "entry-id-123".to_string(), None).await;
+/// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(
+///     runtime,
+///     "entry-id-123".to_string(),
+///     None,
+/// )
+/// .await;
 /// match result {
 ///     Ok(()) => println!("Deleted"),
 ///     Err(e) => eprintln!("Delete failed: {}", e),
@@ -812,10 +817,26 @@ mod tests {
             "noop".to_string()
         }
 
-        async fn send_pairing_message(
+        async fn open_pairing_session(
             &self,
             _peer_id: String,
+            _session_id: String,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_on_session(
+            &self,
+            _session_id: String,
             _message: uc_core::network::PairingMessage,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn close_pairing_session(
+            &self,
+            _session_id: String,
+            _reason: Option<String>,
         ) -> anyhow::Result<()> {
             Ok(())
         }

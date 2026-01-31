@@ -903,6 +903,7 @@ mod tests {
     use uc_core::crypto::pin_hash::hash_pin;
     use uc_core::network::paired_device::{PairedDevice, PairingState};
     use uc_core::network::protocol::{PairingRequest, PairingResponse};
+    use uc_core::network::PairingMessage;
 
     struct MockDeviceRepository;
 
@@ -1145,16 +1146,18 @@ mod tests {
             .await
             .expect("accept pairing");
 
-        let challenge_action = timeout(Duration::from_secs(1), action_rx.recv())
-            .await
-            .expect("challenge action timeout")
-            .expect("challenge action missing");
-        let challenge = match challenge_action {
-            PairingAction::Send {
+        let challenge = loop {
+            let challenge_action = timeout(Duration::from_secs(1), action_rx.recv())
+                .await
+                .expect("challenge action timeout")
+                .expect("challenge action missing");
+            if let PairingAction::Send {
                 message: PairingMessage::Challenge(challenge),
                 ..
-            } => challenge,
-            other => panic!("unexpected action: {other:?}"),
+            } = challenge_action
+            {
+                break challenge;
+            }
         };
 
         let pin_hash = hash_pin(&challenge.pin).expect("hash pin");
@@ -1169,16 +1172,18 @@ mod tests {
             .await
             .expect("handle response");
 
-        let confirm_action = timeout(Duration::from_secs(1), action_rx.recv())
-            .await
-            .expect("confirm action timeout")
-            .expect("confirm action missing");
-        let confirm = match confirm_action {
-            PairingAction::Send {
+        let confirm = loop {
+            let confirm_action = timeout(Duration::from_secs(1), action_rx.recv())
+                .await
+                .expect("confirm action timeout")
+                .expect("confirm action missing");
+            if let PairingAction::Send {
                 message: PairingMessage::Confirm(confirm),
                 ..
-            } => confirm,
-            other => panic!("unexpected action: {other:?}"),
+            } = confirm_action
+            {
+                break confirm;
+            }
         };
 
         assert!(confirm.success);

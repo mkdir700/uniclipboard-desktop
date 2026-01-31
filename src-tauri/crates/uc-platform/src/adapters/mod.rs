@@ -20,6 +20,7 @@ pub mod encryption;
 pub mod in_memory_watcher_control;
 pub mod libp2p_network;
 pub mod network;
+pub mod pairing_stream;
 pub mod ui;
 
 pub use autostart::PlaceholderAutostartPort;

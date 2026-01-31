@@ -89,11 +89,17 @@ const DevicesPage: React.FC = () => {
         }
 
         if (event.kind === 'complete') {
+          // 只处理接收方的成功事件
+          if (!pendingP2PRequest) {
+            console.log('[DevicesPage] Ignoring complete event (not responder)', event.sessionId)
+            return
+          }
           if (lastResultSessionRef.current === event.sessionId) {
+            console.log('[DevicesPage] Ignoring duplicate complete event', event.sessionId)
             return
           }
           lastResultSessionRef.current = event.sessionId
-          console.log('P2P pairing completed')
+          console.log('[DevicesPage] P2P pairing completed (responder)')
           setPinPhase('success')
           setShowPinDialog(true)
           setAcceptingP2PRequest(false)
@@ -111,17 +117,26 @@ const DevicesPage: React.FC = () => {
         }
 
         if (event.kind === 'failed') {
+          // 只处理接收方的失败事件
+          if (!pendingP2PRequest) {
+            console.log('[DevicesPage] Ignoring failed event (not responder)', event.sessionId)
+            return
+          }
           if (lastResultSessionRef.current === event.sessionId) {
+            console.log('[DevicesPage] Ignoring duplicate failed event', event.sessionId)
             return
           }
           lastResultSessionRef.current = event.sessionId
+          console.error('[DevicesPage] P2P pairing failed (responder):', event)
+          setShowPinDialog(false)
+          setPendingP2PRequest(null)
+          setAcceptingP2PRequest(false)
+          setPinPhase('display')
+          toast.error(t('pairing.failed.title'), {
+            description: event.error ?? '',
+          })
+          return
         }
-
-        console.error('P2P pairing failed:', event)
-        setShowPinDialog(false)
-        setPendingP2PRequest(null)
-        setAcceptingP2PRequest(false)
-        setPinPhase('display')
         toast.error(t('pairing.failed.title'), {
           description: event.error || '',
         })

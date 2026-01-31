@@ -1,6 +1,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolId {
     Pairing,
+    PairingStream,
     Business,
 }
 
@@ -8,7 +9,8 @@ impl ProtocolId {
     pub const fn as_str(&self) -> &'static str {
         match self {
             ProtocolId::Pairing => "/uc-pairing/1.0.0",
-            ProtocolId::Business => "/uc-business/1.0.0",
+            ProtocolId::PairingStream => "/uniclipboard/pairing-stream/1.0.0",
+            ProtocolId::Business => "/uniclipboard/business/1.0.0",
         }
     }
 }
@@ -20,6 +22,13 @@ mod tests {
     #[test]
     fn protocol_id_strings_match_expected_values() {
         assert_eq!(ProtocolId::Pairing.as_str(), "/uc-pairing/1.0.0");
-        assert_eq!(ProtocolId::Business.as_str(), "/uc-business/1.0.0");
+        assert_eq!(
+            ProtocolId::PairingStream.as_str(),
+            "/uniclipboard/pairing-stream/1.0.0"
+        );
+        assert_eq!(
+            ProtocolId::Business.as_str(),
+            "/uniclipboard/business/1.0.0"
+        );
     }
 }
