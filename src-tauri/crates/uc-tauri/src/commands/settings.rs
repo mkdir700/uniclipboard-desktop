@@ -1,12 +1,12 @@
 //! Settings-related Tauri commands
 //! 设置相关的 Tauri 命令
 
-use crate::bootstrap::AppRuntime;
+use crate::bootstrap::{resolve_pairing_device_name, AppRuntime};
 use crate::commands::record_trace_fields;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
-use tracing::{info_span, Instrument};
+use tracing::{info_span, warn, Instrument};
 use uc_core::ports::observability::TraceMetadata;
 use uc_core::settings::model::Settings;
 
@@ -85,11 +85,30 @@ pub async fn update_settings(
             format!("Failed to parse settings: {}", e)
         })?;
 
+        let old_settings = runtime
+            .usecases()
+            .get_settings()
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to load existing settings");
+                e.to_string()
+            })?;
+        let device_name_changed =
+            old_settings.general.device_name != parsed_settings.general.device_name;
+
         let uc = runtime.usecases().update_settings();
         uc.execute(parsed_settings).await.map_err(|e| {
             tracing::error!(error = %e, "Failed to update settings");
             e.to_string()
         })?;
+
+        if device_name_changed {
+            let device_name = resolve_pairing_device_name(runtime.deps.settings.clone()).await;
+            if let Err(err) = runtime.deps.network.announce_device_name(device_name).await {
+                warn!(error = %err, "Failed to announce device name after settings update");
+            }
+        }
 
         tracing::info!("Settings updated successfully");
         Ok(())
