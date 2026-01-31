@@ -81,6 +81,7 @@ export default function PairingDialog({ open, onClose, onPairingSuccess }: Pairi
 
         if (event.kind === 'complete') {
           console.log('[PairingDialog] Complete event:', event)
+          console.trace('[PairingDialog] Toast success triggered from:')
           setStep('success')
           setIsPinVerifying(false)
           toast.success(t('pairing.success.title'))

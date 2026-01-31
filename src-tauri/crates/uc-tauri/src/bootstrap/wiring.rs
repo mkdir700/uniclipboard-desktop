@@ -1166,8 +1166,28 @@ async fn run_pairing_action_loop<R: Runtime>(
     while let Some(action) = action_rx.recv().await {
         match action {
             PairingAction::Send { peer_id, message } => {
-                if let Err(err) = network.send_pairing_message(peer_id.clone(), message).await {
-                    error!(error = %err, peer_id = %peer_id, "Failed to send pairing message");
+                let session_id = message.session_id().to_string();
+                if let Err(err) = network
+                    .open_pairing_session(peer_id.clone(), session_id.clone())
+                    .await
+                {
+                    warn!(
+                        error = %err,
+                        peer_id = %peer_id,
+                        session_id = %session_id,
+                        "Failed to open pairing session"
+                    );
+                }
+                if let Err(err) = network
+                    .send_pairing_on_session(session_id.clone(), message)
+                    .await
+                {
+                    error!(
+                        error = %err,
+                        peer_id = %peer_id,
+                        session_id = %session_id,
+                        "Failed to send pairing message"
+                    );
                 }
             }
             PairingAction::ShowVerification {
@@ -1209,6 +1229,16 @@ async fn run_pairing_action_loop<R: Runtime>(
                 success,
                 error,
             } => {
+                if let Err(err) = network
+                    .close_pairing_session(session_id.clone(), error.clone())
+                    .await
+                {
+                    warn!(
+                        error = %err,
+                        session_id = %session_id,
+                        "Failed to close pairing session"
+                    );
+                }
                 if let Some(app) = app_handle.as_ref() {
                     if success {
                         let peer_info = orchestrator.get_session_peer(&session_id).await;
@@ -1307,10 +1337,26 @@ mod tests {
             "local-peer".to_string()
         }
 
-        async fn send_pairing_message(
+        async fn open_pairing_session(
             &self,
             _peer_id: String,
+            _session_id: String,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_on_session(
+            &self,
+            _session_id: String,
             _message: PairingMessage,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn close_pairing_session(
+            &self,
+            _session_id: String,
+            _reason: Option<String>,
         ) -> anyhow::Result<()> {
             Ok(())
         }

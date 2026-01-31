@@ -72,10 +72,26 @@ mod tests {
             "peer-local".to_string()
         }
 
-        async fn send_pairing_message(
+        async fn open_pairing_session(
             &self,
             _peer_id: String,
+            _session_id: String,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_on_session(
+            &self,
+            _session_id: String,
             _message: PairingMessage,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn close_pairing_session(
+            &self,
+            _session_id: String,
+            _reason: Option<String>,
         ) -> anyhow::Result<()> {
             Ok(())
         }

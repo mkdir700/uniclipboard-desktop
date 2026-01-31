@@ -69,9 +69,29 @@ impl NetworkPort for PlaceholderNetworkPort {
 
     // === Pairing operations ===
 
-    async fn send_pairing_message(&self, _peer_id: String, _message: PairingMessage) -> Result<()> {
+    async fn open_pairing_session(&self, _peer_id: String, _session_id: String) -> Result<()> {
         Err(anyhow::anyhow!(
-            "NetworkPort::send_pairing_message not implemented yet"
+            "NetworkPort::open_pairing_session not implemented yet"
+        ))
+    }
+
+    async fn send_pairing_on_session(
+        &self,
+        _session_id: String,
+        _message: PairingMessage,
+    ) -> Result<()> {
+        Err(anyhow::anyhow!(
+            "NetworkPort::send_pairing_on_session not implemented yet"
+        ))
+    }
+
+    async fn close_pairing_session(
+        &self,
+        _session_id: String,
+        _reason: Option<String>,
+    ) -> Result<()> {
+        Err(anyhow::anyhow!(
+            "NetworkPort::close_pairing_session not implemented yet"
         ))
     }
 

@@ -22,6 +22,7 @@ pub enum ProtocolDenyReason {
     NotTrusted,
     Blocked,
     RepoError,
+    NotSupported,
 }
 
 /// A peer discovered via mDNS
@@ -165,7 +166,7 @@ mod tests {
 
         let event = NetworkEvent::ProtocolDenied {
             peer_id: "peer-1".to_string(),
-            protocol_id: "/uc-business/1.0.0".to_string(),
+            protocol_id: "/uniclipboard/business/1.0.0".to_string(),
             pairing_state: PairingState::Pending,
             direction: ProtocolDirection::Inbound,
             reason: ProtocolDenyReason::NotTrusted,
