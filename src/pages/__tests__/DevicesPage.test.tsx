@@ -41,11 +41,21 @@ vi.mock('@/observability/breadcrumbs', () => ({
 
 vi.mock('@/components', () => ({
   DeviceList: () => <div data-testid="device-list" />,
-  DeviceHeader: () => <div data-testid="device-header" />,
+  DeviceHeader: ({ activeTab, addDevice }: { activeTab: string; addDevice: () => void }) => (
+    <div data-testid="device-header" data-active-tab={activeTab}>
+      <button onClick={addDevice}>Add Device</button>
+    </div>
+  ),
 }))
 
 vi.mock('@/components/PairingDialog', () => ({
-  default: ({ open }: { open: boolean }) => (open ? <div>PairingDialog</div> : null),
+  default: ({ open, onPairingSuccess }: { open: boolean; onPairingSuccess: () => void }) =>
+    open ? (
+      <div>
+        PairingDialog
+        <button onClick={onPairingSuccess}>Trigger Success</button>
+      </div>
+    ) : null,
 }))
 
 vi.mock('sonner', () => ({
@@ -66,6 +76,7 @@ describe('DevicesPage', () => {
     toastErrorMock.mockReset()
     dispatchMock.mockReset()
     vi.useFakeTimers()
+    Element.prototype.scrollIntoView = vi.fn()
   })
 
   afterEach(() => {
@@ -137,5 +148,26 @@ describe('DevicesPage', () => {
     await act(async () => {})
 
     expect(screen.queryAllByText(/配对成功|Pairing Successful/i).length).toBe(0)
+  })
+
+  it('handles initiator pairing success: refreshes list and switches tab', async () => {
+    render(<DevicesPage />)
+
+    const addDeviceButton = screen.getByText('Add Device')
+    act(() => {
+      addDeviceButton.click()
+    })
+
+    const successButton = screen.getByText('Trigger Success')
+    act(() => {
+      successButton.click()
+    })
+
+    expect(dispatchMock).toHaveBeenCalledWith({ type: 'devices/fetchPairedDevices' })
+
+    const header = screen.getByTestId('device-header')
+    expect(header).toHaveAttribute('data-active-tab', 'connected')
+
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 })

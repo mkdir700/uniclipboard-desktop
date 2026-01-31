@@ -638,6 +638,7 @@ impl PairingStateMachine {
                 self.context.peer_nonce = Some(challenge.nonce.clone());
                 self.context.peer_identity_pubkey = Some(challenge.identity_pubkey.clone());
                 self.context.pin = Some(challenge.pin.clone());
+                self.context.peer_device_name = Some(challenge.device_name.clone());
                 self.context.created_at = Some(now);
 
                 let local_nonce = self
@@ -882,6 +883,10 @@ impl PairingStateMachine {
                 PairingState::ResponseSent { session_id },
                 PairingEvent::RecvConfirm { confirm, .. },
             ) => {
+                if !confirm.sender_device_name.is_empty() {
+                    self.context.peer_device_name = Some(confirm.sender_device_name.clone());
+                }
+
                 let cancel_timer = PairingAction::CancelTimer {
                     session_id: session_id.clone(),
                     kind: TimeoutKind::WaitingConfirm,
@@ -1969,5 +1974,101 @@ mod tests {
             }
             Err(e) => panic!("Expected Ok, got Err: {:?}", e),
         }
+    }
+
+    #[test]
+    fn initiator_updates_peer_device_name_on_challenge() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        sm.handle_event(
+            PairingEvent::StartPairing {
+                role: PairingRole::Initiator,
+                peer_id: "peer-2".to_string(),
+            },
+            Utc::now(),
+        );
+
+        let challenge = PairingChallenge {
+            session_id: "session-1".to_string(),
+            pin: "123456".to_string(),
+            device_name: "ResponderDevice".to_string(),
+            device_id: "device-2".to_string(),
+            identity_pubkey: vec![2; 32],
+            nonce: vec![9; 16],
+        };
+
+        sm.handle_event(
+            PairingEvent::RecvChallenge {
+                session_id: "session-1".to_string(),
+                challenge,
+            },
+            Utc::now(),
+        );
+
+        assert_eq!(
+            sm.context.peer_device_name,
+            Some("ResponderDevice".to_string())
+        );
+    }
+
+    #[test]
+    fn initiator_updates_peer_device_name_on_confirm() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        sm.handle_event(
+            PairingEvent::StartPairing {
+                role: PairingRole::Initiator,
+                peer_id: "peer-2".to_string(),
+            },
+            Utc::now(),
+        );
+
+        let challenge = PairingChallenge {
+            session_id: "session-1".to_string(),
+            pin: "123456".to_string(),
+            device_name: "OldName".to_string(),
+            device_id: "device-2".to_string(),
+            identity_pubkey: vec![2; 32],
+            nonce: vec![9; 16],
+        };
+        sm.handle_event(
+            PairingEvent::RecvChallenge {
+                session_id: "session-1".to_string(),
+                challenge,
+            },
+            Utc::now(),
+        );
+        sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: "session-1".to_string(),
+            },
+            Utc::now(),
+        );
+
+        let confirm = PairingConfirm {
+            session_id: "session-1".to_string(),
+            success: true,
+            error: None,
+            sender_device_name: "NewName".to_string(),
+            device_id: "device-2".to_string(),
+        };
+
+        sm.handle_event(
+            PairingEvent::RecvConfirm {
+                session_id: "session-1".to_string(),
+                confirm,
+            },
+            Utc::now(),
+        );
+
+        assert_eq!(sm.context.peer_device_name, Some("NewName".to_string()));
     }
 }
