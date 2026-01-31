@@ -547,6 +547,47 @@ impl PairingOrchestrator {
         .await
     }
 
+    /// 处理传输层错误
+    pub async fn handle_transport_error(
+        &self,
+        session_id: &str,
+        peer_id: &str,
+        error: String,
+    ) -> Result<()> {
+        let span = info_span!(
+            "pairing.handle_transport_error",
+            session_id = %session_id,
+            peer_id = %peer_id,
+            error = %error
+        );
+        async {
+            let actions = {
+                let mut sessions = self.sessions.write().await;
+                // If session is already gone, we don't care
+                if let Some(context) = sessions.get_mut(session_id) {
+                    let (_state, actions) = context.state_machine.handle_event(
+                        PairingEvent::TransportError {
+                            session_id: session_id.to_string(),
+                            error: error.clone(),
+                        },
+                        Utc::now(),
+                    );
+                    actions
+                } else {
+                    vec![]
+                }
+            };
+
+            for action in actions {
+                self.execute_action(session_id, peer_id, action).await?;
+            }
+
+            Ok(())
+        }
+        .instrument(span)
+        .await
+    }
+
     /// 执行单个动作
     async fn execute_action(
         &self,

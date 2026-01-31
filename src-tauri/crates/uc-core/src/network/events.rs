@@ -104,6 +104,7 @@ pub enum NetworkEvent {
     },
     PairingFailed {
         session_id: String,
+        peer_id: String,
         error: String,
     },
 
