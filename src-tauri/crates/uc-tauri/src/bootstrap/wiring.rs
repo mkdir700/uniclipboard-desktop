@@ -1310,7 +1310,7 @@ async fn run_pairing_action_loop<R: Runtime>(
                         );
                     }
                     Err(err) => {
-                        error!(
+                        info!(
                             error = %err,
                             peer_id = %peer_id,
                             session_id = %session_id,
@@ -1360,8 +1360,14 @@ async fn run_pairing_action_loop<R: Runtime>(
                 success,
                 error,
             } => {
+                let peer_info = orchestrator.get_session_peer(&session_id).await;
+                let peer_id = peer_info
+                    .as_ref()
+                    .map(|p| p.peer_id.as_str())
+                    .unwrap_or("unknown");
                 info!(
                     session_id = %session_id,
+                    peer_id = %peer_id,
                     success = success,
                     reason = ?error,
                     "EmitResult triggered close_pairing_session"
@@ -1378,7 +1384,6 @@ async fn run_pairing_action_loop<R: Runtime>(
                 }
                 if let Some(app) = app_handle.as_ref() {
                     if success {
-                        let peer_info = orchestrator.get_session_peer(&session_id).await;
                         let (peer_id, device_name) = match peer_info {
                             Some(info) => {
                                 let name = info
