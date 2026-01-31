@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 pub mod p2p_pairing;
+pub mod p2p_peer;
 pub use p2p_pairing::{P2PPairingVerificationEvent, P2PPairingVerificationKind};
+pub use p2p_peer::{P2PPeerConnectionEvent, P2PPeerNameUpdatedEvent};
 
 /// Clipboard events emitted to frontend
 /// 发送到前端的剪贴板事件

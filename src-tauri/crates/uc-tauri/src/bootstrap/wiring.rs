@@ -40,7 +40,10 @@ use tauri::{async_runtime, AppHandle, Emitter, Runtime};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
-use crate::events::{forward_libp2p_start_failed, P2PPairingVerificationEvent};
+use crate::events::{
+    forward_libp2p_start_failed, P2PPairingVerificationEvent, P2PPeerConnectionEvent,
+    P2PPeerNameUpdatedEvent,
+};
 use uc_app::app_paths::AppPaths;
 use uc_app::usecases::{PairingConfig, PairingOrchestrator, ResolveConnectionPolicy};
 use uc_app::AppDeps;
@@ -948,6 +951,15 @@ pub fn start_background_tasks<R: Runtime>(
     let thumbnail_repo = deps.thumbnail_repo.clone();
     let thumbnail_generator = deps.thumbnail_generator.clone();
     let pairing_network = deps.network.clone();
+    let announce_network = deps.network.clone();
+    let announce_settings = deps.settings.clone();
+
+    async_runtime::spawn(async move {
+        let device_name = resolve_pairing_device_name(announce_settings).await;
+        if let Err(err) = announce_network.announce_device_name(device_name).await {
+            warn!(error = %err, "Failed to announce device name at startup");
+        }
+    });
 
     async_runtime::spawn(async move {
         let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx.clone());
@@ -1032,7 +1044,13 @@ pub fn start_background_tasks<R: Runtime>(
             .await;
         });
 
-        run_pairing_event_loop(event_rx, pairing_orchestrator, pairing_app_handle).await;
+        run_pairing_event_loop(
+            event_rx,
+            pairing_orchestrator,
+            pairing_app_handle,
+            pairing_network.clone(),
+        )
+        .await;
         warn!("Pairing event loop stopped");
     });
 }
@@ -1066,10 +1084,27 @@ pub async fn resolve_pairing_config(settings: Arc<dyn SettingsPort>) -> PairingC
     }
 }
 
+async fn resolve_device_name_for_peer(
+    network: &Arc<dyn NetworkPort>,
+    peer_id: &str,
+) -> Option<String> {
+    match network.get_discovered_peers().await {
+        Ok(peers) => peers
+            .into_iter()
+            .find(|peer| peer.peer_id == peer_id)
+            .and_then(|peer| peer.device_name),
+        Err(err) => {
+            warn!(error = %err, peer_id = %peer_id, "Failed to load discovered peers");
+            None
+        }
+    }
+}
+
 async fn run_pairing_event_loop<R: Runtime>(
     mut event_rx: mpsc::Receiver<NetworkEvent>,
     orchestrator: Arc<PairingOrchestrator>,
     app_handle: Option<AppHandle<R>>,
+    network: Arc<dyn NetworkPort>,
 ) {
     while let Some(event) = event_rx.recv().await {
         match event {
@@ -1081,6 +1116,59 @@ async fn run_pairing_event_loop<R: Runtime>(
                     app_handle.as_ref(),
                 )
                 .await;
+            }
+            NetworkEvent::PeerReady { peer_id } | NetworkEvent::PeerNotReady { peer_id } => {
+                let connected = matches!(event, NetworkEvent::PeerReady { .. });
+                let device_name = resolve_device_name_for_peer(&network, &peer_id).await;
+                if let Some(app) = app_handle.as_ref() {
+                    let payload = P2PPeerConnectionEvent {
+                        peer_id,
+                        device_name,
+                        connected,
+                    };
+                    if let Err(err) = app.emit("p2p-peer-connection-changed", payload) {
+                        warn!(error = %err, "Failed to emit peer connection event");
+                    }
+                }
+            }
+            NetworkEvent::PeerConnected(peer) => {
+                if let Some(app) = app_handle.as_ref() {
+                    let payload = P2PPeerConnectionEvent {
+                        peer_id: peer.peer_id,
+                        device_name: Some(peer.device_name),
+                        connected: true,
+                    };
+                    if let Err(err) = app.emit("p2p-peer-connection-changed", payload) {
+                        warn!(error = %err, "Failed to emit peer connection event");
+                    }
+                }
+            }
+            NetworkEvent::PeerDisconnected(peer_id) => {
+                let device_name = resolve_device_name_for_peer(&network, &peer_id).await;
+                if let Some(app) = app_handle.as_ref() {
+                    let payload = P2PPeerConnectionEvent {
+                        peer_id,
+                        device_name,
+                        connected: false,
+                    };
+                    if let Err(err) = app.emit("p2p-peer-connection-changed", payload) {
+                        warn!(error = %err, "Failed to emit peer connection event");
+                    }
+                }
+            }
+            NetworkEvent::PeerNameUpdated {
+                peer_id,
+                device_name,
+            } => {
+                if let Some(app) = app_handle.as_ref() {
+                    let payload = P2PPeerNameUpdatedEvent {
+                        peer_id,
+                        device_name,
+                    };
+                    if let Err(err) = app.emit("p2p-peer-name-updated", payload) {
+                        warn!(error = %err, "Failed to emit peer name updated event");
+                    }
+                }
             }
             _ => {}
         }
@@ -1282,6 +1370,7 @@ async fn run_pairing_action_loop<R: Runtime>(
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use chrono::Utc;
     use std::sync::Mutex;
     use std::time::Duration;
     use tauri::{Listener, Wry};
@@ -1335,6 +1424,10 @@ mod tests {
 
         fn local_peer_id(&self) -> String {
             "local-peer".to_string()
+        }
+
+        async fn announce_device_name(&self, _device_name: String) -> anyhow::Result<()> {
+            Ok(())
         }
 
         async fn open_pairing_session(
@@ -1439,6 +1532,7 @@ mod tests {
             event_rx,
             orchestrator.clone(),
             None,
+            Arc::new(NoopNetwork),
         ));
 
         let request = PairingRequest {
@@ -1459,6 +1553,140 @@ mod tests {
 
         let result = orchestrator.user_accept_pairing("session-1").await;
         assert!(result.is_ok());
+
+        drop(event_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
+    }
+
+    struct TestNetwork {
+        discovered: Vec<DiscoveredPeer>,
+    }
+
+    #[async_trait]
+    impl NetworkPort for TestNetwork {
+        async fn send_clipboard(
+            &self,
+            _peer_id: &str,
+            _encrypted_data: Vec<u8>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn broadcast_clipboard(&self, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_clipboard(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<uc_core::network::ClipboardMessage>>
+        {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+
+        async fn get_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+            Ok(self.discovered.clone())
+        }
+
+        async fn get_connected_peers(&self) -> anyhow::Result<Vec<ConnectedPeer>> {
+            Ok(vec![])
+        }
+
+        fn local_peer_id(&self) -> String {
+            "peer-local".to_string()
+        }
+
+        async fn announce_device_name(&self, _device_name: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn open_pairing_session(
+            &self,
+            _peer_id: String,
+            _session_id: String,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_on_session(
+            &self,
+            _session_id: String,
+            _message: PairingMessage,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn close_pairing_session(
+            &self,
+            _session_id: String,
+            _reason: Option<String>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn unpair_device(&self, _peer_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_events(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<NetworkEvent>> {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+    }
+
+    #[tokio::test]
+    async fn peer_name_updated_emits_frontend_event() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
+        let payload_tx_clone = payload_tx.clone();
+        app_handle.listen("p2p-peer-name-updated", move |event: tauri::Event| {
+            let _ = payload_tx_clone.try_send(event.payload().to_string());
+        });
+
+        let (event_tx, event_rx) = mpsc::channel(1);
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+        let network = Arc::new(TestNetwork {
+            discovered: vec![DiscoveredPeer {
+                peer_id: "peer-1".to_string(),
+                device_name: Some("Desk".to_string()),
+                device_id: None,
+                addresses: vec![],
+                discovered_at: Utc::now(),
+                last_seen: Utc::now(),
+                is_paired: true,
+            }],
+        });
+
+        let loop_handle = tokio::spawn(run_pairing_event_loop::<Wry>(
+            event_rx,
+            orchestrator,
+            Some(app_handle.clone()),
+            network,
+        ));
+
+        event_tx
+            .send(NetworkEvent::PeerNameUpdated {
+                peer_id: "peer-1".to_string(),
+                device_name: "Desk".to_string(),
+            })
+            .await
+            .expect("send peer name event");
+
+        let payload = payload_rx.recv().await.expect("event payload");
+        assert!(payload.contains("peerId"));
+        assert!(payload.contains("deviceName"));
 
         drop(event_tx);
         let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
