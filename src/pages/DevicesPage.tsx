@@ -175,8 +175,8 @@ const DevicesPage: React.FC = () => {
   }
 
   const handlePairingSuccess = () => {
-    // 连接成功后刷新设备列表
-    // TODO: 可以添加刷新设备列表的逻辑
+    dispatch(fetchPairedDevices())
+    handleTabChange('connected')
   }
 
   const handleAcceptPairing = async () => {
