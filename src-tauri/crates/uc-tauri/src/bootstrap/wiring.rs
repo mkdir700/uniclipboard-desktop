@@ -1256,6 +1256,22 @@ async fn run_pairing_action_loop<R: Runtime>(
         match action {
             PairingAction::Send { peer_id, message } => {
                 let session_id = message.session_id().to_string();
+                let message_kind = match &message {
+                    PairingMessage::Request(_) => "request",
+                    PairingMessage::Challenge(_) => "challenge",
+                    PairingMessage::Response(_) => "response",
+                    PairingMessage::Confirm(_) => "confirm",
+                    PairingMessage::Reject(_) => "reject",
+                    PairingMessage::Cancel(_) => "cancel",
+                    PairingMessage::Busy(_) => "busy",
+                };
+                info!(
+                    session_id = %session_id,
+                    peer_id = %peer_id,
+                    message_kind = %message_kind,
+                    stage = "enqueue",
+                    "Sending pairing message"
+                );
                 if let Err(err) = network
                     .open_pairing_session(peer_id.clone(), session_id.clone())
                     .await
@@ -1267,16 +1283,30 @@ async fn run_pairing_action_loop<R: Runtime>(
                         "Failed to open pairing session"
                     );
                 }
-                if let Err(err) = network
+                let result = network
                     .send_pairing_on_session(session_id.clone(), message)
-                    .await
-                {
-                    error!(
-                        error = %err,
-                        peer_id = %peer_id,
-                        session_id = %session_id,
-                        "Failed to send pairing message"
-                    );
+                    .await;
+
+                match &result {
+                    Ok(_) => {
+                        info!(
+                            session_id = %session_id,
+                            peer_id = %peer_id,
+                            message_kind = %message_kind,
+                            stage = "send_result",
+                            "Pairing message sent successfully"
+                        );
+                    }
+                    Err(err) => {
+                        error!(
+                            error = %err,
+                            peer_id = %peer_id,
+                            session_id = %session_id,
+                            message_kind = %message_kind,
+                            stage = "send_result",
+                            "Failed to send pairing message"
+                        );
+                    }
                 }
             }
             PairingAction::ShowVerification {
@@ -1318,6 +1348,12 @@ async fn run_pairing_action_loop<R: Runtime>(
                 success,
                 error,
             } => {
+                info!(
+                    session_id = %session_id,
+                    success = success,
+                    reason = ?error,
+                    "EmitResult triggered close_pairing_session"
+                );
                 if let Err(err) = network
                     .close_pairing_session(session_id.clone(), error.clone())
                     .await
@@ -1670,7 +1706,7 @@ mod tests {
             }],
         });
 
-        let loop_handle = tokio::spawn(run_pairing_event_loop::<Wry>(
+        let loop_handle = tokio::spawn(run_pairing_event_loop::<tauri::test::MockRuntime>(
             event_rx,
             orchestrator,
             Some(app_handle.clone()),
