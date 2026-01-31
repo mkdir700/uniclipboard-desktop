@@ -356,16 +356,33 @@ where
         shutdown_rx.clone(),
     ));
 
-    let result = tokio::select! {
-        read_result = &mut read_task => read_result
-            .map_err(|err| anyhow!("pairing read task join failed: {err}"))?,
-        write_result = &mut write_task => write_result
-            .map_err(|err| anyhow!("pairing write task join failed: {err}"))?,
+    enum CompletedTask {
+        Read,
+        Write,
+    }
+
+    let (result, completed) = tokio::select! {
+        read_result = &mut read_task => (
+            read_result.map_err(|err| anyhow!("pairing read task join failed: {err}"))?,
+            CompletedTask::Read,
+        ),
+        write_result = &mut write_task => (
+            write_result.map_err(|err| anyhow!("pairing write task join failed: {err}"))?,
+            CompletedTask::Write,
+        ),
     };
 
     let _ = shutdown_tx.send(true);
-    let _ = read_task.await;
-    let _ = write_task.await;
+    match completed {
+        CompletedTask::Read => {
+            write_task.abort();
+            let _ = write_task.await;
+        }
+        CompletedTask::Write => {
+            read_task.abort();
+            let _ = read_task.await;
+        }
+    }
 
     result
 }
