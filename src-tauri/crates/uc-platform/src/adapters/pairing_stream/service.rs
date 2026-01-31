@@ -134,6 +134,12 @@ impl PairingStreamService {
     }
 
     pub async fn open_pairing_session(&self, peer_id: String, session_id: String) -> Result<()> {
+        {
+            let sessions = self.inner.sessions.lock().await;
+            if sessions.contains_key(&session_id) {
+                return Ok(());
+            }
+        }
         let peer = peer_id
             .parse::<PeerId>()
             .map_err(|err| anyhow!("invalid peer id for pairing stream: {err}"))?;
@@ -496,5 +502,42 @@ impl PairingStreamServiceInner {
     fn decode_message(&self, peer_id: &str, payload: &[u8]) -> Result<PairingMessage> {
         serde_json::from_slice(payload)
             .map_err(|err| anyhow!("invalid pairing message from {peer_id}: {err}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PairingStreamConfig, PairingStreamService};
+    use libp2p::PeerId;
+    use tokio::sync::{mpsc, watch};
+    use tokio::time::{timeout, Duration};
+
+    #[tokio::test]
+    async fn open_pairing_session_is_idempotent_when_session_exists() {
+        let (event_tx, _event_rx) = mpsc::channel(1);
+        let service = PairingStreamService::for_tests(event_tx, PairingStreamConfig::default());
+        let peer_id = PeerId::random().to_string();
+        let session_id = "session-1".to_string();
+        let permits = service.acquire_permits(&peer_id).await.expect("permits");
+        let (write_tx, _write_rx) = mpsc::channel(1);
+        let (shutdown_tx, _shutdown_rx) = watch::channel(false);
+        let handle = super::SessionHandle {
+            write_tx,
+            shutdown_tx,
+            _global_permit: permits.global,
+            _peer_permit: permits.peer,
+        };
+        {
+            let mut sessions = service.inner.sessions.lock().await;
+            sessions.insert(session_id.clone(), handle);
+        }
+
+        let result = timeout(
+            Duration::from_millis(200),
+            service.open_pairing_session(peer_id, session_id),
+        )
+        .await
+        .expect("idempotent open timeout");
+        result.expect("idempotent open");
     }
 }
