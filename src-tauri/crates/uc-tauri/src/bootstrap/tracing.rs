@@ -26,7 +26,11 @@ use uc_app::app_paths::AppPaths;
 use uc_core::ports::AppDirsPort;
 use uc_platform::app_dirs::DirsAppDirsAdapter;
 
+use sentry;
+use sentry_tracing;
+
 static LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
+static SENTRY_GUARD: OnceLock<sentry::ClientInitGuard> = OnceLock::new();
 
 /// Check if running in development environment
 fn is_development() -> bool {
@@ -101,7 +105,30 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
     let env_filter = tracing_subscriber::EnvFilter::try_new(filter_directives.join(","))
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::from_default_env());
 
-    // Step 2: Create writers
+    // Step 2: Initialize Sentry
+    // - Only if SENTRY_DSN is set
+    // - Guard must be kept alive
+    let sentry_layer = if let Ok(dsn) = std::env::var("SENTRY_DSN") {
+        let guard = sentry::init((
+            dsn,
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                traces_sample_rate: 1.0,
+                ..Default::default()
+            },
+        ));
+
+        if SENTRY_GUARD.set(guard).is_err() {
+            eprintln!("Sentry guard already initialized");
+        }
+
+        Some(sentry_tracing::layer())
+    } else {
+        eprintln!("Sentry DSN not set, disabling Sentry");
+        None
+    };
+
+    // Step 3: Create writers
     let stdout_writer: BoxMakeWriter = BoxMakeWriter::new(io::stdout);
     let file_writer = match build_file_writer() {
         Ok(writer) => Some(writer),
@@ -140,7 +167,11 @@ pub fn init_tracing_subscriber() -> anyhow::Result<()> {
 
     // Step 4: Register the global subscriber
     // This MUST be called once, before any logging occurs
-    let subscriber = registry().with(env_filter).with(stdout_layer);
+    let subscriber = registry()
+        .with(env_filter)
+        .with(sentry_layer)
+        .with(stdout_layer);
+
     if let Some(layer) = file_layer {
         subscriber.with(layer).try_init()?;
     } else {

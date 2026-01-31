@@ -125,7 +125,7 @@ mod restore_tests {
 /// # use std::sync::Arc;
 /// # async fn example(runtime: tauri::State<'_, Arc<uc_tauri::bootstrap::AppRuntime>>) {
 /// // Tauri provides `State<Arc<AppRuntime>>` when invoking commands from the frontend.
-/// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(runtime, "entry-id-123".to_string()).await;
+/// let result = uc_tauri::commands::clipboard::delete_clipboard_entry(runtime, "entry-id-123".to_string(), None).await;
 /// match result {
 ///     Ok(()) => println!("Deleted"),
 ///     Err(e) => eprintln!("Delete failed: {}", e),
