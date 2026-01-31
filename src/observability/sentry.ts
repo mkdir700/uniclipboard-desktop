@@ -46,7 +46,13 @@ export function initSentry(): void {
     replaysOnErrorSampleRate: 1.0,
     environment: import.meta.env.MODE,
     release: import.meta.env.VITE_APP_VERSION,
-    integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration(),
+      Sentry.feedbackIntegration({
+        colorScheme: 'system',
+      }),
+    ],
     beforeSend,
     beforeBreadcrumb,
     initialScope: {
