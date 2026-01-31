@@ -55,7 +55,7 @@ pub async fn initialize_encryption(
     record_trace_fields(&span, &_trace);
 
     let uc = runtime.usecases().initialize_encryption();
-    log::debug!("{} Use case created, executing...", LOG_CONTEXT);
+    tracing::debug!("{} Use case created, executing...", LOG_CONTEXT);
 
     uc.execute(uc_core::security::model::Passphrase(passphrase))
         .instrument(span)
