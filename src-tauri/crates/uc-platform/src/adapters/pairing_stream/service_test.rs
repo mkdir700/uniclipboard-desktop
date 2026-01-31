@@ -70,6 +70,40 @@ async fn oversize_frame_closes_session() {
 }
 
 #[tokio::test]
+async fn early_eof_does_not_panic_session_task() {
+    let (event_tx, mut event_rx) = mpsc::channel(1);
+    let service = PairingStreamService::for_tests(event_tx, PairingStreamConfig::default());
+    let (mut client, server) = tokio::io::duplex(64 * 1024);
+
+    let handle: tokio::task::JoinHandle<anyhow::Result<()>> =
+        service.handle_incoming_stream("peer-4".to_string(), server);
+    let message = PairingMessage::Request(PairingRequest {
+        session_id: "session-4".to_string(),
+        device_name: "device-b".to_string(),
+        device_id: "device-b".to_string(),
+        peer_id: "peer-b".to_string(),
+        identity_pubkey: vec![3; 32],
+        nonce: vec![4; 16],
+    });
+    let payload = serde_json::to_vec(&message).expect("serialize message");
+    write_length_prefixed(&mut client, &payload)
+        .await
+        .expect("write payload");
+    let event = timeout(Duration::from_secs(2), event_rx.recv())
+        .await
+        .expect("event timeout")
+        .expect("event");
+    assert!(matches!(
+        event,
+        NetworkEvent::PairingMessageReceived { peer_id, message }
+            if peer_id == "peer-4" && matches!(message, PairingMessage::Request(_))
+    ));
+    client.shutdown().await.expect("shutdown");
+
+    let _result = handle.await.expect("pairing stream task");
+}
+
+#[tokio::test]
 async fn idle_timeout_closes_session() {
     let (event_tx, mut event_rx) = mpsc::channel(1);
     let config = PairingStreamConfig {
