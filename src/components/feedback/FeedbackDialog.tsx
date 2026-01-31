@@ -10,22 +10,35 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { Sentry } from '@/observability/sentry'
 
+const FEEDBACK_EMAIL_STORAGE_KEY = 'uniclipboard.feedback.email'
+
 interface FeedbackDialogProps {
-  children: React.ReactNode
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
-export function FeedbackDialog({ children }: FeedbackDialogProps) {
+export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
   const { t } = useTranslation()
-  const [open, setOpen] = React.useState(false)
   const [content, setContent] = React.useState('')
   const [email, setEmail] = React.useState('')
+  const [savedEmail, setSavedEmail] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+
+  React.useEffect(() => {
+    try {
+      const storedEmail = localStorage.getItem(FEEDBACK_EMAIL_STORAGE_KEY)
+      if (storedEmail) {
+        setSavedEmail(storedEmail)
+      }
+    } catch {
+      setSavedEmail(null)
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,8 +54,18 @@ export function FeedbackDialog({ children }: FeedbackDialogProps) {
         associatedEventId: eventId,
       })
 
+      if (email.trim()) {
+        try {
+          const nextEmail = email.trim()
+          localStorage.setItem(FEEDBACK_EMAIL_STORAGE_KEY, nextEmail)
+          setSavedEmail(nextEmail)
+        } catch {
+          setSavedEmail(null)
+        }
+      }
+
       toast.success(t('feedback.modal.success'))
-      setOpen(false)
+      onOpenChange(false)
       setContent('')
       setEmail('')
     } catch (error) {
@@ -54,8 +77,7 @@ export function FeedbackDialog({ children }: FeedbackDialogProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{t('feedback.modal.title')}</DialogTitle>
@@ -94,6 +116,17 @@ export function FeedbackDialog({ children }: FeedbackDialogProps) {
               value={email}
               onChange={e => setEmail(e.target.value)}
             />
+            {savedEmail && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => setEmail(savedEmail)}
+                >
+                  {t('feedback.modal.useSavedEmail')}
+                </button>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={isSubmitting}>

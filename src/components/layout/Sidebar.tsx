@@ -71,6 +71,7 @@ const Sidebar: React.FC = () => {
   const { setting } = useSetting()
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const [isInstallingUpdate, setIsInstallingUpdate] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const { updateInfo, isCheckingUpdate } = useUpdate()
 
   const navItems = [
@@ -159,7 +160,7 @@ const Sidebar: React.FC = () => {
             </TooltipProvider>
           )}
           {sentryEnabled && (
-            <FeedbackDialog>
+            <>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -168,6 +169,7 @@ const Sidebar: React.FC = () => {
                       aria-label={t('nav.feedback')}
                       data-tauri-drag-region="false"
                       className="relative group"
+                      onClick={() => setFeedbackOpen(true)}
                     >
                       <div
                         className={cn(
@@ -184,7 +186,8 @@ const Sidebar: React.FC = () => {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </FeedbackDialog>
+              <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+            </>
           )}
           <NavButton
             to="/settings"
