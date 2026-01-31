@@ -75,6 +75,7 @@ mod tests {
         let repo = MockPairedDeviceRepo {
             devices: vec![PairedDevice {
                 peer_id: PeerId::from("peer-1"),
+                device_name: "test-device".to_string(),
                 pairing_state: PairingState::Trusted,
                 identity_fingerprint: "fp".to_string(),
                 paired_at: chrono::Utc::now(),

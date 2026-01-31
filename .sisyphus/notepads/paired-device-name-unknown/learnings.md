@@ -226,3 +226,9 @@ assert_eq!(loaded.unwrap().device_name, "Test Device");
 
 - The `Wry` vs `MockRuntime` mismatch was likely caused by `tauri::test::mock_app()` returning an `AppHandle<MockRuntime>`, while the generic parameter was explicitly set to `Wry`.
 - Using `tauri::test::MockRuntime` in tests ensures compatibility with the mock app handle and avoids unnecessary dependencies on the real webview runtime during testing.
+
+## Framing Logging
+
+- Added structured logging to `uc-platform/src/adapters/pairing_stream/framing/mod.rs`.
+- Logs `stage` (read_len_prefix, read_payload, etc.) and `len`/`expected`.
+- Handles `UnexpectedEof` specifically to aid in debugging stream closures.

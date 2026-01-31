@@ -57,6 +57,7 @@ struct PairingStreamServiceInner {
 }
 
 struct SessionHandle {
+    peer_id: String,
     write_tx: mpsc::Sender<PairingMessage>,
     shutdown_tx: watch::Sender<bool>,
     _global_permit: OwnedSemaphorePermit,
@@ -200,7 +201,10 @@ impl PairingStreamService {
                 warn!("pairing session shutdown send failed: {err}");
             }
             if let Some(reason) = reason.as_ref() {
-                info!("pairing session closed: {session_id} reason={reason}");
+                info!(
+                    "pairing session closed: session_id={} peer_id={} reason={}",
+                    session_id, handle.peer_id, reason
+                );
             }
         }
         Ok(())
@@ -234,6 +238,7 @@ impl PairingStreamService {
         let (write_tx, write_rx) = mpsc::channel(self.inner.config.outbound_queue_depth);
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let handle = SessionHandle {
+            peer_id: peer_id.clone(),
             write_tx: write_tx.clone(),
             shutdown_tx: shutdown_tx.clone(),
             _global_permit: permits.global,
@@ -339,6 +344,10 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let (reader, writer) = tokio::io::split(stream);
+    info!(
+        "pairing session started: peer_id={} session_id={}",
+        peer_id, session_id
+    );
     if let Some(message) = initial_message {
         if let Err(err) = emit_pairing_event(&inner.event_tx, &peer_id, message).await {
             warn!("pairing event emit failed: {err}");
@@ -387,6 +396,29 @@ where
         CompletedTask::Write => {
             read_task.abort();
             let _ = read_task.await;
+        }
+    }
+
+    match &result {
+        Ok(_) => {
+            let source = match completed {
+                CompletedTask::Read => "read_loop_explicit_close",
+                CompletedTask::Write => "write_loop_explicit_close",
+            };
+            info!(
+                "pairing session ended cleanly: peer_id={} session_id={} source={}",
+                peer_id, session_id, source
+            );
+        }
+        Err(err) => {
+            let source = match completed {
+                CompletedTask::Read => "read_loop_error",
+                CompletedTask::Write => "write_loop_error",
+            };
+            warn!(
+                "pairing session ended with error: peer_id={} session_id={} source={} error={}",
+                peer_id, session_id, source, err
+            );
         }
     }
 
@@ -522,6 +554,7 @@ mod tests {
         let (write_tx, _write_rx) = mpsc::channel(1);
         let (shutdown_tx, _shutdown_rx) = watch::channel(false);
         let handle = super::SessionHandle {
+            peer_id: peer_id.clone(),
             write_tx,
             shutdown_tx,
             _global_permit: permits.global,
