@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use libp2p::{
+    core::ConnectedPoint,
     futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt},
     identity, mdns, noise,
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
@@ -71,6 +72,35 @@ impl PeerCaches {
         self.discovered_peers
             .insert(peer.peer_id.clone(), peer.clone());
         peer
+    }
+
+    pub fn upsert_discovered_from_connection(
+        &mut self,
+        peer_id: &str,
+        address: Multiaddr,
+        observed_at: DateTime<Utc>,
+    ) -> bool {
+        let address = address.to_string();
+        let entry = self
+            .discovered_peers
+            .entry(peer_id.to_string())
+            .or_insert_with(|| DiscoveredPeer {
+                peer_id: peer_id.to_string(),
+                device_name: None,
+                device_id: None,
+                addresses: Vec::new(),
+                discovered_at: observed_at,
+                last_seen: observed_at,
+                is_paired: false,
+            });
+
+        let mut changed = false;
+        if !entry.addresses.contains(&address) {
+            entry.addresses.push(address);
+            changed = true;
+        }
+        entry.last_seen = observed_at;
+        changed
     }
 
     pub fn remove_discovered(&mut self, peer_id: &str) -> Option<DiscoveredPeer> {
@@ -692,6 +722,9 @@ async fn run_swarm(
                 match event {
                     SwarmEvent::Behaviour(Libp2pBehaviourEvent::Mdns(event)) => match event {
                         mdns::Event::Discovered(peers) => {
+                            for (peer_id, address) in peers.iter() {
+                                swarm.add_peer_address(peer_id.clone(), address.clone());
+                            }
                             let discovered = collect_mdns_discovered(peers);
                             let events = {
                                 let mut caches = caches.write().await;
@@ -715,17 +748,31 @@ async fn run_swarm(
                         }
                     },
                     SwarmEvent::Behaviour(Libp2pBehaviourEvent::Stream) => {}
-                    SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                        let peer_id = peer_id.to_string();
+                    SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+                        let peer_id_string = peer_id.to_string();
+                        let address = match endpoint {
+                            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
+                            ConnectedPoint::Listener { send_back_addr, .. } => {
+                                Some(send_back_addr.clone())
+                            }
+                        };
+                        if let Some(address) = address.as_ref() {
+                            swarm.add_peer_address(peer_id, address.clone());
+                        }
                         let event = {
                             let mut caches = caches.write().await;
-                            apply_peer_ready(&mut caches, &peer_id, Utc::now())
+                            apply_peer_ready_from_connection(
+                                &mut caches,
+                                &peer_id_string,
+                                Utc::now(),
+                                address,
+                            )
                         };
 
                         if let Some(event) = event {
                             let _ = try_send_event(&event_tx, event, "PeerReady");
                         } else {
-                            debug!("connection established for unknown peer {peer_id}");
+                            debug!("connection established for unknown peer {peer_id_string}");
                         }
                     }
                     SwarmEvent::ConnectionClosed { peer_id, .. } => {
@@ -963,6 +1010,18 @@ fn apply_peer_ready(
     }
 }
 
+fn apply_peer_ready_from_connection(
+    caches: &mut PeerCaches,
+    peer_id: &str,
+    connected_at: DateTime<Utc>,
+    address: Option<Multiaddr>,
+) -> Option<NetworkEvent> {
+    if let Some(address) = address {
+        caches.upsert_discovered_from_connection(peer_id, address, connected_at);
+    }
+    apply_peer_ready(caches, peer_id, connected_at)
+}
+
 fn apply_peer_not_ready(caches: &mut PeerCaches, peer_id: &str) -> Option<NetworkEvent> {
     if caches.mark_unreachable(peer_id) {
         Some(NetworkEvent::PeerNotReady {
@@ -1076,6 +1135,30 @@ mod tests {
             Some(NetworkEvent::PeerReady { peer_id }) if peer_id == "peer-1"
         ));
         assert!(caches.is_reachable("peer-1"));
+    }
+
+    #[test]
+    fn connection_established_backfills_discovery_and_reachable() {
+        let mut caches = PeerCaches::new();
+        let address: Multiaddr = "/ip4/127.0.0.1/tcp/5001".parse().expect("valid multiaddr");
+
+        let event = apply_peer_ready_from_connection(
+            &mut caches,
+            "peer-1",
+            Utc::now(),
+            Some(address.clone()),
+        );
+
+        assert!(matches!(
+            event,
+            Some(NetworkEvent::PeerReady { peer_id }) if peer_id == "peer-1"
+        ));
+        assert!(caches.is_reachable("peer-1"));
+        let discovered = caches
+            .discovered_peers
+            .get("peer-1")
+            .expect("discovered peer");
+        assert!(discovered.addresses.contains(&address.to_string()));
     }
 
     #[test]
