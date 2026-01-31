@@ -25,6 +25,23 @@ pub enum PairingStreamError {
     SessionExists { session_id: String },
 }
 
+#[derive(Debug)]
+enum ShutdownReason {
+    ExplicitClose,
+    StreamClosedByPeer,
+    ChannelClosed,
+}
+
+impl std::fmt::Display for ShutdownReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShutdownReason::ExplicitClose => write!(f, "explicit_close"),
+            ShutdownReason::StreamClosedByPeer => write!(f, "stream_closed_by_peer"),
+            ShutdownReason::ChannelClosed => write!(f, "channel_closed"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct PairingStreamConfig {
     pub idle_timeout: Duration,
@@ -221,8 +238,8 @@ impl PairingStreamService {
         let first_message = self.decode_message(&peer_id, &first_payload)?;
         let session_id = first_message.session_id().to_string();
         self.spawn_session(peer_id, session_id, stream, Some(first_message), permits)
-            .await?;
-        Ok(())
+            .await?
+            .await?
     }
 
     async fn spawn_session<S>(
@@ -402,20 +419,20 @@ where
     }
 
     match &result {
-        Ok(_) => {
+        Ok(reason) => {
             let source = match completed {
-                CompletedTask::Read => "read_loop_explicit_close",
-                CompletedTask::Write => "write_loop_explicit_close",
+                CompletedTask::Read => "read_loop",
+                CompletedTask::Write => "write_loop",
             };
             info!(
-                "pairing session ended cleanly: peer_id={} session_id={} source={}",
-                peer_id, session_id, source
+                "pairing session ended cleanly: peer_id={} session_id={} source={} reason={}",
+                peer_id, session_id, source, reason
             );
         }
         Err(err) => {
             let source = match completed {
-                CompletedTask::Read => "read_loop_error",
-                CompletedTask::Write => "write_loop_error",
+                CompletedTask::Read => "read_loop",
+                CompletedTask::Write => "write_loop",
             };
             warn!(
                 "pairing session ended with error: peer_id={} session_id={} source={} error={}",
@@ -435,7 +452,7 @@ where
         }
     }
 
-    result
+    result.map(|_| ())
 }
 
 async fn read_loop<R>(
@@ -444,14 +461,14 @@ async fn read_loop<R>(
     session_id: String,
     mut reader: R,
     mut shutdown_rx: watch::Receiver<bool>,
-) -> Result<()>
+) -> Result<ShutdownReason>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
     loop {
         tokio::select! {
             _ = shutdown_rx.changed() => {
-                return Ok(());
+                return Ok(ShutdownReason::ExplicitClose);
             }
             payload = inner.read_frame(&mut reader) => {
                 let payload = payload.map_err(|err| {
@@ -460,7 +477,7 @@ where
                 })?;
                 let payload = match payload {
                     Some(p) => p,
-                    None => return Ok(()),
+                    None => return Ok(ShutdownReason::StreamClosedByPeer),
                 };
                 let message = inner.decode_message(&peer_id, &payload).map_err(|err| {
                     warn!("pairing decode failed peer={peer_id} session={session_id}: {err}");
@@ -510,7 +527,7 @@ async fn write_loop<W>(
     mut writer: W,
     mut write_rx: mpsc::Receiver<PairingMessage>,
     mut shutdown_rx: watch::Receiver<bool>,
-) -> Result<()>
+) -> Result<ShutdownReason>
 where
     W: AsyncWrite + Unpin + Send,
 {
@@ -522,7 +539,7 @@ where
             message = write_rx.recv() => {
                 let message = match message {
                     Some(message) => message,
-                    None => return Ok(()),
+                    None => return Ok(ShutdownReason::ChannelClosed),
                 };
                 write_message(&inner, &peer_id, &session_id, &mut writer, message).await?;
             }
@@ -559,7 +576,7 @@ where
         }
     }
 
-    Ok(())
+    Ok(ShutdownReason::ExplicitClose)
 }
 
 async fn emit_pairing_event(
