@@ -12,7 +12,8 @@
     "devices": "设备管理",
     "settings": "设置",
     "updateAvailable": "有新版本",
-    "back": "返回"
+    "back": "返回",
+    "feedback": "反馈"
   },
   "update": {
     "title": "发现新版本",

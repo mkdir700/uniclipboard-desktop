@@ -12,7 +12,8 @@
     "devices": "Devices",
     "settings": "Settings",
     "updateAvailable": "Update available",
-    "back": "Back"
+    "back": "Back",
+    "feedback": "Feedback"
   },
   "update": {
     "title": "Update available",
