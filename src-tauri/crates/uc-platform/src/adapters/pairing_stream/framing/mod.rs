@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Result};
 use std::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tracing::{trace, warn};
+use tracing::{debug, trace};
 
 /// Maximum frame size accepted on pairing streams (16 KiB).
 pub const MAX_PAIRING_FRAME_BYTES: usize = 16 * 1024;
@@ -25,7 +25,7 @@ where
     );
     if let Err(e) = writer.write_all(&len.to_be_bytes()).await {
         if e.kind() == io::ErrorKind::UnexpectedEof {
-            warn!(
+            debug!(
                 stage = "write_len_prefix",
                 error = %e,
                 expected = 4,
@@ -38,7 +38,7 @@ where
     trace!(stage = "write_payload", len = len, "writing frame payload");
     if let Err(e) = writer.write_all(payload).await {
         if e.kind() == io::ErrorKind::UnexpectedEof {
-            warn!(
+            debug!(
                 stage = "write_payload",
                 error = %e,
                 expected = len,
@@ -75,7 +75,7 @@ where
     if n < 4 {
         if let Err(e) = reader.read_exact(&mut len_buf[n..]).await {
             if e.kind() == io::ErrorKind::UnexpectedEof {
-                warn!(
+                debug!(
                     stage = "read_len_prefix",
                     error = %e,
                     expected = 4,
@@ -96,7 +96,7 @@ where
     trace!(stage = "read_payload", len = len, "reading frame payload");
     if let Err(e) = reader.read_exact(&mut buf).await {
         if e.kind() == io::ErrorKind::UnexpectedEof {
-            warn!(
+            debug!(
                 stage = "read_payload",
                 error = %e,
                 expected = len,
