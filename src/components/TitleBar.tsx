@@ -146,6 +146,7 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
 
   return (
     <div
+      data-tauri-drag-region
       className={cn(
         // Window chrome layer - sits in normal document flow (not fixed)
         // No z-index needed - proper layering via DOM hierarchy
@@ -154,7 +155,10 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
         className
       )}
     >
-      <div className="h-full flex items-center justify-between cursor-default">
+      <div
+        data-tauri-drag-region
+        className="h-full flex items-center justify-between cursor-default"
+      >
         <div
           data-tauri-drag-region
           className={cn(
