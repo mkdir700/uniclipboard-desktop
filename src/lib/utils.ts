@@ -20,3 +20,9 @@ export const isWindowsPlatform = () => {
     ?.platform
   return userAgent.includes('windows') || platform?.toLowerCase() === 'windows'
 }
+
+export const formatPeerIdForDisplay = (peerId?: string | null, suffixLength = 8) => {
+  if (!peerId) return ''
+  if (peerId.length <= suffixLength) return peerId
+  return `${peerId.slice(-suffixLength)}`
+}

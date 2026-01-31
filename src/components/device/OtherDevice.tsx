@@ -3,6 +3,7 @@ import { Smartphone, Monitor, Tablet, Settings, Eye, Trash2, Laptop, RefreshCw }
 import React, { useEffect, useState } from 'react'
 import DeviceSettingsPanel from './DeviceSettingsPanel'
 import { onP2PPeerConnectionChanged, unpairP2PDevice } from '@/api/p2p'
+import { formatPeerIdForDisplay } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import {
   fetchPairedDevices,
@@ -203,7 +204,7 @@ const OtherDevice: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
-                      ID: {device.peerId.substring(0, 8)}...
+                      ID: {formatPeerIdForDisplay(device.peerId)}
                     </p>
                   </div>
                 </div>
