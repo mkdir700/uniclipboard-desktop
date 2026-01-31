@@ -13,8 +13,9 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 use uc_core::network::{
-    ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage, PairingState,
-    ProtocolDenyReason, ProtocolDirection, ProtocolId, ProtocolKind, ResolvedConnectionPolicy,
+    ClipboardMessage, ConnectedPeer, DeviceAnnounceMessage, DiscoveredPeer, NetworkEvent,
+    PairingMessage, PairingState, ProtocolDenyReason, ProtocolDirection, ProtocolId, ProtocolKind,
+    ProtocolMessage, ResolvedConnectionPolicy,
 };
 use uc_core::ports::{
     ConnectionPolicyResolverPort, IdentityStorePort, NetworkControlPort, NetworkPort,
@@ -32,11 +33,15 @@ enum BusinessCommand {
         peer_id: uc_core::PeerId,
         data: Vec<u8>,
     },
+    AnnounceDeviceName {
+        device_name: String,
+    },
 }
 
 pub struct PeerCaches {
     discovered_peers: HashMap<String, DiscoveredPeer>,
     reachable_peers: HashSet<String>,
+    connected_at: HashMap<String, DateTime<Utc>>,
 }
 
 impl PeerCaches {
@@ -44,6 +49,7 @@ impl PeerCaches {
         Self {
             discovered_peers: HashMap::new(),
             reachable_peers: HashSet::new(),
+            connected_at: HashMap::new(),
         }
     }
 
@@ -69,16 +75,50 @@ impl PeerCaches {
 
     pub fn remove_discovered(&mut self, peer_id: &str) -> Option<DiscoveredPeer> {
         self.reachable_peers.remove(peer_id);
+        self.connected_at.remove(peer_id);
         self.discovered_peers.remove(peer_id)
     }
 
-    pub fn mark_reachable(&mut self, peer_id: &str) -> bool {
+    pub fn mark_reachable(&mut self, peer_id: &str, connected_at: DateTime<Utc>) -> bool {
         if self.discovered_peers.contains_key(peer_id) {
             self.reachable_peers.insert(peer_id.to_string());
+            self.connected_at
+                .entry(peer_id.to_string())
+                .or_insert(connected_at);
             true
         } else {
             false
         }
+    }
+
+    pub fn mark_unreachable(&mut self, peer_id: &str) -> bool {
+        let removed = self.reachable_peers.remove(peer_id);
+        self.connected_at.remove(peer_id);
+        removed
+    }
+
+    pub fn upsert_device_name(
+        &mut self,
+        peer_id: &str,
+        device_name: String,
+        observed_at: DateTime<Utc>,
+    ) -> bool {
+        let entry = self
+            .discovered_peers
+            .entry(peer_id.to_string())
+            .or_insert_with(|| DiscoveredPeer {
+                peer_id: peer_id.to_string(),
+                device_name: None,
+                device_id: None,
+                addresses: Vec::new(),
+                discovered_at: observed_at,
+                last_seen: observed_at,
+                is_paired: false,
+            });
+        let changed = entry.device_name.as_deref() != Some(device_name.as_str());
+        entry.device_name = Some(device_name);
+        entry.last_seen = observed_at;
+        changed
     }
 
     pub fn is_reachable(&self, peer_id: &str) -> bool {
@@ -216,9 +256,11 @@ impl Libp2pNetworkAdapter {
             *guard = Some(pairing_service);
         }
 
-        spawn_business_stream_echo(
+        spawn_business_stream_handler(
             stream_control.clone(),
+            self.caches.clone(),
             self.event_tx.clone(),
+            self.clipboard_tx.clone(),
             self.policy_resolver.clone(),
         );
 
@@ -234,8 +276,17 @@ impl Libp2pNetworkAdapter {
         let event_tx = self.event_tx.clone();
         let policy_resolver = self.policy_resolver.clone();
         let business_rx = Self::take_receiver(&self.business_rx, "business command")?;
+        let local_peer_id = self.local_peer_id.clone();
         tokio::spawn(async move {
-            run_swarm(swarm, caches, event_tx, policy_resolver, business_rx).await;
+            run_swarm(
+                swarm,
+                caches,
+                event_tx,
+                policy_resolver,
+                business_rx,
+                local_peer_id,
+            )
+            .await;
         });
         Ok(())
     }
@@ -295,11 +346,37 @@ impl NetworkPort for Libp2pNetworkAdapter {
     }
 
     async fn get_connected_peers(&self) -> Result<Vec<ConnectedPeer>> {
-        Ok(Vec::new())
+        let caches = self.caches.read().await;
+        let mut peers = Vec::new();
+        for peer_id in caches.reachable_peers.iter() {
+            let connected_at = caches
+                .connected_at
+                .get(peer_id)
+                .cloned()
+                .unwrap_or_else(Utc::now);
+            let device_name = caches
+                .discovered_peers
+                .get(peer_id)
+                .and_then(|peer| peer.device_name.clone())
+                .unwrap_or_else(|| "Unknown Device".to_string());
+            peers.push(ConnectedPeer {
+                peer_id: peer_id.clone(),
+                device_name,
+                connected_at,
+            });
+        }
+        Ok(peers)
     }
 
     fn local_peer_id(&self) -> String {
         self.local_peer_id.clone()
+    }
+
+    async fn announce_device_name(&self, device_name: String) -> Result<()> {
+        self.business_tx
+            .send(BusinessCommand::AnnounceDeviceName { device_name })
+            .await
+            .map_err(|err| anyhow!("failed to queue device announce: {err}"))
     }
 
     async fn open_pairing_session(&self, peer_id: String, session_id: String) -> Result<()> {
@@ -388,9 +465,11 @@ where
     Ok(())
 }
 
-fn spawn_business_stream_echo(
+fn spawn_business_stream_handler(
     mut control: stream::Control,
+    caches: Arc<RwLock<PeerCaches>>,
     event_tx: mpsc::Sender<NetworkEvent>,
+    clipboard_tx: mpsc::Sender<ClipboardMessage>,
     policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
 ) {
     let mut incoming = match control.accept(StreamProtocol::new(BUSINESS_PROTOCOL_ID)) {
@@ -405,7 +484,9 @@ fn spawn_business_stream_echo(
         while let Some((_peer, mut stream)) = incoming.next().await {
             let peer_id = _peer.to_string();
             let event_tx = event_tx.clone();
+            let clipboard_tx = clipboard_tx.clone();
             let policy_resolver = policy_resolver.clone();
+            let caches = caches.clone();
             tokio::spawn(async move {
                 if check_business_allowed(
                     &policy_resolver,
@@ -418,12 +499,91 @@ fn spawn_business_stream_echo(
                 {
                     return;
                 }
-                if let Err(err) = echo_payload(&mut stream).await {
-                    warn!("business stream echo failed: {err}");
+                let mut payload = Vec::new();
+                if let Err(err) = stream.read_to_end(&mut payload).await {
+                    warn!("business stream read failed: {err}");
+                    return;
                 }
+                if let Err(err) = stream.close().await {
+                    warn!("business stream close failed: {err}");
+                }
+                handle_business_payload(caches, event_tx, clipboard_tx, peer_id, payload).await;
             });
         }
     });
+}
+
+async fn handle_business_payload(
+    caches: Arc<RwLock<PeerCaches>>,
+    event_tx: mpsc::Sender<NetworkEvent>,
+    clipboard_tx: mpsc::Sender<ClipboardMessage>,
+    peer_id: String,
+    payload: Vec<u8>,
+) {
+    let message = match ProtocolMessage::from_bytes(&payload) {
+        Ok(message) => message,
+        Err(err) => {
+            warn!(
+                "Failed to decode business payload: peer_id={}, payload_len={}, err={}",
+                peer_id,
+                payload.len(),
+                err
+            );
+            return;
+        }
+    };
+
+    match message {
+        ProtocolMessage::DeviceAnnounce(announce) => {
+            if announce.peer_id != peer_id {
+                warn!(
+                    "Device announce peer_id mismatch: peer_id={}, announced_peer_id={}",
+                    peer_id, announce.peer_id
+                );
+            }
+            let changed = {
+                let mut caches = caches.write().await;
+                caches.upsert_device_name(
+                    peer_id.as_str(),
+                    announce.device_name.clone(),
+                    announce.timestamp,
+                )
+            };
+            if changed {
+                if let Err(err) = try_send_event(
+                    &event_tx,
+                    NetworkEvent::PeerNameUpdated {
+                        peer_id: peer_id.clone(),
+                        device_name: announce.device_name,
+                    },
+                    "PeerNameUpdated",
+                ) {
+                    warn!("failed to send PeerNameUpdated event: {err}");
+                }
+            }
+        }
+        ProtocolMessage::Clipboard(message) => {
+            if let Err(err) = clipboard_tx.send(message.clone()).await {
+                warn!("Failed to forward clipboard payload: {err}");
+            }
+            if let Err(err) = try_send_event(
+                &event_tx,
+                NetworkEvent::ClipboardReceived(message),
+                "ClipboardReceived",
+            ) {
+                warn!("failed to send ClipboardReceived event: {err}");
+            }
+        }
+        ProtocolMessage::Heartbeat(_) => {
+            debug!("Received heartbeat payload from peer_id={}", peer_id);
+        }
+        ProtocolMessage::Pairing(_) => {
+            warn!(
+                "Unexpected pairing payload on business stream from peer_id={}",
+                peer_id
+            );
+        }
+    }
 }
 
 async fn emit_protocol_denied(
@@ -522,6 +682,7 @@ async fn run_swarm(
     event_tx: mpsc::Sender<NetworkEvent>,
     policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
     mut business_rx: mpsc::Receiver<BusinessCommand>,
+    local_peer_id: String,
 ) {
     info!("libp2p mDNS swarm started");
 
@@ -558,7 +719,7 @@ async fn run_swarm(
                         let peer_id = peer_id.to_string();
                         let event = {
                             let mut caches = caches.write().await;
-                            apply_peer_ready(&mut caches, &peer_id)
+                            apply_peer_ready(&mut caches, &peer_id, Utc::now())
                         };
 
                         if let Some(event) = event {
@@ -647,6 +808,64 @@ async fn run_swarm(
                             }
                         }
                     }
+                    BusinessCommand::AnnounceDeviceName { device_name } => {
+                        let peer_ids = {
+                            let caches = caches.read().await;
+                            caches.discovered_peers.keys().cloned().collect::<Vec<_>>()
+                        };
+                        if peer_ids.is_empty() {
+                            debug!("No discovered peers to announce device name");
+                            continue;
+                        }
+                        let message = ProtocolMessage::DeviceAnnounce(DeviceAnnounceMessage {
+                            peer_id: local_peer_id.clone(),
+                            device_name: device_name.clone(),
+                            timestamp: Utc::now(),
+                        });
+                        let payload = match message.to_bytes() {
+                            Ok(payload) => payload,
+                            Err(err) => {
+                                warn!("Failed to serialize device announce payload: {err}");
+                                continue;
+                            }
+                        };
+                        for peer_id in peer_ids {
+                            let peer = match peer_id.as_str().parse::<PeerId>() {
+                                Ok(peer) => peer,
+                                Err(err) => {
+                                    warn!("invalid peer id for announce stream: {err}");
+                                    continue;
+                                }
+                            };
+                            if check_business_allowed(
+                                &policy_resolver,
+                                &event_tx,
+                                peer_id.as_str(),
+                                ProtocolDirection::Outbound,
+                            )
+                            .await
+                            .is_err()
+                            {
+                                continue;
+                            }
+                            let mut control = swarm.behaviour().stream.new_control();
+                            match control
+                                .open_stream(peer, StreamProtocol::new(BUSINESS_PROTOCOL_ID))
+                                .await
+                            {
+                                Ok(mut stream) => {
+                                    if let Err(err) = stream.write_all(&payload).await {
+                                        warn!("announce stream write failed: {err}");
+                                    } else if let Err(err) = stream.close().await {
+                                        warn!("announce stream close failed: {err}");
+                                    }
+                                }
+                                Err(err) => {
+                                    warn!("announce stream open failed: {err}");
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -730,8 +949,12 @@ fn apply_mdns_expired(caches: &mut PeerCaches, expired: HashSet<String>) -> Vec<
         .collect()
 }
 
-fn apply_peer_ready(caches: &mut PeerCaches, peer_id: &str) -> Option<NetworkEvent> {
-    if caches.mark_reachable(peer_id) {
+fn apply_peer_ready(
+    caches: &mut PeerCaches,
+    peer_id: &str,
+    connected_at: DateTime<Utc>,
+) -> Option<NetworkEvent> {
+    if caches.mark_reachable(peer_id, connected_at) {
         Some(NetworkEvent::PeerReady {
             peer_id: peer_id.to_string(),
         })
@@ -741,7 +964,7 @@ fn apply_peer_ready(caches: &mut PeerCaches, peer_id: &str) -> Option<NetworkEve
 }
 
 fn apply_peer_not_ready(caches: &mut PeerCaches, peer_id: &str) -> Option<NetworkEvent> {
-    if caches.reachable_peers.remove(peer_id) {
+    if caches.mark_unreachable(peer_id) {
         Some(NetworkEvent::PeerNotReady {
             peer_id: peer_id.to_string(),
         })
@@ -796,7 +1019,7 @@ mod tests {
     #[test]
     fn reachable_is_best_effort_and_requires_discovery() {
         let mut caches = PeerCaches::new();
-        assert!(!caches.mark_reachable("peer-1"));
+        assert!(!caches.mark_reachable("peer-1", Utc::now()));
         assert!(!caches.is_reachable("peer-1"));
 
         caches.upsert_discovered(
@@ -804,7 +1027,7 @@ mod tests {
             vec!["/ip4/192.168.1.2/tcp/4001".to_string()],
             Utc::now(),
         );
-        assert!(caches.mark_reachable("peer-1"));
+        assert!(caches.mark_reachable("peer-1", Utc::now()));
         assert!(caches.is_reachable("peer-1"));
     }
 
@@ -846,7 +1069,7 @@ mod tests {
             Utc::now(),
         );
 
-        let event = apply_peer_ready(&mut caches, "peer-1");
+        let event = apply_peer_ready(&mut caches, "peer-1", Utc::now());
 
         assert!(matches!(
             event,
@@ -865,7 +1088,7 @@ mod tests {
         );
 
         assert!(apply_peer_not_ready(&mut caches, "peer-1").is_none());
-        let _ = apply_peer_ready(&mut caches, "peer-1");
+        let _ = apply_peer_ready(&mut caches, "peer-1", Utc::now());
 
         let event = apply_peer_not_ready(&mut caches, "peer-1");
 
@@ -962,6 +1185,74 @@ mod tests {
         let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(FakeResolver);
         let adapter = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()), resolver);
         assert!(adapter.is_ok());
+    }
+
+    #[tokio::test]
+    async fn device_announce_updates_cache_and_emits_event() {
+        let caches = Arc::new(RwLock::new(PeerCaches::new()));
+        let (event_tx, mut event_rx) = mpsc::channel(1);
+        let (clipboard_tx, _clipboard_rx) = mpsc::channel(1);
+        let announce = ProtocolMessage::DeviceAnnounce(DeviceAnnounceMessage {
+            peer_id: "peer-1".to_string(),
+            device_name: "Desk".to_string(),
+            timestamp: Utc::now(),
+        });
+        let payload = announce.to_bytes().expect("serialize announce");
+
+        handle_business_payload(
+            caches.clone(),
+            event_tx,
+            clipboard_tx,
+            "peer-1".to_string(),
+            payload,
+        )
+        .await;
+
+        let event = event_rx.recv().await.expect("peer name updated event");
+        match event {
+            NetworkEvent::PeerNameUpdated {
+                peer_id,
+                device_name,
+            } => {
+                assert_eq!(peer_id, "peer-1");
+                assert_eq!(device_name, "Desk");
+            }
+            _ => panic!("expected PeerNameUpdated"),
+        }
+
+        let cached_name = caches
+            .read()
+            .await
+            .discovered_peers
+            .get("peer-1")
+            .and_then(|peer| peer.device_name.clone());
+        assert_eq!(cached_name, Some("Desk".to_string()));
+    }
+
+    #[tokio::test]
+    async fn announce_device_name_queues_command() {
+        let adapter = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter");
+
+        adapter
+            .announce_device_name("Desk".to_string())
+            .await
+            .expect("announce device name");
+
+        let mut rx = Libp2pNetworkAdapter::take_receiver(&adapter.business_rx, "business")
+            .expect("business receiver");
+        let command = rx.recv().await.expect("business command");
+        match command {
+            BusinessCommand::AnnounceDeviceName { device_name } => {
+                assert_eq!(device_name, "Desk");
+            }
+            BusinessCommand::SendClipboard { .. } => {
+                panic!("unexpected clipboard command")
+            }
+        }
     }
 
     #[tokio::test]
@@ -1089,6 +1380,9 @@ mod tests {
             BusinessCommand::SendClipboard { peer_id, data } => {
                 assert_eq!(peer_id.as_str(), "peer-2");
                 assert_eq!(data, payload);
+            }
+            BusinessCommand::AnnounceDeviceName { .. } => {
+                panic!("unexpected announce command")
             }
         }
     }

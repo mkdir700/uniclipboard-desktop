@@ -67,6 +67,12 @@ impl NetworkPort for PlaceholderNetworkPort {
         self.local_peer_id.to_string()
     }
 
+    async fn announce_device_name(&self, _device_name: String) -> Result<()> {
+        Err(anyhow::anyhow!(
+            "NetworkPort::announce_device_name not implemented yet"
+        ))
+    }
+
     // === Pairing operations ===
 
     async fn open_pairing_session(&self, _peer_id: String, _session_id: String) -> Result<()> {
