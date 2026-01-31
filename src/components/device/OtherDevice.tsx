@@ -2,13 +2,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Smartphone, Monitor, Tablet, Settings, Eye, Trash2, Laptop, RefreshCw } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import DeviceSettingsPanel from './DeviceSettingsPanel'
-import { onP2PPeerConnectionChanged, unpairP2PDevice } from '@/api/p2p'
+import { onP2PPeerConnectionChanged, onP2PPeerNameUpdated, unpairP2PDevice } from '@/api/p2p'
 import { formatPeerIdForDisplay } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import {
   fetchPairedDevices,
   clearPairedDevicesError,
   updatePeerConnectionStatus,
+  updatePeerDeviceName,
 } from '@/store/slices/devicesSlice'
 
 const OtherDevice: React.FC = () => {
@@ -24,6 +25,7 @@ const OtherDevice: React.FC = () => {
 
     // 监听连接状态变化
     let unlistenConnection: (() => void) | undefined
+    let unlistenName: (() => void) | undefined
 
     const setupConnectionListener = async () => {
       unlistenConnection = await onP2PPeerConnectionChanged(event => {
@@ -32,16 +34,30 @@ const OtherDevice: React.FC = () => {
           updatePeerConnectionStatus({
             peerId: event.peerId,
             connected: event.connected,
+            deviceName: event.deviceName ?? undefined,
+          })
+        )
+      })
+    }
+
+    const setupNameListener = async () => {
+      unlistenName = await onP2PPeerNameUpdated(event => {
+        dispatch(
+          updatePeerDeviceName({
+            peerId: event.peerId,
+            deviceName: event.deviceName,
           })
         )
       })
     }
 
     setupConnectionListener()
+    setupNameListener()
 
     return () => {
       // 清理监听器
       unlistenConnection?.()
+      unlistenName?.()
     }
   }, [dispatch])
 
