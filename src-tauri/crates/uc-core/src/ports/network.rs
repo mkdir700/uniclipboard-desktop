@@ -40,6 +40,9 @@ pub trait NetworkPort: Send + Sync {
     /// Get local peer ID
     fn local_peer_id(&self) -> String;
 
+    /// Announce local device name to peers
+    async fn announce_device_name(&self, device_name: String) -> Result<()>;
+
     // === Pairing operations ===
 
     /// Open a pairing session-specific stream toward a peer. Best-effort.
