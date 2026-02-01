@@ -18,6 +18,162 @@
 - **All external capabilities go through Ports (no exceptions):**
   - DB, FS, Clipboard, Network, Crypto
 
+## Atomic Commit Rule (MANDATORY)
+
+### Core Principle
+
+**Every commit MUST represent exactly ONE engineering intent.**
+
+A commit is invalid if it mixes:
+
+- feature + refactor
+- logic change + formatting
+- bug fix + cleanup
+- domain layer + infra/platform layer
+
+If the commit message requires words like:
+`and`, `also`, `plus`, `misc`, `update`  
+→ the commit is NOT atomic and must be split.
+
+---
+
+### Allowed Commit Types
+
+Each commit must use exactly ONE of the following prefixes:
+
+- `feat:` new user-facing capability
+- `impl:` concrete implementation step of a planned feature
+- `fix:` bug fix
+- `hotfix:` urgent production fix
+- `refactor:` structural change without behavior change
+- `arch:` architecture or boundary change
+- `chore:` tooling, build, dependency, scripts
+- `infra:` deployment or environment config
+- `test:` add or adjust tests
+- `perf:` performance optimization (benchmark required)
+- `docs:` documentation only
+
+---
+
+### Pre-Commit Self Check (Agent MUST execute)
+
+Before committing, the agent must verify:
+
+1. This commit has exactly ONE clear goal.
+2. Removing this commit removes only ONE capability/change.
+3. The diff cannot be logically split.
+
+If condition 3 is false → SPLIT the commit.
+
+---
+
+### Diff Scope Validation
+
+Abort commit if diff contains:
+
+- Domain logic + infrastructure implementation
+- Port interface + adapter implementation
+- Functional logic + formatting changes
+- Multiple bounded contexts
+
+Required split example:
+
+❌ Forbidden:
+
+```
+
+feat: add pairing flow and refactor crypto utils
+
+```
+
+✅ Required:
+
+```
+
+refactor: extract crypto utils module
+feat: implement pairing handshake flow
+
+```
+
+---
+
+### Hexagonal Architecture Commit Boundary Rule
+
+The following MUST NOT appear in the same commit:
+
+- `uc-core` + `uc-infra`
+- Port definition + Adapter implementation
+- App use-case + Platform integration
+
+Required order:
+
+```
+
+arch: add BlobRepository port
+impl: implement sqlite BlobRepository adapter
+
+```
+
+---
+
+### Commit Message Format (Strict)
+
+```
+
+<type>: <single intent summary>
+
+[optional context]
+
+```
+
+Good examples:
+
+```
+
+feat: add device pairing handshake state machine
+
+```
+
+```
+
+fix: prevent blob sync deadlock on reconnect
+
+```
+
+```
+
+refactor: extract clipboard encryption service into uc-core
+
+```
+
+Bad examples (forbidden):
+
+```
+
+update stuff
+
+```
+
+```
+
+feat: add pairing and improve ui and fix bug
+
+```
+
+---
+
+### Revert Safety Rule
+
+Every commit MUST satisfy:
+
+- Project builds successfully
+- Tests still pass (or explicitly documented breaking commit)
+- No "half-prepared" commits for future steps
+
+Never commit code that only exists to support a later commit.
+
+---
+
 ## Rust Error Handling (Production Code)
 
 - **No `unwrap()` / `expect()` in production code.**
@@ -63,7 +219,6 @@
 use tracing::{info, warn, error, debug, info_span, Instrument};
 
 pub async fn sync_peer(peer_id: &str, attempt: u32) -> Result<(), SyncError> {
-    // Attach stable context to a span once.
     let span = info_span!(
         "sync_peer",
         peer_id = %peer_id,
@@ -73,7 +228,6 @@ pub async fn sync_peer(peer_id: &str, attempt: u32) -> Result<(), SyncError> {
     async move {
         info!("start");
 
-        // Prefer explicit error handling; log with context at the right layer.
         let session = match open_session(peer_id).await {
             Ok(s) => s,
             Err(e) => {
@@ -85,7 +239,6 @@ pub async fn sync_peer(peer_id: &str, attempt: u32) -> Result<(), SyncError> {
         debug!(session_id = %session.id(), "session opened");
 
         if let Err(e) = push_updates(&session).await {
-            // error logging should preserve the causal chain where possible
             error!(error = %e, "push_updates failed");
             return Err(SyncError::PushUpdates(e));
         }
@@ -112,9 +265,7 @@ pub async fn command_body(_trace: Option<TraceMetadata>) -> Result<(), CmdError>
     record_trace_fields(&span, &_trace);
 
     async move {
-        // logs inside automatically inherit trace fields via the span
         tracing::info!(op = "do_something", "start");
-        // ...
         Ok(())
     }
     .instrument(span)
