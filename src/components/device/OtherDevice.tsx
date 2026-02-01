@@ -1,5 +1,15 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { Smartphone, Monitor, Tablet, Settings, Eye, Trash2, Laptop, RefreshCw } from 'lucide-react'
+import {
+  Smartphone,
+  Monitor,
+  Tablet,
+  Settings,
+  Eye,
+  Trash2,
+  Laptop,
+  RefreshCw,
+  Plus,
+} from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import DeviceSettingsPanel from './DeviceSettingsPanel'
 import { onP2PPeerConnectionChanged, onP2PPeerNameUpdated, unpairP2PDevice } from '@/api/p2p'
@@ -12,7 +22,11 @@ import {
   updatePeerDeviceName,
 } from '@/store/slices/devicesSlice'
 
-const OtherDevice: React.FC = () => {
+interface OtherDeviceProps {
+  onAddDevice: () => void
+}
+
+const OtherDevice: React.FC<OtherDeviceProps> = ({ onAddDevice }) => {
   const [expandedDevices, setExpandedDevices] = useState<Record<string, boolean>>({})
   const dispatch = useAppDispatch()
   const { pairedDevices, pairedDevicesLoading, pairedDevicesError } = useAppSelector(
@@ -136,6 +150,7 @@ const OtherDevice: React.FC = () => {
           <div className="flex items-center gap-3">
             <p className="text-sm text-destructive">{pairedDevicesError}</p>
             <button
+              type="button"
               onClick={handleRetry}
               className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
               title="重试"
@@ -151,15 +166,22 @@ const OtherDevice: React.FC = () => {
   // 空状态
   if (pairedDevices.length === 0) {
     return (
-      <div className="space-y-4">
-        <div className="flex flex-col items-center justify-center p-12 border border-dashed border-border/50 rounded-lg bg-muted/5 text-muted-foreground">
-          <p className="text-sm">暂无已配对的设备</p>
-          <p className="text-xs mt-2 flex items-center gap-2">
-            <RefreshCw className="h-3 w-3 animate-spin" />
-            正在发现设备... (可能需要几秒钟)
-          </p>
-          <p className="text-xs mt-1">点击右上角的"添加设备"按钮开始配对</p>
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="bg-muted/30 p-6 rounded-full mb-6 ring-1 ring-border/50">
+          <Smartphone className="h-12 w-12 text-muted-foreground/50" />
         </div>
+        <h3 className="text-xl font-semibold text-foreground mb-2">No paired devices</h3>
+        <p className="text-muted-foreground max-w-xs mb-8">
+          Connect your other devices to start syncing clipboard content instantly.
+        </p>
+        <button
+          type="button"
+          onClick={onAddDevice}
+          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 hover:shadow-primary/30 hover:-translate-y-0.5"
+        >
+          <Plus className="h-5 w-5" />
+          Add Device
+        </button>
       </div>
     )
   }
@@ -227,6 +249,7 @@ const OtherDevice: React.FC = () => {
                   {/* Action Buttons */}
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
                       onClick={() => toggleDevice(device.peerId)}
                       className={`p-2 rounded-xl transition-all duration-300 ${isExpanded ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
                       title="设置"
@@ -236,12 +259,14 @@ const OtherDevice: React.FC = () => {
                       />
                     </button>
                     <button
+                      type="button"
                       className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
                       title="查看"
                     >
                       <Eye className="h-5 w-5" />
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleUnpair(device.peerId)}
                       className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-colors"
                       title="取消配对"
@@ -275,6 +300,17 @@ const OtherDevice: React.FC = () => {
           </div>
         )
       })}
+
+      <button
+        type="button"
+        onClick={onAddDevice}
+        className="w-full group relative overflow-hidden bg-card/30 hover:bg-card/50 border border-dashed border-border hover:border-primary/50 rounded-lg transition-all duration-300 p-4 flex items-center justify-center gap-3 text-muted-foreground hover:text-primary"
+      >
+        <div className="h-10 w-10 rounded-full bg-muted/50 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
+          <Plus className="h-5 w-5" />
+        </div>
+        <span className="font-medium">Add another device</span>
+      </button>
     </div>
   )
 }

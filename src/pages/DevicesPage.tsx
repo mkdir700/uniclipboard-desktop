@@ -9,6 +9,10 @@ const DevicesPage: React.FC = () => {
     setShowPairingDialog(false)
   }
 
+  const handleAddDevice = () => {
+    setShowPairingDialog(true)
+  }
+
   const handlePairingSuccess = () => {}
 
   return (
@@ -16,7 +20,7 @@ const DevicesPage: React.FC = () => {
       <div className="flex-1 overflow-hidden relative">
         <div className="h-full overflow-y-auto scrollbar-thin px-8 pb-32 pt-2 scroll-smooth">
           <div className="mb-12">
-            <DeviceList />
+            <DeviceList onAddDevice={handleAddDevice} />
           </div>
         </div>
       </div>
