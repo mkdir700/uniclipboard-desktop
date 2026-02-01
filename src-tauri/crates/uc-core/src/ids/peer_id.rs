@@ -22,13 +22,7 @@ impl PeerId {
 
 impl Display for PeerId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // Truncate for display (libp2p PeerIds are long)
-        let display = if self.0.len() > 16 {
-            format!("{}...", &self.0[..16])
-        } else {
-            self.0.clone()
-        };
-        write!(f, "{}", display)
+        write!(f, "{}", self.0)
     }
 }
 
@@ -55,10 +49,9 @@ mod tests {
     }
 
     #[test]
-    fn test_peer_id_truncation() {
+    fn test_peer_id_display_is_full() {
         let long_id = PeerId::new("12D3KooWVeryLongPeerIdStringThatShouldBeTruncated".to_string());
         let display = format!("{}", long_id);
-        assert!(display.ends_with("..."));
-        assert!(display.len() <= 19);
+        assert_eq!(display, "12D3KooWVeryLongPeerIdStringThatShouldBeTruncated");
     }
 }
