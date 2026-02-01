@@ -185,7 +185,6 @@ jobs:
           MACOS_X64_DMG=$(find release-assets -name "*x64.dmg" -type f -printf "%f\n" | head -n1 || echo "")
           LINUX_DEB=$(find release-assets -name "*.deb" -type f -printf "%f\n" | head -n1 || echo "")
           LINUX_APPIMAGE=$(find release-assets -name "*.AppImage" -type f -printf "%f\n" | head -n1 || echo "")
-          WINDOWS_MSI=$(find release-assets -name "*.msi" -type f -printf "%f\n" | head -n1 || echo "")
           WINDOWS_EXE=$(find release-assets -name "*.exe" -type f -printf "%f\n" | head -n1 || echo "")
 
           # Start release notes
@@ -242,12 +241,8 @@ jobs:
           ### Windows
           EOF
 
-          if [ -n "$WINDOWS_MSI" ]; then
-            echo "- **MSI Installer**: [$WINDOWS_MSI]($BASE_URL/$WINDOWS_MSI)" >> release-notes.md
-          fi
-
           if [ -n "$WINDOWS_EXE" ]; then
-            echo "- **Portable**: [$WINDOWS_EXE]($BASE_URL/$WINDOWS_EXE)" >> release-notes.md
+            echo "- **NSIS Installer**: [$WINDOWS_EXE]($BASE_URL/$WINDOWS_EXE)" >> release-notes.md
           fi
 
           cat >> release-notes.md << 'EOF'
