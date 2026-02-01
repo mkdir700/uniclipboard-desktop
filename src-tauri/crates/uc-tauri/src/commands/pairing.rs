@@ -246,7 +246,7 @@ pub async fn get_paired_peers_with_status(
         Ok(paired_devices
             .into_iter()
             .map(|device| {
-                let peer_id = device.peer_id.to_string();
+                let peer_id = device.peer_id.as_str().to_string();
                 let discovered_peer = discovered_map.get(&peer_id);
                 let connected = connected_map.contains_key(&peer_id);
                 map_paired_device_to_peer(device, discovered_peer, connected)

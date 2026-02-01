@@ -1593,7 +1593,7 @@ mod tests {
             session_id: "session-1".to_string(),
             device_name: "PeerDevice".to_string(),
             device_id: "device-999".to_string(),
-            peer_id: "peer-remote".to_string(),
+            peer_id: "peer-local".to_string(),
             identity_pubkey: vec![1; 32],
             nonce: vec![2; 16],
         };
@@ -1771,7 +1771,7 @@ mod tests {
             session_id: "session-1".to_string(),
             device_name: "PeerDevice".to_string(),
             device_id: "device-999".to_string(),
-            peer_id: "peer-remote".to_string(),
+            peer_id: "peer-local".to_string(),
             identity_pubkey: vec![1; 32],
             nonce: vec![2; 16],
         };
@@ -1834,10 +1834,10 @@ mod tests {
         let orchestrator = Arc::new(orchestrator);
 
         let request = PairingRequest {
-            session_id: "session-2".to_string(),
+            session_id: "session-1".to_string(),
             device_name: "PeerDevice".to_string(),
             device_id: "device-999".to_string(),
-            peer_id: "peer-remote".to_string(),
+            peer_id: "peer-local".to_string(),
             identity_pubkey: vec![1; 32],
             nonce: vec![2; 16],
         };
