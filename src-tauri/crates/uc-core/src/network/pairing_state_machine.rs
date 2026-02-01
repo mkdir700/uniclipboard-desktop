@@ -1348,11 +1348,17 @@ impl PairingStateMachine {
                     session_id: session_id.clone(),
                     paired_device_id: device_id,
                 },
-                vec![PairingAction::EmitResult {
-                    session_id,
-                    success: true,
-                    error: None,
-                }],
+                vec![
+                    PairingAction::CancelTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::Persist,
+                    },
+                    PairingAction::EmitResult {
+                        session_id,
+                        success: true,
+                        error: None,
+                    },
+                ],
             ),
             (
                 PairingState::Finalizing { session_id, .. },
@@ -1362,11 +1368,17 @@ impl PairingStateMachine {
                     session_id: session_id.clone(),
                     reason: FailureReason::PersistenceError(error.clone()),
                 },
-                vec![PairingAction::EmitResult {
-                    session_id,
-                    success: false,
-                    error: Some(error),
-                }],
+                vec![
+                    PairingAction::CancelTimer {
+                        session_id: session_id.clone(),
+                        kind: TimeoutKind::Persist,
+                    },
+                    PairingAction::EmitResult {
+                        session_id,
+                        success: false,
+                        error: Some(error),
+                    },
+                ],
             ),
             (
                 PairingState::Finalizing { session_id, .. },
@@ -1893,6 +1905,142 @@ mod tests {
         assert!(actions
             .iter()
             .any(|action| matches!(action, PairingAction::PersistPairedDevice { .. })));
+    }
+
+    #[test]
+    fn finalizing_persist_ok_cancels_timer() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        sm.handle_event(
+            PairingEvent::RecvRequest {
+                session_id: "session-1".to_string(),
+                sender_peer_id: "peer-remote".to_string(),
+                request: build_request("session-1"),
+            },
+            Utc::now(),
+        );
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: "session-1".to_string(),
+            },
+            Utc::now(),
+        );
+        let challenge = actions
+            .iter()
+            .find_map(|action| match action {
+                PairingAction::Send {
+                    message: PairingMessage::Challenge(challenge),
+                    ..
+                } => Some(challenge.clone()),
+                _ => None,
+            })
+            .expect("challenge action");
+
+        let response = PairingResponse {
+            session_id: challenge.session_id.clone(),
+            pin_hash: hash_pin(&challenge.pin).expect("hash pin"),
+            accepted: true,
+        };
+        let (state, _actions) = sm.handle_event(
+            PairingEvent::RecvResponse {
+                session_id: challenge.session_id.clone(),
+                response,
+            },
+            Utc::now(),
+        );
+
+        let session_id = match state {
+            PairingState::Finalizing { session_id, .. } => session_id,
+            _ => panic!("Expected Finalizing state, got {:?}", state),
+        };
+
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::PersistOk {
+                session_id,
+                device_id: "device-remote".to_string(),
+            },
+            Utc::now(),
+        );
+
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::CancelTimer {
+                kind: TimeoutKind::Persist,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn finalizing_persist_err_cancels_timer() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        sm.handle_event(
+            PairingEvent::RecvRequest {
+                session_id: "session-1".to_string(),
+                sender_peer_id: "peer-remote".to_string(),
+                request: build_request("session-1"),
+            },
+            Utc::now(),
+        );
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::UserAccept {
+                session_id: "session-1".to_string(),
+            },
+            Utc::now(),
+        );
+        let challenge = actions
+            .iter()
+            .find_map(|action| match action {
+                PairingAction::Send {
+                    message: PairingMessage::Challenge(challenge),
+                    ..
+                } => Some(challenge.clone()),
+                _ => None,
+            })
+            .expect("challenge action");
+
+        let response = PairingResponse {
+            session_id: challenge.session_id.clone(),
+            pin_hash: hash_pin(&challenge.pin).expect("hash pin"),
+            accepted: true,
+        };
+        let (state, _actions) = sm.handle_event(
+            PairingEvent::RecvResponse {
+                session_id: challenge.session_id.clone(),
+                response,
+            },
+            Utc::now(),
+        );
+
+        let session_id = match state {
+            PairingState::Finalizing { session_id, .. } => session_id,
+            _ => panic!("Expected Finalizing state, got {:?}", state),
+        };
+
+        let (_state, actions) = sm.handle_event(
+            PairingEvent::PersistErr {
+                session_id,
+                error: "persist failed".to_string(),
+            },
+            Utc::now(),
+        );
+
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::CancelTimer {
+                kind: TimeoutKind::Persist,
+                ..
+            }
+        )));
     }
 
     #[test]
