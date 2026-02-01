@@ -18,13 +18,13 @@ node scripts/bump-version.js --type minor --channel stable
 # Major 版本升级 (0.1.0 -> 1.0.0)
 node scripts/bump-version.js --type major --channel stable
 
-# 创建 alpha 预发布版本 (0.1.0 -> 0.1.1-alpha.1)
+# 创建 alpha 预发布版本 (0.1.0 -> 0.1.0-alpha.1)
 node scripts/bump-version.js --type patch --channel alpha
 
-# 继续发布 alpha 版本 (0.1.1-alpha.1 -> 0.1.1-alpha.2)
+# 继续发布 alpha 版本 (0.1.0-alpha.1 -> 0.1.0-alpha.2)
 node scripts/bump-version.js --type patch --channel alpha
 
-# 从预发布版本升级到稳定版 (0.1.1-alpha.5 -> 0.1.1)
+# 从预发布版本升级到稳定版 (0.1.0-alpha.5 -> 0.1.0)
 node scripts/bump-version.js --type patch --channel stable
 
 # 预览变更（不实际修改文件）
@@ -177,17 +177,17 @@ git push
 # channel: alpha
 ```
 
-结果: `0.1.0` -> `0.1.1-alpha.1`
+结果: `0.1.0` -> `0.1.0-alpha.1`
 
 ### 场景 2: 继续发布 alpha 版本
 
-如果当前版本是 `0.1.1-alpha.1`，继续使用相同参数：
+如果当前版本是 `0.1.0-alpha.1`，继续使用相同参数：
 
 ```bash
 node scripts/bump-version.js --type patch --channel alpha
 ```
 
-结果: `0.1.1-alpha.1` -> `0.1.1-alpha.2`
+结果: `0.1.0-alpha.1` -> `0.1.0-alpha.2`
 
 ### 场景 3: Alpha 测试完成，发布稳定版
 
@@ -195,7 +195,7 @@ node scripts/bump-version.js --type patch --channel alpha
 node scripts/bump-version.js --type patch --channel stable
 ```
 
-结果: `0.1.1-alpha.5` -> `0.1.1`
+结果: `0.1.0-alpha.5` -> `0.1.0`
 
 ### 场景 4: 发布新的 minor 版本
 
