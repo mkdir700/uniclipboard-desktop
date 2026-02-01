@@ -6,6 +6,7 @@ import { JoinVerifyPassphraseStepProps } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { formatPeerIdForDisplay } from '@/lib/utils'
 
 export default function JoinVerifyPassphraseStep({
   peerId,
@@ -58,6 +59,7 @@ export default function JoinVerifyPassphraseStep({
         className="w-full"
       >
         <button
+          type="button"
           onClick={onBack}
           className="mb-8 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
@@ -103,6 +105,7 @@ export default function JoinVerifyPassphraseStep({
       className="w-full"
     >
       <button
+        type="button"
         onClick={onBack}
         className="mb-8 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
@@ -114,7 +117,7 @@ export default function JoinVerifyPassphraseStep({
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
         <p className="mt-2 text-muted-foreground">{t('subtitle')}</p>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
-          {t('targetDevice', { peerShort: peerId.substring(0, 8) })}
+          {t('targetDevice', { peerShort: formatPeerIdForDisplay(peerId) })}
         </p>
       </div>
 

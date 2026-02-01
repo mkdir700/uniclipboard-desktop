@@ -298,7 +298,7 @@
     "joinVerifyPassphrase": {
       "title": "Enter passphrase",
       "subtitle": "Enter the same passphrase used on your existing device to join the encrypted space",
-      "targetDevice": "Target device: {{peerShort}}...",
+      "targetDevice": "Target device: {{peerShort}}",
       "actions": {
         "verify": "Verify and continue",
         "verifying": "Verifying...",
