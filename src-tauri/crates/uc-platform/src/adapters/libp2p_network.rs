@@ -28,6 +28,8 @@ use super::pairing_stream::service::{
 };
 use crate::identity_store::load_or_create_identity;
 const BUSINESS_PROTOCOL_ID: &str = ProtocolId::Business.as_str();
+const BUSINESS_PAYLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
+const BUSINESS_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug)]
 enum BusinessCommand {
@@ -537,8 +539,35 @@ fn spawn_business_stream_handler(
                     return;
                 }
                 let mut payload = Vec::new();
-                if let Err(err) = stream.read_to_end(&mut payload).await {
-                    warn!("business stream read failed: {err}");
+                let mut limited = stream.take(BUSINESS_PAYLOAD_MAX_BYTES + 1);
+                match tokio::time::timeout(BUSINESS_READ_TIMEOUT, limited.read_to_end(&mut payload))
+                    .await
+                {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(err)) => {
+                        warn!("business stream read failed: {err}");
+                        if let Err(err) = stream.close().await {
+                            warn!("business stream close failed: {err}");
+                        }
+                        return;
+                    }
+                    Err(_) => {
+                        warn!("business stream read timed out");
+                        if let Err(err) = stream.close().await {
+                            warn!("business stream close failed: {err}");
+                        }
+                        return;
+                    }
+                }
+                if payload.len() as u64 > BUSINESS_PAYLOAD_MAX_BYTES {
+                    warn!(
+                        "business stream payload exceeds limit: payload_len={}, max_bytes={}",
+                        payload.len(),
+                        BUSINESS_PAYLOAD_MAX_BYTES
+                    );
+                    if let Err(err) = stream.close().await {
+                        warn!("business stream close failed: {err}");
+                    }
                     return;
                 }
                 if let Err(err) = stream.close().await {
