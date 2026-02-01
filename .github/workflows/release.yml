@@ -25,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.extract-version.outputs.version }}
+      previous_tag: ${{ steps.get-previous-tag.outputs.previous_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -53,11 +54,29 @@ jobs:
             exit 1
           fi
 
+      - name: Get previous tag
+        id: get-previous-tag
+        run: |
+          # Fetch all tags
+          git fetch --tags origin
+
+          # Get the most recent tag
+          PREV_TAG=$(git tag --sort=-version:refname | head -n 1 || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, using initial commit"
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "previous_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          echo "Previous reference: $PREV_TAG"
+
   build:
     needs: validate
     uses: ./.github/workflows/build.yml
     with:
       platform: ${{ inputs.platform }}
+      branch: ${{ inputs.branch }}
     secrets: inherit
 
   create-release:
@@ -114,7 +133,7 @@ jobs:
 
           <!-- Please update this section with actual changes -->
 
-          **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ needs.validate.outputs.version }}...v${{ needs.validate.outputs.version }}
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ needs.validate.outputs.previous_tag }}...v${{ needs.validate.outputs.version }}
 
           ## Installation
 
