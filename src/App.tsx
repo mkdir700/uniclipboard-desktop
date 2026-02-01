@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { type EncryptionSessionStatus } from '@/api/security'
 import { TitleBar } from '@/components'
+import P2PPairingToastListener from '@/components/P2PPairingToastListener'
 import { Toaster } from '@/components/ui/sonner'
 import { useOnboarding } from '@/contexts/onboarding-context'
 import { OnboardingProvider } from '@/contexts/OnboardingContext'
@@ -124,6 +125,7 @@ const AppContent = () => {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <P2PPairingToastListener />
       <Toaster />
     </ShortcutProvider>
   )
