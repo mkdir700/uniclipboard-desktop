@@ -3,6 +3,7 @@ import { ArrowLeft, RefreshCw, Monitor, Smartphone, Laptop, AlertCircle } from '
 import { useTranslation } from 'react-i18next'
 import { JoinPickDeviceStepProps } from './types'
 import { Button } from '@/components/ui/button'
+import { formatPeerIdForDisplay } from '@/lib/utils'
 
 export default function JoinPickDeviceStep({
   onSelectPeer,
@@ -35,6 +36,7 @@ export default function JoinPickDeviceStep({
     >
       <div className="mb-8 flex items-center justify-between">
         <button
+          type="button"
           onClick={onBack}
           className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
@@ -42,6 +44,7 @@ export default function JoinPickDeviceStep({
           {tCommon('back')}
         </button>
         <button
+          type="button"
           onClick={onRefresh}
           disabled={loading}
           className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
@@ -91,7 +94,7 @@ export default function JoinPickDeviceStep({
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{peer.name}</div>
                 <div className="truncate font-mono text-xs text-muted-foreground">
-                  {peer.id.substring(0, 8)}...
+                  {formatPeerIdForDisplay(peer.id)}
                 </div>
               </div>
               <Button size="sm" onClick={() => onSelectPeer(peer.id)} disabled={loading}>
