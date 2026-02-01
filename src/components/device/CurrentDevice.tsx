@@ -1,13 +1,10 @@
-import { motion, AnimatePresence } from 'framer-motion'
-import { Laptop, Settings, RefreshCw } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
-import DeviceSettingsPanel from './DeviceSettingsPanel'
+import { Laptop, RefreshCw } from 'lucide-react'
+import React, { useEffect } from 'react'
 import { formatPeerIdForDisplay } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { fetchLocalDeviceInfo, clearLocalDeviceError } from '@/store/slices/devicesSlice'
 
 const CurrentDevice: React.FC = () => {
-  const [isExpanded, setIsExpanded] = useState(false)
   const dispatch = useAppDispatch()
   const { localDevice, localDeviceLoading, localDeviceError } = useAppSelector(
     state => state.devices
@@ -49,6 +46,7 @@ const CurrentDevice: React.FC = () => {
             <p className="text-sm text-destructive">{localDeviceError || '无法获取当前设备信息'}</p>
             {localDeviceError && (
               <button
+                type="button"
                 onClick={handleRetry}
                 className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
                 title="重试"
@@ -92,9 +90,8 @@ const CurrentDevice: React.FC = () => {
               </div>
             </div>
 
-            {/* Actions & Status */}
+            {/* Status Indicator */}
             <div className="flex items-center gap-6">
-              {/* Status Indicator */}
               <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 text-green-500 rounded-full border border-green-500/20">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
@@ -102,35 +99,8 @@ const CurrentDevice: React.FC = () => {
                 </span>
                 <span className="text-xs font-medium">在线</span>
               </div>
-
-              {/* Action Buttons */}
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className={`p-2 rounded-lg transition-all duration-300 ${isExpanded ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
-              >
-                <Settings
-                  className={`h-5 w-5 transition-transform duration-500 ${isExpanded ? 'rotate-90' : ''}`}
-                />
-              </button>
             </div>
           </div>
-
-          {/* Expandable Settings Panel */}
-          <AnimatePresence>
-            {isExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-                className="overflow-hidden"
-              >
-                <div className="pt-6 border-t border-border/50 mt-6">
-                  <DeviceSettingsPanel deviceId="current" deviceName={localDevice.deviceName} />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       </div>
     </div>
