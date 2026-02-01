@@ -39,7 +39,8 @@ pub struct PairingRequest {
     pub device_name: String,
     /// 6-digit stable device ID (from devices table)
     pub device_id: String,
-    /// Current libp2p PeerId for this session (stable while identity is persisted)
+    /// Target PeerId for validation. Responder checks this matches its own PeerId.
+    /// Sender PeerId is passed via network layer events (e.g., PairingEvent::RecvRequest).
     pub peer_id: String,
     /// Stable identity public key (Ed25519)
     pub identity_pubkey: Vec<u8>,

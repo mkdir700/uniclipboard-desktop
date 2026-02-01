@@ -173,6 +173,8 @@ pub enum PairingEvent {
     /// 收到配对请求
     RecvRequest {
         session_id: SessionId,
+        /// 发送方 PeerID (从网络层获取,可信)
+        sender_peer_id: String,
         request: crate::network::protocol::PairingRequest,
     },
 
@@ -598,10 +600,17 @@ impl PairingStateMachine {
                     actions,
                 )
             }
-            (PairingState::Idle, PairingEvent::RecvRequest { request, .. }) => {
+            (
+                PairingState::Idle,
+                PairingEvent::RecvRequest {
+                    request,
+                    sender_peer_id,
+                    ..
+                },
+            ) => {
                 self.context.session_id = Some(request.session_id.clone());
                 self.context.role = Some(PairingRole::Responder);
-                self.context.peer_id = Some(request.peer_id.clone());
+                self.context.peer_id = Some(sender_peer_id);
                 self.context.peer_nonce = Some(request.nonce.clone());
                 self.context.peer_identity_pubkey = Some(request.identity_pubkey.clone());
                 self.context.peer_device_name = Some(request.device_name.clone());
@@ -1566,6 +1575,7 @@ mod tests {
         let (state, _actions) = sm.handle_event(
             PairingEvent::RecvRequest {
                 session_id: session_id.to_string(),
+                sender_peer_id: "peer-initiator".to_string(),
                 request: request.clone(),
             },
             Utc::now(),
@@ -1686,6 +1696,7 @@ mod tests {
             },
             Utc::now(),
         );
+
         sm.handle_event(
             PairingEvent::RecvChallenge {
                 session_id: "session-1".to_string(),
@@ -1736,6 +1747,7 @@ mod tests {
         sm.handle_event(
             PairingEvent::RecvRequest {
                 session_id: "session-1".to_string(),
+                sender_peer_id: "peer-remote".to_string(),
                 request: build_request("session-1"),
             },
             Utc::now(),
@@ -1776,6 +1788,7 @@ mod tests {
         sm.handle_event(
             PairingEvent::RecvRequest {
                 session_id: "session-1".to_string(),
+                sender_peer_id: "peer-remote".to_string(),
                 request: build_request("session-1"),
             },
             Utc::now(),
@@ -1834,6 +1847,7 @@ mod tests {
         sm.handle_event(
             PairingEvent::RecvRequest {
                 session_id: "session-1".to_string(),
+                sender_peer_id: "peer-remote".to_string(),
                 request: build_request("session-1"),
             },
             Utc::now(),
@@ -1902,6 +1916,7 @@ mod tests {
         sm.handle_event(
             PairingEvent::RecvRequest {
                 session_id: "session-1".to_string(),
+                sender_peer_id: "peer-remote".to_string(),
                 request,
             },
             Utc::now(),
@@ -2070,5 +2085,37 @@ mod tests {
         );
 
         assert_eq!(sm.context.peer_device_name, Some("NewName".to_string()));
+    }
+
+    #[test]
+    fn recv_request_uses_sender_peer_id_not_request_peer_id() {
+        let mut sm = PairingStateMachine::new_with_local_identity(
+            "LocalDevice".to_string(),
+            "device-1".to_string(),
+            vec![1; 32],
+        );
+
+        let request = PairingRequest {
+            session_id: "session-1".to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-2".to_string(),
+            peer_id: "spoofed-peer-id".to_string(), // Malicious/Wrong ID
+            identity_pubkey: vec![2; 32],
+            nonce: vec![9; 16],
+        };
+
+        let sender_peer_id = "trusted-sender-id".to_string();
+
+        sm.handle_event(
+            PairingEvent::RecvRequest {
+                session_id: "session-1".to_string(),
+                sender_peer_id: sender_peer_id.clone(),
+                request,
+            },
+            Utc::now(),
+        );
+
+        // The context should reflect the trusted sender_peer_id, not the spoofed one
+        assert_eq!(sm.context.peer_id, Some(sender_peer_id));
     }
 }
