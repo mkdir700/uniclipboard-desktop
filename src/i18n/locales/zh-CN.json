@@ -466,7 +466,8 @@
     "globalRequest": {
       "title": "设备配对请求",
       "description": "{{deviceName}} 请求与您配对",
-      "warning": "请确认这是您发起的配对操作"
+      "warning": "请确认这是您发起的配对操作",
+      "action": "打开配对"
     },
     "requests": {
       "accept": "接受",
