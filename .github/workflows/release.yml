@@ -1,0 +1,179 @@
+name: 'Release'
+run-name: "release-${{ github.run_number }}"
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '发布分支'
+        required: true
+        type: string
+        default: 'main'
+      platform:
+        description: '构建平台'
+        required: true
+        type: choice
+        options:
+          - 'all'
+          - 'macos-aarch64'
+          - 'macos-x86_64'
+          - 'ubuntu-22.04'
+          - 'windows-latest'
+        default: 'all'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract-version.outputs.version }}
+      previous_tag: ${{ steps.get-previous-tag.outputs.previous_tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Extract version from package.json
+        id: extract-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Extracted version: $VERSION"
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Error: Invalid version format in package.json. Expected format: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag exists
+        run: |
+          VERSION="${{ steps.extract-version.outputs.version }}"
+          if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION"; then
+            echo "Error: Tag v$VERSION already exists"
+            echo "Please update the version in package.json before releasing"
+            exit 1
+          fi
+
+      - name: Get previous tag
+        id: get-previous-tag
+        run: |
+          # Fetch all tags
+          git fetch --tags origin
+
+          # Get the most recent tag
+          PREV_TAG=$(git tag --sort=-version:refname | head -n 1 || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, using initial commit"
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "previous_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          echo "Previous reference: $PREV_TAG"
+
+  build:
+    needs: validate
+    uses: ./.github/workflows/build.yml
+    with:
+      platform: ${{ inputs.platform }}
+      branch: ${{ inputs.branch }}
+    secrets: inherit
+
+  create-release:
+    name: Create GitHub Release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display artifact structure
+        run: ls -R artifacts
+
+      - name: Prepare release assets
+        id: prepare-assets
+        run: |
+          mkdir -p release-assets
+
+          # Find and copy all release bundles
+          find artifacts -type f \( \
+            -name "*.dmg" -o \
+            -name "*.app.tar.gz" -o \
+            -name "*.deb" -o \
+            -name "*.AppImage" -o \
+            -name "*.msi" -o \
+            -name "*.exe" -o \
+            -name "*.sig" \
+          \) -exec cp {} release-assets/ \;
+
+          echo "Release assets:"
+          ls -lh release-assets
+
+      - name: Create git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ needs.validate.outputs.version }}" -m "Release v${{ needs.validate.outputs.version }}"
+          git push origin "v${{ needs.validate.outputs.version }}"
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          cat > release-notes.md << 'EOF'
+          ## What's Changed
+
+          <!-- Please update this section with actual changes -->
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ needs.validate.outputs.previous_tag }}...v${{ needs.validate.outputs.version }}
+
+          ## Installation
+
+          ### macOS
+          - **Apple Silicon (M1/M2/M3)**: Download `UniClipboard_*_aarch64.dmg`
+          - **Intel**: Download `UniClipboard_*_x64.dmg`
+
+          ### Linux
+          - **Debian/Ubuntu**: Download `.deb` file
+          - **AppImage**: Download `.AppImage` file (universal)
+
+          ### Windows
+          - Download `.msi` installer or `.exe` portable version
+
+          ## Verification
+
+          All releases are signed. `.sig` files are provided for verification.
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.validate.outputs.version }}
+          name: v${{ needs.validate.outputs.version }}
+          body_path: release-notes.md
+          draft: true
+          prerelease: false
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Release Created Successfully! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${{ needs.validate.outputs.version }} (from package.json)" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ inputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** ${{ inputs.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to [Releases](https://github.com/${{ github.repository }}/releases)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Edit the draft release and update release notes" >> $GITHUB_STEP_SUMMARY
+          echo "3. Publish the release when ready" >> $GITHUB_STEP_SUMMARY

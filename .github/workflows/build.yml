@@ -14,6 +14,18 @@ on:
           - 'windows-latest'
           - 'all'
         default: 'all'
+  workflow_call:
+    inputs:
+      platform:
+        description: '选择构建平台'
+        required: false
+        type: string
+        default: 'all'
+      branch:
+        description: 'Branch to build'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   setup-matrix:
@@ -35,6 +47,9 @@ jobs:
             echo 'matrix=[{"platform":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","args":""}]' >> "$GITHUB_OUTPUT"
           elif [ "$PLATFORM" == "windows-latest" ]; then
             echo 'matrix=[{"platform":"windows-latest","target":"x86_64-pc-windows-msvc","args":""}]' >> "$GITHUB_OUTPUT"
+          else
+            echo "Error: Unknown platform '$PLATFORM'. Valid options: all, macos-aarch64, macos-x86_64, ubuntu-22.04, windows-latest"
+            exit 1
           fi
 
   build-tauri:
@@ -48,6 +63,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref }}
 
       - name: setup node
         uses: actions/setup-node@v4
