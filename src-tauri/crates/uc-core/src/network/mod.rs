@@ -21,7 +21,7 @@ pub use pairing_state_machine::{
 };
 pub use protocol::{
     ClipboardMessage, DeviceAnnounceMessage, HeartbeatMessage, PairingBusy, PairingCancel,
-    PairingChallenge, PairingConfirm, PairingMessage, PairingReject, PairingRequest,
-    PairingResponse, ProtocolMessage,
+    PairingChallenge, PairingChallengeResponse, PairingConfirm, PairingKeyslotOffer,
+    PairingMessage, PairingReject, PairingRequest, PairingResponse, ProtocolMessage,
 };
 pub use protocol_ids::ProtocolId;

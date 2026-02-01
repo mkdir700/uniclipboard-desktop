@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::security::model::KeySlotFile;
+
 /// P2P protocol messages for UniClipboard
 /// Based on decentpaste protocol with UniClipboard-specific adaptations
 #[derive(Clone, Serialize, Deserialize)]
@@ -18,6 +20,8 @@ pub enum ProtocolMessage {
 pub enum PairingMessage {
     Request(PairingRequest),
     Challenge(PairingChallenge),
+    KeyslotOffer(PairingKeyslotOffer),
+    ChallengeResponse(PairingChallengeResponse),
     Response(PairingResponse),
     Confirm(PairingConfirm),
     Reject(PairingReject),
@@ -66,6 +70,24 @@ pub struct PairingChallenge {
     pub identity_pubkey: Vec<u8>,
     /// Random nonce for short-code transcript
     pub nonce: Vec<u8>,
+}
+
+/// Keyslot offer sent by responder for join flow
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairingKeyslotOffer {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyslot_file: Option<KeySlotFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub challenge: Option<Vec<u8>>,
+}
+
+/// Challenge response sent by initiator for join flow
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PairingChallengeResponse {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encrypted_challenge: Option<Vec<u8>>,
 }
 
 /// Pairing response from initiator after PIN verification
@@ -210,6 +232,8 @@ impl std::fmt::Debug for PairingMessage {
         match self {
             Self::Request(msg) => f.debug_tuple("Request").field(msg).finish(),
             Self::Challenge(msg) => f.debug_tuple("Challenge").field(msg).finish(),
+            Self::KeyslotOffer(msg) => f.debug_tuple("KeyslotOffer").field(msg).finish(),
+            Self::ChallengeResponse(msg) => f.debug_tuple("ChallengeResponse").field(msg).finish(),
             Self::Response(msg) => f.debug_tuple("Response").field(msg).finish(),
             Self::Confirm(msg) => f.debug_tuple("Confirm").field(msg).finish(),
             Self::Reject(msg) => f.debug_tuple("Reject").field(msg).finish(),
@@ -224,6 +248,8 @@ impl PairingMessage {
         match self {
             PairingMessage::Request(msg) => &msg.session_id,
             PairingMessage::Challenge(msg) => &msg.session_id,
+            PairingMessage::KeyslotOffer(msg) => &msg.session_id,
+            PairingMessage::ChallengeResponse(msg) => &msg.session_id,
             PairingMessage::Response(msg) => &msg.session_id,
             PairingMessage::Confirm(msg) => &msg.session_id,
             PairingMessage::Reject(msg) => &msg.session_id,
@@ -255,6 +281,30 @@ impl std::fmt::Debug for PairingChallenge {
             .field("device_id", &self.device_id)
             .field("identity_pubkey_len", &self.identity_pubkey.len())
             .field("nonce_len", &self.nonce.len())
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for PairingKeyslotOffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let keyslot_present = self.keyslot_file.is_some();
+        let challenge_len = self.challenge.as_ref().map(Vec::len);
+
+        f.debug_struct("PairingKeyslotOffer")
+            .field("session_id", &self.session_id)
+            .field("keyslot_file_present", &keyslot_present)
+            .field("challenge_len", &challenge_len)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for PairingChallengeResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let encrypted_len = self.encrypted_challenge.as_ref().map(Vec::len);
+
+        f.debug_struct("PairingChallengeResponse")
+            .field("session_id", &self.session_id)
+            .field("encrypted_challenge_len", &encrypted_len)
             .finish()
     }
 }
@@ -312,6 +362,7 @@ impl std::fmt::Debug for PairingBusy {
 mod tests {
     use super::*;
     use chrono::Utc;
+    use serde_json::json;
 
     fn sample_request(session_id: &str) -> PairingRequest {
         PairingRequest {
@@ -332,6 +383,38 @@ mod tests {
             device_id: "654321".to_string(),
             identity_pubkey: vec![7, 8],
             nonce: vec![9],
+        }
+    }
+
+    fn sample_keyslot_file() -> crate::security::model::KeySlotFile {
+        use crate::security::model::{
+            EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, KdfAlgorithm, KdfParams,
+            KdfParamsV1, KeyScope, KeySlotFile, KeySlotVersion,
+        };
+
+        KeySlotFile {
+            version: KeySlotVersion::V1,
+            scope: KeyScope {
+                profile_id: "profile-1".to_string(),
+            },
+            kdf: KdfParams {
+                alg: KdfAlgorithm::Argon2id,
+                params: KdfParamsV1 {
+                    mem_kib: 1024,
+                    iters: 2,
+                    parallelism: 1,
+                },
+            },
+            salt: vec![1, 2, 3],
+            wrapped_master_key: EncryptedBlob {
+                version: EncryptionFormatVersion::V1,
+                aead: EncryptionAlgo::XChaCha20Poly1305,
+                nonce: vec![9, 8, 7],
+                ciphertext: vec![6, 5, 4],
+                aad_fingerprint: None,
+            },
+            created_at: None,
+            updated_at: None,
         }
     }
 
@@ -376,6 +459,74 @@ mod tests {
             }
             _ => panic!("expected DeviceAnnounce message"),
         }
+    }
+
+    #[test]
+    fn pairing_request_json_still_deserializes() {
+        let legacy_json = json!({
+            "Pairing": {
+                "Request": {
+                    "session_id": "s-legacy",
+                    "device_name": "Desk",
+                    "device_id": "123456",
+                    "peer_id": "peer-1",
+                    "identity_pubkey": [1, 2, 3],
+                    "nonce": [4, 5, 6]
+                }
+            }
+        });
+
+        let bytes = serde_json::to_vec(&legacy_json).expect("serialize");
+        let decoded = ProtocolMessage::from_bytes(&bytes).expect("deserialize");
+
+        match decoded {
+            ProtocolMessage::Pairing(PairingMessage::Request(request)) => {
+                assert_eq!(request.session_id, "s-legacy");
+                assert_eq!(request.device_id, "123456");
+            }
+            _ => panic!("expected pairing request"),
+        }
+    }
+
+    #[test]
+    fn pairing_message_deserializes_keyslot_offer_json() {
+        let keyslot_file = sample_keyslot_file();
+        let keyslot_value = serde_json::to_value(&keyslot_file).expect("serialize keyslot");
+        let challenge: Vec<u8> = (0u8..32).collect();
+
+        let json_value = json!({
+            "Pairing": {
+                "KeyslotOffer": {
+                    "session_id": "s1",
+                    "keyslot_file": keyslot_value,
+                    "challenge": challenge
+                }
+            }
+        });
+
+        let bytes = serde_json::to_vec(&json_value).expect("serialize");
+        let decoded = ProtocolMessage::from_bytes(&bytes).expect("deserialize");
+        let round_trip = serde_json::to_value(&decoded).expect("serialize round trip");
+
+        assert_eq!(round_trip, json_value);
+    }
+
+    #[test]
+    fn pairing_message_deserializes_challenge_response_json() {
+        let json_value = json!({
+            "Pairing": {
+                "ChallengeResponse": {
+                    "session_id": "s2",
+                    "encrypted_challenge": [9, 8, 7]
+                }
+            }
+        });
+
+        let bytes = serde_json::to_vec(&json_value).expect("serialize");
+        let decoded = ProtocolMessage::from_bytes(&bytes).expect("deserialize");
+        let round_trip = serde_json::to_value(&decoded).expect("serialize round trip");
+
+        assert_eq!(round_trip, json_value);
     }
 
     #[test]
