@@ -466,7 +466,8 @@
     "globalRequest": {
       "title": "Device Pairing Request",
       "description": "{{deviceName}} wants to pair with you",
-      "warning": "Make sure you initiated this pairing"
+      "warning": "Make sure you initiated this pairing",
+      "action": "Open Pairing"
     },
     "requests": {
       "accept": "Accept",

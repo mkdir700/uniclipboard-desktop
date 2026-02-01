@@ -4,12 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import CreatePassphraseStep from '@/pages/onboarding/CreatePassphraseStep'
-import JoinPickDeviceStep from '@/pages/onboarding/JoinPickDeviceStep'
-import JoinVerifyPassphraseStep from '@/pages/onboarding/JoinVerifyPassphraseStep'
-import PairingConfirmStep from '@/pages/onboarding/PairingConfirmStep'
-import SetupDoneStep from '@/pages/onboarding/SetupDoneStep'
-import WelcomeStep from '@/pages/onboarding/WelcomeStep'
 import {
   getSetupState,
   dispatchSetupEvent,
@@ -19,6 +13,12 @@ import {
 } from '@/api/onboarding'
 import { getP2PPeers, P2PPeerInfo } from '@/api/p2p'
 import { useOnboarding } from '@/contexts/onboarding-context'
+import CreatePassphraseStep from '@/pages/onboarding/CreatePassphraseStep'
+import JoinPickDeviceStep from '@/pages/onboarding/JoinPickDeviceStep'
+import JoinVerifyPassphraseStep from '@/pages/onboarding/JoinVerifyPassphraseStep'
+import PairingConfirmStep from '@/pages/onboarding/PairingConfirmStep'
+import SetupDoneStep from '@/pages/onboarding/SetupDoneStep'
+import WelcomeStep from '@/pages/onboarding/WelcomeStep'
 
 export default function OnboardingPage() {
   const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.page' })
