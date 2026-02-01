@@ -239,13 +239,6 @@ const DevicesPage: React.FC = () => {
         <div className="h-full overflow-y-auto scrollbar-thin px-8 pb-32 pt-2 scroll-smooth">
           {/* Pairing Requests Section */}
           <div className="mb-12">
-            <div className="flex items-center gap-4 mb-4 mt-8">
-              <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-                {t('devices.sections.requests')}
-              </h3>
-              <div className="h-px flex-1 bg-border/50"></div>
-            </div>
-
             {pendingP2PRequest ? (
               <div className="border border-border/50 rounded-lg bg-card p-4">
                 <div className="flex items-center justify-between">

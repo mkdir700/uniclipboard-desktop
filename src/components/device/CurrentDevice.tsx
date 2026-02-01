@@ -27,10 +27,6 @@ const CurrentDevice: React.FC = () => {
   if (localDeviceLoading) {
     return (
       <div className="mb-8">
-        <div className="flex items-center gap-4 mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground">当前设备</h3>
-          <div className="h-px flex-1 bg-border/50"></div>
-        </div>
         <div className="border border-border/50 rounded-lg bg-card p-6">
           <div className="animate-pulse flex items-center gap-5">
             <div className="h-14 w-14 bg-muted rounded-md"></div>
@@ -48,10 +44,6 @@ const CurrentDevice: React.FC = () => {
   if (localDeviceError || !localDevice) {
     return (
       <div className="mb-8">
-        <div className="flex items-center gap-4 mb-4">
-          <h3 className="text-sm font-medium text-muted-foreground">当前设备</h3>
-          <div className="h-px flex-1 bg-border/50"></div>
-        </div>
         <div className="border border-destructive/50 rounded-lg bg-card p-6">
           <div className="flex items-center gap-3">
             <p className="text-sm text-destructive">{localDeviceError || '无法获取当前设备信息'}</p>
@@ -72,11 +64,6 @@ const CurrentDevice: React.FC = () => {
 
   return (
     <div className="mb-8">
-      <div className="flex items-center gap-4 mb-4">
-        <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">当前设备</h3>
-        <div className="h-px flex-1 bg-border/50"></div>
-      </div>
-
       <div className="group relative overflow-hidden bg-card/50 hover:bg-card/80 border border-border/50 hover:border-primary/20 rounded-lg transition-all duration-300 shadow-sm hover:shadow-md">
         {/* Abstract Background Gradient */}
         <div className="absolute top-0 right-0 p-12 bg-primary/5 blur-[80px] rounded-full pointer-events-none" />

@@ -113,12 +113,6 @@ const OtherDevice: React.FC = () => {
   if (pairedDevicesLoading) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-4 mb-4 mt-8">
-          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-            其他已连接设备
-          </h3>
-          <div className="h-px flex-1 bg-border/50"></div>
-        </div>
         {[1, 2, 3].map(i => (
           <div key={i} className="border border-border/50 rounded-lg bg-card p-6">
             <div className="animate-pulse flex items-center gap-5">
@@ -138,12 +132,6 @@ const OtherDevice: React.FC = () => {
   if (pairedDevicesError) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-4 mb-4 mt-8">
-          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-            其他已连接设备
-          </h3>
-          <div className="h-px flex-1 bg-border/50"></div>
-        </div>
         <div className="border border-destructive/50 rounded-lg bg-card p-6">
           <div className="flex items-center gap-3">
             <p className="text-sm text-destructive">{pairedDevicesError}</p>
@@ -164,12 +152,6 @@ const OtherDevice: React.FC = () => {
   if (pairedDevices.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-4 mb-4 mt-8">
-          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-            其他已连接设备
-          </h3>
-          <div className="h-px flex-1 bg-border/50"></div>
-        </div>
         <div className="flex flex-col items-center justify-center p-12 border border-dashed border-border/50 rounded-lg bg-muted/5 text-muted-foreground">
           <p className="text-sm">暂无已配对的设备</p>
           <p className="text-xs mt-2 flex items-center gap-2">
@@ -184,13 +166,6 @@ const OtherDevice: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4 mb-4 mt-8">
-        <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-          其他已连接设备
-        </h3>
-        <div className="h-px flex-1 bg-border/50"></div>
-      </div>
-
       {pairedDevices.map((device, index) => {
         const Icon = getDeviceIcon(device.deviceName)
         const isExpanded = expandedDevices[device.peerId] || false
