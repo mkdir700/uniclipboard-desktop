@@ -23,13 +23,22 @@ export default function P2PPairingToastListener() {
       const deviceName = event.deviceName ?? t('pairing.discovery.unknownDevice')
       const description = t('pairing.globalRequest.description', { deviceName })
       const warning = t('pairing.globalRequest.warning')
+      const params = new URLSearchParams()
+
+      params.set('pairingPin', '1')
+      if (event.sessionId) {
+        params.set('sessionId', event.sessionId)
+      }
+      if (event.deviceName) {
+        params.set('deviceName', event.deviceName)
+      }
 
       toast(t('pairing.globalRequest.title'), {
         description: `${description} ${warning}`,
         action: {
           label: t('pairing.globalRequest.action'),
           onClick: () => {
-            navigate('/devices?pairing=1')
+            navigate(`/devices?${params.toString()}`)
           },
         },
       })

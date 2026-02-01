@@ -63,6 +63,11 @@ describe('P2PPairingToastListener', () => {
       })
     )
     options?.action?.onClick()
-    expect(navigateMock).toHaveBeenCalledWith('/devices?pairing=1')
+    const [target] = navigateMock.mock.calls[0] ?? []
+    expect(target).toContain('/devices?')
+    const params = new URLSearchParams(String(target).split('?')[1])
+    expect(params.get('pairingPin')).toBe('1')
+    expect(params.get('sessionId')).toBe('session-1')
+    expect(params.get('deviceName')).toBe('Peer Device')
   })
 })
