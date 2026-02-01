@@ -1070,6 +1070,17 @@ mod tests {
     use uc_core::network::{ConnectionPolicy, PairingState, ResolvedConnectionPolicy};
     use uc_core::ports::{ConnectionPolicyResolverError, ConnectionPolicyResolverPort};
 
+    async fn echo_payload<Stream>(stream: &mut Stream) -> anyhow::Result<()>
+    where
+        Stream: libp2p::futures::AsyncRead + libp2p::futures::AsyncWrite + Unpin,
+    {
+        let mut buffer = Vec::new();
+        stream.read_to_end(&mut buffer).await?;
+        stream.write_all(&buffer).await?;
+        stream.close().await?;
+        Ok(())
+    }
+
     #[test]
     fn mdns_config_has_5s_query_interval() {
         let config = build_mdns_config();

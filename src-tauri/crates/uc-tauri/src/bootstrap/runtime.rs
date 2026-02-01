@@ -296,6 +296,13 @@ impl<'a> UseCases<'a> {
         )
     }
 
+    /// Announce local device name through the network port.
+    ///
+    /// 通过网络端口广播本地设备名称。
+    pub fn announce_device_name(&self) -> uc_app::usecases::AnnounceDeviceName {
+        uc_app::usecases::AnnounceDeviceName::new(self.runtime.deps.network.clone())
+    }
+
     /// List discovered peers from network.
     ///
     /// 列出已发现的对等端。

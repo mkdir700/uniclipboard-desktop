@@ -181,9 +181,21 @@ impl PairingStreamService {
                 })?
         };
         let stream = stream.compat();
-        self.spawn_session(peer_id, session_id, stream, None, permits)
+        match self
+            .spawn_session(peer_id, session_id, stream, None, permits)
             .await
-            .map(|_| ())
+        {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                if let Some(PairingStreamError::SessionExists { .. }) =
+                    err.downcast_ref::<PairingStreamError>()
+                {
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     pub async fn send_pairing_on_session(
@@ -406,7 +418,7 @@ where
         ),
     };
 
-    let _ = shutdown_tx.send(true);
+    send_shutdown_signal(&shutdown_tx);
     match completed {
         CompletedTask::Read => {
             write_task.abort();
@@ -489,6 +501,13 @@ where
                 }
             }
         }
+    }
+}
+
+fn send_shutdown_signal(shutdown_tx: &watch::Sender<bool>) {
+    match shutdown_tx.send(true) {
+        Ok(()) => {}
+        Err(err) => warn!("pairing session shutdown send failed: {err}"),
     }
 }
 
@@ -619,8 +638,11 @@ impl PairingStreamServiceInner {
 
 #[cfg(test)]
 mod tests {
+    use super::send_shutdown_signal;
     use super::{PairingStreamConfig, PairingStreamService};
     use libp2p::PeerId;
+    use log::{Level, LevelFilter, Metadata, Record};
+    use std::sync::{Mutex, Once};
     use tokio::sync::{mpsc, watch};
     use tokio::time::{timeout, Duration};
 
@@ -652,5 +674,54 @@ mod tests {
         .await
         .expect("idempotent open timeout");
         result.expect("idempotent open");
+    }
+
+    struct TestLogger {
+        logs: Mutex<Vec<String>>,
+    }
+
+    impl log::Log for TestLogger {
+        fn enabled(&self, metadata: &Metadata) -> bool {
+            metadata.level() <= Level::Warn
+        }
+
+        fn log(&self, record: &Record) {
+            if self.enabled(record.metadata()) {
+                let mut logs = self.logs.lock().expect("logs lock");
+                logs.push(format!("{}", record.args()));
+            }
+        }
+
+        fn flush(&self) {}
+    }
+
+    static LOGGER: TestLogger = TestLogger {
+        logs: Mutex::new(Vec::new()),
+    };
+    static LOGGER_INIT: Once = Once::new();
+
+    fn init_logger() {
+        LOGGER_INIT.call_once(|| {
+            let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Warn));
+        });
+    }
+
+    #[test]
+    fn shutdown_signal_logs_warning_when_receiver_dropped() {
+        init_logger();
+        {
+            let mut logs = LOGGER.logs.lock().expect("logs lock");
+            logs.clear();
+        }
+
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        drop(shutdown_rx);
+
+        send_shutdown_signal(&shutdown_tx);
+
+        let logs = LOGGER.logs.lock().expect("logs lock");
+        assert!(logs
+            .iter()
+            .any(|entry| entry.contains("pairing session shutdown send failed")));
     }
 }

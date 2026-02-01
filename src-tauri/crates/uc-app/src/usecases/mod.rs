@@ -41,9 +41,9 @@ pub use initialize_encryption::InitializeEncryption;
 pub use is_encryption_initialized::IsEncryptionInitialized;
 pub use list_clipboard_entries::ListClipboardEntries;
 pub use pairing::{
-    GetLocalDeviceInfo, GetLocalPeerId, ListConnectedPeers, ListDiscoveredPeers, ListPairedDevices,
-    LocalDeviceInfo, PairingConfig, PairingOrchestrator, ResolveConnectionPolicy, SetPairingState,
-    UnpairDevice,
+    AnnounceDeviceName, GetLocalDeviceInfo, GetLocalPeerId, ListConnectedPeers,
+    ListDiscoveredPeers, ListPairedDevices, LocalDeviceInfo, PairingConfig, PairingOrchestrator,
+    ResolveConnectionPolicy, SetPairingState, UnpairDevice,
 };
 pub use setup::{SetupOrchestrator, SetupOrchestratorError};
 pub use start_clipboard_watcher::StartClipboardWatcher;

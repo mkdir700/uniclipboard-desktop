@@ -36,7 +36,7 @@ async fn framing_rejects_oversize_frame() {
 
 #[tokio::test]
 async fn framing_eof_at_boundary_is_clean() {
-    let (mut client, mut server) = tokio::io::duplex(64 * 1024);
+    let (client, mut server) = tokio::io::duplex(64 * 1024);
 
     // Close client immediately without writing anything
     drop(client);

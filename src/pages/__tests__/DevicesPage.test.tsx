@@ -43,7 +43,9 @@ vi.mock('@/components', () => ({
   DeviceList: () => <div data-testid="device-list" />,
   DeviceHeader: ({ activeTab, addDevice }: { activeTab: string; addDevice: () => void }) => (
     <div data-testid="device-header" data-active-tab={activeTab}>
-      <button onClick={addDevice}>Add Device</button>
+      <button type="button" onClick={addDevice}>
+        Add Device
+      </button>
     </div>
   ),
 }))
@@ -53,7 +55,9 @@ vi.mock('@/components/PairingDialog', () => ({
     open ? (
       <div>
         PairingDialog
-        <button onClick={onPairingSuccess}>Trigger Success</button>
+        <button type="button" onClick={onPairingSuccess}>
+          Trigger Success
+        </button>
       </div>
     ) : null,
 }))
@@ -169,5 +173,32 @@ describe('DevicesPage', () => {
     expect(header).toHaveAttribute('data-active-tab', 'connected')
 
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+  })
+
+  it('does not drop verification events when request arrives in same tick', async () => {
+    render(<DevicesPage />)
+
+    await act(async () => {})
+
+    expect(verificationHandler).not.toBeNull()
+
+    act(() => {
+      verificationHandler?.({
+        kind: 'request',
+        sessionId: 'session-fast',
+        peerId: 'peer-fast',
+        deviceName: 'Fast Peer',
+      })
+      verificationHandler?.({
+        kind: 'verification',
+        sessionId: 'session-fast',
+        code: '654321',
+        deviceName: 'Fast Peer',
+      })
+    })
+
+    await act(async () => {})
+
+    expect(screen.getByText('654321')).toBeInTheDocument()
   })
 })

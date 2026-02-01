@@ -1310,7 +1310,7 @@ async fn run_pairing_action_loop<R: Runtime>(
                         );
                     }
                     Err(err) => {
-                        info!(
+                        warn!(
                             error = %err,
                             peer_id = %peer_id,
                             session_id = %session_id,
@@ -1318,6 +1318,23 @@ async fn run_pairing_action_loop<R: Runtime>(
                             stage = "send_result",
                             "Failed to send pairing message"
                         );
+                        if let Some(app) = app_handle.as_ref() {
+                            let payload =
+                                P2PPairingVerificationEvent::failed(&session_id, err.to_string());
+                            if let Err(emit_err) = app.emit("p2p-pairing-verification", payload) {
+                                warn!(error = %emit_err, "Failed to emit pairing verification event");
+                            }
+                        }
+                        if let Err(handle_err) = orchestrator
+                            .handle_transport_error(&session_id, &peer_id, err.to_string())
+                            .await
+                        {
+                            error!(
+                                error = %handle_err,
+                                session_id = %session_id,
+                                "Failed to handle pairing transport error"
+                            );
+                        }
                     }
                 }
             }
@@ -1423,15 +1440,17 @@ async fn run_pairing_action_loop<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::anyhow;
     use async_trait::async_trait;
     use chrono::Utc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
     use std::time::Duration;
     use tauri::{Listener, Wry};
     use tokio::sync::mpsc;
     use uc_app::usecases::PairingConfig;
     use uc_core::network::paired_device::{PairedDevice, PairingState};
-    use uc_core::network::protocol::PairingRequest;
+    use uc_core::network::protocol::{PairingChallenge, PairingRequest};
     use uc_core::network::{ConnectedPeer, DiscoveredPeer, PairingMessage};
     use uc_core::ports::NetworkPort;
 
@@ -1445,6 +1464,10 @@ mod tests {
     struct NoopPairedDeviceRepository;
 
     struct NoopNetwork;
+
+    struct SendFailNetwork {
+        send_called: Arc<AtomicUsize>,
+    }
 
     #[async_trait]
     impl NetworkPort for NoopNetwork {
@@ -1498,6 +1521,81 @@ mod tests {
             _message: PairingMessage,
         ) -> anyhow::Result<()> {
             Ok(())
+        }
+
+        async fn close_pairing_session(
+            &self,
+            _session_id: String,
+            _reason: Option<String>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn unpair_device(&self, _peer_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_events(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<NetworkEvent>> {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+    }
+
+    #[async_trait]
+    impl NetworkPort for SendFailNetwork {
+        async fn send_clipboard(
+            &self,
+            _peer_id: &str,
+            _encrypted_data: Vec<u8>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn broadcast_clipboard(&self, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_clipboard(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<uc_core::network::ClipboardMessage>>
+        {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+
+        async fn get_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+            Ok(vec![])
+        }
+
+        async fn get_connected_peers(&self) -> anyhow::Result<Vec<ConnectedPeer>> {
+            Ok(vec![])
+        }
+
+        fn local_peer_id(&self) -> String {
+            "local-peer".to_string()
+        }
+
+        async fn announce_device_name(&self, _device_name: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn open_pairing_session(
+            &self,
+            _peer_id: String,
+            _session_id: String,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_on_session(
+            &self,
+            _session_id: String,
+            _message: PairingMessage,
+        ) -> anyhow::Result<()> {
+            self.send_called.fetch_add(1, Ordering::SeqCst);
+            Err(anyhow!("send failed"))
         }
 
         async fn close_pairing_session(
@@ -1694,7 +1792,7 @@ mod tests {
     async fn peer_name_updated_emits_frontend_event() {
         let app = tauri::test::mock_app();
         let app_handle = app.handle();
-        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
+        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(4);
         let payload_tx_clone = payload_tx.clone();
         app_handle.listen("p2p-peer-name-updated", move |event: tauri::Event| {
             let _ = payload_tx_clone.try_send(event.payload().to_string());
@@ -1755,6 +1853,15 @@ mod tests {
         app_handle.listen("p2p-pairing-verification", move |event: tauri::Event| {
             let _ = payload_tx_clone.try_send(event.payload().to_string());
         });
+
+        let probe = P2PPairingVerificationEvent::failed("probe", "probe".to_string());
+        app_handle
+            .emit("p2p-pairing-verification", probe)
+            .expect("emit probe");
+        let _ = tokio::time::timeout(Duration::from_secs(1), payload_rx.recv())
+            .await
+            .expect("timeout waiting for probe")
+            .expect("probe payload received");
 
         let device_repo = Arc::new(NoopPairedDeviceRepository);
         let (orchestrator, _action_rx) = PairingOrchestrator::new(
@@ -1928,6 +2035,80 @@ mod tests {
         assert_eq!(value["deviceName"], "PeerDevice");
 
         drop(action_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
+    }
+
+    #[tokio::test]
+    async fn pairing_action_loop_emits_failed_on_send_error() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
+        let payload_tx_clone = payload_tx.clone();
+        app_handle.listen("p2p-pairing-verification", move |event: tauri::Event| {
+            let _ = payload_tx_clone.try_send(event.payload().to_string());
+        });
+
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+
+        let (action_tx, action_rx) = mpsc::channel(4);
+
+        let send_called = Arc::new(AtomicUsize::new(0));
+        let loop_handle = tokio::spawn(run_pairing_action_loop::<tauri::test::MockRuntime>(
+            action_rx,
+            Arc::new(SendFailNetwork {
+                send_called: send_called.clone(),
+            }),
+            Some(app_handle.clone()),
+            orchestrator.clone(),
+        ));
+
+        let challenge = PairingChallenge {
+            session_id: "session-send-fail".to_string(),
+            pin: "123456".to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-999".to_string(),
+            identity_pubkey: vec![1; 32],
+            nonce: vec![2; 16],
+        };
+        action_tx
+            .send(PairingAction::Send {
+                peer_id: "peer-remote".to_string(),
+                message: PairingMessage::Challenge(challenge),
+            })
+            .await
+            .expect("send action");
+
+        tokio::task::yield_now().await;
+        assert!(send_called.load(Ordering::SeqCst) > 0);
+
+        let mut failed_event = None;
+        for _ in 0..3 {
+            let payload = tokio::time::timeout(Duration::from_secs(1), payload_rx.recv())
+                .await
+                .expect("timeout waiting for payload")
+                .expect("payload received");
+            let value: serde_json::Value = serde_json::from_str(&payload).expect("payload json");
+            if value["kind"] == "failed" {
+                failed_event = Some(value);
+                break;
+            }
+        }
+        let value = failed_event.expect("failed event");
+        assert_eq!(value["sessionId"], "session-send-fail");
+        assert!(value["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("send failed"));
+
         let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
     }
 

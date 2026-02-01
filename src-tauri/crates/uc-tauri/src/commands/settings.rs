@@ -6,7 +6,7 @@ use crate::commands::record_trace_fields;
 use serde_json::Value;
 use std::sync::Arc;
 use tauri::State;
-use tracing::{info_span, warn, Instrument};
+use tracing::{info_span, Instrument};
 use uc_core::ports::observability::TraceMetadata;
 use uc_core::settings::model::Settings;
 
@@ -105,9 +105,11 @@ pub async fn update_settings(
 
         if device_name_changed {
             let device_name = resolve_pairing_device_name(runtime.deps.settings.clone()).await;
-            if let Err(err) = runtime.deps.network.announce_device_name(device_name).await {
-                warn!(error = %err, "Failed to announce device name after settings update");
-            }
+            let uc = runtime.usecases().announce_device_name();
+            uc.execute(device_name).await.map_err(|e| {
+                tracing::error!(error = %e, "Failed to announce device name after settings update");
+                e.to_string()
+            })?;
         }
 
         tracing::info!("Settings updated successfully");

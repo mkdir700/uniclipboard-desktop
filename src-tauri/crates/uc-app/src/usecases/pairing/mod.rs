@@ -1,3 +1,4 @@
+pub mod announce_device_name;
 pub mod get_local_device_info;
 pub mod get_local_peer_id;
 pub mod list_connected_peers;
@@ -10,6 +11,7 @@ pub mod set_pairing_state;
 mod transport_error_test;
 pub mod unpair_device;
 
+pub use announce_device_name::AnnounceDeviceName;
 pub use get_local_device_info::{GetLocalDeviceInfo, LocalDeviceInfo};
 pub use get_local_peer_id::GetLocalPeerId;
 pub use list_connected_peers::ListConnectedPeers;

@@ -37,11 +37,7 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 
 ## Legacy Bridge Commands (Temporary)
 
-| Command                   | File                                                             | Registered | Uses UseCases | Status |
-| ------------------------- | ---------------------------------------------------------------- | ---------- | ------------- | ------ |
-| `check_onboarding_status` | [onboarding.rs:22-32](../../src-tauri/src/onboarding.rs#L22-L32) | ✅         | ❌            | Stub   |
-
-**Note**: `check_onboarding_status` is a temporary stub implementation that returns hardcoded values. It needs to be migrated to the hexagonal architecture following the `IsEncryptionInitialized` pattern.
+None. Legacy onboarding status checks were superseded by `get_onboarding_state`.
 
 ## Use Case Status
 
@@ -58,7 +54,7 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 ## Migration Progress
 
 **Core Commands: 7/7 using UseCases accessor (100%)**
-**Total Registered: 11 commands (7 core + 3 plugin + 1 bridge)**
+**Total Registered: 10 commands (7 core + 3 plugin)**
 
 ### Completed ✅
 
@@ -85,8 +81,7 @@ None
 2. ✅ Refactor `is_encryption_initialized` to use UseCases accessor
 3. ✅ Fix missing plugin command registrations (2025-01-14)
 4. ✅ Implement `GetSettings` and `UpdateSettings` use cases
-5. ⏳ Implement `CheckOnboardingStatus` use case and migrate command
-6. ⏳ Update `capture_clipboard` command to use existing use case
+5. ⏳ Update `capture_clipboard` command to use existing use case
 
 ## Recent Changes
 
