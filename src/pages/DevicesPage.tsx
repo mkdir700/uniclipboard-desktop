@@ -37,6 +37,7 @@ const DevicesPage: React.FC = () => {
   const [pinPeerDeviceName, setPinPeerDeviceName] = useState<string>('')
   const [pairingSessionId, setPairingSessionId] = useState<string>('')
   const [pinPhase, setPinPhase] = useState<'display' | 'verifying' | 'success'>('display')
+  const pendingP2PRequestRef = useRef<P2PPairingRequestWithPin | null>(null)
   const cleanupRefs = useRef<(() => void)[]>([])
   const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastResultSessionRef = useRef<string | null>(null)
@@ -52,11 +53,13 @@ const DevicesPage: React.FC = () => {
         if (event.kind === 'request') {
           console.log('Received P2P pairing request:', event)
           const requestEvent = event as P2PPairingVerificationEvent & { kind: 'request' }
-          setPendingP2PRequest({
+          const nextRequest = {
             ...requestEvent,
             pin: undefined,
             peerDeviceName: undefined,
-          })
+          }
+          pendingP2PRequestRef.current = nextRequest
+          setPendingP2PRequest(nextRequest)
           setAcceptingP2PRequest(false)
           setPinPhase('display')
           lastResultSessionRef.current = null
@@ -65,7 +68,7 @@ const DevicesPage: React.FC = () => {
         }
 
         if (event.kind === 'verification') {
-          if (!pendingP2PRequest) {
+          if (!pendingP2PRequestRef.current) {
             return
           }
           console.log('Received P2P verification event (responder):', event)
@@ -78,7 +81,7 @@ const DevicesPage: React.FC = () => {
         }
 
         if (event.kind === 'verifying') {
-          if (!pendingP2PRequest) {
+          if (!pendingP2PRequestRef.current) {
             return
           }
           console.log('Received P2P verifying event (responder):', event)
@@ -91,7 +94,7 @@ const DevicesPage: React.FC = () => {
 
         if (event.kind === 'complete') {
           // 只处理接收方的成功事件
-          if (!pendingP2PRequest) {
+          if (!pendingP2PRequestRef.current) {
             console.log('[DevicesPage] Ignoring complete event (not responder)', event.sessionId)
             return
           }
@@ -111,6 +114,7 @@ const DevicesPage: React.FC = () => {
           }
           completionTimerRef.current = setTimeout(() => {
             setShowPinDialog(false)
+            pendingP2PRequestRef.current = null
             setPendingP2PRequest(null)
             setPinPhase('display')
           }, 2000)
@@ -119,7 +123,7 @@ const DevicesPage: React.FC = () => {
 
         if (event.kind === 'failed') {
           // 只处理接收方的失败事件
-          if (!pendingP2PRequest) {
+          if (!pendingP2PRequestRef.current) {
             console.log('[DevicesPage] Ignoring failed event (not responder)', event.sessionId)
             return
           }
@@ -130,6 +134,7 @@ const DevicesPage: React.FC = () => {
           lastResultSessionRef.current = event.sessionId
           console.error('[DevicesPage] P2P pairing failed (responder):', event)
           setShowPinDialog(false)
+          pendingP2PRequestRef.current = null
           setPendingP2PRequest(null)
           setAcceptingP2PRequest(false)
           setPinPhase('display')
@@ -146,7 +151,7 @@ const DevicesPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to setup P2P pairing request listener:', error)
     }
-  }, [t, dispatch, pendingP2PRequest])
+  }, [t, dispatch])
 
   useEffect(() => {
     // 设置P2P配对请求监听

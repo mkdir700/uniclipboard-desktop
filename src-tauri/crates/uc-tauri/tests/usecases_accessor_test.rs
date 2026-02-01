@@ -21,6 +21,13 @@ fn test_use_cases_has_list_clipboard_entries() {
 }
 
 #[test]
+fn test_use_cases_has_announce_device_name() {
+    fn assert_method_exists<F: Fn(&UseCases) -> uc_app::usecases::AnnounceDeviceName>(_f: F) {}
+
+    assert_method_exists(|uc: &UseCases| uc.announce_device_name());
+}
+
+#[test]
 fn test_app_runtime_has_usecases_method() {
     // Compile-time verification
     // 编译时验证
