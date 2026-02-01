@@ -1,0 +1,3 @@
+- Decided to remove the tab-based navigation in the Devices page in favor of a single scrollable list.
+- Kept the "Requests" and "Connected" sections but removed the scroll-to-tab logic.
+- Decided to remove settings from the current device card to further simplify the device management interface.

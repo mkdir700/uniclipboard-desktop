@@ -1,0 +1,8 @@
+- Removed tabs from Devices page to simplify the UI.
+- Cleaned up unused imports and state related to tab management.
+- Fixed unrelated lint errors in onboarding pages to ensure the build passes.
+- Removed section headers from DevicesPage, CurrentDevice, and OtherDevice to simplify the UI as requested.
+- Ensured that empty states and functional blocks remain intact.
+- Removed settings expand entry from CurrentDevice.tsx to simplify the UI.
+- Cleaned up framer-motion and DeviceSettingsPanel dependencies in CurrentDevice.tsx.
+- Fixed type="button" lint warning for the retry button in CurrentDevice.tsx.
