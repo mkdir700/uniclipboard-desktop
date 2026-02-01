@@ -92,4 +92,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: uniclipping-${{ matrix.target }}
-          path: src-tauri/target/release/bundle/**
+          path: src-tauri/target/**/release/bundle/**
