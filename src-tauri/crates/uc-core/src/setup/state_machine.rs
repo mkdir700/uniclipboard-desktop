@@ -35,6 +35,13 @@ pub enum SetupState {
         peer_fingerprint: Option<String>,
         error: Option<SetupError>,
     },
+    /// Join-space keyslot received.
+    ///
+    /// 加入空间密钥槽已接收。
+    JoinSpaceKeyslotReceived {
+        peer_id: String,
+        error: Option<SetupError>,
+    },
     /// Setup completed.
     ///
     /// 设置完成。
@@ -88,6 +95,14 @@ pub enum SetupEvent {
     ///
     /// 配对失败（网络回调）。
     PairingFailed { reason: SetupError },
+    /// Keyslot received.
+    ///
+    /// 密钥槽已接收。
+    KeyslotReceived { peer_id: String },
+    /// Challenge verification succeeded.
+    ///
+    /// 挑战验证成功。
+    ChallengeVerified,
     /// Passphrase mismatch when joining.
     ///
     /// 加入口令不一致。
@@ -124,6 +139,11 @@ impl fmt::Debug for SetupEvent {
                 .debug_struct("PairingFailed")
                 .field("reason", reason)
                 .finish(),
+            SetupEvent::KeyslotReceived { peer_id } => f
+                .debug_struct("KeyslotReceived")
+                .field("peer_id", peer_id)
+                .finish(),
+            SetupEvent::ChallengeVerified => f.write_str("ChallengeVerified"),
             SetupEvent::PassphraseMismatch => f.write_str("PassphraseMismatch"),
             SetupEvent::NetworkScanRefresh => f.write_str("NetworkScanRefresh"),
         }
@@ -244,11 +264,13 @@ impl SetupStateMachine {
                 vec![SetupAction::ScanPeers],
             ),
             (SetupState::JoinSpacePickDevice { .. }, SetupEvent::SelectPeer { peer_id }) => (
-                SetupState::JoinSpaceVerifyPassphrase {
-                    peer_id,
+                SetupState::PairingConfirm {
+                    session_id: peer_id.clone(),
+                    short_code: String::new(),
+                    peer_fingerprint: None,
                     error: None,
                 },
-                Vec::new(),
+                vec![SetupAction::StartPairing { peer_id }],
             ),
             (
                 SetupState::JoinSpaceVerifyPassphrase { peer_id, .. },
@@ -293,6 +315,13 @@ impl SetupStateMachine {
                 },
                 Vec::new(),
             ),
+            (SetupState::PairingConfirm { .. }, SetupEvent::KeyslotReceived { peer_id }) => (
+                SetupState::JoinSpaceKeyslotReceived {
+                    peer_id,
+                    error: None,
+                },
+                Vec::new(),
+            ),
             (SetupState::PairingConfirm { .. }, SetupEvent::PairingUserCancel) => {
                 (SetupState::JoinSpacePickDevice { error: None }, Vec::new())
             }
@@ -305,6 +334,26 @@ impl SetupStateMachine {
                 },
                 Vec::new(),
             ),
+            // JoinSpaceKeyslotReceived state transitions
+            (SetupState::JoinSpaceKeyslotReceived { .. }, SetupEvent::ChallengeVerified) => {
+                (SetupState::Done, vec![SetupAction::MarkSetupComplete])
+            }
+            (
+                SetupState::JoinSpaceKeyslotReceived { peer_id, .. },
+                SetupEvent::SubmitJoinPassphrase { passphrase },
+            ) => (
+                SetupState::JoinSpaceVerifyPassphrase {
+                    peer_id: peer_id.clone(),
+                    error: None,
+                },
+                vec![SetupAction::VerifyPassphraseWithPeer {
+                    peer_id,
+                    passphrase,
+                }],
+            ),
+            (SetupState::JoinSpaceKeyslotReceived { .. }, SetupEvent::Back) => {
+                (SetupState::JoinSpacePickDevice { error: None }, Vec::new())
+            }
             (state, _event) => (state, Vec::new()),
         }
     }
@@ -312,7 +361,7 @@ impl SetupStateMachine {
 
 #[cfg(test)]
 mod tests {
-    use super::{SetupError, SetupEvent, SetupState, SetupStateMachine};
+    use super::{SetupAction, SetupError, SetupEvent, SetupState, SetupStateMachine};
 
     #[test]
     fn setup_state_machine_welcome_choose_create_transitions_to_create_passphrase() {
@@ -350,6 +399,70 @@ mod tests {
 
         assert!(output.contains("SubmitCreatePassphrase"));
         assert!(!output.contains("super-secret"));
+    }
+
+    #[test]
+    fn setup_state_machine_pairing_confirm_keyslot_received_transitions_to_keyslot_received() {
+        let state = SetupState::PairingConfirm {
+            session_id: "session-1".to_string(),
+            short_code: "123456".to_string(),
+            peer_fingerprint: None,
+            error: None,
+        };
+        let event = SetupEvent::KeyslotReceived {
+            peer_id: "peer-1".to_string(),
+        };
+
+        let (next, actions) = SetupStateMachine::transition(state, event);
+
+        assert_eq!(
+            next,
+            SetupState::JoinSpaceKeyslotReceived {
+                peer_id: "peer-1".to_string(),
+                error: None,
+            }
+        );
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn setup_state_machine_select_peer_transitions_to_pairing_confirm() {
+        let state = SetupState::JoinSpacePickDevice { error: None };
+        let event = SetupEvent::SelectPeer {
+            peer_id: "peer-1".to_string(),
+        };
+
+        let (next, actions) = SetupStateMachine::transition(state, event);
+
+        assert_eq!(
+            next,
+            SetupState::PairingConfirm {
+                session_id: "peer-1".to_string(),
+                short_code: String::new(),
+                peer_fingerprint: None,
+                error: None,
+            }
+        );
+        assert_eq!(
+            actions,
+            vec![SetupAction::StartPairing {
+                peer_id: "peer-1".to_string()
+            }]
+        );
+    }
+
+    #[test]
+    fn setup_state_machine_keyslot_received_challenge_verified_transitions_to_done() {
+        let state = SetupState::JoinSpaceKeyslotReceived {
+            peer_id: "peer-1".to_string(),
+            error: None,
+        };
+        let event = SetupEvent::ChallengeVerified;
+
+        let (next, actions) = SetupStateMachine::transition(state, event);
+
+        assert_eq!(next, SetupState::Done);
+        assert_eq!(actions, vec![SetupAction::MarkSetupComplete]);
     }
 }
 
