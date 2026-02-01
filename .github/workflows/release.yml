@@ -42,6 +42,8 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.bump-version.outputs.version }}
       previous_tag: ${{ steps.get-previous-tag.outputs.previous_tag }}
