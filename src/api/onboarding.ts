@@ -30,6 +30,7 @@ export type SetupState =
         error: SetupError | null
       }
     }
+  | { JoinSpaceKeyslotReceived: { peer_id: string; error: SetupError | null } }
 
 export type SetupEvent =
   | 'ChooseCreateSpace'
@@ -42,6 +43,8 @@ export type SetupEvent =
   | 'PairingUserCancel'
   | 'PairingSucceeded'
   | { PairingFailed: { reason: SetupError } }
+  | { KeyslotReceived: { peer_id: string } }
+  | 'ChallengeVerified'
   | 'PassphraseMismatch'
   | 'NetworkScanRefresh'
 
