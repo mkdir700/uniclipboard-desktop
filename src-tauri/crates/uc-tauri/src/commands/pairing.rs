@@ -262,7 +262,7 @@ fn map_paired_device_to_peer(
     discovered_peer: Option<&DiscoveredPeer>,
     connected: bool,
 ) -> PairedPeer {
-    let peer_id = device.peer_id.to_string();
+    let peer_id = device.peer_id.as_str().to_string();
 
     // Use persisted device_name as primary, fallback to discovered name, then to "Unknown Device"
     let device_name = if !device.device_name.is_empty() {
