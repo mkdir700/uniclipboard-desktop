@@ -1,5 +1,5 @@
 name: 'Release'
-run-name: "release-${{ github.run_number }}"
+run-name: "release-${{ inputs.channel }}-${{ github.run_number }}"
 on:
   workflow_dispatch:
     inputs:
@@ -19,38 +19,82 @@ on:
           - 'ubuntu-22.04'
           - 'windows-latest'
         default: 'all'
+      bump:
+        description: '版本升级类型'
+        required: true
+        type: choice
+        options:
+          - 'patch'
+          - 'minor'
+          - 'major'
+        default: 'patch'
+      channel:
+        description: '发布渠道'
+        required: true
+        type: choice
+        options:
+          - 'stable'
+          - 'alpha'
+          - 'beta'
+          - 'rc'
+        default: 'stable'
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.extract-version.outputs.version }}
+      version: ${{ steps.bump-version.outputs.version }}
       previous_tag: ${{ steps.get-previous-tag.outputs.previous_tag }}
+      is_prerelease: ${{ steps.check-prerelease.outputs.is_prerelease }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version from package.json
-        id: extract-version
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Bump version
+        id: bump-version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "Extracted version: $VERSION"
+          # Run version bump script
+          node scripts/bump-version.js --type ${{ inputs.bump }} --channel ${{ inputs.channel }}
 
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "Error: Invalid version format in package.json. Expected format: X.Y.Z or X.Y.Z-suffix"
-            exit 1
+          # Get the new version
+          VERSION=$(node -p "require('./package.json').version")
+          echo "New version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check prerelease status
+        id: check-prerelease
+        run: |
+          VERSION="${{ steps.bump-version.outputs.version }}"
+          if [[ "$VERSION" =~ -[a-zA-Z] ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "This is a prerelease version"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "This is a stable release"
           fi
 
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+          git commit -m "chore: bump version to ${{ steps.bump-version.outputs.version }}"
+          git push origin ${{ inputs.branch }}
 
       - name: Check if tag exists
         run: |
-          VERSION="${{ steps.extract-version.outputs.version }}"
+          VERSION="${{ steps.bump-version.outputs.version }}"
           if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION"; then
             echo "Error: Tag v$VERSION already exists"
-            echo "Please update the version in package.json before releasing"
+            echo "This should not happen after version bump. Please check the workflow."
             exit 1
           fi
 
@@ -128,25 +172,83 @@ jobs:
       - name: Generate release notes
         id: release-notes
         run: |
-          cat > release-notes.md << 'EOF'
+          VERSION="${{ needs.validate.outputs.version }}"
+          REPO="${{ github.repository }}"
+          BASE_URL="https://github.com/$REPO/releases/download/v$VERSION"
+          CHANNEL="${{ inputs.channel }}"
+          IS_PRERELEASE="${{ needs.validate.outputs.is_prerelease }}"
+
+          # Find actual filenames
+          MACOS_ARM64_DMG=$(find release-assets -name "*aarch64.dmg" -type f -printf "%f\n" | head -n1 || echo "")
+          MACOS_X64_DMG=$(find release-assets -name "*x64.dmg" -type f -printf "%f\n" | head -n1 || echo "")
+          LINUX_DEB=$(find release-assets -name "*.deb" -type f -printf "%f\n" | head -n1 || echo "")
+          LINUX_APPIMAGE=$(find release-assets -name "*.AppImage" -type f -printf "%f\n" | head -n1 || echo "")
+          WINDOWS_MSI=$(find release-assets -name "*.msi" -type f -printf "%f\n" | head -n1 || echo "")
+          WINDOWS_EXE=$(find release-assets -name "*.exe" -type f -printf "%f\n" | head -n1 || echo "")
+
+          # Start release notes
+          cat > release-notes.md << EOF
           ## What's Changed
 
           <!-- Please update this section with actual changes -->
 
-          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ needs.validate.outputs.previous_tag }}...v${{ needs.validate.outputs.version }}
+          **Full Changelog**: https://github.com/$REPO/compare/${{ needs.validate.outputs.previous_tag }}...v$VERSION
 
+          EOF
+
+          # Add prerelease warning if applicable
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            cat >> release-notes.md << EOF
+          ## ⚠️ Prerelease Warning
+
+          This is a **$CHANNEL** release and may contain bugs or incomplete features.
+          Not recommended for production use. Please report issues on GitHub.
+
+          EOF
+          fi
+
+          # Installation section
+          cat >> release-notes.md << EOF
           ## Installation
 
           ### macOS
-          - **Apple Silicon (M1/M2/M3)**: Download `UniClipboard_*_aarch64.dmg`
-          - **Intel**: Download `UniClipboard_*_x64.dmg`
+          EOF
+
+          if [ -n "$MACOS_ARM64_DMG" ]; then
+            echo "- **Apple Silicon (M1/M2/M3)**: [$MACOS_ARM64_DMG]($BASE_URL/$MACOS_ARM64_DMG)" >> release-notes.md
+          fi
+
+          if [ -n "$MACOS_X64_DMG" ]; then
+            echo "- **Intel**: [$MACOS_X64_DMG]($BASE_URL/$MACOS_X64_DMG)" >> release-notes.md
+          fi
+
+          cat >> release-notes.md << EOF
 
           ### Linux
-          - **Debian/Ubuntu**: Download `.deb` file
-          - **AppImage**: Download `.AppImage` file (universal)
+          EOF
+
+          if [ -n "$LINUX_DEB" ]; then
+            echo "- **Debian/Ubuntu**: [$LINUX_DEB]($BASE_URL/$LINUX_DEB)" >> release-notes.md
+          fi
+
+          if [ -n "$LINUX_APPIMAGE" ]; then
+            echo "- **AppImage**: [$LINUX_APPIMAGE]($BASE_URL/$LINUX_APPIMAGE)" >> release-notes.md
+          fi
+
+          cat >> release-notes.md << EOF
 
           ### Windows
-          - Download `.msi` installer or `.exe` portable version
+          EOF
+
+          if [ -n "$WINDOWS_MSI" ]; then
+            echo "- **MSI Installer**: [$WINDOWS_MSI]($BASE_URL/$WINDOWS_MSI)" >> release-notes.md
+          fi
+
+          if [ -n "$WINDOWS_EXE" ]; then
+            echo "- **Portable**: [$WINDOWS_EXE]($BASE_URL/$WINDOWS_EXE)" >> release-notes.md
+          fi
+
+          cat >> release-notes.md << 'EOF'
 
           ## Verification
 
@@ -160,7 +262,7 @@ jobs:
           name: v${{ needs.validate.outputs.version }}
           body_path: release-notes.md
           draft: true
-          prerelease: false
+          prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
           files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -169,9 +271,11 @@ jobs:
         run: |
           echo "## Release Created Successfully! :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** v${{ needs.validate.outputs.version }} (from package.json)" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Channel:** ${{ inputs.channel }}" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** ${{ inputs.branch }}" >> $GITHUB_STEP_SUMMARY
           echo "**Platform:** ${{ inputs.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Prerelease:** ${{ needs.validate.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. Go to [Releases](https://github.com/${{ github.repository }}/releases)" >> $GITHUB_STEP_SUMMARY
