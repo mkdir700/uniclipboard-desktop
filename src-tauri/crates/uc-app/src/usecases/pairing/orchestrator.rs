@@ -123,6 +123,8 @@ struct LocalDeviceInfo {
     device_id: String,
     /// 本地身份公钥
     identity_pubkey: Vec<u8>,
+    /// 本地 PeerID
+    peer_id: String,
 }
 
 impl PairingOrchestrator {
@@ -132,7 +134,7 @@ impl PairingOrchestrator {
         device_repo: Arc<dyn PairedDeviceRepositoryPort + Send + Sync + 'static>,
         local_device_name: String,
         local_device_id: String,
-        _local_peer_id: String,
+        local_peer_id: String,
         local_identity_pubkey: Vec<u8>,
     ) -> (Self, mpsc::Receiver<PairingAction>) {
         let (action_tx, action_rx) = mpsc::channel(100);
@@ -146,6 +148,7 @@ impl PairingOrchestrator {
                 device_name: local_device_name,
                 device_id: local_device_id,
                 identity_pubkey: local_identity_pubkey,
+                peer_id: local_peer_id,
             },
             action_tx,
         };
@@ -214,6 +217,14 @@ impl PairingOrchestrator {
         peer_id: String,
         request: PairingRequest,
     ) -> Result<()> {
+        if request.peer_id != self.local_identity.peer_id {
+            return Err(anyhow::anyhow!(
+                "Request target peer_id mismatch: expected {}, got {}",
+                self.local_identity.peer_id,
+                request.peer_id
+            ));
+        }
+
         let session_id = request.session_id.clone();
         let span = info_span!(
             "pairing.handle_request",
@@ -238,6 +249,7 @@ impl PairingOrchestrator {
             let (_state, actions) = state_machine.handle_event(
                 PairingEvent::RecvRequest {
                     session_id: session_id.clone(),
+                    sender_peer_id: peer_id.clone(),
                     request,
                 },
                 Utc::now(),
@@ -1173,7 +1185,7 @@ mod tests {
             session_id: "session-1".to_string(),
             device_name: "PeerDevice".to_string(),
             device_id: "device-999".to_string(),
-            peer_id: "peer-remote".to_string(),
+            peer_id: "peer-local".to_string(),
             identity_pubkey: vec![1; 32],
             nonce: vec![2; 16],
         };
@@ -1356,5 +1368,38 @@ mod tests {
         let context = sessions.get(&session_id).expect("session");
         let timers = context.timers.lock().await;
         assert!(!timers.contains_key(&TimeoutKind::WaitingChallenge));
+    }
+
+    #[tokio::test]
+    async fn test_handle_incoming_request_validates_target_peer_id() {
+        let config = PairingConfig::default();
+        let device_repo = Arc::new(MockDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            config,
+            device_repo,
+            "Local".to_string(),
+            "device-1".to_string(),
+            "peer-local".to_string(),
+            vec![1; 32],
+        );
+
+        let request = PairingRequest {
+            session_id: "session-1".to_string(),
+            device_name: "Peer".to_string(),
+            device_id: "device-2".to_string(),
+            peer_id: "wrong-peer-id".to_string(),
+            identity_pubkey: vec![2; 32],
+            nonce: vec![3; 16],
+        };
+
+        let result = orchestrator
+            .handle_incoming_request("peer-remote".to_string(), request)
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Request target peer_id mismatch: expected peer-local, got wrong-peer-id"
+        );
     }
 }
