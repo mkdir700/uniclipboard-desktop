@@ -298,7 +298,7 @@
     "joinVerifyPassphrase": {
       "title": "输入加密口令",
       "subtitle": "输入与已有设备相同的口令以加入加密空间",
-      "targetDevice": "目标设备: {{peerShort}}...",
+      "targetDevice": "目标设备: {{peerShort}}",
       "actions": {
         "verify": "验证并继续",
         "verifying": "验证中...",
