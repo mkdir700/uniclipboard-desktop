@@ -1,5 +1,5 @@
 [build]
-target-dir = "target"
+target-dir = "src-tauri/target"
 
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"
