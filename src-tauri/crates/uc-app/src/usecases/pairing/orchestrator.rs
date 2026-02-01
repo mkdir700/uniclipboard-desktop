@@ -18,6 +18,8 @@
 //! ```
 
 use anyhow::{Context, Result};
+
+use super::{PairingDomainEvent, PairingEventPort, PairingFacade};
 use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
@@ -29,10 +31,13 @@ use tracing::{info_span, Instrument};
 use uc_core::{
     network::{
         pairing_state_machine::{
-            PairingAction, PairingEvent, PairingPolicy, PairingRole, PairingState,
+            FailureReason, PairingAction, PairingEvent, PairingPolicy, PairingRole, PairingState,
             PairingStateMachine, SessionId, TimeoutKind,
         },
-        protocol::{PairingChallenge, PairingConfirm, PairingRequest},
+        protocol::{
+            PairingChallenge, PairingChallengeResponse, PairingConfirm, PairingKeyslotOffer,
+            PairingRequest,
+        },
     },
     ports::PairedDeviceRepositoryPort,
     settings::model::Settings,
@@ -96,6 +101,8 @@ pub struct PairingOrchestrator {
     local_identity: LocalDeviceInfo,
     /// 动作发送器
     action_tx: mpsc::Sender<PairingAction>,
+    /// 配对事件订阅者
+    event_senders: Arc<Mutex<Vec<mpsc::Sender<PairingDomainEvent>>>>,
 }
 
 /// 配对会话上下文
@@ -151,6 +158,7 @@ impl PairingOrchestrator {
                 peer_id: local_peer_id,
             },
             action_tx,
+            event_senders: Arc::new(Mutex::new(Vec::new())),
         };
 
         (orchestrator, action_rx)
@@ -314,6 +322,89 @@ impl PairingOrchestrator {
                 self.execute_action(session_id, peer_id, action).await?;
             }
 
+            Ok(())
+        }
+        .instrument(span)
+        .await
+    }
+
+    /// 处理收到的KeyslotOffer (Initiator)
+    pub async fn handle_keyslot_offer(
+        &self,
+        session_id: &str,
+        peer_id: &str,
+        offer: PairingKeyslotOffer,
+    ) -> Result<()> {
+        let span = info_span!(
+            "pairing.handle_keyslot_offer",
+            session_id = %session_id,
+            peer_id = %peer_id
+        );
+        async {
+            let has_keyslot = offer.keyslot_file.as_ref().is_some();
+            let has_challenge = offer.challenge.as_ref().is_some();
+            tracing::info!(
+                session_id = %session_id,
+                peer_id = %peer_id,
+                has_keyslot,
+                has_challenge,
+                "Handling pairing keyslot offer"
+            );
+            let keyslot_file = match offer.keyslot_file {
+                Some(keyslot_file) => keyslot_file,
+                None => {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        peer_id = %peer_id,
+                        "Keyslot offer missing keyslot file"
+                    );
+                    return Ok(());
+                }
+            };
+            let challenge = match offer.challenge {
+                Some(challenge) => challenge,
+                None => {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        peer_id = %peer_id,
+                        "Keyslot offer missing challenge"
+                    );
+                    return Ok(());
+                }
+            };
+            self.emit_event(PairingDomainEvent::KeyslotReceived {
+                session_id: session_id.to_string(),
+                peer_id: peer_id.to_string(),
+                keyslot_file,
+                challenge,
+            })
+            .await;
+            Ok(())
+        }
+        .instrument(span)
+        .await
+    }
+
+    /// 处理收到的ChallengeResponse (Responder)
+    pub async fn handle_challenge_response(
+        &self,
+        session_id: &str,
+        peer_id: &str,
+        response: PairingChallengeResponse,
+    ) -> Result<()> {
+        let span = info_span!(
+            "pairing.handle_challenge_response",
+            session_id = %session_id,
+            peer_id = %peer_id
+        );
+        async {
+            let has_encrypted_challenge = response.encrypted_challenge.as_ref().is_some();
+            tracing::info!(
+                session_id = %session_id,
+                peer_id = %peer_id,
+                has_encrypted_challenge,
+                "Handling pairing challenge response"
+            );
             Ok(())
         }
         .instrument(span)
@@ -610,6 +701,8 @@ impl PairingOrchestrator {
         Self::execute_action_inner(
             self.action_tx.clone(),
             self.sessions.clone(),
+            self.session_peers.clone(),
+            self.event_senders.clone(),
             self.device_repo.clone(),
             session_id.to_string(),
             action,
@@ -620,6 +713,8 @@ impl PairingOrchestrator {
     fn execute_action_inner(
         action_tx: mpsc::Sender<PairingAction>,
         sessions: Arc<RwLock<HashMap<SessionId, PairingSessionContext>>>,
+        session_peers: Arc<RwLock<HashMap<SessionId, PairingPeerInfo>>>,
+        event_senders: Arc<Mutex<Vec<mpsc::Sender<PairingDomainEvent>>>>,
         device_repo: Arc<dyn PairedDeviceRepositoryPort + Send + Sync + 'static>,
         session_id: String,
         action: PairingAction,
@@ -659,6 +754,8 @@ impl PairingOrchestrator {
                         success,
                         error,
                     } => {
+                        let result_session_id_for_send = result_session_id.clone();
+                        let error_for_send = error.clone();
                         tracing::info!(
                             session_id = %result_session_id,
                             success = %success,
@@ -667,12 +764,42 @@ impl PairingOrchestrator {
                         );
                         action_tx
                             .send(PairingAction::EmitResult {
-                                session_id: result_session_id,
+                                session_id: result_session_id_for_send,
                                 success,
-                                error,
+                                error: error_for_send,
                             })
                             .await
                             .context("Failed to queue emit result action")?;
+                        let peer_id = {
+                            let peers = session_peers.read().await;
+                            peers
+                                .get(&result_session_id)
+                                .map(|peer| peer.peer_id.clone())
+                                .unwrap_or_default()
+                        };
+                        if peer_id.is_empty() {
+                            tracing::warn!(
+                                session_id = %result_session_id,
+                                "Pairing result emitted without peer id"
+                            );
+                        }
+                        let event = if success {
+                            PairingDomainEvent::PairingSucceeded {
+                                session_id: result_session_id.clone(),
+                                peer_id,
+                            }
+                        } else {
+                            let reason =
+                                error.clone().map(FailureReason::Other).unwrap_or_else(|| {
+                                    FailureReason::Other("Pairing failed".to_string())
+                                });
+                            PairingDomainEvent::PairingFailed {
+                                session_id: result_session_id.clone(),
+                                peer_id,
+                                reason,
+                            }
+                        };
+                        Self::emit_event_to_senders(event_senders.clone(), event).await;
                     }
                     PairingAction::PersistPairedDevice {
                         session_id: _,
@@ -748,6 +875,8 @@ impl PairingOrchestrator {
                         deadline,
                     } => {
                         let sessions_for_timer = sessions.clone();
+                        let peers_for_timer = session_peers.clone();
+                        let event_senders_for_timer = event_senders.clone();
                         let mut sessions = sessions.write().await;
                         let context = sessions
                             .get_mut(&action_session_id)
@@ -761,6 +890,8 @@ impl PairingOrchestrator {
 
                         let action_tx = action_tx.clone();
                         let sessions = sessions_for_timer;
+                        let session_peers = peers_for_timer;
+                        let event_senders = event_senders_for_timer;
                         let device_repo = device_repo.clone();
                         let session_id_for_log = action_session_id.clone();
                         let sleep_duration = deadline
@@ -772,6 +903,8 @@ impl PairingOrchestrator {
                             if let Err(error) = Self::handle_timeout(
                                 action_tx,
                                 sessions,
+                                session_peers,
+                                event_senders,
                                 device_repo,
                                 action_session_id,
                                 kind,
@@ -903,6 +1036,8 @@ impl PairingOrchestrator {
     async fn handle_timeout(
         action_tx: mpsc::Sender<PairingAction>,
         sessions: Arc<RwLock<HashMap<SessionId, PairingSessionContext>>>,
+        session_peers: Arc<RwLock<HashMap<SessionId, PairingPeerInfo>>>,
+        event_senders: Arc<Mutex<Vec<mpsc::Sender<PairingDomainEvent>>>>,
         device_repo: Arc<dyn PairedDeviceRepositoryPort + Send + Sync + 'static>,
         session_id: String,
         kind: TimeoutKind,
@@ -934,6 +1069,8 @@ impl PairingOrchestrator {
                 Self::execute_action_inner(
                     action_tx.clone(),
                     sessions.clone(),
+                    session_peers.clone(),
+                    event_senders.clone(),
                     device_repo.clone(),
                     session_id.clone(),
                     action,
@@ -946,6 +1083,56 @@ impl PairingOrchestrator {
         .instrument(span)
         .await
     }
+
+    async fn emit_event(&self, event: PairingDomainEvent) {
+        Self::emit_event_to_senders(self.event_senders.clone(), event).await;
+    }
+
+    async fn emit_event_to_senders(
+        event_senders: Arc<Mutex<Vec<mpsc::Sender<PairingDomainEvent>>>>,
+        event: PairingDomainEvent,
+    ) {
+        let senders = { event_senders.lock().await.clone() };
+        for sender in senders {
+            if sender.send(event.clone()).await.is_err() {
+                tracing::debug!("Pairing event receiver dropped");
+            }
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl PairingFacade for PairingOrchestrator {
+    async fn initiate_pairing(&self, peer_id: String) -> anyhow::Result<SessionId> {
+        Self::initiate_pairing(self, peer_id).await
+    }
+
+    async fn user_accept_pairing(&self, session_id: &str) -> anyhow::Result<()> {
+        Self::user_accept_pairing(self, session_id).await
+    }
+
+    async fn user_reject_pairing(&self, session_id: &str) -> anyhow::Result<()> {
+        Self::user_reject_pairing(self, session_id).await
+    }
+
+    async fn handle_challenge_response(
+        &self,
+        session_id: &str,
+        peer_id: &str,
+        response: PairingChallengeResponse,
+    ) -> anyhow::Result<()> {
+        Self::handle_challenge_response(self, session_id, peer_id, response).await
+    }
+}
+
+#[async_trait::async_trait]
+impl PairingEventPort for PairingOrchestrator {
+    async fn subscribe(&self) -> anyhow::Result<mpsc::Receiver<PairingDomainEvent>> {
+        let (event_tx, event_rx) = mpsc::channel(100);
+        let mut senders = self.event_senders.lock().await;
+        senders.push(event_tx);
+        Ok(event_rx)
+    }
 }
 
 #[cfg(test)]
@@ -955,8 +1142,13 @@ mod tests {
     use tokio::time::timeout;
     use uc_core::crypto::pin_hash::hash_pin;
     use uc_core::network::paired_device::{PairedDevice, PairingState};
+    use uc_core::network::pairing_state_machine::FailureReason;
     use uc_core::network::protocol::{PairingRequest, PairingResponse};
     use uc_core::network::PairingMessage;
+    use uc_core::security::model::{
+        EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, KdfAlgorithm, KdfParams,
+        KdfParamsV1, KeyScope, KeySlotFile, KeySlotVersion,
+    };
 
     struct MockDeviceRepository;
 
@@ -1401,5 +1593,142 @@ mod tests {
             result.unwrap_err().to_string(),
             "Request target peer_id mismatch: expected peer-local, got wrong-peer-id"
         );
+    }
+
+    fn sample_keyslot_file() -> KeySlotFile {
+        KeySlotFile {
+            version: KeySlotVersion::V1,
+            scope: KeyScope {
+                profile_id: "profile-1".to_string(),
+            },
+            kdf: KdfParams {
+                alg: KdfAlgorithm::Argon2id,
+                params: KdfParamsV1 {
+                    mem_kib: 1024,
+                    iters: 2,
+                    parallelism: 1,
+                },
+            },
+            salt: vec![1, 2, 3],
+            wrapped_master_key: EncryptedBlob {
+                version: EncryptionFormatVersion::V1,
+                aead: EncryptionAlgo::XChaCha20Poly1305,
+                nonce: vec![9, 8, 7],
+                ciphertext: vec![6, 5, 4],
+                aad_fingerprint: None,
+            },
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn pairing_orchestrator_emits_keyslot_received_event() {
+        let config = PairingConfig::default();
+        let device_repo = Arc::new(MockDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            config,
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![0u8; 32],
+        );
+
+        let mut event_rx = crate::usecases::pairing::PairingEventPort::subscribe(&orchestrator)
+            .await
+            .expect("subscribe event port");
+        let offer = PairingKeyslotOffer {
+            session_id: "session-1".to_string(),
+            keyslot_file: Some(sample_keyslot_file()),
+            challenge: Some(vec![9, 9, 9]),
+        };
+
+        orchestrator
+            .handle_keyslot_offer("session-1", "peer-remote", offer)
+            .await
+            .expect("handle keyslot offer");
+
+        let event = timeout(Duration::from_secs(1), event_rx.recv())
+            .await
+            .expect("event timeout")
+            .expect("event missing");
+
+        assert!(matches!(
+            event,
+            crate::usecases::pairing::PairingDomainEvent::KeyslotReceived { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn pairing_orchestrator_emits_pairing_result_events() {
+        let config = PairingConfig::default();
+        let device_repo = Arc::new(MockDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            config,
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![0u8; 32],
+        );
+
+        orchestrator
+            .record_session_peer(
+                "session-1",
+                "peer-remote".to_string(),
+                Some("Remote".to_string()),
+            )
+            .await;
+
+        let mut event_rx = crate::usecases::pairing::PairingEventPort::subscribe(&orchestrator)
+            .await
+            .expect("subscribe event port");
+
+        orchestrator
+            .execute_action(
+                "session-1",
+                "peer-remote",
+                PairingAction::EmitResult {
+                    session_id: "session-1".to_string(),
+                    success: true,
+                    error: None,
+                },
+            )
+            .await
+            .expect("emit success result");
+
+        let success_event = timeout(Duration::from_secs(1), event_rx.recv())
+            .await
+            .expect("event timeout")
+            .expect("event missing");
+        assert!(matches!(
+            success_event,
+            crate::usecases::pairing::PairingDomainEvent::PairingSucceeded { .. }
+        ));
+
+        orchestrator
+            .execute_action(
+                "session-1",
+                "peer-remote",
+                PairingAction::EmitResult {
+                    session_id: "session-1".to_string(),
+                    success: false,
+                    error: Some("failed".to_string()),
+                },
+            )
+            .await
+            .expect("emit failure result");
+
+        let failed_event = timeout(Duration::from_secs(1), event_rx.recv())
+            .await
+            .expect("event timeout")
+            .expect("event missing");
+        match failed_event {
+            crate::usecases::pairing::PairingDomainEvent::PairingFailed { reason, .. } => {
+                assert!(matches!(reason, FailureReason::Other(_)));
+            }
+            _ => panic!("expected PairingFailed event"),
+        }
     }
 }
