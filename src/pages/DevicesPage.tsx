@@ -1,10 +1,14 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { DeviceList } from '@/components'
 import PairingDialog from '@/components/PairingDialog'
-import { useAppSelector } from '@/store/hooks'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { fetchPairedDevices } from '@/store/slices/devicesSlice'
 
 const DevicesPage: React.FC = () => {
   const [showPairingDialog, setShowPairingDialog] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dispatch = useAppDispatch()
   const { pairedDevices, pairedDevicesLoading, pairedDevicesError } = useAppSelector(
     state => state.devices
   )
@@ -19,7 +23,28 @@ const DevicesPage: React.FC = () => {
     setShowPairingDialog(true)
   }
 
-  const handlePairingSuccess = () => {}
+  const handlePairingSuccess = () => {
+    dispatch(fetchPairedDevices())
+    setShowPairingDialog(false)
+  }
+
+  useEffect(() => {
+    if (searchParams.get('pairing') !== '1') {
+      return
+    }
+
+    setShowPairingDialog(true)
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev)
+        next.delete('pairing')
+        return next
+      },
+      {
+        replace: true,
+      }
+    )
+  }, [searchParams, setSearchParams])
 
   return (
     <div className="flex flex-col h-full relative">

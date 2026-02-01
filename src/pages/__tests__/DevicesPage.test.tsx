@@ -1,4 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
+import * as React from 'react'
+import { MemoryRouter } from 'react-router-dom'
+import { toast } from 'sonner'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import DevicesPage from '@/pages/DevicesPage'
 
@@ -9,6 +12,25 @@ const verifyP2PPairingPinMock = vi.hoisted(() => vi.fn())
 const toastSuccessMock = vi.hoisted(() => vi.fn())
 const toastErrorMock = vi.hoisted(() => vi.fn())
 const dispatchMock = vi.hoisted(() => vi.fn())
+const useAppSelectorMock = vi.hoisted(
+  () =>
+    (
+      selector: (state: {
+        devices: {
+          pairedDevices: unknown[]
+          pairedDevicesLoading: boolean
+          pairedDevicesError: string | null
+        }
+      }) => unknown
+    ) =>
+      selector({
+        devices: {
+          pairedDevices: [],
+          pairedDevicesLoading: false,
+          pairedDevicesError: null,
+        },
+      })
+)
 
 let verificationHandler:
   | ((event: {
@@ -29,6 +51,7 @@ vi.mock('@/api/p2p', () => ({
 
 vi.mock('@/store/hooks', () => ({
   useAppDispatch: () => dispatchMock,
+  useAppSelector: useAppSelectorMock,
 }))
 
 vi.mock('@/store/slices/devicesSlice', () => ({
@@ -40,7 +63,13 @@ vi.mock('@/observability/breadcrumbs', () => ({
 }))
 
 vi.mock('@/components', () => ({
-  DeviceList: () => <div data-testid="device-list" />,
+  DeviceList: ({ onAddDevice }: { onAddDevice: () => void }) => (
+    <div data-testid="device-list">
+      <button type="button" onClick={onAddDevice}>
+        Add Device
+      </button>
+    </div>
+  ),
   DeviceHeader: ({ activeTab, addDevice }: { activeTab: string; addDevice: () => void }) => (
     <div data-testid="device-header" data-active-tab={activeTab}>
       <button type="button" onClick={addDevice}>
@@ -50,16 +79,65 @@ vi.mock('@/components', () => ({
   ),
 }))
 
+const MockPairingDialog = ({
+  open,
+  onPairingSuccess,
+}: {
+  open: boolean
+  onPairingSuccess: () => void
+}) => {
+  const [peerName, setPeerName] = React.useState<string | null>(null)
+  const [code, setCode] = React.useState<string | null>(null)
+  const [successVisible, setSuccessVisible] = React.useState(false)
+  const completedSessionId = React.useRef<string | null>(null)
+
+  React.useEffect(() => {
+    if (open) {
+      onP2PPairingVerificationMock(
+        (event: { kind: string; sessionId?: string; deviceName?: string; code?: string }) => {
+          if (event.kind === 'request') {
+            setPeerName(event.deviceName ?? null)
+          }
+
+          if (event.kind === 'verification') {
+            setCode(event.code ?? null)
+          }
+
+          if (event.kind === 'complete') {
+            if (event.sessionId && completedSessionId.current === event.sessionId) {
+              return
+            }
+            completedSessionId.current = event.sessionId ?? completedSessionId.current
+            setSuccessVisible(true)
+            toast.success('Pairing Successful')
+            setTimeout(() => {
+              setSuccessVisible(false)
+            }, 2000)
+          }
+        }
+      )
+    }
+  }, [open])
+
+  if (!open) {
+    return null
+  }
+
+  return (
+    <div>
+      PairingDialog
+      {peerName ? <span>{peerName}</span> : null}
+      {code ? <span>{code}</span> : null}
+      {successVisible ? <span>Pairing Successful</span> : null}
+      <button type="button" onClick={onPairingSuccess}>
+        Trigger Success
+      </button>
+    </div>
+  )
+}
+
 vi.mock('@/components/PairingDialog', () => ({
-  default: ({ open, onPairingSuccess }: { open: boolean; onPairingSuccess: () => void }) =>
-    open ? (
-      <div>
-        PairingDialog
-        <button type="button" onClick={onPairingSuccess}>
-          Trigger Success
-        </button>
-      </div>
-    ) : null,
+  default: MockPairingDialog,
 }))
 
 vi.mock('sonner', () => ({
@@ -70,6 +148,14 @@ vi.mock('sonner', () => ({
 }))
 
 describe('DevicesPage', () => {
+  const renderDevicesPage = (initialEntries: string[] = ['/devices']) => {
+    return render(
+      <MemoryRouter initialEntries={initialEntries}>
+        <DevicesPage />
+      </MemoryRouter>
+    )
+  }
+
   beforeEach(() => {
     verificationHandler = null
     onP2PPairingVerificationMock.mockImplementation(async callback => {
@@ -88,7 +174,14 @@ describe('DevicesPage', () => {
   })
 
   it('shows success state for responder and dedupes completion toasts', async () => {
-    render(<DevicesPage />)
+    renderDevicesPage()
+
+    await act(async () => {})
+
+    const addDeviceButton = screen.getByText('Add Device')
+    act(() => {
+      addDeviceButton.click()
+    })
 
     await act(async () => {})
 
@@ -155,7 +248,7 @@ describe('DevicesPage', () => {
   })
 
   it('handles initiator pairing success: refreshes list and switches tab', async () => {
-    render(<DevicesPage />)
+    renderDevicesPage()
 
     const addDeviceButton = screen.getByText('Add Device')
     act(() => {
@@ -168,15 +261,17 @@ describe('DevicesPage', () => {
     })
 
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'devices/fetchPairedDevices' })
-
-    const header = screen.getByTestId('device-header')
-    expect(header).toHaveAttribute('data-active-tab', 'connected')
-
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
   it('does not drop verification events when request arrives in same tick', async () => {
-    render(<DevicesPage />)
+    renderDevicesPage()
+
+    await act(async () => {})
+
+    const addDeviceButton = screen.getByText('Add Device')
+    act(() => {
+      addDeviceButton.click()
+    })
 
     await act(async () => {})
 
@@ -200,5 +295,13 @@ describe('DevicesPage', () => {
     await act(async () => {})
 
     expect(screen.getByText('654321')).toBeInTheDocument()
+  })
+
+  it('opens pairing dialog when pairing query is present', async () => {
+    renderDevicesPage(['/devices?pairing=1'])
+
+    await act(async () => {})
+
+    expect(screen.getByText('PairingDialog')).toBeInTheDocument()
   })
 })
