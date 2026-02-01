@@ -79,13 +79,13 @@ vi.mock('@/components', () => ({
   ),
 }))
 
-const MockPairingDialog = ({
+function MockPairingDialog({
   open,
   onPairingSuccess,
 }: {
   open: boolean
   onPairingSuccess: () => void
-}) => {
+}) {
   const [peerName, setPeerName] = React.useState<string | null>(null)
   const [code, setCode] = React.useState<string | null>(null)
   const [successVisible, setSuccessVisible] = React.useState(false)
@@ -140,6 +140,30 @@ vi.mock('@/components/PairingDialog', () => ({
   default: MockPairingDialog,
 }))
 
+vi.mock('@/components/PairingPinDialog', () => ({
+  default: ({
+    open,
+    pinCode,
+    peerDeviceName,
+  }: {
+    open: boolean
+    pinCode: string
+    peerDeviceName?: string
+  }) => {
+    if (!open) {
+      return null
+    }
+
+    return (
+      <div>
+        PairingPinDialog
+        {peerDeviceName ? <span>{peerDeviceName}</span> : null}
+        {pinCode ? <span>{pinCode}</span> : null}
+      </div>
+    )
+  },
+}))
+
 vi.mock('sonner', () => ({
   toast: {
     success: toastSuccessMock,
@@ -173,31 +197,12 @@ describe('DevicesPage', () => {
     vi.useRealTimers()
   })
 
-  it('shows success state for responder and dedupes completion toasts', async () => {
-    renderDevicesPage()
+  it('shows pairing pin dialog for responder and dedupes completion toasts', async () => {
+    renderDevicesPage(['/devices?pairingPin=1&sessionId=session-1&deviceName=Peer%20Device'])
 
     await act(async () => {})
 
-    const addDeviceButton = screen.getByText('Add Device')
-    act(() => {
-      addDeviceButton.click()
-    })
-
-    await act(async () => {})
-
-    expect(verificationHandler).not.toBeNull()
-
-    act(() => {
-      verificationHandler?.({
-        kind: 'request',
-        sessionId: 'session-1',
-        peerId: 'peer-1',
-        deviceName: 'Peer Device',
-      })
-    })
-
-    await act(async () => {})
-
+    expect(screen.getByText('PairingPinDialog')).toBeInTheDocument()
     expect(screen.getByText('Peer Device')).toBeInTheDocument()
 
     act(() => {
@@ -224,7 +229,6 @@ describe('DevicesPage', () => {
 
     await act(async () => {})
 
-    expect(screen.getAllByText(/配对成功|Pairing Successful/i).length).toBeGreaterThan(0)
     expect(toastSuccessMock).toHaveBeenCalledTimes(1)
 
     act(() => {
@@ -237,14 +241,6 @@ describe('DevicesPage', () => {
     })
 
     expect(toastSuccessMock).toHaveBeenCalledTimes(1)
-
-    act(() => {
-      vi.advanceTimersByTime(2000)
-    })
-
-    await act(async () => {})
-
-    expect(screen.queryAllByText(/配对成功|Pairing Successful/i).length).toBe(0)
   })
 
   it('handles initiator pairing success: refreshes list and switches tab', async () => {
@@ -263,27 +259,12 @@ describe('DevicesPage', () => {
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'devices/fetchPairedDevices' })
   })
 
-  it('does not drop verification events when request arrives in same tick', async () => {
-    renderDevicesPage()
+  it('shows pin code when verification arrives quickly', async () => {
+    renderDevicesPage(['/devices?pairingPin=1&sessionId=session-fast&deviceName=Fast%20Peer'])
 
     await act(async () => {})
 
-    const addDeviceButton = screen.getByText('Add Device')
     act(() => {
-      addDeviceButton.click()
-    })
-
-    await act(async () => {})
-
-    expect(verificationHandler).not.toBeNull()
-
-    act(() => {
-      verificationHandler?.({
-        kind: 'request',
-        sessionId: 'session-fast',
-        peerId: 'peer-fast',
-        deviceName: 'Fast Peer',
-      })
       verificationHandler?.({
         kind: 'verification',
         sessionId: 'session-fast',
@@ -297,11 +278,11 @@ describe('DevicesPage', () => {
     expect(screen.getByText('654321')).toBeInTheDocument()
   })
 
-  it('opens pairing dialog when pairing query is present', async () => {
-    renderDevicesPage(['/devices?pairing=1'])
+  it('opens pairing pin dialog when pairingPin query is present', async () => {
+    renderDevicesPage(['/devices?pairingPin=1&sessionId=session-1&deviceName=Peer%20Device'])
 
     await act(async () => {})
 
-    expect(screen.getByText('PairingDialog')).toBeInTheDocument()
+    expect(screen.getByText('PairingPinDialog')).toBeInTheDocument()
   })
 })
