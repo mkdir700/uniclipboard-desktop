@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use libp2p::{
     core::ConnectedPoint,
-    futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt},
+    futures::{AsyncReadExt, AsyncWriteExt, StreamExt},
     identity, mdns, noise,
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, StreamProtocol, SwarmBuilder,
@@ -494,16 +494,6 @@ impl NetworkControlPort for Libp2pNetworkAdapter {
     }
 }
 
-async fn echo_payload<T>(stream: &mut T) -> Result<()>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
-{
-    let mut buf = Vec::new();
-    stream.read_to_end(&mut buf).await?;
-    stream.write_all(&buf).await?;
-    Ok(())
-}
-
 fn spawn_business_stream_handler(
     mut control: stream::Control,
     caches: Arc<RwLock<PeerCaches>>,
@@ -520,7 +510,7 @@ fn spawn_business_stream_handler(
     };
 
     tokio::spawn(async move {
-        while let Some((_peer, mut stream)) = incoming.next().await {
+        while let Some((_peer, stream)) = incoming.next().await {
             let peer_id = _peer.to_string();
             let event_tx = event_tx.clone();
             let clipboard_tx = clipboard_tx.clone();
@@ -546,14 +536,14 @@ fn spawn_business_stream_handler(
                     Ok(Ok(_)) => {}
                     Ok(Err(err)) => {
                         warn!("business stream read failed: {err}");
-                        if let Err(err) = stream.close().await {
+                        if let Err(err) = limited.into_inner().close().await {
                             warn!("business stream close failed: {err}");
                         }
                         return;
                     }
                     Err(_) => {
                         warn!("business stream read timed out");
-                        if let Err(err) = stream.close().await {
+                        if let Err(err) = limited.into_inner().close().await {
                             warn!("business stream close failed: {err}");
                         }
                         return;
@@ -565,12 +555,12 @@ fn spawn_business_stream_handler(
                         payload.len(),
                         BUSINESS_PAYLOAD_MAX_BYTES
                     );
-                    if let Err(err) = stream.close().await {
+                    if let Err(err) = limited.into_inner().close().await {
                         warn!("business stream close failed: {err}");
                     }
                     return;
                 }
-                if let Err(err) = stream.close().await {
+                if let Err(err) = limited.into_inner().close().await {
                     warn!("business stream close failed: {err}");
                 }
                 handle_business_payload(caches, event_tx, clipboard_tx, peer_id, payload).await;
