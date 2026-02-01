@@ -8,7 +8,6 @@ import {
   type P2PPairingVerificationEvent,
 } from '@/api/p2p'
 import { DeviceList, DeviceHeader } from '@/components'
-import { DeviceTab } from '@/components/device/Header'
 import PairingDialog from '@/components/PairingDialog'
 import PairingPinDialog from '@/components/PairingPinDialog'
 import { toast } from '@/components/ui/toast'
@@ -27,7 +26,6 @@ const DevicesPage: React.FC = () => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const [showPairingDialog, setShowPairingDialog] = useState(false)
-  const [activeTab, setActiveTab] = useState<DeviceTab>('connected')
 
   // P2P配对请求相关状态
   const [pendingP2PRequest, setPendingP2PRequest] = useState<P2PPairingRequestWithPin | null>(null)
@@ -41,11 +39,6 @@ const DevicesPage: React.FC = () => {
   const cleanupRefs = useRef<(() => void)[]>([])
   const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastResultSessionRef = useRef<string | null>(null)
-
-  // Refs for scrolling
-  const connectedRef = useRef<HTMLDivElement>(null)
-  const requestsRef = useRef<HTMLDivElement>(null)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   const setupP2PRequestListener = useCallback(async () => {
     try {
@@ -63,7 +56,6 @@ const DevicesPage: React.FC = () => {
           setAcceptingP2PRequest(false)
           setPinPhase('display')
           lastResultSessionRef.current = null
-          setActiveTab('requests')
           return
         }
 
@@ -181,7 +173,6 @@ const DevicesPage: React.FC = () => {
 
   const handlePairingSuccess = () => {
     dispatch(fetchPairedDevices())
-    handleTabChange('connected')
   }
 
   const handleAcceptPairing = async () => {
@@ -238,68 +229,16 @@ const DevicesPage: React.FC = () => {
     }
   }
 
-  const handleTabChange = (tab: DeviceTab) => {
-    setActiveTab(tab)
-    let targetRef: React.RefObject<HTMLDivElement> | undefined
-    switch (tab) {
-      case 'connected':
-        targetRef = connectedRef
-        break
-      case 'requests':
-        targetRef = requestsRef
-        break
-    }
-
-    if (targetRef?.current) {
-      targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }
-
-  // Optional: Update active tab on scroll
-  useEffect(() => {
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    const handleScroll = () => {
-      const positions = [
-        { id: 'connected' as DeviceTab, ref: connectedRef },
-        { id: 'requests' as DeviceTab, ref: requestsRef },
-      ]
-
-      // Simple proximity check
-      for (const { id, ref } of positions) {
-        if (ref.current) {
-          const rect = ref.current.getBoundingClientRect()
-          // If the element is near the top of the viewport (with some offset for header)
-          if (rect.top >= 0 && rect.top < 300) {
-            setActiveTab(id)
-            break
-          }
-        }
-      }
-    }
-
-    container.addEventListener('scroll', handleScroll)
-    return () => container.removeEventListener('scroll', handleScroll)
-  }, [])
-
   return (
     <div className="flex flex-col h-full relative">
       {/* 顶部标题栏 */}
-      <DeviceHeader
-        addDevice={handleAddDevice}
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-      />
+      <DeviceHeader addDevice={handleAddDevice} />
 
       {/* 内容区域 */}
       <div className="flex-1 overflow-hidden relative">
-        <div
-          ref={scrollContainerRef}
-          className="h-full overflow-y-auto scrollbar-thin px-8 pb-32 pt-2 scroll-smooth"
-        >
+        <div className="h-full overflow-y-auto scrollbar-thin px-8 pb-32 pt-2 scroll-smooth">
           {/* Pairing Requests Section */}
-          <div id="requests" ref={requestsRef} className="scroll-mt-24 mb-12">
+          <div className="mb-12">
             <div className="flex items-center gap-4 mb-4 mt-8">
               <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
                 {t('devices.sections.requests')}
@@ -319,6 +258,7 @@ const DevicesPage: React.FC = () => {
                         stroke="currentColor"
                         viewBox="0 0 24 24"
                       >
+                        <title>{t('pairing.requests.deviceIcon')}</title>
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -366,7 +306,7 @@ const DevicesPage: React.FC = () => {
           </div>
 
           {/* Connected Devices Section */}
-          <div id="connected" ref={connectedRef} className="scroll-mt-24 mb-12">
+          <div className="mb-12">
             <DeviceList />
           </div>
         </div>
