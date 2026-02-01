@@ -45,12 +45,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true,
-    "windows": {
-      "wix": {
-        "enabled": false
-      }
-    }
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "updater": {

@@ -120,7 +120,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VITE_APP_VERSION: ${{ steps.app-version.outputs.version }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-        run: bun run tauri build ${{ matrix.args }}
+        run: |
+          if [ "${{ matrix.platform }}" = "windows-latest" ]; then
+            bun run tauri build ${{ matrix.args }} --bundles nsis
+          else
+            bun run tauri build ${{ matrix.args }}
+          fi
 
       - name: upload artifacts
         uses: actions/upload-artifact@v4
