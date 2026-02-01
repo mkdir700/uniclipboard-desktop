@@ -211,10 +211,11 @@ node scripts/bump-version.js --type minor --channel stable
 - macOS Intel: `UniClipboard_X.Y.Z_x64.dmg`
 - Linux Debian: `uniclipboard_X.Y.Z_amd64.deb`
 - Linux AppImage: `uniclipboard_X.Y.Z_amd64.AppImage`
-- Windows MSI: `UniClipboard_X.Y.Z_x64.msi`
-- Windows Portable: `UniClipboard_X.Y.Z_x64.exe`
+- Windows NSIS: `UniClipboard_X.Y.Z_x64-setup.exe`
 
 所有安装包都附带 `.sig` 签名文件用于验证。
+
+**注意**: Windows 使用 NSIS 安装程序而不是 MSI，因为 NSIS 支持完整的语义化版本号（包括预发布标识如 `-alpha.1`），而 MSI 只支持纯数字版本号。
 
 ## 故障排除
 
