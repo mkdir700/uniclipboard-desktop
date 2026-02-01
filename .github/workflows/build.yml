@@ -14,6 +14,13 @@ on:
           - 'windows-latest'
           - 'all'
         default: 'all'
+  workflow_call:
+    inputs:
+      platform:
+        description: '选择构建平台'
+        required: false
+        type: string
+        default: 'all'
 
 jobs:
   setup-matrix:
