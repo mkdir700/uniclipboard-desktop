@@ -168,7 +168,7 @@ const OtherDevice: React.FC<OtherDeviceProps> = ({ onAddDevice }) => {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <div className="bg-muted/30 p-6 rounded-full mb-6 ring-1 ring-border/50">
-          <Smartphone className="h-12 w-12 text-muted-foreground/50" />
+          <Monitor className="h-12 w-12 text-muted-foreground/50" />
         </div>
         <h3 className="text-xl font-semibold text-foreground mb-2">No paired devices</h3>
         <p className="text-muted-foreground max-w-xs mb-8">
