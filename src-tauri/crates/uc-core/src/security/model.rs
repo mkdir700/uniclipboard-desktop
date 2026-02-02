@@ -203,6 +203,7 @@ pub struct EncryptedBlob {
 /// - 32 bytes is suitable for XChaCha20-Poly1305 / AES-256-GCM keys.
 /// - Do NOT implement Serialize/Deserialize.
 /// - Consider adding `zeroize` to wipe on drop in adapters.
+/// TODO: Remove Clone trait.
 #[derive(Clone, PartialEq, Eq)]
 pub struct MasterKey(pub [u8; 32]);
 
