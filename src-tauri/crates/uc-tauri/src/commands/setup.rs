@@ -22,12 +22,9 @@ pub async fn get_setup_state(
         trace_ts = tracing::field::Empty,
     );
     record_trace_fields(&span, &_trace);
-    async {
-        let orchestrator = runtime.usecases().setup_orchestrator();
-        Ok(orchestrator.get_state().await)
-    }
-    .instrument(span)
-    .await
+    async { Ok(runtime.usecases().setup_orchestrator().get_state().await) }
+        .instrument(span)
+        .await
 }
 
 /// Dispatch a setup event and return the next state.
@@ -45,12 +42,12 @@ pub async fn dispatch_setup_event(
     );
     record_trace_fields(&span, &_trace);
     async {
-        let orchestrator = runtime.usecases().setup_orchestrator();
-        let result: Result<SetupState, String> = orchestrator
+        Ok(runtime
+            .usecases()
+            .setup_orchestrator()
             .dispatch(event)
             .await
-            .map_err(|err| err.to_string());
-        result
+            .map_err(|e| e.to_string())?)
     }
     .instrument(span)
     .await
