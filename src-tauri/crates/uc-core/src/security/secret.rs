@@ -63,6 +63,24 @@ impl Deref for SecretString {
     }
 }
 
+impl PartialEq for SecretString {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl From<String> for SecretString {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<&str> for SecretString {
+    fn from(value: &str) -> Self {
+        Self::new(value.to_string())
+    }
+}
+
 impl Drop for SecretString {
     fn drop(&mut self) {
         self.inner.zeroize();
