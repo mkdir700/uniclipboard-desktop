@@ -260,6 +260,7 @@ impl Passphrase {
 /// KEK is used ONLY to wrap/unwrap the MasterKey.
 ///
 /// Keep KEK ephemeral (avoid long-lived storage).
+/// TODO: consider adding `zeroize` to wipe on drop in adapters, disable derive(Debug).
 #[derive(Clone, PartialEq, Eq)]
 pub struct Kek(pub [u8; 32]);
 
