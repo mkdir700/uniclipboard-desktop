@@ -1219,6 +1219,32 @@ async fn handle_pairing_message<R: Runtime>(
                 error!(error = %err, session_id = %session_id, "Failed to handle pairing challenge");
             }
         }
+        PairingMessage::KeyslotOffer(offer) => {
+            let session_id = offer.session_id.clone();
+            if let Err(err) = orchestrator
+                .handle_keyslot_offer(&session_id, &peer_id, offer)
+                .await
+            {
+                error!(
+                    error = %err,
+                    session_id = %session_id,
+                    "Failed to handle pairing keyslot offer"
+                );
+            }
+        }
+        PairingMessage::ChallengeResponse(response) => {
+            let session_id = response.session_id.clone();
+            if let Err(err) = orchestrator
+                .handle_challenge_response(&session_id, &peer_id, response)
+                .await
+            {
+                error!(
+                    error = %err,
+                    session_id = %session_id,
+                    "Failed to handle pairing challenge response"
+                );
+            }
+        }
         PairingMessage::Response(response) => {
             let session_id = response.session_id.clone();
             if let Err(err) = orchestrator
@@ -1271,6 +1297,8 @@ async fn run_pairing_action_loop<R: Runtime>(
                 let message_kind = match &message {
                     PairingMessage::Request(_) => "request",
                     PairingMessage::Challenge(_) => "challenge",
+                    PairingMessage::KeyslotOffer(_) => "keyslot_offer",
+                    PairingMessage::ChallengeResponse(_) => "challenge_response",
                     PairingMessage::Response(_) => "response",
                     PairingMessage::Confirm(_) => "confirm",
                     PairingMessage::Reject(_) => "reject",
