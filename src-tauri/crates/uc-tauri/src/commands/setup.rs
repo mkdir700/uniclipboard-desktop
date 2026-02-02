@@ -7,12 +7,12 @@ use std::sync::Arc;
 use tauri::State;
 use tracing::{info_span, Instrument};
 use uc_core::ports::observability::TraceMetadata;
-use uc_core::setup::{SetupEvent, SetupState};
+use uc_core::setup::SetupState;
 
 /// Get current setup state.
 /// 获取当前设置流程状态。
 #[tauri::command]
-pub async fn get_setup_state(
+pub async fn get_state(
     runtime: State<'_, Arc<AppRuntime>>,
     _trace: Option<TraceMetadata>,
 ) -> Result<SetupState, String> {
@@ -27,28 +27,42 @@ pub async fn get_setup_state(
         .await
 }
 
-/// Dispatch a setup event and return the next state.
-/// 分发设置事件并返回下一状态。
 #[tauri::command]
-pub async fn dispatch_setup_event(
+pub async fn start_new_space(
     runtime: State<'_, Arc<AppRuntime>>,
-    event: SetupEvent,
     _trace: Option<TraceMetadata>,
 ) -> Result<SetupState, String> {
-    let span = info_span!(
-        "command.setup.dispatch_event",
-        trace_id = tracing::field::Empty,
-        trace_ts = tracing::field::Empty,
-    );
-    record_trace_fields(&span, &_trace);
-    async {
-        Ok(runtime
-            .usecases()
-            .setup_orchestrator()
-            .dispatch(event)
-            .await
-            .map_err(|e| e.to_string())?)
-    }
-    .instrument(span)
-    .await
+    todo!()
+}
+
+#[tauri::command]
+pub async fn start_join_space(
+    runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
+) -> Result<SetupState, String> {
+    todo!()
+}
+
+#[tauri::command]
+pub async fn select_device(
+    runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
+) -> Result<SetupState, String> {
+    todo!()
+}
+
+#[tauri::command]
+pub async fn submit_passphrase(
+    runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
+) -> Result<SetupState, String> {
+    todo!()
+}
+
+#[tauri::command]
+pub async fn cancel_setup(
+    runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
+) -> Result<SetupState, String> {
+    todo!()
 }
