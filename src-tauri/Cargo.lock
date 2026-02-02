@@ -9755,6 +9755,7 @@ dependencies = [
  "tracing",
  "twox-hash",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
