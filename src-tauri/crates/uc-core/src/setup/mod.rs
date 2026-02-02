@@ -2,6 +2,14 @@
 //!
 //! This module defines the onboarding setup state machine types.
 
+pub mod action;
+pub mod error;
+pub mod event;
+pub mod state;
 pub mod state_machine;
 
-pub use state_machine::{SetupAction, SetupError, SetupEvent, SetupState, SetupStateMachine};
+pub use action::SetupAction;
+pub use error::SetupError;
+pub use event::SetupEvent;
+pub use state::SetupState;
+pub use state_machine::SetupStateMachine;
