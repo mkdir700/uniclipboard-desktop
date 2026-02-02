@@ -75,25 +75,15 @@ pub struct AppRuntime {
     /// Tauri AppHandle for emitting events (optional, set after Tauri setup)
     /// Uses RwLock for interior mutability since Arc<AppRuntime> is shared
     app_handle: std::sync::RwLock<Option<tauri::AppHandle>>,
-    setup_orchestrator: Arc<SetupOrchestrator>,
 }
 
 impl AppRuntime {
     /// Create a new AppRuntime from dependencies.
     /// 从依赖创建新的 AppRuntime。
     pub fn new(deps: AppDeps) -> Self {
-        let setup_orchestrator = Arc::new(SetupOrchestrator::from_ports(
-            deps.encryption.clone(),
-            deps.key_material.clone(),
-            deps.key_scope.clone(),
-            deps.encryption_state.clone(),
-            deps.encryption_session.clone(),
-            deps.onboarding_state.clone(),
-        ));
         Self {
             deps,
             app_handle: std::sync::RwLock::new(None),
-            setup_orchestrator,
         }
     }
 
@@ -126,10 +116,6 @@ impl AppRuntime {
     /// 获取用例访问器。
     pub fn usecases(&self) -> UseCases<'_> {
         UseCases::new(self)
-    }
-
-    pub fn setup_orchestrator(&self) -> Arc<SetupOrchestrator> {
-        self.setup_orchestrator.clone()
     }
 }
 
@@ -472,7 +458,10 @@ impl<'a> UseCases<'a> {
     }
 
     pub fn setup_orchestrator(&self) -> Arc<SetupOrchestrator> {
-        self.runtime.setup_orchestrator()
+        Arc::new(uc_app::usecases::SetupOrchestrator::new(
+            Arc::new(self.runtime.usecases().initialize_encryption()),
+            Arc::new(self.runtime.usecases().complete_onboarding()),
+        ))
     }
 
     /// Settings use cases / 设置用例
