@@ -46,6 +46,7 @@ uuid = { version = "1", features = ["v4", "fast-rng", "serde"] }
 
 # Optional: domain layer only records events (facts)
 tracing = { version = "0.1", optional = true }
+zeroize = "1.8.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
