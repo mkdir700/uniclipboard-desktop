@@ -39,6 +39,7 @@ pub mod onboarding;
 pub mod paired_device_repository;
 pub mod security;
 pub mod settings;
+mod timer;
 pub mod ui_port;
 pub mod watcher_control;
 
@@ -49,6 +50,7 @@ pub use clipboard_event::*;
 pub use clock::*;
 pub use connection_policy::{ConnectionPolicyResolverError, ConnectionPolicyResolverPort};
 pub use hash::*;
+pub use timer::TimerPort;
 
 pub use app_dirs::AppDirsPort;
 pub use app_runtime::AppRuntimePort;
