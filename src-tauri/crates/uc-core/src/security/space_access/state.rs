@@ -2,40 +2,36 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub use crate::security::KeySlot;
-use crate::{ids::SpaceId, network::SessionId, security::protocol::DenyReason};
+use crate::{ids::SpaceId, network::SessionId};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpaceAccessState {
     Idle,
 
-    // Joiner：等待 Sponsor 的 Offer
+    // Joiner：已开始加入流程，等待 Sponsor 的 Offer
     WaitingOffer {
         pairing_session_id: SessionId,
         expires_at: DateTime<Utc>,
     },
 
-    // Joiner：收到 Offer，等待用户输入 passphrase
-    WaitingPassphrase {
+    // Joiner：Offer 已被接受，等待用户输入 passphrase
+    WaitingUserPassphrase {
         pairing_session_id: SessionId,
         space_id: SpaceId,
-        keyslot_blob: Vec<u8>,
-        challenge_nonce: [u8; 32],
         expires_at: DateTime<Utc>,
     },
 
-    // Joiner：已发送 proof，等待结果
-    WaitingResult {
+    // Joiner：用户已提交 passphrase，等待 Sponsor 裁决
+    WaitingDecision {
         pairing_session_id: SessionId,
         space_id: SpaceId,
-        challenge_nonce: [u8; 32],
         sent_at: DateTime<Utc>,
     },
 
-    // Sponsor：已发出 Offer，等待 proof
-    WaitingProof {
+    // Sponsor：已发起授权，等待 Joiner 的证明
+    WaitingJoinerProof {
         pairing_session_id: SessionId,
         space_id: SpaceId,
-        challenge_nonce: [u8; 32],
         expires_at: DateTime<Utc>,
     },
 
@@ -54,6 +50,15 @@ pub enum SpaceAccessState {
         pairing_session_id: SessionId,
         reason: CancelReason,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DenyReason {
+    Expired,
+    InvalidProof,
+    SpaceMismatch,
+    SessionMismatch,
+    InternalError,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

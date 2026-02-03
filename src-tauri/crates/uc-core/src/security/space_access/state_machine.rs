@@ -1,396 +1,344 @@
 use chrono::{DateTime, Duration, Utc};
+use tracing::warn;
 
-use super::action::SpaceAccessAction;
-use super::event::SpaceAccessEvent;
-use super::protocol::{DenyReason, SpaceAccessOffer, SpaceAccessProof, SpaceAccessResult};
-use super::state::{CancelReason, SpaceAccessState};
-use crate::{ids::SpaceId, network::SessionId};
+use crate::security::space_access::action::SpaceAccessAction;
+use crate::security::space_access::event::SpaceAccessEvent;
+use crate::security::space_access::state::{CancelReason, SpaceAccessState};
 
-pub fn transition(
-    state: SpaceAccessState,
-    event: SpaceAccessEvent,
-    now: DateTime<Utc>,
-) -> (SpaceAccessState, Vec<SpaceAccessAction>) {
-    match (state, event) {
-        (
-            SpaceAccessState::Idle,
-            SpaceAccessEvent::StartAsJoiner {
-                pairing_session_id,
-                ttl_secs,
-            },
-        ) => {
-            let expires_at = now + Duration::seconds(ttl_secs as i64);
+pub struct SpaceAccessStateMachine;
+
+impl SpaceAccessStateMachine {
+    pub fn transition(
+        state: SpaceAccessState,
+        event: SpaceAccessEvent,
+    ) -> (SpaceAccessState, Vec<SpaceAccessAction>) {
+        Self::transition_at(state, event, Utc::now())
+    }
+
+    pub(crate) fn transition_at(
+        state: SpaceAccessState,
+        event: SpaceAccessEvent,
+        now: DateTime<Utc>,
+    ) -> (SpaceAccessState, Vec<SpaceAccessAction>) {
+        match (state, event) {
+            // ===== Start =====
             (
-                SpaceAccessState::WaitingOffer {
+                SpaceAccessState::Idle,
+                SpaceAccessEvent::JoinRequested {
                     pairing_session_id,
-                    expires_at,
+                    ttl_secs,
                 },
-                vec![SpaceAccessAction::StartTimer { ttl_secs }],
-            )
-        }
-        (
-            SpaceAccessState::Idle,
-            SpaceAccessEvent::StartAsSponsor {
-                pairing_session_id,
-                space_id,
-                ttl_secs,
-            },
-        ) => {
-            let expires_at = now + Duration::seconds(ttl_secs as i64);
-            let challenge_nonce = placeholder_nonce();
-            let keyslot_blob = placeholder_keyslot_blob();
-            let offer = SpaceAccessOffer {
-                pairing_session_id: pairing_session_id.clone(),
-                space_id: space_id.clone(),
-                keyslot_blob,
-                challenge_nonce,
-                expires_at,
-                version: 1,
-            };
-
-            (
-                SpaceAccessState::WaitingProof {
-                    pairing_session_id,
-                    space_id,
-                    challenge_nonce,
-                    expires_at,
-                },
-                vec![
-                    SpaceAccessAction::SendOffer(offer),
-                    SpaceAccessAction::StartTimer { ttl_secs },
-                ],
-            )
-        }
-
-        (
-            SpaceAccessState::WaitingOffer {
-                pairing_session_id,
-                expires_at,
-            },
-            SpaceAccessEvent::ReceivedOffer(offer),
-        ) => {
-            if offer.pairing_session_id == pairing_session_id && offer.expires_at > now {
-                (
-                    SpaceAccessState::WaitingPassphrase {
-                        pairing_session_id: offer.pairing_session_id,
-                        space_id: offer.space_id,
-                        keyslot_blob: offer.keyslot_blob,
-                        challenge_nonce: offer.challenge_nonce,
-                        expires_at: offer.expires_at,
-                    },
-                    vec![SpaceAccessAction::StopTimer],
-                )
-            } else {
+            ) => {
+                let expires_at = now + Duration::seconds(ttl_secs as i64);
                 (
                     SpaceAccessState::WaitingOffer {
                         pairing_session_id,
                         expires_at,
                     },
-                    vec![],
+                    vec![SpaceAccessAction::StartTimer { ttl_secs }],
                 )
             }
-        }
-        (
-            SpaceAccessState::WaitingOffer {
-                pairing_session_id, ..
-            },
-            SpaceAccessEvent::Timeout,
-        ) => (
-            SpaceAccessState::Denied {
-                pairing_session_id,
-                space_id: unknown_space_id(),
-                reason: DenyReason::Expired,
-            },
-            vec![SpaceAccessAction::StopTimer],
-        ),
-        (
-            SpaceAccessState::WaitingOffer {
-                pairing_session_id, ..
-            },
-            SpaceAccessEvent::CancelByUser,
-        ) => (
-            SpaceAccessState::Cancelled {
-                pairing_session_id,
-                reason: CancelReason::UserCancelled,
-            },
-            vec![SpaceAccessAction::StopTimer],
-        ),
-        (
-            SpaceAccessState::WaitingOffer {
-                pairing_session_id, ..
-            },
-            SpaceAccessEvent::SessionClosed,
-        ) => (
-            SpaceAccessState::Cancelled {
-                pairing_session_id,
-                reason: CancelReason::SessionClosed,
-            },
-            vec![SpaceAccessAction::StopTimer],
-        ),
-
-        (
-            SpaceAccessState::WaitingPassphrase {
-                pairing_session_id,
-                space_id,
-                keyslot_blob,
-                challenge_nonce,
-                expires_at,
-            },
-            SpaceAccessEvent::SubmitPassphrase { passphrase },
-        ) => {
-            let ttl_secs = ttl_secs_until(expires_at, now);
-            let proof = placeholder_proof(
-                pairing_session_id.clone(),
-                space_id.clone(),
-                challenge_nonce,
-            );
             (
-                SpaceAccessState::WaitingResult {
-                    pairing_session_id: pairing_session_id.clone(),
+                SpaceAccessState::Idle,
+                SpaceAccessEvent::SponsorAuthorizationRequested {
+                    pairing_session_id,
+                    space_id,
+                    ttl_secs,
+                },
+            ) => {
+                let expires_at = now + Duration::seconds(ttl_secs as i64);
+                let actions = vec![
+                    SpaceAccessAction::RequestOfferPreparation {
+                        pairing_session_id: pairing_session_id.clone().into(),
+                        space_id: space_id.clone(),
+                        expires_at,
+                    },
+                    SpaceAccessAction::SendOffer,
+                    SpaceAccessAction::StartTimer { ttl_secs },
+                ];
+                (
+                    SpaceAccessState::WaitingJoinerProof {
+                        pairing_session_id,
+                        space_id,
+                        expires_at,
+                    },
+                    actions,
+                )
+            }
+
+            // ===== Offer =====
+            (
+                SpaceAccessState::WaitingOffer { .. },
+                SpaceAccessEvent::OfferAccepted {
+                    pairing_session_id,
+                    space_id,
+                    expires_at,
+                },
+            ) => {
+                let ttl_secs = ttl_from_expires_at(expires_at, now);
+                (
+                    SpaceAccessState::WaitingUserPassphrase {
+                        pairing_session_id,
+                        space_id,
+                        expires_at,
+                    },
+                    vec![
+                        SpaceAccessAction::StopTimer,
+                        SpaceAccessAction::StartTimer { ttl_secs },
+                    ],
+                )
+            }
+
+            // ===== User input =====
+            (
+                SpaceAccessState::WaitingUserPassphrase {
+                    space_id,
+                    pairing_session_id,
+                    ..
+                },
+                SpaceAccessEvent::PassphraseSubmitted,
+            ) => (
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id,
                     space_id: space_id.clone(),
-                    challenge_nonce,
                     sent_at: now,
                 },
                 vec![
-                    SpaceAccessAction::DeriveSpaceKeyFromKeyslot {
-                        keyslot_blob,
-                        passphrase,
-                    },
-                    SpaceAccessAction::SendProof(proof),
-                    SpaceAccessAction::StartTimer { ttl_secs },
+                    SpaceAccessAction::RequestSpaceKeyDerivation { space_id },
+                    SpaceAccessAction::SendProof,
                 ],
-            )
-        }
-        (
-            SpaceAccessState::WaitingPassphrase {
-                pairing_session_id,
-                space_id,
-                ..
-            },
-            SpaceAccessEvent::Timeout,
-        ) => (
-            SpaceAccessState::Denied {
-                pairing_session_id,
-                space_id,
-                reason: DenyReason::Expired,
-            },
-            vec![SpaceAccessAction::StopTimer],
-        ),
-        (
-            SpaceAccessState::WaitingPassphrase {
-                pairing_session_id, ..
-            },
-            SpaceAccessEvent::CancelByUser,
-        ) => (
-            SpaceAccessState::Cancelled {
-                pairing_session_id,
-                reason: CancelReason::UserCancelled,
-            },
-            vec![SpaceAccessAction::StopTimer],
-        ),
-        (
-            SpaceAccessState::WaitingPassphrase {
-                pairing_session_id, ..
-            },
-            SpaceAccessEvent::SessionClosed,
-        ) => (
-            SpaceAccessState::Cancelled {
-                pairing_session_id,
-                reason: CancelReason::SessionClosed,
-            },
-            vec![SpaceAccessAction::StopTimer],
-        ),
+            ),
 
-        (
-            SpaceAccessState::WaitingResult {
-                pairing_session_id,
-                space_id,
-                challenge_nonce,
-                sent_at,
-            },
-            SpaceAccessEvent::ReceivedResult(SpaceAccessResult::Granted {
-                pairing_session_id: result_session_id,
-                space_id: result_space_id,
-            }),
-        ) => {
-            if pairing_session_id == result_session_id && space_id == result_space_id {
-                (
-                    SpaceAccessState::Granted {
-                        pairing_session_id,
-                        space_id,
-                    },
-                    vec![SpaceAccessAction::StopTimer],
-                )
-            } else {
-                (
-                    SpaceAccessState::WaitingResult {
-                        pairing_session_id,
-                        space_id,
-                        challenge_nonce,
-                        sent_at,
-                    },
-                    vec![],
-                )
-            }
-        }
-        (
-            SpaceAccessState::WaitingResult {
-                pairing_session_id,
-                space_id,
-                challenge_nonce,
-                sent_at,
-            },
-            SpaceAccessEvent::ReceivedResult(SpaceAccessResult::Denied {
-                pairing_session_id: result_session_id,
-                space_id: result_space_id,
-                reason,
-            }),
-        ) => {
-            if pairing_session_id == result_session_id && space_id == result_space_id {
-                (
-                    SpaceAccessState::Denied {
-                        pairing_session_id,
-                        space_id,
-                        reason,
-                    },
-                    vec![SpaceAccessAction::StopTimer],
-                )
-            } else {
-                (
-                    SpaceAccessState::WaitingResult {
-                        pairing_session_id,
-                        space_id,
-                        challenge_nonce,
-                        sent_at,
-                    },
-                    vec![],
-                )
-            }
-        }
-        (
-            SpaceAccessState::WaitingResult {
-                pairing_session_id,
-                space_id,
-                ..
-            },
-            SpaceAccessEvent::Timeout,
-        ) => (
-            SpaceAccessState::Denied {
-                pairing_session_id,
-                space_id,
-                reason: DenyReason::Expired,
-            },
-            vec![SpaceAccessAction::StopTimer],
-        ),
-
-        (
-            SpaceAccessState::WaitingProof {
-                pairing_session_id,
-                space_id,
-                challenge_nonce,
-                expires_at,
-            },
-            SpaceAccessEvent::ReceivedProof(proof),
-        ) => {
-            if proof.pairing_session_id != pairing_session_id {
-                return deny_sponsor(pairing_session_id, space_id, DenyReason::SessionMismatch);
-            }
-            if proof.space_id != space_id {
-                return deny_sponsor(pairing_session_id, space_id, DenyReason::SpaceMismatch);
-            }
-            if proof.challenge_nonce != challenge_nonce {
-                return deny_sponsor(pairing_session_id, space_id, DenyReason::InvalidProof);
-            }
-            if expires_at <= now {
-                return deny_sponsor(pairing_session_id, space_id, DenyReason::Expired);
-            }
-
-            if proof.proof.is_empty() {
-                return deny_sponsor(pairing_session_id, space_id, DenyReason::InvalidProof);
-            }
-
-            let pairing_session_id_for_result = pairing_session_id.clone();
-            let space_id_for_result = space_id.clone();
+            // ===== Proof =====
             (
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id,
+                    space_id,
+                    ..
+                },
+                SpaceAccessEvent::ProofVerified { .. },
+            ) => (
                 SpaceAccessState::Granted {
                     pairing_session_id,
                     space_id: space_id.clone(),
                 },
                 vec![
-                    SpaceAccessAction::VerifyProof { proof },
-                    SpaceAccessAction::SendResult(SpaceAccessResult::Granted {
-                        pairing_session_id: pairing_session_id_for_result,
-                        space_id: space_id_for_result,
-                    }),
-                    // TODO: action layer must supply the real peer_id when persisting.
-                    SpaceAccessAction::PersistSponsorPairedDevice {
-                        space_id,
-                        peer_id: String::new(),
-                    },
+                    SpaceAccessAction::SendResult,
+                    SpaceAccessAction::PersistSponsorAccess { space_id },
                     SpaceAccessAction::StopTimer,
                 ],
-            )
+            ),
+            (
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id,
+                    space_id,
+                    ..
+                },
+                SpaceAccessEvent::ProofRejected { reason, .. },
+            ) => (
+                SpaceAccessState::Denied {
+                    pairing_session_id,
+                    space_id,
+                    reason,
+                },
+                vec![SpaceAccessAction::SendResult, SpaceAccessAction::StopTimer],
+            ),
+
+            // ===== Result =====
+            (
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id,
+                    space_id,
+                    ..
+                },
+                SpaceAccessEvent::AccessGranted { .. },
+            ) => (
+                SpaceAccessState::Granted {
+                    pairing_session_id,
+                    space_id: space_id.clone(),
+                },
+                vec![
+                    SpaceAccessAction::PersistJoinerAccess { space_id },
+                    SpaceAccessAction::StopTimer,
+                ],
+            ),
+            (
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id,
+                    space_id,
+                    ..
+                },
+                SpaceAccessEvent::AccessDenied { reason, .. },
+            ) => (
+                SpaceAccessState::Denied {
+                    pairing_session_id,
+                    space_id,
+                    reason,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+
+            // ===== Cancel / Timeout =====
+            (
+                SpaceAccessState::WaitingOffer {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::CancelledByUser,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::UserCancelled,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingOffer {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::Timeout,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::Timeout,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingOffer {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::SessionClosed,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::SessionClosed,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingUserPassphrase {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::CancelledByUser,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::UserCancelled,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingUserPassphrase {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::Timeout,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::Timeout,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingUserPassphrase {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::SessionClosed,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::SessionClosed,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::CancelledByUser,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::UserCancelled,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::Timeout,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::Timeout,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::SessionClosed,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::SessionClosed,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::CancelledByUser,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::UserCancelled,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::Timeout,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::Timeout,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id, ..
+                },
+                SpaceAccessEvent::SessionClosed,
+            ) => (
+                SpaceAccessState::Cancelled {
+                    pairing_session_id,
+                    reason: CancelReason::SessionClosed,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+
+            // ===== Terminal =====
+            (state @ SpaceAccessState::Granted { .. }, _) => (state, vec![]),
+            (state @ SpaceAccessState::Denied { .. }, _) => (state, vec![]),
+            (state @ SpaceAccessState::Cancelled { .. }, _) => (state, vec![]),
+
+            // ===== Invalid =====
+            (state, event) => {
+                warn!(?state, ?event, "invalid space access transition");
+                (state, vec![])
+            }
         }
-        (
-            SpaceAccessState::WaitingProof {
-                pairing_session_id,
-                space_id,
-                ..
-            },
-            SpaceAccessEvent::Timeout,
-        ) => deny_sponsor(pairing_session_id, space_id, DenyReason::Expired),
-        (
-            SpaceAccessState::WaitingProof {
-                pairing_session_id,
-                space_id,
-                ..
-            },
-            SpaceAccessEvent::CancelByUser,
-        ) => (
-            SpaceAccessState::Cancelled {
-                pairing_session_id: pairing_session_id.clone(),
-                reason: CancelReason::UserCancelled,
-            },
-            vec![
-                SpaceAccessAction::SendResult(SpaceAccessResult::Denied {
-                    pairing_session_id,
-                    space_id,
-                    reason: DenyReason::SessionMismatch,
-                }),
-                SpaceAccessAction::StopTimer,
-            ],
-        ),
-        (
-            SpaceAccessState::WaitingProof {
-                pairing_session_id,
-                space_id,
-                ..
-            },
-            SpaceAccessEvent::SessionClosed,
-        ) => (
-            SpaceAccessState::Cancelled {
-                pairing_session_id: pairing_session_id.clone(),
-                reason: CancelReason::SessionClosed,
-            },
-            vec![
-                SpaceAccessAction::SendResult(SpaceAccessResult::Denied {
-                    pairing_session_id,
-                    space_id,
-                    reason: DenyReason::SessionMismatch,
-                }),
-                SpaceAccessAction::StopTimer,
-            ],
-        ),
-
-        (state @ SpaceAccessState::Granted { .. }, _)
-        | (state @ SpaceAccessState::Denied { .. }, _)
-        | (state @ SpaceAccessState::Cancelled { .. }, _) => (state, vec![]),
-
-        (state, _) => (state, vec![]),
     }
 }
 
-fn ttl_secs_until(expires_at: DateTime<Utc>, now: DateTime<Utc>) -> u64 {
+fn ttl_from_expires_at(expires_at: DateTime<Utc>, now: DateTime<Utc>) -> u64 {
     let delta = expires_at.signed_duration_since(now).num_seconds();
     if delta <= 0 {
         0
@@ -399,239 +347,244 @@ fn ttl_secs_until(expires_at: DateTime<Utc>, now: DateTime<Utc>) -> u64 {
     }
 }
 
-fn unknown_space_id() -> SpaceId {
-    SpaceId::from("unknown")
-}
-
-fn placeholder_nonce() -> [u8; 32] {
-    // TODO: action layer must supply a real nonce; this is a placeholder.
-    [0; 32]
-}
-
-fn placeholder_keyslot_blob() -> Vec<u8> {
-    // TODO: action layer must supply a real keyslot blob; this is a placeholder.
-    Vec::new()
-}
-
-fn placeholder_proof(
-    pairing_session_id: SessionId,
-    space_id: SpaceId,
-    challenge_nonce: [u8; 32],
-) -> SpaceAccessProof {
-    // TODO: action layer must supply a real proof/client nonce; this is a placeholder.
-    SpaceAccessProof {
-        pairing_session_id,
-        space_id,
-        challenge_nonce,
-        proof: Vec::new(),
-        client_nonce: [0; 32],
-        version: 1,
-    }
-}
-
-fn deny_sponsor(
-    pairing_session_id: SessionId,
-    space_id: SpaceId,
-    reason: DenyReason,
-) -> (SpaceAccessState, Vec<SpaceAccessAction>) {
-    (
-        SpaceAccessState::Denied {
-            pairing_session_id: pairing_session_id.clone(),
-            space_id: space_id.clone(),
-            reason: reason.clone(),
-        },
-        vec![
-            SpaceAccessAction::SendResult(SpaceAccessResult::Denied {
-                pairing_session_id,
-                space_id,
-                reason,
-            }),
-            SpaceAccessAction::StopTimer,
-        ],
-    )
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::Duration;
+    use super::SpaceAccessStateMachine;
+    use crate::ids::SessionId as CoreSessionId;
+    use crate::ids::SpaceId;
+    use crate::network::SessionId as NetSessionId;
+    use crate::security::space_access::action::SpaceAccessAction;
+    use crate::security::space_access::event::SpaceAccessEvent;
+    use crate::security::space_access::state::{CancelReason, DenyReason, SpaceAccessState};
+    use chrono::{DateTime, Duration, TimeZone, Utc};
 
-    fn build_offer(
-        pairing_session_id: SessionId,
-        space_id: SpaceId,
-        expires_at: DateTime<Utc>,
-    ) -> SpaceAccessOffer {
-        SpaceAccessOffer {
-            pairing_session_id,
-            space_id,
-            keyslot_blob: vec![1, 2, 3],
-            challenge_nonce: [7; 32],
-            expires_at,
-            version: 1,
+    fn fixed_now() -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
+    }
+
+    fn cases(
+        now: DateTime<Utc>,
+    ) -> Vec<(
+        &'static str,
+        SpaceAccessState,
+        SpaceAccessEvent,
+        SpaceAccessState,
+        Vec<SpaceAccessAction>,
+    )> {
+        let pairing_session_id: NetSessionId = "session-1".to_string();
+        let space_id: SpaceId = "space-1".into();
+        let ttl_secs = 30_u64;
+        let expires_at = now + Duration::seconds(ttl_secs as i64);
+
+        vec![
+            (
+                "idle -> join requested",
+                SpaceAccessState::Idle,
+                SpaceAccessEvent::JoinRequested {
+                    pairing_session_id: pairing_session_id.clone(),
+                    ttl_secs,
+                },
+                SpaceAccessState::WaitingOffer {
+                    pairing_session_id: pairing_session_id.clone(),
+                    expires_at,
+                },
+                vec![SpaceAccessAction::StartTimer { ttl_secs }],
+            ),
+            (
+                "idle -> sponsor authorization requested",
+                SpaceAccessState::Idle,
+                SpaceAccessEvent::SponsorAuthorizationRequested {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    ttl_secs,
+                },
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at,
+                },
+                vec![
+                    SpaceAccessAction::RequestOfferPreparation {
+                        pairing_session_id: CoreSessionId::from("session-1"),
+                        space_id: space_id.clone(),
+                        expires_at,
+                    },
+                    SpaceAccessAction::SendOffer,
+                    SpaceAccessAction::StartTimer { ttl_secs },
+                ],
+            ),
+            (
+                "waiting offer -> offer accepted",
+                SpaceAccessState::WaitingOffer {
+                    pairing_session_id: pairing_session_id.clone(),
+                    expires_at,
+                },
+                SpaceAccessEvent::OfferAccepted {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at,
+                },
+                SpaceAccessState::WaitingUserPassphrase {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at,
+                },
+                vec![
+                    SpaceAccessAction::StopTimer,
+                    SpaceAccessAction::StartTimer { ttl_secs },
+                ],
+            ),
+            (
+                "waiting passphrase -> passphrase submitted",
+                SpaceAccessState::WaitingUserPassphrase {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at,
+                },
+                SpaceAccessEvent::PassphraseSubmitted,
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    sent_at: now,
+                },
+                vec![
+                    SpaceAccessAction::RequestSpaceKeyDerivation {
+                        space_id: space_id.clone(),
+                    },
+                    SpaceAccessAction::SendProof,
+                ],
+            ),
+            (
+                "waiting decision -> access granted",
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    sent_at: now,
+                },
+                SpaceAccessEvent::AccessGranted {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                },
+                SpaceAccessState::Granted {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                },
+                vec![
+                    SpaceAccessAction::PersistJoinerAccess {
+                        space_id: space_id.clone(),
+                    },
+                    SpaceAccessAction::StopTimer,
+                ],
+            ),
+            (
+                "waiting decision -> access denied",
+                SpaceAccessState::WaitingDecision {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    sent_at: now,
+                },
+                SpaceAccessEvent::AccessDenied {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    reason: DenyReason::InvalidProof,
+                },
+                SpaceAccessState::Denied {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    reason: DenyReason::InvalidProof,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                "waiting proof -> proof verified",
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at,
+                },
+                SpaceAccessEvent::ProofVerified {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                },
+                SpaceAccessState::Granted {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                },
+                vec![
+                    SpaceAccessAction::SendResult,
+                    SpaceAccessAction::PersistSponsorAccess {
+                        space_id: space_id.clone(),
+                    },
+                    SpaceAccessAction::StopTimer,
+                ],
+            ),
+            (
+                "waiting proof -> proof rejected",
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at,
+                },
+                SpaceAccessEvent::ProofRejected {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    reason: DenyReason::InvalidProof,
+                },
+                SpaceAccessState::Denied {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    reason: DenyReason::InvalidProof,
+                },
+                vec![SpaceAccessAction::SendResult, SpaceAccessAction::StopTimer],
+            ),
+            (
+                "waiting offer -> cancelled by user",
+                SpaceAccessState::WaitingOffer {
+                    pairing_session_id: pairing_session_id.clone(),
+                    expires_at,
+                },
+                SpaceAccessEvent::CancelledByUser,
+                SpaceAccessState::Cancelled {
+                    pairing_session_id: pairing_session_id.clone(),
+                    reason: CancelReason::UserCancelled,
+                },
+                vec![SpaceAccessAction::StopTimer],
+            ),
+            (
+                "granted ignores events",
+                SpaceAccessState::Granted {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                },
+                SpaceAccessEvent::Timeout,
+                SpaceAccessState::Granted {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                },
+                vec![],
+            ),
+        ]
+    }
+
+    #[test]
+    fn space_access_state_machine_table_driven() {
+        let now = fixed_now();
+        for (name, from, event, expected_state, expected_actions) in cases(now) {
+            let (next, actions) = SpaceAccessStateMachine::transition_at(from, event, now);
+            assert_eq!(next, expected_state, "state mismatch: {}", name);
+            assert_eq!(actions, expected_actions, "actions mismatch: {}", name);
         }
     }
 
     #[test]
-    fn joiner_success_flow() {
-        let now = Utc::now();
-        let session_id: SessionId = "session-1".into();
-        let space_id: SpaceId = "space-1".into();
+    fn invalid_transition_is_noop() {
+        let now = fixed_now();
+        let from = SpaceAccessState::Idle;
+        let event = SpaceAccessEvent::PassphraseSubmitted;
 
-        let (state, actions) = transition(
-            SpaceAccessState::Idle,
-            SpaceAccessEvent::StartAsJoiner {
-                pairing_session_id: session_id.clone(),
-                ttl_secs: 30,
-            },
-            now,
-        );
+        let (next, actions) = SpaceAccessStateMachine::transition_at(from.clone(), event, now);
 
-        assert!(matches!(
-            &state,
-            SpaceAccessState::WaitingOffer {
-                pairing_session_id,
-                ..
-            } if pairing_session_id == &session_id
-        ));
-        assert!(matches!(
-            actions.as_slice(),
-            [SpaceAccessAction::StartTimer { ttl_secs: 30 }]
-        ));
-
-        let expires_at = now + Duration::seconds(20);
-        let offer = build_offer(session_id.clone(), space_id.clone(), expires_at);
-        let (state, actions) =
-            transition(state, SpaceAccessEvent::ReceivedOffer(offer.clone()), now);
-
-        assert!(matches!(
-            &state,
-            SpaceAccessState::WaitingPassphrase {
-                pairing_session_id,
-                space_id,
-                keyslot_blob,
-                challenge_nonce,
-                expires_at
-            } if pairing_session_id == &session_id
-                && space_id == &offer.space_id
-                && keyslot_blob == &offer.keyslot_blob
-                && challenge_nonce == &offer.challenge_nonce
-                && expires_at == &offer.expires_at
-        ));
-        assert!(matches!(actions.as_slice(), [SpaceAccessAction::StopTimer]));
-
-        let submit_time = now + Duration::seconds(1);
-        let (state, actions) = transition(
-            state,
-            SpaceAccessEvent::SubmitPassphrase {
-                passphrase: "secret".to_string(),
-            },
-            submit_time,
-        );
-
-        assert!(matches!(
-            &state,
-            SpaceAccessState::WaitingResult {
-                pairing_session_id,
-                space_id,
-                challenge_nonce,
-                sent_at
-            } if pairing_session_id == &session_id
-                && space_id == &offer.space_id
-                && challenge_nonce == &offer.challenge_nonce
-                && sent_at == &submit_time
-        ));
-        assert_eq!(actions.len(), 3);
-        match &actions[0] {
-            SpaceAccessAction::DeriveSpaceKeyFromKeyslot {
-                keyslot_blob,
-                passphrase,
-            } => {
-                assert_eq!(keyslot_blob, &offer.keyslot_blob);
-                assert_eq!(passphrase, "secret");
-            }
-            _ => panic!("expected DeriveSpaceKeyFromKeyslot"),
-        }
-        assert!(matches!(actions[1], SpaceAccessAction::SendProof(_)));
-        assert!(matches!(
-            actions[2],
-            SpaceAccessAction::StartTimer { ttl_secs: 19 }
-        ));
-
-        let (state, actions) = transition(
-            state,
-            SpaceAccessEvent::ReceivedResult(SpaceAccessResult::Granted {
-                pairing_session_id: session_id.clone(),
-                space_id: offer.space_id.clone(),
-            }),
-            submit_time,
-        );
-
-        assert!(matches!(
-            &state,
-            SpaceAccessState::Granted {
-                pairing_session_id,
-                space_id
-            } if pairing_session_id == &session_id && space_id == &offer.space_id
-        ));
-        assert!(matches!(actions.as_slice(), [SpaceAccessAction::StopTimer]));
-    }
-
-    #[test]
-    fn joiner_passphrase_invalid_result_denied() {
-        let now = Utc::now();
-        let session_id: SessionId = "session-1".into();
-        let space_id: SpaceId = "space-1".into();
-        let expires_at = now + Duration::seconds(20);
-        let offer = build_offer(session_id.clone(), space_id.clone(), expires_at);
-
-        let state = SpaceAccessState::WaitingResult {
-            pairing_session_id: session_id.clone(),
-            space_id: space_id.clone(),
-            challenge_nonce: offer.challenge_nonce,
-            sent_at: now,
-        };
-
-        let (state, actions) = transition(
-            state,
-            SpaceAccessEvent::ReceivedResult(SpaceAccessResult::Denied {
-                pairing_session_id: session_id.clone(),
-                space_id: space_id.clone(),
-                reason: DenyReason::InvalidProof,
-            }),
-            now,
-        );
-
-        assert!(matches!(
-            &state,
-            SpaceAccessState::Denied {
-                pairing_session_id,
-                space_id: state_space_id,
-                reason: DenyReason::InvalidProof
-            } if pairing_session_id == &session_id && state_space_id == &space_id
-        ));
-        assert!(matches!(actions.as_slice(), [SpaceAccessAction::StopTimer]));
-    }
-
-    #[test]
-    fn joiner_timeout_from_waiting_offer() {
-        let now = Utc::now();
-        let session_id: SessionId = "session-1".into();
-
-        let state = SpaceAccessState::WaitingOffer {
-            pairing_session_id: session_id.clone(),
-            expires_at: now + Duration::seconds(10),
-        };
-
-        let (state, actions) = transition(state, SpaceAccessEvent::Timeout, now);
-
-        assert!(matches!(
-            &state,
-            SpaceAccessState::Denied {
-                pairing_session_id,
-                reason: DenyReason::Expired,
-                ..
-            } if pairing_session_id == &session_id
-        ));
-        assert!(matches!(actions.as_slice(), [SpaceAccessAction::StopTimer]));
+        assert_eq!(next, from);
+        assert!(actions.is_empty());
     }
 }
