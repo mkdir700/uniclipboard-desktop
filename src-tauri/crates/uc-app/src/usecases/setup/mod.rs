@@ -4,4 +4,4 @@
 mod context;
 pub mod orchestrator;
 
-pub use orchestrator::{SetupOrchestrator, SetupOrchestratorError};
+pub use orchestrator::{SetupError, SetupOrchestrator};

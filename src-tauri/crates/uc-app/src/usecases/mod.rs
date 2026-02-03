@@ -45,7 +45,7 @@ pub use pairing::{
     ListDiscoveredPeers, ListPairedDevices, LocalDeviceInfo, PairingConfig, PairingOrchestrator,
     ResolveConnectionPolicy, SetPairingState, UnpairDevice,
 };
-pub use setup::{SetupOrchestrator, SetupOrchestratorError};
+pub use setup::{SetupError, SetupOrchestrator};
 pub use start_clipboard_watcher::StartClipboardWatcher;
 pub use start_network::StartNetwork;
 pub use start_network_after_unlock::StartNetworkAfterUnlock;
