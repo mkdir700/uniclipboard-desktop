@@ -253,31 +253,7 @@ git commit -m "refactor(uc-tauri): initialize_encryption command to use UseCases
 - Modify: `src-tauri/crates/uc-tauri/src/commands/clipboard.rs`
 - Modify: `src-tauri/crates/uc-tauri/src/commands/settings.rs`
 
-**Step 1: Update is_encryption_initialized command**
-
-In `src-tauri/crates/uc-tauri/src/commands/encryption.rs`, update the `is_encryption_initialized` function:
-
-Replace current implementation (lines 88-98) with:
-
-```rust
-/// Check if encryption is initialized
-/// 检查加密是否已初始化
-///
-/// TODO: Implement IsEncryptionInitialized use case first.
-/// This command should use: runtime.usecases().is_encryption_initialized()
-///
-/// Tracking: https://github.com/your-org/uniclipboard-desktop/issues/XXX
-#[tauri::command]
-pub async fn is_encryption_initialized(
-    runtime: State<'_, AppRuntime>,
-) -> Result<bool, String> {
-    // TODO: Refactor to use UseCases accessor after implementing use case
-    let _ = runtime; // Suppress unused warning until implemented
-    Err("Not yet implemented - requires IsEncryptionInitialized use case".to_string())
-}
-```
-
-**Step 2: Update delete_clipboard_entry command**
+**Step 1: Update delete_clipboard_entry command**
 
 In `src-tauri/crates/uc-tauri/src/commands/clipboard.rs`, update the function:
 
@@ -301,7 +277,7 @@ pub async fn delete_clipboard_entry(
 }
 ```
 
-**Step 3: Update capture_clipboard command**
+**Step 2: Update capture_clipboard command**
 
 In `src-tauri/crates/uc-tauri/src/commands/clipboard.rs`, update the function:
 
@@ -323,7 +299,7 @@ pub async fn capture_clipboard(
 }
 ```
 
-**Step 4: Update settings commands**
+**Step 3: Update settings commands**
 
 In `src-tauri/crates/uc-tauri/src/commands/settings.rs`, update both functions:
 
@@ -388,15 +364,14 @@ git commit -m "refactor(uc-tauri): add TODO comments for commands requiring use 
 In `docs/architecture/commands-layer-specification.md`, find the "Current Status" table and update `initialize_encryption` status:
 
 ```markdown
-| Command                     | File                                                                                      | Status | Use Case Exists | Needs Refactor      |
-| --------------------------- | ----------------------------------------------------------------------------------------- | ------ | --------------- | ------------------- |
-| `get_clipboard_entries`     | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)   | ✅     | ✅              | No                  |
-| `delete_clipboard_entry`    | [clipboard.rs:45-51](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L45-L51)   | TODO   | ❌              | **TODO**            |
-| `capture_clipboard`         | [clipboard.rs:62-74](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L62-L74)   | TODO   | ⚠️              | **TODO**            |
-| `initialize_encryption`     | [encryption.rs:19-30](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L19-L30) | ✅     | ✅              | **No (refactored)** |
-| `is_encryption_initialized` | [encryption.rs:40-50](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L40-L50) | TODO   | ❌              | **TODO**            |
-| `get_settings`              | [settings.rs:11-27](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L11-L27)     | TODO   | ❌              | **TODO**            |
-| `update_settings`           | [settings.rs:29-43](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L29-L43)     | TODO   | ❌              | **TODO**            |
+| Command                  | File                                                                                      | Status | Use Case Exists | Needs Refactor      |
+| ------------------------ | ----------------------------------------------------------------------------------------- | ------ | --------------- | ------------------- |
+| `get_clipboard_entries`  | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)   | ✅     | ✅              | No                  |
+| `delete_clipboard_entry` | [clipboard.rs:45-51](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L45-L51)   | TODO   | ❌              | **TODO**            |
+| `capture_clipboard`      | [clipboard.rs:62-74](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L62-L74)   | TODO   | ⚠️              | **TODO**            |
+| `initialize_encryption`  | [encryption.rs:19-30](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L19-L30) | ✅     | ✅              | **No (refactored)** |
+| `get_settings`           | [settings.rs:11-27](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L11-L27)     | TODO   | ❌              | **TODO**            |
+| `update_settings`        | [settings.rs:29-43](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L29-L43)     | TODO   | ❌              | **TODO**            |
 ```
 
 **Step 2: Commit**

@@ -23,7 +23,6 @@
 - ✅ `get_clipboard_entries` - Registered, uses UseCases accessor
 - ✅ `delete_clipboard_entry` - Registered, uses UseCases accessor
 - ✅ `initialize_encryption` - Registered, uses UseCases accessor
-- ❌ `is_encryption_initialized` - Registered but directly accesses Port (needs refactoring)
 - ⚠️ `capture_clipboard` - Registered but returns placeholder error
 - ❌ `get_settings` - Defined but NOT registered
 - ❌ `update_settings` - Defined but NOT registered
@@ -55,7 +54,6 @@ The current invoke_handler (lines 195-202) only has 5 commands:
     uc_tauri::commands::clipboard::capture_clipboard,
     // Encryption commands
     uc_tauri::commands::encryption::initialize_encryption,
-    uc_tauri::commands::encryption::is_encryption_initialized,
 ])
 ```
 
@@ -71,7 +69,6 @@ Add the settings commands section after the encryption commands (after line 202)
     uc_tauri::commands::clipboard::capture_clipboard,
     // Encryption commands
     uc_tauri::commands::encryption::initialize_encryption,
-    uc_tauri::commands::encryption::is_encryption_initialized,
     // Settings commands
     uc_tauri::commands::settings::get_settings,
     uc_tauri::commands::settings::update_settings,
@@ -98,172 +95,12 @@ errors when frontend tried to call them.
 
 ---
 
-## Task 2: Fix is_encryption_initialized Direct Port Access
-
-**Files:**
-
-- Modify: `src-tauri/crates/uc-tauri/src/commands/encryption.rs`
-- Modify: `src-tauri/crates/uc-app/src/usecases/mod.rs`
-- Modify: `src-tauri/crates/uc-tauri/src/bootstrap/runtime.rs`
-
-**Step 1: Create IsEncryptionInitialized use case**
-
-Create: `src-tauri/crates/uc-app/src/usecases/is_encryption_initialized.rs`
-
-```rust
-//! Use case for checking if encryption is initialized
-//! 检查加密是否已初始化的用例
-
-use anyhow::Result;
-use uc_core::ports::EncryptionStatePort;
-use uc_core::security::state::EncryptionState;
-
-/// Use case for checking encryption initialization status.
-///
-/// ## Behavior / 行为
-/// - Loads encryption state from port
-/// - Returns true if initialized, false otherwise
-///
-/// ## English
-/// Checks whether encryption has been initialized by loading the
-/// encryption state and comparing it to `EncryptionState::Initialized`.
-pub struct IsEncryptionInitialized {
-    encryption_state: std::sync::Arc<dyn EncryptionStatePort>,
-}
-
-impl IsEncryptionInitialized {
-    /// Create a new IsEncryptionInitialized use case.
-    pub fn new(encryption_state: std::sync::Arc<dyn EncryptionStatePort>) -> Self {
-        Self { encryption_state }
-    }
-
-    /// Execute the use case.
-    ///
-    /// # Returns / 返回值
-    /// - `Ok(true)` if encryption is initialized
-    /// - `Ok(false)` if encryption is not initialized
-    /// - `Err(e)` if loading state fails
-    pub async fn execute(&self) -> Result<bool> {
-        let state = self.encryption_state
-            .load_state()
-            .await?;
-        Ok(state == EncryptionState::Initialized)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use uc_core::ports::MockEncryptionStatePort;
-    use uc_core::security::state::EncryptionState;
-
-    #[tokio::test]
-    async fn test_returns_true_when_initialized() {
-        let mut mock = MockEncryptionStatePort::new();
-        mock.expect_load_state()
-            .returning(|| Ok(EncryptionState::Initialized));
-
-        let usecase = IsEncryptionInitialized::new(std::sync::Arc::new(mock));
-        assert_eq!(usecase.execute().await.unwrap(), true);
-    }
-
-    #[tokio::test]
-    async fn test_returns_false_when_not_initialized() {
-        let mut mock = MockEncryptionStatePort::new();
-        mock.expect_load_state()
-            .returning(|| Ok(EncryptionState::NotInitialized));
-
-        let usecase = IsEncryptionInitialized::new(std::sync::Arc::new(mock));
-        assert_eq!(usecase.execute().await.unwrap(), false);
-    }
-}
-```
-
-**Step 2: Export the use case from mod.rs**
-
-Modify: `src-tauri/crates/uc-app/src/usecases/mod.rs`
-
-Add import after line 62:
-
-```rust
-pub mod is_encryption_initialized;
-```
-
-Add export after line 68:
-
-```rust
-pub use is_encryption_initialized::IsEncryptionInitialized;
-```
-
-**Step 3: Add to UseCases accessor**
-
-Modify: `src-tauri/crates/uc-tauri/src/bootstrap/runtime.rs`
-
-Add this method inside the `impl<'a> UseCases<'a>` block (after `initialize_encryption` method, around line 199):
-
-````rust
-    /// Check if encryption is initialized
-    ///
-    /// ## Example / 示例
-    ///
-    /// ```rust,no_run
-    /// # use uc_tauri::bootstrap::AppRuntime;
-    /// # use tauri::State;
-    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<bool, String> {
-    /// let uc = runtime.usecases().is_encryption_initialized();
-    /// let is_init = uc.execute().await.map_err(|e| e.to_string())?;
-    /// # Ok(is_init)
-    /// # }
-    /// ```
-    pub fn is_encryption_initialized(&self) -> uc_app::usecases::IsEncryptionInitialized {
-        uc_app::usecases::IsEncryptionInitialized::new(
-            self.runtime.deps.encryption_state.clone(),
-        )
-    }
-````
-
-**Step 4: Update the command to use UseCases accessor**
-
-Modify: `src-tauri/crates/uc-tauri/src/commands/encryption.rs`
-
-Replace the `is_encryption_initialized` function (lines 51-62) with:
-
-```rust
-/// Check if encryption is initialized
-/// 检查加密是否已初始化
-///
-/// This command uses the IsEncryptionInitialized use case.
-/// 此命令使用 IsEncryptionInitialized 用例。
-#[tauri::command]
-pub async fn is_encryption_initialized(
-    runtime: State<'_, AppRuntime>,
-) -> Result<bool, String> {
-    let uc = runtime.usecases().is_encryption_initialized();
-    uc.execute().await.map_err(|e| e.to_string())
-}
-```
-
-**Step 5: Verify compilation**
-
-Run: `cd src-tauri && cargo check --package uc-tauri`
-
-Expected: SUCCESS, no errors
-
-**Step 6: Commit**
-
-```bash
-git add src-tauri/crates/uc-app/src/usecases/is_encryption_initialized.rs
-git add src-tauri/crates/uc-app/src/usecases/mod.rs
-git add src-tauri/crates/uc-tauri/src/bootstrap/runtime.rs
-git add src-tauri/crates/uc-tauri/src/commands/encryption.rs
-git commit -m "feat(uc-app): add IsEncryptionInitialized use case
-refactor(uc-tauri): is_encryption_initialized command to use UseCases accessor
-
 Add new use case to check encryption initialization status.
 Update command to use UseCases accessor pattern instead of
 direct Port access, following hexagonal architecture principles.
 "
-```
+
+````
 
 ---
 
@@ -279,7 +116,6 @@ Expected output should show all command functions:
 - `delete_clipboard_entry`
 - `capture_clipboard`
 - `initialize_encryption`
-- `is_encryption_initialized`
 - `get_settings`
 - `update_settings`
 
@@ -287,7 +123,7 @@ Expected output should show all command functions:
 
 Read: `src-tauri/src/main.rs`
 
-Check that the `invoke_handler` section includes all 7 commands.
+Check that the `invoke_handler` section includes all 6 commands.
 
 **Step 3: Run full compilation**
 
@@ -309,15 +145,15 @@ Expected: All commands should be accessible via `__TAURI__.core.invoke()`
 git add -A
 git commit -m "chore: verify all commands are registered and compiled
 
-All 7 commands are now properly defined and registered:
+All 6 commands are now properly defined and registered:
 - 3 clipboard commands
-- 2 encryption commands
+- 1 encryption command
 - 2 settings commands
 
 All use UseCases accessor pattern (except placeholder commands
 pending use case implementation).
 "
-```
+````
 
 ---
 
@@ -351,38 +187,35 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 
 ## Command Status Matrix
 
-| Command                     | File                                                                                        | Registered | Uses UseCases | Status      |
-| --------------------------- | ------------------------------------------------------------------------------------------- | ---------- | ------------- | ----------- |
-| `get_clipboard_entries`     | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)     | ✅         | ✅            | Complete    |
-| `delete_clipboard_entry`    | [clipboard.rs:59-74](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L59-L74)     | ✅         | ✅            | Complete    |
-| `capture_clipboard`         | [clipboard.rs:118-137](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L118-L137) | ✅         | ❌            | Placeholder |
-| `initialize_encryption`     | [encryption.rs:21-31](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L21-L31)   | ✅         | ✅            | Complete    |
-| `is_encryption_initialized` | [encryption.rs:51-60](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L51-L60)   | ✅         | ✅            | Complete    |
-| `get_settings`              | [settings.rs:37-49](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L37-L49)       | ✅         | ❌            | Placeholder |
-| `update_settings`           | [settings.rs:81-94](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L81-L94)       | ✅         | ❌            | Placeholder |
+| Command                  | File                                                                                        | Registered | Uses UseCases | Status      |
+| ------------------------ | ------------------------------------------------------------------------------------------- | ---------- | ------------- | ----------- |
+| `get_clipboard_entries`  | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)     | ✅         | ✅            | Complete    |
+| `delete_clipboard_entry` | [clipboard.rs:59-74](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L59-L74)     | ✅         | ✅            | Complete    |
+| `capture_clipboard`      | [clipboard.rs:118-137](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L118-L137) | ✅         | ❌            | Placeholder |
+| `initialize_encryption`  | [encryption.rs:21-31](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L21-L31)   | ✅         | ✅            | Complete    |
+| `get_settings`           | [settings.rs:37-49](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L37-L49)       | ✅         | ❌            | Placeholder |
+| `update_settings`        | [settings.rs:81-94](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L81-L94)       | ✅         | ❌            | Placeholder |
 
 ## Use Case Status
 
-| Use Case                  | Exists | Location                                            | Used By Commands            |
-| ------------------------- | ------ | --------------------------------------------------- | --------------------------- |
-| `ListClipboardEntries`    | ✅     | `uc-app/src/usecases/list_clipboard_entries.rs`     | `get_clipboard_entries`     |
-| `DeleteClipboardEntry`    | ✅     | `uc-app/src/usecases/delete_clipboard_entry.rs`     | `delete_clipboard_entry`    |
-| `CaptureClipboard`        | ⚠️     | `uc-app/src/usecases/internal/capture_clipboard.rs` | `capture_clipboard` (TODO)  |
-| `InitializeEncryption`    | ✅     | `uc-app/src/usecases/initialize_encryption.rs`      | `initialize_encryption`     |
-| `IsEncryptionInitialized` | ✅     | `uc-app/src/usecases/is_encryption_initialized.rs`  | `is_encryption_initialized` |
-| `GetSettings`             | ❌     | -                                                   | `get_settings` (TODO)       |
-| `UpdateSettings`          | ❌     | -                                                   | `update_settings` (TODO)    |
+| Use Case               | Exists | Location                                            | Used By Commands           |
+| ---------------------- | ------ | --------------------------------------------------- | -------------------------- |
+| `ListClipboardEntries` | ✅     | `uc-app/src/usecases/list_clipboard_entries.rs`     | `get_clipboard_entries`    |
+| `DeleteClipboardEntry` | ✅     | `uc-app/src/usecases/delete_clipboard_entry.rs`     | `delete_clipboard_entry`   |
+| `CaptureClipboard`     | ⚠️     | `uc-app/src/usecases/internal/capture_clipboard.rs` | `capture_clipboard` (TODO) |
+| `InitializeEncryption` | ✅     | `uc-app/src/usecases/initialize_encryption.rs`      | `initialize_encryption`    |
+| `GetSettings`          | ❌     | -                                                   | `get_settings` (TODO)      |
+| `UpdateSettings`       | ❌     | -                                                   | `update_settings` (TODO)   |
 
 ## Migration Progress
 
-**Complete: 5/7 commands (71%)**
+**Complete: 4/6 commands (67%)**
 
 ### Completed ✅
 
 1. **get_clipboard_entries** - Uses `ListClipboardEntries` via accessor
 2. **delete_clipboard_entry** - Uses `DeleteClipboardEntry` via accessor
 3. **initialize_encryption** - Uses `InitializeEncryption` via accessor
-4. **is_encryption_initialized** - Uses `IsEncryptionInitialized` via accessor
 
 ### In Progress ⚠️
 
@@ -398,10 +231,9 @@ Commands are **Driving Adapters** in Hexagonal Architecture:
 ## Next Steps
 
 1. ✅ Register all defined commands in `main.rs` invoke_handler
-2. ✅ Refactor `is_encryption_initialized` to use UseCases accessor
-3. ⏳ Implement `GetSettings` and `UpdateSettings` use cases
-4. ⏳ Update `capture_clipboard` command to use existing use case
-5. ⏳ Remove all direct `runtime.deps.xxx` access from commands
+2. ⏳ Implement `GetSettings` and `UpdateSettings` use cases
+3. ⏳ Update `capture_clipboard` command to use existing use case
+4. ⏳ Remove all direct `runtime.deps.xxx` access from commands
 
 ## References
 
@@ -419,7 +251,7 @@ Add section after "## Tauri Commands":
 ```markdown
 ## Commands Layer Status
 
-**Current Migration Status:** 5/7 commands using UseCases accessor (71%)
+**Current Migration Status:** 4/6 commands using UseCases accessor (67%)
 
 When adding new commands:
 
@@ -450,9 +282,7 @@ Document current status of all 7 commands and associated use cases.
 This plan fixes the "Tauri commands not found" issue and ensures proper hexagonal architecture compliance:
 
 1. ✅ Registers missing `get_settings` and `update_settings` commands
-2. ✅ Refactors `is_encryption_initialized` to use UseCases accessor
-3. ✅ Creates `IsEncryptionInitialized` use case
-4. ✅ Documents current architecture status
+2. ✅ Documents current architecture status
 
 **Architecture Compliance Achieved:**
 
@@ -476,8 +306,6 @@ This plan fixes the "Tauri commands not found" issue and ensures proper hexagona
 After completing all tasks:
 
 - ☐ `get_settings` and `update_settings` registered in main.rs
-- ☐ `IsEncryptionInitialized` use case created
-- ☐ `is_encryption_initialized` uses UseCases accessor
 - ☐ All commands compile without errors
 - ☐ No direct `runtime.deps.xxx` access in implemented commands
 - ☐ Documentation updated with current status

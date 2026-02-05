@@ -240,7 +240,7 @@ Validates schema version before persisting.
 
 Modify: `src-tauri/crates/uc-tauri/src/bootstrap/runtime.rs`
 
-Add method after line 217 (after `is_encryption_initialized()`):
+Add method after line 217 (after the existing encryption accessor methods):
 
 ````rust
     /// Get application settings
