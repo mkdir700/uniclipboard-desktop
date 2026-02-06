@@ -20,9 +20,7 @@ pub mod delete_clipboard_entry;
 pub mod get_settings;
 pub mod initialize_encryption;
 pub mod internal;
-pub mod is_encryption_initialized;
 pub mod list_clipboard_entries;
-pub mod onboarding;
 pub mod pairing;
 pub mod settings;
 pub mod setup;
@@ -38,21 +36,14 @@ pub use clipboard::list_entry_projections::{
 pub use delete_clipboard_entry::DeleteClipboardEntry;
 pub use get_settings::GetSettings;
 pub use initialize_encryption::InitializeEncryption;
-pub use is_encryption_initialized::IsEncryptionInitialized;
 pub use list_clipboard_entries::ListClipboardEntries;
 pub use pairing::{
     AnnounceDeviceName, GetLocalDeviceInfo, GetLocalPeerId, ListConnectedPeers,
     ListDiscoveredPeers, ListPairedDevices, LocalDeviceInfo, PairingConfig, PairingOrchestrator,
     ResolveConnectionPolicy, SetPairingState, UnpairDevice,
 };
-pub use setup::{SetupError, SetupOrchestrator};
+pub use setup::{MarkSetupComplete, SetupError, SetupOrchestrator};
 pub use start_clipboard_watcher::StartClipboardWatcher;
 pub use start_network::StartNetwork;
 pub use start_network_after_unlock::StartNetworkAfterUnlock;
 pub use update_settings::UpdateSettings;
-
-// Re-export onboarding types for Tauri command serialization
-pub use onboarding::CompleteOnboarding;
-pub use onboarding::GetOnboardingState;
-pub use onboarding::InitializeOnboarding;
-pub use onboarding::OnboardingStateDto;
