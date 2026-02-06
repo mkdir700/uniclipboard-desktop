@@ -348,19 +348,6 @@ pub async fn initialize_encryption(
     Ok(())
 }
 
-/// Check if encryption is initialized
-/// 检查加密是否已初始化
-#[tauri::command]
-pub async fn is_encryption_initialized(
-    runtime: State<'_, AppRuntime>,
-) -> Result<bool, String> {
-    let uc = runtime.usecases().is_encryption_initialized();
-    let initialized = uc.execute()
-        .await
-        .map_err(map_err)?;
-    Ok(initialized)
-}
-
 /// Change passphrase
 /// 更改密码短语
 #[tauri::command]
@@ -431,15 +418,14 @@ runtime.usecases().initialize_encryption()
 
 ## Current Status
 
-| Command                     | File                                                                                      | Status             | Use Case Exists | Needs Refactor |
-| --------------------------- | ----------------------------------------------------------------------------------------- | ------------------ | --------------- | -------------- |
-| `get_clipboard_entries`     | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)   | ✅ Refactored      | ✅              | No             |
-| `delete_clipboard_entry`    | [clipboard.rs:42-79](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L42-L79)   | 📝 Documented TODO | ❌              | **TODO**       |
-| `capture_clipboard`         | [clipboard.rs:81-142](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L81-L142) | 📝 Documented TODO | ❌              | **TODO**       |
-| `initialize_encryption`     | [encryption.rs:22-31](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L22-L31) | ✅ Refactored      | ✅              | No             |
-| `is_encryption_initialized` | [encryption.rs:52-62](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L52-L62) | 📝 Documented TODO | ❌              | **TODO**       |
-| `get_settings`              | [settings.rs:37-49](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L37-L49)     | 📝 Documented TODO | ❌              | **TODO**       |
-| `update_settings`           | [settings.rs:81-94](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L81-L94)     | 📝 Documented TODO | ❌              | **TODO**       |
+| Command                  | File                                                                                      | Status             | Use Case Exists | Needs Refactor |
+| ------------------------ | ----------------------------------------------------------------------------------------- | ------------------ | --------------- | -------------- |
+| `get_clipboard_entries`  | [clipboard.rs:12-40](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L12-L40)   | ✅ Refactored      | ✅              | No             |
+| `delete_clipboard_entry` | [clipboard.rs:42-79](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L42-L79)   | 📝 Documented TODO | ❌              | **TODO**       |
+| `capture_clipboard`      | [clipboard.rs:81-142](../../src-tauri/crates/uc-tauri/src/commands/clipboard.rs#L81-L142) | 📝 Documented TODO | ❌              | **TODO**       |
+| `initialize_encryption`  | [encryption.rs:22-31](../../src-tauri/crates/uc-tauri/src/commands/encryption.rs#L22-L31) | ✅ Refactored      | ✅              | No             |
+| `get_settings`           | [settings.rs:37-49](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L37-L49)     | 📝 Documented TODO | ❌              | **TODO**       |
+| `update_settings`        | [settings.rs:81-94](../../src-tauri/crates/uc-tauri/src/commands/settings.rs#L81-L94)     | 📝 Documented TODO | ❌              | **TODO**       |
 
 ### Legend / 图例
 
@@ -457,7 +443,6 @@ runtime.usecases().initialize_encryption()
 
 ### In Progress / 进行中
 
-- 📝 `is_encryption_initialized` - TODO documented, awaiting IsEncryptionInitialized use case
 - 📝 `delete_clipboard_entry` - TODO documented, awaiting DeleteClipboardEntry use case
 - 📝 `capture_clipboard` - TODO documented, awaiting CaptureClipboard use case (complex multi-port)
 - 📝 `get_settings` - TODO documented, awaiting GetSettings use case
@@ -466,10 +451,6 @@ runtime.usecases().initialize_encryption()
 ## TODO: Missing Use Cases
 
 The following commands require use case implementation (separate task):
-
-- ⏳ `IsEncryptionInitialized` - Query encryption state
-  - Port: EncryptionStatePort (already exists)
-  - Complexity: Low (simple query)
 
 - ⏳ `DeleteClipboardEntry` - Delete clipboard entry
   - Port: ClipboardEntryRepositoryPort (already exists)

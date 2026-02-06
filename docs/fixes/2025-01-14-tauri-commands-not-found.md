@@ -1,5 +1,3 @@
-# Tauri Commands Not Found Error - Fix Summary
-
 **Date**: 2025-01-14
 **Issue**: Frontend errors "Command not found" on application startup
 **Status**: ✅ Resolved
@@ -8,22 +6,22 @@
 
 On application startup, the frontend encountered two critical errors:
 
-1. `Command check_onboarding_status not found`
+1. `Command get_setup_state not found`
 2. `Command enable_modern_window_style not found`
 
 These errors prevented the application from starting properly.
 
 ## Root Cause Analysis
 
-### Issue 1: `check_onboarding_status` Not Registered
+### Issue 1: `get_setup_state` Not Registered
 
-**Root Cause**: The onboarding command was defined in the legacy codebase (`src-tauri/src-legacy/api/onboarding.rs`) but was not registered in the new architecture's `src-tauri/src/main.rs`.
+**Root Cause**: The setup status command was defined in the legacy codebase but was not registered in the new architecture's `src-tauri/src/main.rs`.
 
 **Evidence**:
 
-- Frontend call: `src/api/onboarding.ts:15` → `invoke('check_onboarding_status')`
-- Legacy definition: `src-legacy/api/onboarding.rs:35`
-- Missing registration: `src/main.rs:195-206` (no entry for this command)
+- Frontend call: `invoke('get_setup_state')`
+- Legacy definition: legacy API module
+- Missing registration: `src-tauri/src/main.rs` (no entry for this command)
 
 ### Issue 2: `enable_modern_window_style` Not Registered
 
@@ -38,32 +36,32 @@ These errors prevented the application from starting properly.
 
 ## Solution Implementation
 
-### 1. Created Onboarding Command Module
+### 1. Created Setup Status Command Module
 
-**File**: `src-tauri/src/onboarding.rs` (new)
+**File**: `src-tauri/src/setup_status.rs` (new)
 
 ```rust
-//! Simplified Onboarding Command (Temporary Implementation)
+//! Simplified Setup Status Command (Temporary Implementation)
 //! This is a minimal implementation to bridge the gap during architecture migration.
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct OnboardingStatus {
+pub struct SetupStatus {
     pub has_completed: bool,
     pub vault_initialized: bool,
     pub device_registered: bool,
-    pub encryption_password_set: bool,
+    pub passphrase_set: bool,
 }
 
 #[tauri::command]
-pub async fn check_onboarding_status() -> Result<OnboardingStatus, String> {
+pub async fn get_setup_state() -> Result<SetupStatus, String> {
     // TODO: Integrate with new architecture's use cases
-    Ok(OnboardingStatus {
+    Ok(SetupStatus {
         has_completed: false,
         vault_initialized: false,
         device_registered: false,
-        encryption_password_set: false,
+        passphrase_set: false,
     })
 }
 ```
@@ -99,9 +97,9 @@ Added imports:
 mod plugins;
 use plugins::mac_rounded_corners;
 
-// Onboarding module (simplified implementation during migration)
-mod onboarding;
-use onboarding::check_onboarding_status;
+// Setup status module (simplified implementation during migration)
+mod setup_status;
+use setup_status::get_setup_state;
 ```
 
 Updated `invoke_handler`:
@@ -113,8 +111,8 @@ Updated `invoke_handler`:
     mac_rounded_corners::enable_rounded_corners,
     mac_rounded_corners::enable_modern_window_style,
     mac_rounded_corners::reposition_traffic_lights,
-    // Onboarding commands (simplified implementation during migration)
-    check_onboarding_status,
+    // Setup status command (simplified implementation during migration)
+    get_setup_state,
 ])
 ```
 
@@ -123,7 +121,7 @@ Updated `invoke_handler`:
 ```
 src-tauri/src/
 ├── main.rs              (modified - added imports and command registration)
-├── onboarding.rs        (new - simplified command implementation)
+├── setup_status.rs      (new - simplified status command implementation)
 ├── lib.rs               (unchanged - empty)
 └── plugins/             (new directory)
     ├── mod.rs           (new - module exports)
@@ -151,18 +149,18 @@ cargo update -p objc
 
 ## Next Steps
 
-### 1. Complete Onboarding Migration (High Priority)
+### 1. Complete Setup Status Migration (High Priority)
 
-The current `check_onboarding_status` implementation is a stub that returns hardcoded values. It needs to be properly integrated with the new architecture:
+The current `get_setup_state` implementation is a stub that returns hardcoded values. It needs to be properly integrated with the new architecture:
 
 **Tasks**:
 
-- [ ] Create `CheckOnboardingStatus` use case in `uc-app/src/usecases/`
+- [ ] Create `GetSetupState` use case in `uc-app/src/usecases/`
 - [ ] Add accessor method to `UseCases` in `uc-tauri/src/bootstrap/runtime.rs`
-- [ ] Update `onboarding.rs` command to use `runtime.usecases().check_onboarding_status()`
+- [ ] Update `setup_status.rs` command to use `runtime.usecases().get_setup_state()`
 - [ ] Implement actual status checking logic (vault init, device registration, etc.)
 
-**Reference**: Follow the pattern of `IsEncryptionInitialized` command
+**Reference**: Follow the pattern of `InitializeEncryption` command
 
 ### 2. Update Commands Status Documentation
 
@@ -170,7 +168,7 @@ The current `check_onboarding_status` implementation is a stub that returns hard
 
 Add the new commands to the tracking table:
 
-- `check_onboarding_status` - mark as "Legacy bridge, needs migration"
+- `get_setup_state` - mark as "Legacy bridge, needs migration"
 - `enable_rounded_corners` - mark as "Plugin, external dependency"
 - `enable_modern_window_style` - mark as "Plugin, external dependency"
 - `reposition_traffic_lights` - mark as "Plugin, external dependency"
@@ -187,7 +185,7 @@ The macOS rounded corners plugin is an external npm package. Consider:
 
 **Missing tests**:
 
-- [ ] Add unit tests for `OnboardingStatus` serialization
+- [ ] Add unit tests for `SetupStatus` serialization
 - [ ] Add integration tests for command registration
 - [ ] Test rounded corners plugin on actual macOS hardware
 

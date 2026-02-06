@@ -129,8 +129,8 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
 impl InitializeAppUseCase {
     pub fn execute(&self, config: AppConfig) -> Result<(), UseCaseError> {
         if config.vault_path.is_empty() {
-            // Business decision: show onboarding
-            return Err(UseCaseError::OnboardingRequired);
+            // Business decision: show setup flow
+            return Err(UseCaseError::SetupRequired);
         }
         // ...
     }
@@ -422,7 +422,7 @@ pub fn load_config() -> Result<AppConfig, ConfigError> {
 
 // ✅ CORRECT: main.rs or use case decides policy
 if config.vault_path.is_empty() {
-    // Show onboarding or use default
+// Show setup flow or use default
 }
 ```
 

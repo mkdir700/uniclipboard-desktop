@@ -125,7 +125,7 @@ pub async fn get_clipboard_items(
         .clipboard_list
         .execute()
         .map_err(|e| match e {
-            UseCaseError::NotInitialized => "Please complete onboarding first".to_string(),
+            UseCaseError::NotInitialized => "Please complete setup first".to_string(),
             UseCaseError::EncryptionFailed(msg) => format!("Encryption error: {}", msg),
             _ => "Failed to load clipboard items".to_string(),
         })
@@ -467,14 +467,14 @@ impl ClipboardRepositoryPort for FailingRepo {
 
 ### When to Use Which Error Type
 
-| Situation             | Error Type                       | Example                            |
-| --------------------- | -------------------------------- | ---------------------------------- |
-| Database query failed | `RepoError::Storage`             | "Failed to query database"         |
-| Entity not found      | `RepoError::NotFound`            | No message needed                  |
-| Validation failed     | `UseCaseError::Validation`       | "Invalid device name"              |
-| Network offline       | `UseCaseError::NetworkOffline`   | "Network is offline"               |
-| Encryption failed     | `UseCaseError::EncryptionFailed` | "Encryption failed"                |
-| User-facing           | `String` (user-friendly)         | "Please complete onboarding first" |
+| Situation             | Error Type                       | Example                       |
+| --------------------- | -------------------------------- | ----------------------------- |
+| Database query failed | `RepoError::Storage`             | "Failed to query database"    |
+| Entity not found      | `RepoError::NotFound`            | No message needed             |
+| Validation failed     | `UseCaseError::Validation`       | "Invalid device name"         |
+| Network offline       | `UseCaseError::NetworkOffline`   | "Network is offline"          |
+| Encryption failed     | `UseCaseError::EncryptionFailed` | "Encryption failed"           |
+| User-facing           | `String` (user-friendly)         | "Please complete setup first" |
 
 ### Error Conversion Pattern
 
