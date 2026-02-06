@@ -1,0 +1,109 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use tempfile::TempDir;
+use uc_app::usecases::{InitializeEncryption, MarkSetupComplete, SetupOrchestrator};
+use uc_core::ports::security::key_scope::{KeyScopePort, ScopeError};
+use uc_core::ports::security::secure_storage::{SecureStorageError, SecureStoragePort};
+use uc_core::ports::{EncryptionSessionPort, SetupStatusPort};
+use uc_core::security::model::KeyScope;
+use uc_core::setup::SetupState;
+use uc_infra::fs::key_slot_store::JsonKeySlotStore;
+use uc_infra::security::{
+    DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository,
+    InMemoryEncryptionSession,
+};
+use uc_infra::setup_status::FileSetupStatusRepository;
+
+#[derive(Default)]
+struct InMemorySecureStorage {
+    data: Mutex<HashMap<String, Vec<u8>>>,
+}
+
+impl SecureStoragePort for InMemorySecureStorage {
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>, SecureStorageError> {
+        Ok(self.data.lock().unwrap().get(key).cloned())
+    }
+
+    fn set(&self, key: &str, value: &[u8]) -> Result<(), SecureStorageError> {
+        self.data
+            .lock()
+            .unwrap()
+            .insert(key.to_string(), value.to_vec());
+        Ok(())
+    }
+
+    fn delete(&self, key: &str) -> Result<(), SecureStorageError> {
+        self.data.lock().unwrap().remove(key);
+        Ok(())
+    }
+}
+
+struct TestKeyScope {
+    scope: KeyScope,
+}
+
+impl Default for TestKeyScope {
+    fn default() -> Self {
+        Self {
+            scope: KeyScope {
+                profile_id: "default".to_string(),
+            },
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl KeyScopePort for TestKeyScope {
+    async fn current_scope(&self) -> Result<KeyScope, ScopeError> {
+        Ok(self.scope.clone())
+    }
+}
+
+#[tokio::test]
+async fn create_space_flow_marks_setup_complete_and_persists_state() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let vault_dir = temp_dir.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).expect("create vault dir");
+
+    let keyslot_store = Arc::new(JsonKeySlotStore::new(vault_dir.clone()));
+    let secure_storage = Arc::new(InMemorySecureStorage::default());
+    let key_material = Arc::new(DefaultKeyMaterialService::new(
+        secure_storage,
+        keyslot_store,
+    ));
+
+    let encryption = Arc::new(EncryptionRepository);
+    let key_scope = Arc::new(TestKeyScope::default());
+    let encryption_state = Arc::new(FileEncryptionStateRepository::new(vault_dir.clone()));
+    let encryption_session = Arc::new(InMemoryEncryptionSession::new());
+
+    let initialize_encryption = Arc::new(InitializeEncryption::from_ports(
+        encryption,
+        key_material,
+        key_scope,
+        encryption_state,
+        encryption_session.clone(),
+    ));
+
+    let setup_status = Arc::new(FileSetupStatusRepository::with_defaults(vault_dir.clone()));
+    let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
+    let orchestrator = SetupOrchestrator::new(
+        initialize_encryption,
+        mark_setup_complete,
+        setup_status.clone(),
+    );
+
+    orchestrator.new_space().await.expect("new space");
+    let state = orchestrator
+        .submit_passphrase("secret".to_string(), "secret".to_string())
+        .await
+        .expect("submit passphrase");
+
+    assert_eq!(state, SetupState::Completed);
+
+    let status = setup_status.get_status().await.expect("get status");
+    assert!(status.has_completed);
+    assert!(encryption_session.is_ready().await);
+    assert!(vault_dir.join(".initialized_encryption").exists());
+}
