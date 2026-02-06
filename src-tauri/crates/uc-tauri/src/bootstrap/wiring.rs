@@ -87,7 +87,7 @@ use uc_infra::security::{
     FileEncryptionStateRepository,
 };
 use uc_infra::settings::repository::FileSettingsRepository;
-use uc_infra::{FileOnboardingStateRepository, SystemClock};
+use uc_infra::{FileSetupStatusRepository, SystemClock};
 
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
@@ -225,8 +225,8 @@ struct InfraLayer {
     // Settings / 设置
     settings_repo: Arc<dyn SettingsPort>,
 
-    // Onboarding / 入门引导
-    onboarding_state: Arc<dyn OnboardingStatePort>,
+    // Setup status / 设置状态
+    setup_status: Arc<dyn SetupStatusPort>,
 
     // System services / 系统服务
     clock: Arc<dyn ClockPort>,
@@ -402,11 +402,10 @@ fn create_infra_layer(
     // 创建设置仓库
     let settings_repo: Arc<dyn SettingsPort> = Arc::new(FileSettingsRepository::new(settings_path));
 
-    // Create onboarding state repository
-    // 创建入门引导状态仓库
-    let onboarding_state: Arc<dyn OnboardingStatePort> = Arc::new(
-        FileOnboardingStateRepository::with_defaults(vault_path.clone()),
-    );
+    // Create setup status repository
+    // 创建设置状态仓库
+    let setup_status: Arc<dyn SetupStatusPort> =
+        Arc::new(FileSetupStatusRepository::with_defaults(vault_path.clone()));
 
     // Create system services
     // 创建系统服务
@@ -432,7 +431,7 @@ fn create_infra_layer(
         encryption,
         encryption_state,
         settings_repo,
-        onboarding_state,
+        setup_status,
         clock,
         hash,
     };
@@ -869,8 +868,8 @@ pub fn wire_dependencies_with_identity_store(
         network: platform.network,
         network_control: platform.libp2p_network.clone(),
 
-        // Onboarding dependencies / 入门引导依赖
-        onboarding_state: infra.onboarding_state,
+        // Setup status dependencies / 设置状态依赖
+        setup_status: infra.setup_status,
 
         // Storage dependencies / 存储依赖
         blob_store: platform.blob_store,

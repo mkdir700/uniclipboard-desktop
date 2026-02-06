@@ -865,19 +865,12 @@ mod tests {
     }
 
     #[async_trait]
-    impl OnboardingStatePort for NoopPort {
-        async fn get_state(&self) -> anyhow::Result<uc_core::onboarding::OnboardingState> {
-            Ok(uc_core::onboarding::OnboardingState::default())
+    impl uc_core::ports::SetupStatusPort for NoopPort {
+        async fn get_status(&self) -> anyhow::Result<uc_core::setup::SetupStatus> {
+            Ok(uc_core::setup::SetupStatus::default())
         }
 
-        async fn set_state(
-            &self,
-            _state: &uc_core::onboarding::OnboardingState,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn reset(&self) -> anyhow::Result<()> {
+        async fn set_status(&self, _status: &uc_core::setup::SetupStatus) -> anyhow::Result<()> {
             Ok(())
         }
     }
@@ -1062,7 +1055,7 @@ mod tests {
             paired_device_repo: Arc::new(NoopPort),
             network: Arc::new(NoopPort),
             network_control: Arc::new(NoopPort),
-            onboarding_state: Arc::new(NoopPort),
+            setup_status: Arc::new(NoopPort),
             blob_store: Arc::new(NoopPort),
             blob_repository: Arc::new(NoopPort),
             blob_writer: Arc::new(NoopPort),

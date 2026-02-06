@@ -377,94 +377,13 @@ impl<'a> UseCases<'a> {
         )
     }
 
-    /// Check if encryption is initialized
-    ///
-    /// ## Example / 示例
-    ///
-    /// ```rust,no_run
-    /// # use uc_tauri::bootstrap::AppRuntime;
-    /// # use tauri::State;
-    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<bool, String> {
-    /// let uc = runtime.usecases().is_encryption_initialized();
-    /// let is_init = uc.execute().await.map_err(|e| e.to_string())?;
-    /// # Ok(is_init)
-    /// # }
-    /// ```
-    pub fn is_encryption_initialized(&self) -> uc_app::usecases::IsEncryptionInitialized {
-        uc_app::usecases::IsEncryptionInitialized::new(self.runtime.deps.encryption_state.clone())
-    }
-
-    /// Onboarding use cases / 入门引导用例
-    ///
-    /// Get the InitializeOnboarding use case for getting initial onboarding state.
-    ///
-    /// 获取 InitializeOnboarding 用例以获取初始入门引导状态。
-    ///
-    /// ## Example / 示例
-    ///
-    /// ```rust,no_run
-    /// # use uc_tauri::bootstrap::AppRuntime;
-    /// # use tauri::State;
-    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<uc_app::usecases::onboarding::OnboardingStateDto, String> {
-    /// let uc = runtime.usecases().initialize_onboarding();
-    /// let state = uc.execute().await.map_err(|e| e.to_string())?;
-    /// # Ok(state)
-    /// # }
-    /// ```
-    pub fn initialize_onboarding(&self) -> uc_app::usecases::onboarding::InitializeOnboarding {
-        uc_app::usecases::onboarding::InitializeOnboarding::from_ports(
-            self.runtime.deps.onboarding_state.clone(),
-            self.runtime.deps.encryption_state.clone(),
-        )
-    }
-
-    /// Get the GetOnboardingState use case for getting current onboarding state.
-    ///
-    /// 获取 GetOnboardingState 用例以获取当前入门引导状态。
-    ///
-    /// ## Example / 示例
-    ///
-    /// ```rust,no_run
-    /// # use uc_tauri::bootstrap::AppRuntime;
-    /// # use tauri::State;
-    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<uc_app::usecases::onboarding::OnboardingStateDto, String> {
-    /// let uc = runtime.usecases().get_onboarding_state();
-    /// let state = uc.execute().await.map_err(|e| e.to_string())?;
-    /// # Ok(state)
-    /// # }
-    /// ```
-    pub fn get_onboarding_state(&self) -> uc_app::usecases::onboarding::GetOnboardingState {
-        uc_app::usecases::onboarding::GetOnboardingState::from_ports(
-            self.runtime.deps.onboarding_state.clone(),
-            self.runtime.deps.encryption_state.clone(),
-        )
-    }
-
-    /// Get the CompleteOnboarding use case for marking onboarding as complete.
-    ///
-    /// 获取 CompleteOnboarding 用例以标记入门引导为完成。
-    ///
-    /// ## Example / 示例
-    ///
-    /// ```rust,no_run
-    /// # use uc_tauri::bootstrap::AppRuntime;
-    /// # use tauri::State;
-    /// # async fn example(runtime: State<'_, AppRuntime>) -> Result<(), String> {
-    /// let uc = runtime.usecases().complete_onboarding();
-    /// uc.execute().await.map_err(|e| e.to_string())?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn complete_onboarding(&self) -> uc_app::usecases::onboarding::CompleteOnboarding {
-        uc_app::usecases::onboarding::CompleteOnboarding::from_ports(
-            self.runtime.deps.onboarding_state.clone(),
-        )
-    }
-
     pub fn setup_orchestrator(&self) -> Arc<SetupOrchestrator> {
         Arc::new(uc_app::usecases::SetupOrchestrator::new(
             Arc::new(self.runtime.usecases().initialize_encryption()),
-            Arc::new(self.runtime.usecases().complete_onboarding()),
+            Arc::new(uc_app::usecases::MarkSetupComplete::from_ports(
+                self.runtime.deps.setup_status.clone(),
+            )),
+            self.runtime.deps.setup_status.clone(),
         ))
     }
 
@@ -1246,19 +1165,12 @@ mod tests {
     }
 
     #[async_trait]
-    impl OnboardingStatePort for NoopPort {
-        async fn get_state(&self) -> anyhow::Result<uc_core::onboarding::OnboardingState> {
-            Ok(uc_core::onboarding::OnboardingState::default())
+    impl SetupStatusPort for NoopPort {
+        async fn get_status(&self) -> anyhow::Result<uc_core::setup::SetupStatus> {
+            Ok(uc_core::setup::SetupStatus::default())
         }
 
-        async fn set_state(
-            &self,
-            _state: &uc_core::onboarding::OnboardingState,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn reset(&self) -> anyhow::Result<()> {
+        async fn set_status(&self, _status: &uc_core::setup::SetupStatus) -> anyhow::Result<()> {
             Ok(())
         }
     }
@@ -1476,7 +1388,7 @@ mod tests {
             paired_device_repo: Arc::new(NoopPort),
             network: Arc::new(NoopPort),
             network_control: Arc::new(NoopPort),
-            onboarding_state: Arc::new(NoopPort),
+            setup_status: Arc::new(NoopPort),
             blob_store: Arc::new(NoopPort),
             blob_repository: Arc::new(NoopPort),
             blob_writer: Arc::new(NoopPort),

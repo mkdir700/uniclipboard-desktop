@@ -807,19 +807,12 @@ mod tests {
     }
 
     #[async_trait]
-    impl OnboardingStatePort for NoopPort {
-        async fn get_state(&self) -> anyhow::Result<uc_core::onboarding::OnboardingState> {
-            Ok(uc_core::onboarding::OnboardingState::default())
+    impl uc_core::ports::SetupStatusPort for NoopPort {
+        async fn get_status(&self) -> anyhow::Result<uc_core::setup::SetupStatus> {
+            Ok(uc_core::setup::SetupStatus::default())
         }
 
-        async fn set_state(
-            &self,
-            _state: &uc_core::onboarding::OnboardingState,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn reset(&self) -> anyhow::Result<()> {
+        async fn set_status(&self, _status: &uc_core::setup::SetupStatus) -> anyhow::Result<()> {
             Ok(())
         }
     }
@@ -981,7 +974,7 @@ mod tests {
             paired_device_repo: Arc::new(NoopPort),
             network: Arc::new(NoopPort),
             network_control: Arc::new(RecordingNetworkControl::new(start_calls.clone())),
-            onboarding_state: Arc::new(NoopPort),
+            setup_status: Arc::new(NoopPort),
             blob_store: Arc::new(NoopPort),
             blob_repository: Arc::new(NoopPort),
             blob_writer: Arc::new(NoopPort),
@@ -1014,8 +1007,8 @@ mod tests {
 /// Check if encryption is initialized
 /// 检查加密是否已初始化
 ///
-/// This command uses the IsEncryptionInitialized use case.
-/// 此命令使用 IsEncryptionInitialized 用例。
+/// This command checks the encryption state port directly.
+/// 此命令直接检查加密状态端口。
 #[tauri::command]
 pub async fn is_encryption_initialized(
     runtime: State<'_, Arc<AppRuntime>>,
@@ -1029,11 +1022,19 @@ pub async fn is_encryption_initialized(
     );
     record_trace_fields(&span, &_trace);
     async {
-        let uc = runtime.usecases().is_encryption_initialized();
-        let result = uc.execute().await.map_err(|e| {
-            tracing::error!(error = %e, "Failed to check encryption status");
-            e.to_string()
-        })?;
+        let state = runtime
+            .deps
+            .encryption_state
+            .load_state()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to check encryption status");
+                e.to_string()
+            })?;
+        let result = matches!(
+            state,
+            uc_core::security::state::EncryptionState::Initialized
+        );
 
         tracing::info!(is_initialized = result, "Encryption status checked");
         Ok(result)
