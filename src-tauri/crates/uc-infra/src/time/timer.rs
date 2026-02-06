@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tokio::sync::oneshot;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
-use tracing::{debug, warn};
+use tracing::debug;
 use uc_core::{ports::TimerPort, SessionId};
 
 pub struct Timer {
@@ -21,12 +20,7 @@ impl Timer {
 
 #[async_trait::async_trait]
 impl TimerPort for Timer {
-    async fn start(
-        &mut self,
-        session_id: &SessionId,
-        ttl_secs: u64,
-    ) -> anyhow::Result<oneshot::Receiver<SessionId>> {
-        let (tx, rx) = oneshot::channel();
+    async fn start(&mut self, session_id: &SessionId, ttl_secs: u64) -> anyhow::Result<()> {
         let timers = Arc::clone(&self.timers);
         let session_id_clone = session_id.clone();
 
@@ -37,17 +31,13 @@ impl TimerPort for Timer {
 
         let handle = tokio::spawn(async move {
             sleep(Duration::from_secs(ttl_secs)).await;
-            if tx.send(session_id_clone.clone()).is_err() {
-                warn!(session_id = %session_id_clone, "timer timeout receiver dropped");
-            }
-
             let mut timers_guard = timers.lock().await;
             timers_guard.remove(&session_id_clone);
         });
 
         timers_guard.insert(session_id.clone(), handle.abort_handle());
         debug!(session_id = %session_id, ttl_secs, "timer started");
-        Ok(rx)
+        Ok(())
     }
 
     async fn stop(&mut self, session_id: &SessionId) -> anyhow::Result<()> {
@@ -71,11 +61,12 @@ mod tests {
         let mut timer = Timer::new();
         let session_id = SessionId::from("session-1");
 
-        let rx = timer.start(&session_id, 5).await?;
+        timer.start(&session_id, 5).await?;
+        assert!(timer.timers.lock().await.contains_key(&session_id));
         advance(Duration::from_secs(5)).await;
+        tokio::task::yield_now().await;
 
-        let received = rx.await?;
-        assert_eq!(received, session_id);
+        assert!(!timer.timers.lock().await.contains_key(&session_id));
         Ok(())
     }
 
@@ -85,11 +76,12 @@ mod tests {
         let mut timer = Timer::new();
         let session_id = SessionId::from("session-2");
 
-        let rx = timer.start(&session_id, 5).await?;
+        timer.start(&session_id, 5).await?;
         timer.stop(&session_id).await?;
         advance(Duration::from_secs(10)).await;
+        tokio::task::yield_now().await;
 
-        assert!(rx.await.is_err());
+        assert!(!timer.timers.lock().await.contains_key(&session_id));
         Ok(())
     }
 
@@ -99,15 +91,16 @@ mod tests {
         let mut timer = Timer::new();
         let session_id = SessionId::from("session-3");
 
-        let rx = timer.start(&session_id, 5).await?;
-        let rx2 = timer.start(&session_id, 10).await?;
+        timer.start(&session_id, 5).await?;
+        timer.start(&session_id, 10).await?;
         advance(Duration::from_secs(5)).await;
+        tokio::task::yield_now().await;
 
-        assert!(rx.await.is_err());
+        assert!(timer.timers.lock().await.contains_key(&session_id));
 
         advance(Duration::from_secs(5)).await;
-        let received = rx2.await?;
-        assert_eq!(received, session_id);
+        tokio::task::yield_now().await;
+        assert!(!timer.timers.lock().await.contains_key(&session_id));
         Ok(())
     }
 }
