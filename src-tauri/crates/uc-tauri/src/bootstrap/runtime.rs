@@ -75,6 +75,9 @@ pub struct AppRuntime {
     /// Tauri AppHandle for emitting events (optional, set after Tauri setup)
     /// Uses RwLock for interior mutability since Arc<AppRuntime> is shared
     app_handle: std::sync::RwLock<Option<tauri::AppHandle>>,
+    /// Shared lifecycle status port – stored here so that every call to
+    /// `usecases().app_lifecycle_coordinator()` shares the same state.
+    lifecycle_status: Arc<dyn uc_app::usecases::LifecycleStatusPort>,
 }
 
 impl AppRuntime {
@@ -84,6 +87,7 @@ impl AppRuntime {
         Self {
             deps,
             app_handle: std::sync::RwLock::new(None),
+            lifecycle_status: Arc::new(crate::adapters::lifecycle::InMemoryLifecycleStatus::new()),
         }
     }
 
@@ -580,6 +584,31 @@ impl<'a> UseCases<'a> {
         uc_app::usecases::clipboard::touch_clipboard_entry::TouchClipboardEntryUseCase::new(
             self.runtime.deps.clipboard_entry_repo.clone(),
             self.runtime.deps.clock.clone(),
+        )
+    }
+
+    /// Get the lifecycle status port directly (for status queries).
+    ///
+    /// 直接获取生命周期状态端口（用于状态查询）。
+    pub fn get_lifecycle_status(&self) -> Arc<dyn uc_app::usecases::LifecycleStatusPort> {
+        self.runtime.lifecycle_status.clone()
+    }
+
+    /// Get the AppLifecycleCoordinator use case for orchestrating
+    /// clipboard watcher, network startup, and session readiness.
+    ///
+    /// 获取 AppLifecycleCoordinator 用例以编排剪贴板监视器、网络启动和会话就绪。
+    pub fn app_lifecycle_coordinator(&self) -> uc_app::usecases::AppLifecycleCoordinator {
+        uc_app::usecases::AppLifecycleCoordinator::from_deps(
+            uc_app::usecases::AppLifecycleCoordinatorDeps {
+                watcher: Arc::new(self.start_clipboard_watcher()),
+                network: Arc::new(self.start_network_after_unlock()),
+                emitter: Arc::new(crate::adapters::lifecycle::LoggingSessionReadyEmitter),
+                status: self.runtime.lifecycle_status.clone(),
+                lifecycle_emitter: Arc::new(
+                    crate::adapters::lifecycle::LoggingLifecycleEventEmitter,
+                ),
+            },
         )
     }
 

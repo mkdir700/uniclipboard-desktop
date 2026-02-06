@@ -630,6 +630,9 @@ fn run_app(config: AppConfig) {
             uc_tauri::commands::pairing::unpair_p2p_device,
             uc_tauri::commands::pairing::list_paired_devices,
             uc_tauri::commands::pairing::set_pairing_state,
+            // Lifecycle commands
+            uc_tauri::commands::lifecycle::retry_lifecycle,
+            uc_tauri::commands::lifecycle::get_lifecycle_status,
             // Autostart commands
             uc_tauri::commands::autostart::enable_autostart,
             uc_tauri::commands::autostart::disable_autostart,

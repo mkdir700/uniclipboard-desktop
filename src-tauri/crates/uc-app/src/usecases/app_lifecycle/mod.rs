@@ -11,7 +11,7 @@ use super::{StartClipboardWatcher, StartNetworkAfterUnlock};
 // ---------------------------------------------------------------------------
 
 /// Represents the current state of the application lifecycle.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum LifecycleState {
     /// Initial state – no lifecycle attempt has been made yet.
     Idle,
@@ -30,7 +30,7 @@ pub enum LifecycleState {
 // ---------------------------------------------------------------------------
 
 /// Events emitted during the lifecycle boot process.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum LifecycleEvent {
     /// The clipboard watcher failed to start. Contains the error message.
     WatcherFailed(String),
