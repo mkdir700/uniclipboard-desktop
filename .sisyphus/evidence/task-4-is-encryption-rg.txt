@@ -1,0 +1,3 @@
+rg "is_encryption_initialized" src-tauri src docs --glob '!docs/archive/**' --glob '!docs/plans/archive/**'
+
+(no matches)

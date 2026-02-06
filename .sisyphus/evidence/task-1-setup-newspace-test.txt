@@ -1,0 +1,9 @@
+cargo test -p uc-core setup_state_machine_new_space
+
+warning: trait `SpaceMessage` is never used
+--> crates/uc-core/src/network/protocol/space.rs:1:11
+
+running 1 test
+test setup::state_machine::tests::setup_state_machine_new_space ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 74 filtered out; finished in 0.00s

@@ -1,0 +1,33 @@
+src-tauri/src-legacy/api/mod.rs:pub mod onboarding;
+src-tauri/src-legacy/api/encryption.rs:/// supplied their encryption password (for example, during onboarding or a
+src-tauri/src-legacy/api/onboarding.rs:const ONBOARDING_FILE: &str = ".onboarding_completed";
+src-tauri/src-legacy/api/onboarding.rs:/// 检查是否已完成 onboarding
+src-tauri/src-legacy/api/onboarding.rs:/// 1. 检查 onboarding 标记文件是否存在
+src-tauri/src-legacy/api/onboarding.rs:pub async fn check_onboarding_status() -> Result<OnboardingStatus, String> {
+src-tauri/src-legacy/api/onboarding.rs:    let onboarding_file = config_dir.join(ONBOARDING_FILE);
+src-tauri/src-legacy/api/onboarding.rs:    let has_completed = onboarding_file.exists();
+src-tauri/src-legacy/api/onboarding.rs:    // 如果 onboarding 标记存在但关键组件缺失，记录警告
+src-tauri/src-legacy/api/onboarding.rs:/// 完成 onboarding 流程
+src-tauri/src-legacy/api/onboarding.rs:/// 4. 创建 onboarding 完成标记文件
+src-tauri/src-legacy/api/onboarding.rs:pub async fn complete_onboarding(app_handle: AppHandle) -> Result<(), String> {
+src-tauri/src-legacy/api/onboarding.rs:    // 创建 onboarding 完成标记文件
+src-tauri/src-legacy/api/onboarding.rs:    let onboarding_file = config_dir.join(ONBOARDING_FILE);
+src-tauri/src-legacy/api/onboarding.rs:    let temp_file = onboarding_file.with_extension("tmp");
+src-tauri/src-legacy/api/onboarding.rs:            "onboarding completed\n{}",
+src-tauri/src-legacy/api/onboarding.rs:    .map_err(|e| format!("写入临时 onboarding 文件失败: {}", e))?;
+src-tauri/src-legacy/api/onboarding.rs:    fs::rename(&temp_file, &onboarding_file)
+src-tauri/src-legacy/api/onboarding.rs:        .map_err(|e| format!("创建 onboarding 标记文件失败: {}", e))?;
+src-tauri/src-legacy/api/onboarding.rs:        let mut perms = fs::metadata(&onboarding_file)
+src-tauri/src-legacy/api/onboarding.rs:        fs::set_permissions(&onboarding_file, perms)
+src-tauri/src-legacy/api/onboarding.rs:    if !onboarding_file.exists() {
+src-tauri/src-legacy/api/onboarding.rs:        .emit("onboarding-completed", event)
+src-tauri/src-legacy/api/onboarding.rs:/// 设置加密密码（onboarding 专用）
+src-tauri/src-legacy/api/onboarding.rs:/// 此命令用于 onboarding 流程中设置加密密码
+src-tauri/src-legacy/api/onboarding.rs:        .emit("onboarding-password-set", event)
+src-tauri/src-legacy/main.rs:                                "No encryption password set, will prompt user during onboarding"
+src-tauri/src-legacy/main.rs:            api::onboarding::check_onboarding_status,
+src-tauri/src-legacy/main.rs:            api::onboarding::complete_onboarding,
+src-tauri/src-legacy/main.rs:            api::onboarding::setup_encryption_password,
+src-tauri/src-legacy/main.rs:            api::onboarding::get_device_id,
+src-tauri/src-legacy/main.rs:            api::onboarding::save_device_info,
+src-tauri/src-legacy/infrastructure/security/password.rs:    /// 用于 onboarding 流程中的轻量级状态检查
