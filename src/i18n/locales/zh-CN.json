@@ -437,6 +437,12 @@
       "error": "反馈发送失败，请稍后重试。"
     }
   },
+  "lifecycle": {
+    "watcherFailed": "剪贴板监听器启动失败",
+    "networkFailed": "网络启动失败",
+    "retry": "重试",
+    "retrying": "重试中..."
+  },
   "setup": {
     "page": {
       "loadingSetupState": "正在加载初始化状态...",

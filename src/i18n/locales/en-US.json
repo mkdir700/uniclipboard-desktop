@@ -437,6 +437,12 @@
       "error": "Failed to send feedback. Please try again later."
     }
   },
+  "lifecycle": {
+    "watcherFailed": "Clipboard listener failed to start",
+    "networkFailed": "Network failed to start",
+    "retry": "Retry",
+    "retrying": "Retrying..."
+  },
   "setup": {
     "page": {
       "loadingSetupState": "Loading setup state...",

@@ -7,6 +7,7 @@ import ClipboardContent from '@/components/clipboard/ClipboardContent'
 import Header from '@/components/layout/Header'
 import { toast } from '@/components/ui/toast'
 import { useSearch } from '@/contexts/search-context'
+import { useLifecycleStatus } from '@/hooks/useLifecycleStatus'
 import { useShortcutScope } from '@/hooks/useShortcutScope'
 import { useAppDispatch } from '@/store/hooks'
 import { fetchClipboardItems, setNotReady } from '@/store/slices/clipboardSlice'
@@ -32,6 +33,7 @@ const DashboardPage: React.FC = () => {
   const { searchValue } = useSearch()
   const [currentFilter, setCurrentFilter] = useState<Filter>(Filter.All)
   const dispatch = useAppDispatch()
+  const { status: lifecycleStatus, retry: retryLifecycle, retrying } = useLifecycleStatus()
 
   // 设置当前页面作用域为 clipboard
   useShortcutScope('clipboard')
@@ -291,6 +293,24 @@ const DashboardPage: React.FC = () => {
     <div className="flex flex-col h-full relative">
       {/* Top search bar - Hidden in MVP */}
       <Header onFilterChange={handleFilterChange} className="hidden" />
+
+      {/* Lifecycle failure banner */}
+      {(lifecycleStatus === 'WatcherFailed' || lifecycleStatus === 'NetworkFailed') && (
+        <div className="mx-3 mt-2 mb-1 p-3 rounded-md bg-destructive/10 border border-destructive/20 flex items-center justify-between">
+          <span className="text-sm font-medium text-destructive">
+            {lifecycleStatus === 'WatcherFailed'
+              ? t('lifecycle.watcherFailed')
+              : t('lifecycle.networkFailed')}
+          </span>
+          <button
+            onClick={retryLifecycle}
+            disabled={retrying}
+            className="text-sm px-3 py-1 rounded bg-destructive/20 hover:bg-destructive/30 text-destructive font-medium disabled:opacity-50"
+          >
+            {retrying ? t('lifecycle.retrying') : t('lifecycle.retry')}
+          </button>
+        </div>
+      )}
 
       {/* Clipboard content area - use flex-1 to make it take remaining space */}
       <div className="flex-1 overflow-hidden relative">
