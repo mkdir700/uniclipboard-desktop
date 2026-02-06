@@ -13,6 +13,7 @@
 // ---------------------------------
 //         ↓
 // MaterializeClipboardSelectionUseCase → 粘贴 / 恢复 / 同步
+pub mod app_lifecycle;
 pub mod auto_unlock_encryption_session;
 pub mod change_passphrase;
 pub mod clipboard;
@@ -29,6 +30,9 @@ pub mod start_network;
 pub mod start_network_after_unlock;
 pub mod update_settings;
 
+pub use app_lifecycle::{
+    AppLifecycleCoordinator, AppLifecycleCoordinatorDeps, SessionReadyEmitter,
+};
 pub use auto_unlock_encryption_session::AutoUnlockEncryptionSession;
 pub use clipboard::list_entry_projections::{
     EntryProjectionDto, ListClipboardEntryProjections, ListProjectionsError,
