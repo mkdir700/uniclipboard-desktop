@@ -5,7 +5,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
-import { useOnboarding } from '@/contexts/onboarding-context'
 import { usePlatform } from '@/hooks/usePlatform'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +12,7 @@ interface TitleBarProps {
   className?: string
   searchValue?: string
   onSearchChange?: (value: string) => void
+  isSetupActive?: boolean
 }
 
 // macOS window style configuration (must match enableModernWindowStyle call)
@@ -53,11 +53,15 @@ const TitleBarButton = ({
   </button>
 )
 
-export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleBarProps) => {
+export const TitleBar = ({
+  className,
+  searchValue = '',
+  onSearchChange,
+  isSetupActive = false,
+}: TitleBarProps) => {
   const [isMaximized, setIsMaximized] = useState(false)
   const location = useLocation()
   const { t } = useTranslation()
-  const { status } = useOnboarding()
 
   // 使用 usePlatform hook 获取平台信息
   const { isWindows, isMac, isTauri } = usePlatform()
@@ -65,8 +69,8 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
 
   // 检测是否在 Dashboard 页面
   const isDashboardPage = location.pathname === '/'
-  // 检测是否在 Onboarding 页面（通过 onboarding 状态判断，未完成时隐藏 TitleBar）
-  const isOnboardingPage = status !== null && !status.has_completed
+  // Setup 页面隐藏 TitleBar 保持沉浸感
+  const shouldHideTitleBar = isSetupActive
 
   useEffect(() => {
     if (!isTauri || !windowRef) return
@@ -139,8 +143,7 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
 
   const [isSearchFocused, setIsSearchFocused] = useState(false)
 
-  // Onboarding 页面隐藏 TitleBar 保持沉浸感
-  if (isOnboardingPage) {
+  if (shouldHideTitleBar) {
     return null
   }
 
@@ -162,7 +165,7 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
         <div
           data-tauri-drag-region
           className={cn(
-            'flex-1 flex items-center',
+            'relative flex-1 flex items-center',
             'pr-4',
             // On macOS, add left padding to avoid traffic lights
             // On other platforms, use default padding
@@ -170,12 +173,29 @@ export const TitleBar = ({ className, searchValue = '', onSearchChange }: TitleB
               ? `pl-16`
               : 'px-3' /* MVP: justify-center removed - restore with: , isDashboardPage ? 'justify-center' : '' */
           )}
-          onDoubleClick={isWindows ? handleToggleMaximize : undefined}
         >
+          <button
+            type="button"
+            data-tauri-drag-region
+            aria-label="Toggle window maximize"
+            className="absolute inset-0 z-0 cursor-default bg-transparent"
+            onDoubleClick={() => {
+              if (!isWindows) return
+              handleToggleMaximize()
+            }}
+            onKeyDown={event => {
+              if (!isWindows) return
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                handleToggleMaximize()
+              }
+            }}
+            tabIndex={-1}
+          />
           {isDashboardPage ? (
             <div
               className={cn(
-                'relative flex items-center w-64 max-w-xs',
+                'relative z-10 flex items-center w-64 max-w-xs',
                 'transition-all duration-200',
                 'opacity-0 pointer-events-none' /* MVP: search hidden - remove this line to restore */
               )}
