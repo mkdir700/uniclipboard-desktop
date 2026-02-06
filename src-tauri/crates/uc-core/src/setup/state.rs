@@ -1,6 +1,8 @@
+use serde::Serialize;
+
 use crate::setup::SetupError;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum SetupState {
     /// 尚未开始,
     /// 选择加入方式（New / Join）

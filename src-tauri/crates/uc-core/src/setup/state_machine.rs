@@ -80,6 +80,9 @@ impl SetupStateMachine {
             (SetupState::ProcessingJoinSpace { .. }, SetupEvent::JoinSpaceSucceeded) => {
                 (SetupState::Completed, vec![SetupAction::MarkSetupComplete])
             }
+            (SetupState::ProcessingCreateSpace { .. }, SetupEvent::CreateSpaceSucceeded) => {
+                (SetupState::Completed, vec![SetupAction::MarkSetupComplete])
+            }
             (SetupState::ProcessingJoinSpace { .. }, SetupEvent::JoinSpaceFailed { error }) => (
                 SetupState::JoinSpaceInputPassphrase { error: Some(error) },
                 vec![],
@@ -152,6 +155,13 @@ mod tests {
                     error: Some(SetupError::PassphraseInvalidOrMismatch),
                 },
                 vec![],
+            ),
+            (
+                "create space succeeded",
+                SetupState::ProcessingCreateSpace { message: None },
+                || SetupEvent::CreateSpaceSucceeded,
+                SetupState::Completed,
+                vec![SetupAction::MarkSetupComplete],
             ),
             (
                 "create space cancel",

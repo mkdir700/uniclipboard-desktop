@@ -13,7 +13,6 @@ pub mod crypto;
 pub mod device;
 pub mod ids;
 pub mod network;
-pub mod onboarding;
 pub mod ports;
 pub mod security;
 pub mod settings;
