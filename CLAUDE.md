@@ -383,7 +383,6 @@ All frontend-backend communication through Tauri commands defined in [commands/]
 **Encryption Commands**:
 
 - `initialize_encryption` - Initialize encryption with passphrase (uses `InitializeEncryption` use case)
-- `is_encryption_initialized` - Check encryption initialization status (uses `IsEncryptionInitialized` use case)
 
 **Settings Commands** (⚠️ Legacy - needs migration):
 
