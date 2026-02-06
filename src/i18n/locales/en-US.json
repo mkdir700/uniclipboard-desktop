@@ -217,133 +217,6 @@
       }
     }
   },
-  "onboarding": {
-    "preparingDashboard": "Preparing your dashboard...",
-    "page": {
-      "loadingSetupState": "Loading setup state...",
-      "errors": {
-        "loadSetupStateFailed": "Failed to load setup state",
-        "refreshPeersFailed": "Failed to refresh device list",
-        "operationFailed": "Operation failed. Please try again.",
-        "completeSetupFailed": "Failed to complete setup"
-      },
-      "badges": {
-        "e2ee": "End-to-end encrypted",
-        "localKeys": "Local keys",
-        "lanDiscovery": "LAN discovery"
-      },
-      "unknownState": "Unknown state: {{state}}"
-    },
-    "common": {
-      "back": "Back",
-      "refresh": "Refresh",
-      "unknownDevice": "Unknown device",
-      "encryptPassphraseLabel": "Passphrase",
-      "encryptPassphrasePlaceholder": "Enter passphrase"
-    },
-    "welcome": {
-      "title": "Welcome to UniClipboard",
-      "subtitle": "Choose how you want to set up your encrypted space",
-      "create": {
-        "title": "Create a new encrypted space",
-        "description": "For first-time use, or if you want to create a brand-new encrypted space",
-        "cta": "Start"
-      },
-      "join": {
-        "title": "Join an existing space",
-        "description": "Already using it on another device? Enter the same passphrase to join.",
-        "cta": "Find devices"
-      },
-      "footer": "UniClipboard uses end-to-end encryption. Only your devices can decrypt your clipboard content."
-    },
-    "createPassphrase": {
-      "title": "Set encryption passphrase",
-      "subtitle": "Create a passphrase for your encrypted space. You'll need the same passphrase to join from other devices.",
-      "labels": {
-        "pass1": "Passphrase",
-        "pass2": "Confirm passphrase"
-      },
-      "placeholders": {
-        "pass1": "Enter passphrase",
-        "pass2": "Re-enter passphrase"
-      },
-      "actions": {
-        "creating": "Setting up...",
-        "submit": "Create and continue"
-      },
-      "hint": "Pick a passphrase you can remember. You'll use it on all devices.",
-      "errors": {
-        "mismatch": "Passphrases do not match. Please try again.",
-        "tooShort": "Passphrase is too short. Please enter at least {{minLen}} characters.",
-        "empty": "Please enter a passphrase.",
-        "generic": "Setup failed. Please try again."
-      }
-    },
-    "joinPickDevice": {
-      "title": "Choose a device",
-      "subtitle": "Select a device already running UniClipboard to join its encrypted space",
-      "empty": {
-        "title": "No devices found",
-        "description": "Make sure both devices are on the same network and UniClipboard is open on the other device.",
-        "rescan": "Rescan"
-      },
-      "errors": {
-        "timeout": "Scan timed out. Please try again.",
-        "loadPeers": "Failed to load device list"
-      },
-      "actions": {
-        "select": "Select"
-      }
-    },
-    "joinVerifyPassphrase": {
-      "title": "Enter passphrase",
-      "subtitle": "Enter the same passphrase used on your existing device to join the encrypted space",
-      "targetDevice": "Target device: {{peerShort}}",
-      "actions": {
-        "verify": "Verify and continue",
-        "verifying": "Verifying...",
-        "backToPick": "Back to device list"
-      },
-      "mismatchHelp": {
-        "title": "Can't join space",
-        "subtitle": "The passphrase you entered doesn't match the one used on the target device",
-        "p1": "Only devices using the same passphrase can join the same encrypted space.",
-        "p2": "You can choose:",
-        "option1": "Re-enter the correct passphrase",
-        "option2": "Create a new encrypted space",
-        "retry": "Re-enter passphrase",
-        "createNew": "Create a new encrypted space"
-      },
-      "errors": {
-        "timeout": "Verification timed out. Check your network and try again.",
-        "peerUnavailable": "The other device is unavailable. Make sure UniClipboard is open.",
-        "generic": "Verification failed. Please try again.",
-        "empty": "Please enter a passphrase."
-      }
-    },
-    "pairingConfirm": {
-      "title": "Confirm pairing",
-      "subtitle": "Make sure both devices show the same verification code",
-      "session": "Session: {{sessionShort}}...",
-      "peerFingerprint": "Peer fingerprint",
-      "errors": {
-        "rejected": "Pairing was cancelled.",
-        "generic": "Pairing failed. Please try again."
-      },
-      "actions": {
-        "cancel": "Cancel",
-        "confirming": "Confirming...",
-        "confirm": "Codes match"
-      }
-    },
-    "done": {
-      "title": "Setup complete",
-      "subtitle": "Your device is ready. You can now share your clipboard securely.",
-      "actions": {
-        "enter": "Go to Home"
-      }
-    }
-  },
   "unlock": {
     "title": "Unlock UniClipboard",
     "description": "Your data is encrypted. Please unlock to continue.",
@@ -562,6 +435,131 @@
       "useSavedEmail": "Use saved email",
       "success": "Feedback sent successfully. Thank you!",
       "error": "Failed to send feedback. Please try again later."
+    }
+  },
+  "setup": {
+    "page": {
+      "loadingSetupState": "Loading setup state...",
+      "processing": "Processing...",
+      "unknownState": "Unknown setup state: {{state}}",
+      "errors": {
+        "loadSetupStateFailed": "Failed to load setup state",
+        "refreshPeersFailed": "Failed to refresh device list",
+        "operationFailed": "Operation failed. Please try again."
+      },
+      "badges": {
+        "e2ee": "End-to-end encrypted",
+        "localKeys": "Local key custody",
+        "lanDiscovery": "LAN discovery"
+      }
+    },
+    "common": {
+      "unknownDevice": "Unknown device",
+      "back": "Back",
+      "refresh": "Refresh",
+      "encryptPassphraseLabel": "Encryption passphrase",
+      "encryptPassphrasePlaceholder": "Enter the passphrase shown on the host device"
+    },
+    "welcome": {
+      "title": "Welcome to UniClipboard",
+      "subtitle": "Create a secure space or join an existing trusted device.",
+      "create": {
+        "title": "Create a new secure space",
+        "description": "Generate encryption keys and protect your clipboard data with your own passphrase.",
+        "cta": "Start new space"
+      },
+      "join": {
+        "title": "Join an existing space",
+        "description": "Pair with another device and reuse the passphrase to access the shared space.",
+        "cta": "Join via pairing"
+      },
+      "footer": "You can switch spaces or add more devices later in Settings."
+    },
+    "createPassphrase": {
+      "title": "Create encryption passphrase",
+      "subtitle": "This passphrase protects your encrypted space. Keep it memorable but secure.",
+      "labels": {
+        "pass1": "Passphrase",
+        "pass2": "Confirm passphrase"
+      },
+      "placeholders": {
+        "pass1": "Enter a strong passphrase",
+        "pass2": "Re-enter your passphrase"
+      },
+      "errors": {
+        "mismatch": "Passphrases do not match",
+        "tooShort": "Passphrase must be at least {{minLen}} characters",
+        "empty": "Passphrase cannot be empty",
+        "generic": "Failed to set passphrase. Please try again."
+      },
+      "actions": {
+        "creating": "Creating...",
+        "submit": "Create space"
+      },
+      "hint": "Store this passphrase in a safe place. You will need it to add more devices."
+    },
+    "joinPickDevice": {
+      "title": "Choose a device to pair",
+      "subtitle": "Select a device that already joined the encrypted space.",
+      "errors": {
+        "timeout": "Scanning timed out. Please try again.",
+        "loadPeers": "Failed to fetch device list."
+      },
+      "empty": {
+        "title": "No devices discovered",
+        "description": "Ensure the host device is on the same network and pairing is enabled.",
+        "rescan": "Scan again"
+      },
+      "actions": {
+        "select": "Select"
+      }
+    },
+    "joinVerifyPassphrase": {
+      "title": "Verify passphrase",
+      "subtitle": "Enter the encryption passphrase to unlock the shared space.",
+      "targetDevice": "Target device: {{peerShort}}",
+      "errors": {
+        "empty": "Passphrase cannot be empty",
+        "timeout": "Verification timed out. Please try again.",
+        "peerUnavailable": "The other device went offline. Please pick a device again.",
+        "generic": "Failed to verify the passphrase."
+      },
+      "actions": {
+        "backToPick": "Back to device list",
+        "verifying": "Verifying...",
+        "verify": "Verify and continue"
+      },
+      "mismatchHelp": {
+        "title": "The entered passphrase didn’t work",
+        "subtitle": "It looks like the passphrase didn’t match what the host device expects.",
+        "p1": "Double-check that you typed the passphrase exactly, including case and symbols.",
+        "p2": "If you still cannot proceed, you can go back and pick another device or create a new space instead.",
+        "option1": "Re-enter the passphrase carefully",
+        "option2": "Ask the host device owner to confirm the passphrase",
+        "retry": "Try again",
+        "createNew": "Create a new space instead"
+      }
+    },
+    "pairingConfirm": {
+      "title": "Confirm pairing code",
+      "subtitle": "Verify that the code matches on both devices before continuing.",
+      "peerFingerprint": "Device fingerprint",
+      "errors": {
+        "rejected": "Pairing was rejected by the other device.",
+        "generic": "Failed to confirm pairing."
+      },
+      "actions": {
+        "cancel": "Cancel",
+        "confirming": "Confirming...",
+        "confirm": "Confirm pairing"
+      }
+    },
+    "done": {
+      "title": "All set!",
+      "subtitle": "Your encrypted space is ready. Enjoy secure clipboard sync.",
+      "actions": {
+        "enter": "Enter UniClipboard"
+      }
     }
   }
 }

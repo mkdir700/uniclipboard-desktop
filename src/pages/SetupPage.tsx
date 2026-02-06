@@ -4,32 +4,37 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import {
-  getSetupState,
-  dispatchSetupEvent,
-  completeOnboarding,
-  SetupState,
-  SetupEvent,
-} from '@/api/onboarding'
 import { getP2PPeers, P2PPeerInfo } from '@/api/p2p'
-import { useOnboarding } from '@/contexts/onboarding-context'
-import CreatePassphraseStep from '@/pages/onboarding/CreatePassphraseStep'
-import JoinPickDeviceStep from '@/pages/onboarding/JoinPickDeviceStep'
-import JoinVerifyPassphraseStep from '@/pages/onboarding/JoinVerifyPassphraseStep'
-import PairingConfirmStep from '@/pages/onboarding/PairingConfirmStep'
-import SetupDoneStep from '@/pages/onboarding/SetupDoneStep'
-import WelcomeStep from '@/pages/onboarding/WelcomeStep'
+import {
+  cancelSetup,
+  getSetupState,
+  selectJoinPeer,
+  startJoinSpace,
+  startNewSpace,
+  submitPassphrase,
+  verifyPassphrase,
+  SetupState,
+} from '@/api/setup'
+import CreatePassphraseStep from '@/pages/setup/CreatePassphraseStep'
+import JoinPickDeviceStep from '@/pages/setup/JoinPickDeviceStep'
+import JoinVerifyPassphraseStep from '@/pages/setup/JoinVerifyPassphraseStep'
+import PairingConfirmStep from '@/pages/setup/PairingConfirmStep'
+import SetupDoneStep from '@/pages/setup/SetupDoneStep'
+import WelcomeStep from '@/pages/setup/WelcomeStep'
 
-export default function OnboardingPage() {
-  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.page' })
-  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'onboarding.common' })
+type SetupPageProps = {
+  onCompleteSetup?: () => void
+}
+
+export default function SetupPage({ onCompleteSetup }: SetupPageProps = {}) {
+  const { t } = useTranslation(undefined, { keyPrefix: 'setup.page' })
+  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'setup.common' })
   const navigate = useNavigate()
-  const { refreshStatus } = useOnboarding()
   const [setupState, setSetupState] = useState<SetupState | null>(null)
   const [loading, setLoading] = useState(false)
-  const [completing, setCompleting] = useState(false)
   const [peers, setPeers] = useState<Array<{ id: string; name: string; device_type: string }>>([])
   const [peersLoading, setPeersLoading] = useState(false)
+  const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadState = async () => {
@@ -47,7 +52,6 @@ export default function OnboardingPage() {
   const handleRefreshPeers = useCallback(async () => {
     setPeersLoading(true)
     try {
-      await dispatchSetupEvent('NetworkScanRefresh')
       const peerList = await getP2PPeers()
       setPeers(
         peerList.map((p: P2PPeerInfo) => ({
@@ -65,15 +69,15 @@ export default function OnboardingPage() {
   }, [t, tCommon])
 
   useEffect(() => {
-    if (setupState && typeof setupState === 'object' && 'JoinSpacePickDevice' in setupState) {
+    if (setupState && typeof setupState === 'object' && 'JoinSpaceSelectDevice' in setupState) {
       handleRefreshPeers()
     }
   }, [setupState, handleRefreshPeers])
 
-  const handleDispatch = async (event: SetupEvent) => {
+  const runAction = async (action: () => Promise<SetupState>) => {
     setLoading(true)
     try {
-      const newState = await dispatchSetupEvent(event)
+      const newState = await action()
       setSetupState(newState)
     } catch (error) {
       console.error('Failed to dispatch event:', error)
@@ -98,101 +102,95 @@ export default function OnboardingPage() {
     if (setupState === 'Welcome') {
       return (
         <WelcomeStep
-          onCreate={() => handleDispatch('ChooseCreateSpace')}
-          onJoin={() => handleDispatch('ChooseJoinSpace')}
+          onCreate={() => runAction(() => startNewSpace())}
+          onJoin={() => runAction(() => startJoinSpace())}
           loading={loading}
         />
       )
     }
 
-    if (setupState === 'Done') {
+    if (setupState === 'Completed') {
       return (
         <SetupDoneStep
-          onComplete={async () => {
-            setCompleting(true)
-            try {
-              await completeOnboarding()
-              await refreshStatus()
-              navigate('/', { replace: true })
-            } catch (error) {
-              console.error('Failed to complete onboarding:', error)
-              toast.error(t('errors.completeSetupFailed'))
-            } finally {
-              setCompleting(false)
-            }
+          onComplete={() => {
+            onCompleteSetup?.()
+            navigate('/', { replace: true })
           }}
-          loading={completing}
+          loading={loading}
         />
       )
     }
 
     if (typeof setupState === 'object') {
-      if ('CreateSpacePassphrase' in setupState) {
+      if ('CreateSpaceInputPassphrase' in setupState) {
         return (
           <CreatePassphraseStep
-            onSubmit={(pass1, pass2) =>
-              handleDispatch({ SubmitCreatePassphrase: { pass1, pass2 } })
+            onSubmit={(pass1: string, pass2: string) =>
+              runAction(() => submitPassphrase(pass1, pass2))
             }
-            onBack={() => handleDispatch('Back')}
-            error={setupState.CreateSpacePassphrase.error}
+            onBack={() => runAction(() => cancelSetup())}
+            error={setupState.CreateSpaceInputPassphrase.error}
             loading={loading}
           />
         )
       }
 
-      if ('JoinSpacePickDevice' in setupState) {
+      if ('JoinSpaceSelectDevice' in setupState) {
         return (
           <JoinPickDeviceStep
-            onSelectPeer={peerId => handleDispatch({ SelectPeer: { peer_id: peerId } })}
-            onBack={() => handleDispatch('Back')}
+            onSelectPeer={(peerId: string) => {
+              setSelectedPeerId(peerId)
+              runAction(() => selectJoinPeer(peerId))
+            }}
+            onBack={() => runAction(() => cancelSetup())}
             onRefresh={handleRefreshPeers}
             peers={peers}
-            error={setupState.JoinSpacePickDevice.error}
+            error={setupState.JoinSpaceSelectDevice.error}
             loading={loading || peersLoading}
           />
         )
       }
 
-      if ('JoinSpaceVerifyPassphrase' in setupState) {
-        const { peer_id, error } = setupState.JoinSpaceVerifyPassphrase
+      if ('JoinSpaceInputPassphrase' in setupState) {
+        const { error } = setupState.JoinSpaceInputPassphrase
         return (
           <JoinVerifyPassphraseStep
-            peerId={peer_id}
-            onSubmit={passphrase => handleDispatch({ SubmitJoinPassphrase: { passphrase } })}
-            onBack={() => handleDispatch('Back')}
-            onCreateNew={() => handleDispatch('ChooseCreateSpace')}
+            peerId={selectedPeerId ?? undefined}
+            onSubmit={(passphrase: string) => runAction(() => verifyPassphrase(passphrase))}
+            onBack={() => runAction(() => cancelSetup())}
+            onCreateNew={() => runAction(() => startNewSpace())}
             error={error}
             loading={loading}
           />
         )
       }
 
-      if ('PairingConfirm' in setupState) {
-        const { short_code, session_id, peer_fingerprint, error } = setupState.PairingConfirm
+      if ('JoinSpaceConfirmPeer' in setupState) {
+        const { short_code, peer_fingerprint, error } = setupState.JoinSpaceConfirmPeer
         return (
           <PairingConfirmStep
             shortCode={short_code}
-            sessionId={session_id}
             peerFingerprint={peer_fingerprint}
-            onConfirm={() => handleDispatch('PairingUserConfirm')}
-            onCancel={() => handleDispatch('PairingUserCancel')}
+            onConfirm={() => runAction(() => cancelSetup())}
+            onCancel={() => runAction(() => cancelSetup())}
             error={error}
             loading={loading}
           />
         )
       }
 
-      if ('JoinSpaceKeyslotReceived' in setupState) {
-        const { peer_id, error } = setupState.JoinSpaceKeyslotReceived
+      if ('ProcessingCreateSpace' in setupState || 'ProcessingJoinSpace' in setupState) {
+        const message =
+          'ProcessingCreateSpace' in setupState
+            ? setupState.ProcessingCreateSpace.message
+            : setupState.ProcessingJoinSpace.message
         return (
-          <JoinVerifyPassphraseStep
-            peerId={peer_id}
-            onSubmit={passphrase => handleDispatch({ SubmitJoinPassphrase: { passphrase } })}
-            onBack={() => handleDispatch('Back')}
-            onCreateNew={() => handleDispatch('ChooseCreateSpace')}
-            error={error}
-            loading={loading}
-          />
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {message ?? t('processing')}
+            </div>
+          </div>
         )
       }
     }

@@ -4,12 +4,12 @@ import { I18nextProvider } from 'react-i18next'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import i18n from '@/i18n'
 import { formatPeerIdForDisplay } from '@/lib/utils'
-import JoinPickDeviceStep from '@/pages/onboarding/JoinPickDeviceStep'
+import JoinPickDeviceStep from '@/pages/setup/JoinPickDeviceStep'
 
 const renderWithI18n = (ui: ReactElement) =>
   render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>)
 
-describe('onboarding join pick peer id display', () => {
+describe('setup join pick peer id display', () => {
   let initialLanguage = 'en-US'
 
   const ensureI18nInitialized = async () => {

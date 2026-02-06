@@ -13,8 +13,8 @@ export default function JoinPickDeviceStep({
   error,
   loading,
 }: JoinPickDeviceStepProps) {
-  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.joinPickDevice' })
-  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'onboarding.common' })
+  const { t } = useTranslation(undefined, { keyPrefix: 'setup.joinPickDevice' })
+  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'setup.common' })
 
   const getIcon = (type: string) => {
     switch (type.toLowerCase()) {
@@ -83,7 +83,7 @@ export default function JoinPickDeviceStep({
             </Button>
           </div>
         ) : (
-          peers.map(peer => (
+          peers.map((peer: JoinPickDeviceStepProps['peers'][number]) => (
             <div
               key={peer.id}
               className="flex items-center gap-4 py-4 transition-colors hover:bg-muted/30"

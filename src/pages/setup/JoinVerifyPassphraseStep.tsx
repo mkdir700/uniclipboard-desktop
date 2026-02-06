@@ -16,8 +16,8 @@ export default function JoinVerifyPassphraseStep({
   error,
   loading,
 }: JoinVerifyPassphraseStepProps) {
-  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.joinVerifyPassphrase' })
-  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'onboarding.common' })
+  const { t } = useTranslation(undefined, { keyPrefix: 'setup.joinVerifyPassphrase' })
+  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'setup.common' })
 
   const [passphrase, setPassphrase] = useState('')
   const [showPassphrase, setShowPassphrase] = useState(false)
@@ -116,9 +116,11 @@ export default function JoinVerifyPassphraseStep({
       <div className="mb-10">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
         <p className="mt-2 text-muted-foreground">{t('subtitle')}</p>
-        <p className="mt-1 font-mono text-xs text-muted-foreground">
-          {t('targetDevice', { peerShort: formatPeerIdForDisplay(peerId) })}
-        </p>
+        {peerId && (
+          <p className="mt-1 font-mono text-xs text-muted-foreground">
+            {t('targetDevice', { peerShort: formatPeerIdForDisplay(peerId) })}
+          </p>
+        )}
       </div>
 
       <div className="space-y-6">

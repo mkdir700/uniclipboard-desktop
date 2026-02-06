@@ -6,14 +6,13 @@ import { Button } from '@/components/ui/button'
 
 export default function PairingConfirmStep({
   shortCode,
-  sessionId,
   peerFingerprint,
   onConfirm,
   onCancel,
   error,
   loading,
 }: PairingConfirmStepProps) {
-  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.pairingConfirm' })
+  const { t } = useTranslation(undefined, { keyPrefix: 'setup.pairingConfirm' })
 
   return (
     <motion.div
@@ -30,9 +29,6 @@ export default function PairingConfirmStep({
       <div className="mb-10 text-center">
         <div className="text-5xl font-mono font-semibold tracking-widest text-primary">
           {shortCode}
-        </div>
-        <div className="mt-4 font-mono text-xs text-muted-foreground">
-          {t('session', { sessionShort: sessionId.substring(0, 8) })}
         </div>
         {peerFingerprint && (
           <div className="mt-6 pt-6 border-t border-border/30">

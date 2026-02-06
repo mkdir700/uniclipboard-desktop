@@ -217,133 +217,6 @@
       }
     }
   },
-  "onboarding": {
-    "preparingDashboard": "准备您的仪表板...",
-    "page": {
-      "loadingSetupState": "正在加载设置状态...",
-      "errors": {
-        "loadSetupStateFailed": "加载设置状态失败",
-        "refreshPeersFailed": "刷新设备列表失败",
-        "operationFailed": "操作失败，请重试",
-        "completeSetupFailed": "完成设置失败"
-      },
-      "badges": {
-        "e2ee": "端到端加密",
-        "localKeys": "本地密钥",
-        "lanDiscovery": "局域网发现"
-      },
-      "unknownState": "Unknown state: {{state}}"
-    },
-    "common": {
-      "back": "返回",
-      "refresh": "刷新",
-      "unknownDevice": "未知设备",
-      "encryptPassphraseLabel": "加密口令",
-      "encryptPassphrasePlaceholder": "输入加密口令"
-    },
-    "welcome": {
-      "title": "欢迎使用 UniClipboard",
-      "subtitle": "选择一种方式开始设置你的加密空间",
-      "create": {
-        "title": "创建新的加密空间",
-        "description": "适用于首次使用，或希望创建一个全新的加密空间",
-        "cta": "开始创建"
-      },
-      "join": {
-        "title": "加入已有空间",
-        "description": "已在其他设备上使用？输入相同口令即可加入",
-        "cta": "查找设备"
-      },
-      "footer": "UniClipboard 使用端到端加密。你的剪贴板内容只有你的设备能够解密。"
-    },
-    "createPassphrase": {
-      "title": "设置加密口令",
-      "subtitle": "创建加密空间的口令。之后在其他设备上使用时，需要输入相同的口令才能加入。",
-      "labels": {
-        "pass1": "加密口令",
-        "pass2": "确认口令"
-      },
-      "placeholders": {
-        "pass1": "输入加密口令",
-        "pass2": "再次输入口令"
-      },
-      "actions": {
-        "creating": "设置中...",
-        "submit": "创建并进入"
-      },
-      "hint": "建议选择一个你能记住的口令，它将在所有设备上使用。",
-      "errors": {
-        "mismatch": "两次输入不一致，请重新确认。",
-        "tooShort": "口令太短，请至少输入 {{minLen}} 位。",
-        "empty": "请输入加密口令。",
-        "generic": "设置失败，请重试"
-      }
-    },
-    "joinPickDevice": {
-      "title": "选择设备",
-      "subtitle": "选择一台已在运行 UniClipboard 的设备加入其加密空间",
-      "empty": {
-        "title": "未发现可加入的设备",
-        "description": "请确认两台设备在同一网络下，且另一台设备已打开 UniClipboard",
-        "rescan": "重新扫描"
-      },
-      "errors": {
-        "timeout": "扫描超时，请重试。",
-        "loadPeers": "获取设备列表失败"
-      },
-      "actions": {
-        "select": "选择"
-      }
-    },
-    "joinVerifyPassphrase": {
-      "title": "输入加密口令",
-      "subtitle": "输入与已有设备相同的口令以加入加密空间",
-      "targetDevice": "目标设备: {{peerShort}}",
-      "actions": {
-        "verify": "验证并继续",
-        "verifying": "验证中...",
-        "backToPick": "返回选择设备"
-      },
-      "mismatchHelp": {
-        "title": "无法加入空间",
-        "subtitle": "输入的口令与目标设备使用的口令不一致",
-        "p1": "只有使用相同口令的设备才能加入同一个加密空间。",
-        "p2": "你可以选择：",
-        "option1": "重新输入正确的口令",
-        "option2": "创建一个新的加密空间",
-        "retry": "重新输入口令",
-        "createNew": "创建新的加密空间"
-      },
-      "errors": {
-        "timeout": "验证超时，请检查网络后重试。",
-        "peerUnavailable": "对方设备不可用，请确认已打开 UniClipboard。",
-        "generic": "验证失败，请重试。",
-        "empty": "请输入加密口令。"
-      }
-    },
-    "pairingConfirm": {
-      "title": "确认配对",
-      "subtitle": "请确认两台设备显示的验证码一致",
-      "session": "Session: {{sessionShort}}...",
-      "peerFingerprint": "对方设备指纹",
-      "errors": {
-        "rejected": "配对已取消。",
-        "generic": "配对失败，请重试。"
-      },
-      "actions": {
-        "cancel": "取消",
-        "confirming": "确认中...",
-        "confirm": "验证码一致"
-      }
-    },
-    "done": {
-      "title": "设置完成",
-      "subtitle": "你的设备已准备就绪，现在可以安全地共享剪贴板了",
-      "actions": {
-        "enter": "进入主页"
-      }
-    }
-  },
   "unlock": {
     "title": "解锁 UniClipboard",
     "description": "您的数据已加密，请解锁以继续。",
@@ -562,6 +435,131 @@
       "useSavedEmail": "使用已保存邮箱",
       "success": "反馈发送成功，感谢您的支持！",
       "error": "反馈发送失败，请稍后重试。"
+    }
+  },
+  "setup": {
+    "page": {
+      "loadingSetupState": "正在加载初始化状态...",
+      "processing": "正在处理...",
+      "unknownState": "未知的初始化状态：{{state}}",
+      "errors": {
+        "loadSetupStateFailed": "加载初始化状态失败",
+        "refreshPeersFailed": "刷新设备列表失败",
+        "operationFailed": "操作失败，请稍后重试"
+      },
+      "badges": {
+        "e2ee": "端到端加密",
+        "localKeys": "本地密钥托管",
+        "lanDiscovery": "局域网发现"
+      }
+    },
+    "common": {
+      "unknownDevice": "未知设备",
+      "back": "返回",
+      "refresh": "刷新",
+      "encryptPassphraseLabel": "加密口令",
+      "encryptPassphrasePlaceholder": "请输入主设备上显示的加密口令"
+    },
+    "welcome": {
+      "title": "欢迎使用 UniClipboard",
+      "subtitle": "创建全新的加密空间，或加入可信设备共享的空间。",
+      "create": {
+        "title": "创建新的安全空间",
+        "description": "生成密钥并用自定义口令保护你的剪贴板数据。",
+        "cta": "创建空间"
+      },
+      "join": {
+        "title": "加入已有空间",
+        "description": "与另一台设备配对，并使用其口令访问共享空间。",
+        "cta": "通过配对加入"
+      },
+      "footer": "你可以稍后在设置中切换空间或添加更多设备。"
+    },
+    "createPassphrase": {
+      "title": "创建加密口令",
+      "subtitle": "该口令用于保护你的加密空间，请妥善保管。",
+      "labels": {
+        "pass1": "设置口令",
+        "pass2": "确认口令"
+      },
+      "placeholders": {
+        "pass1": "输入一个强口令",
+        "pass2": "再次输入口令"
+      },
+      "errors": {
+        "mismatch": "两次输入的口令不一致",
+        "tooShort": "口令至少需要 {{minLen}} 个字符",
+        "empty": "口令不能为空",
+        "generic": "设置口令失败，请重试。"
+      },
+      "actions": {
+        "creating": "正在创建...",
+        "submit": "创建空间"
+      },
+      "hint": "请将口令保存在安全的位置，后续添加设备时会用到。"
+    },
+    "joinPickDevice": {
+      "title": "选择要加入的设备",
+      "subtitle": "请选择已经加入该加密空间的设备。",
+      "errors": {
+        "timeout": "扫描超时，请稍后重试。",
+        "loadPeers": "获取设备列表失败。"
+      },
+      "empty": {
+        "title": "没有发现可连接的设备",
+        "description": "请确认主设备与本机在同一网络，并已开启配对。",
+        "rescan": "重新扫描"
+      },
+      "actions": {
+        "select": "选择"
+      }
+    },
+    "joinVerifyPassphrase": {
+      "title": "验证加密口令",
+      "subtitle": "请输入主设备设置的口令以解锁共享空间。",
+      "targetDevice": "目标设备：{{peerShort}}",
+      "errors": {
+        "empty": "口令不能为空",
+        "timeout": "验证超时，请重试。",
+        "peerUnavailable": "对方设备已离线，请重新选择设备。",
+        "generic": "验证口令失败，请稍后重试。"
+      },
+      "actions": {
+        "backToPick": "返回设备列表",
+        "verifying": "正在验证...",
+        "verify": "验证并继续"
+      },
+      "mismatchHelp": {
+        "title": "口令不匹配",
+        "subtitle": "刚刚输入的口令与主设备不一致。",
+        "p1": "请仔细检查大小写、空格和符号是否完全一致。",
+        "p2": "如果仍无法通过验证，可以返回重新选择设备，或直接创建新的空间。",
+        "option1": "重新输入并再次尝试",
+        "option2": "请主设备确认口令",
+        "retry": "重试",
+        "createNew": "改为创建新的空间"
+      }
+    },
+    "pairingConfirm": {
+      "title": "确认配对验证码",
+      "subtitle": "继续之前请确认两台设备显示的验证码完全一致。",
+      "peerFingerprint": "设备指纹",
+      "errors": {
+        "rejected": "对方已拒绝此次配对请求。",
+        "generic": "确认配对失败，请稍后重试。"
+      },
+      "actions": {
+        "cancel": "取消",
+        "confirming": "正在确认...",
+        "confirm": "确认配对"
+      }
+    },
+    "done": {
+      "title": "初始化完成",
+      "subtitle": "加密空间已准备就绪，可以开始安全同步。",
+      "actions": {
+        "enter": "进入 UniClipboard"
+      }
     }
   }
 }

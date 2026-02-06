@@ -1,5 +1,4 @@
-import { SetupError } from '@/api/onboarding'
-
+import { SetupError } from '@/api/setup'
 export interface StepProps {
   error?: SetupError | null
   loading?: boolean
@@ -23,7 +22,7 @@ export interface JoinPickDeviceStepProps extends StepProps {
 }
 
 export interface JoinVerifyPassphraseStepProps extends StepProps {
-  peerId: string
+  peerId?: string
   onSubmit: (passphrase: string) => void
   onBack: () => void
   onCreateNew: () => void
@@ -31,7 +30,6 @@ export interface JoinVerifyPassphraseStepProps extends StepProps {
 
 export interface PairingConfirmStepProps extends StepProps {
   shortCode: string
-  sessionId: string
   peerFingerprint?: string | null
   onConfirm: () => void
   onCancel: () => void

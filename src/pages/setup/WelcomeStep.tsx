@@ -1,10 +1,10 @@
 import { motion } from 'framer-motion'
 import { Shield, Smartphone, ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { WelcomeStepProps } from '@/pages/onboarding/types'
+import { WelcomeStepProps } from '@/pages/setup/types'
 
 export default function WelcomeStep({ onCreate, onJoin, loading }: WelcomeStepProps) {
-  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.welcome' })
+  const { t } = useTranslation(undefined, { keyPrefix: 'setup.welcome' })
 
   return (
     <motion.div
@@ -22,6 +22,7 @@ export default function WelcomeStep({ onCreate, onJoin, loading }: WelcomeStepPr
 
       <div className="grid gap-4 md:grid-cols-2">
         <button
+          type="button"
           onClick={onCreate}
           disabled={loading}
           className="group relative flex flex-col items-start gap-6 rounded-xl border bg-card p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg active:translate-y-0 active:shadow-sm disabled:opacity-50"
@@ -42,6 +43,7 @@ export default function WelcomeStep({ onCreate, onJoin, loading }: WelcomeStepPr
         </button>
 
         <button
+          type="button"
           onClick={onJoin}
           disabled={loading}
           className="group relative flex flex-col items-start gap-6 rounded-xl border bg-card p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg active:translate-y-0 active:shadow-sm disabled:opacity-50"

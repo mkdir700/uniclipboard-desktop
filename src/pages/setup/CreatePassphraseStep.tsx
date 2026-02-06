@@ -2,10 +2,10 @@ import { motion } from 'framer-motion'
 import { AlertCircle, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CreatePassphraseStepProps } from '@/pages/onboarding/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CreatePassphraseStepProps } from '@/pages/setup/types'
 
 export default function CreatePassphraseStep({
   onSubmit,
@@ -13,8 +13,8 @@ export default function CreatePassphraseStep({
   error,
   loading,
 }: CreatePassphraseStepProps) {
-  const { t } = useTranslation(undefined, { keyPrefix: 'onboarding.createPassphrase' })
-  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'onboarding.common' })
+  const { t } = useTranslation(undefined, { keyPrefix: 'setup.createPassphrase' })
+  const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'setup.common' })
 
   const [pass1, setPass1] = useState('')
   const [pass2, setPass2] = useState('')
@@ -59,6 +59,7 @@ export default function CreatePassphraseStep({
       className="w-full"
     >
       <button
+        type="button"
         onClick={onBack}
         className="mb-8 flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
