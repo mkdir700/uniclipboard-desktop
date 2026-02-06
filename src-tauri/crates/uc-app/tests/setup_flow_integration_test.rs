@@ -1,10 +1,17 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
 use tempfile::TempDir;
-use uc_app::usecases::{InitializeEncryption, MarkSetupComplete, SetupOrchestrator};
+use uc_app::usecases::{
+    AppLifecycleCoordinator, AppLifecycleCoordinatorDeps, InitializeEncryption, LifecycleEvent,
+    LifecycleEventEmitter, LifecycleState, LifecycleStatusPort, MarkSetupComplete,
+    SessionReadyEmitter, SetupOrchestrator, StartClipboardWatcher, StartNetworkAfterUnlock,
+};
+use uc_core::ports::network_control::NetworkControlPort;
 use uc_core::ports::security::key_scope::{KeyScopePort, ScopeError};
 use uc_core::ports::security::secure_storage::{SecureStorageError, SecureStoragePort};
+use uc_core::ports::watcher_control::{WatcherControlError, WatcherControlPort};
 use uc_core::ports::{EncryptionSessionPort, SetupStatusPort};
 use uc_core::security::model::KeyScope;
 use uc_core::setup::SetupState;
@@ -60,6 +67,71 @@ impl KeyScopePort for TestKeyScope {
     }
 }
 
+struct MockWatcherControl;
+
+#[async_trait]
+impl WatcherControlPort for MockWatcherControl {
+    async fn start_watcher(&self) -> Result<(), WatcherControlError> {
+        Ok(())
+    }
+
+    async fn stop_watcher(&self) -> Result<(), WatcherControlError> {
+        Ok(())
+    }
+}
+
+struct MockNetworkControl;
+
+#[async_trait]
+impl NetworkControlPort for MockNetworkControl {
+    async fn start_network(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+struct MockSessionReadyEmitter;
+
+#[async_trait]
+impl SessionReadyEmitter for MockSessionReadyEmitter {
+    async fn emit_ready(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+struct MockLifecycleStatus;
+
+#[async_trait]
+impl LifecycleStatusPort for MockLifecycleStatus {
+    async fn set_state(&self, _state: LifecycleState) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn get_state(&self) -> LifecycleState {
+        LifecycleState::Idle
+    }
+}
+
+struct MockLifecycleEventEmitter;
+
+#[async_trait]
+impl LifecycleEventEmitter for MockLifecycleEventEmitter {
+    async fn emit_lifecycle_event(&self, _event: LifecycleEvent) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+fn build_mock_lifecycle() -> Arc<AppLifecycleCoordinator> {
+    Arc::new(AppLifecycleCoordinator::from_deps(
+        AppLifecycleCoordinatorDeps {
+            watcher: Arc::new(StartClipboardWatcher::new(Arc::new(MockWatcherControl))),
+            network: Arc::new(StartNetworkAfterUnlock::new(Arc::new(MockNetworkControl))),
+            emitter: Arc::new(MockSessionReadyEmitter),
+            status: Arc::new(MockLifecycleStatus),
+            lifecycle_emitter: Arc::new(MockLifecycleEventEmitter),
+        },
+    ))
+}
+
 #[tokio::test]
 async fn create_space_flow_marks_setup_complete_and_persists_state() {
     let temp_dir = TempDir::new().expect("temp dir");
@@ -92,6 +164,7 @@ async fn create_space_flow_marks_setup_complete_and_persists_state() {
         initialize_encryption,
         mark_setup_complete,
         setup_status.clone(),
+        build_mock_lifecycle(),
     );
 
     orchestrator.new_space().await.expect("new space");

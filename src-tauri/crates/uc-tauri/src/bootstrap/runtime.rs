@@ -384,6 +384,7 @@ impl<'a> UseCases<'a> {
                 self.runtime.deps.setup_status.clone(),
             )),
             self.runtime.deps.setup_status.clone(),
+            Arc::new(self.runtime.usecases().app_lifecycle_coordinator()),
         ))
     }
 

@@ -17,6 +17,7 @@ use uc_core::{
 use crate::usecases::initialize_encryption::InitializeEncryptionError;
 use crate::usecases::setup::context::SetupContext;
 use crate::usecases::setup::MarkSetupComplete;
+use crate::usecases::AppLifecycleCoordinator;
 use crate::usecases::InitializeEncryption;
 
 /// Errors produced by the setup orchestrator.
@@ -26,6 +27,8 @@ pub enum SetupError {
     InitializeEncryption(#[from] InitializeEncryptionError),
     #[error("mark setup complete failed: {0}")]
     MarkSetupComplete(#[from] anyhow::Error),
+    #[error("lifecycle boot failed: {0}")]
+    LifecycleFailed(#[source] anyhow::Error),
     #[error("setup action not implemented: {0}")]
     ActionNotImplemented(&'static str),
 }
@@ -42,6 +45,7 @@ pub struct SetupOrchestrator {
     initialize_encryption: Arc<InitializeEncryption>,
     mark_setup_complete: Arc<MarkSetupComplete>,
     setup_status: Arc<dyn SetupStatusPort>,
+    app_lifecycle: Arc<AppLifecycleCoordinator>,
 }
 
 impl SetupOrchestrator {
@@ -49,6 +53,7 @@ impl SetupOrchestrator {
         initialize_encryption: Arc<InitializeEncryption>,
         mark_setup_complete: Arc<MarkSetupComplete>,
         setup_status: Arc<dyn SetupStatusPort>,
+        app_lifecycle: Arc<AppLifecycleCoordinator>,
     ) -> Self {
         Self {
             context: SetupContext::default().arc(),
@@ -58,6 +63,7 @@ impl SetupOrchestrator {
             initialize_encryption,
             mark_setup_complete,
             setup_status,
+            app_lifecycle,
         }
     }
 
@@ -140,6 +146,11 @@ impl SetupOrchestrator {
                 SetupAction::CreateEncryptedSpace => {
                     let passphrase = self.take_passphrase().await?;
                     self.initialize_encryption.execute(passphrase).await?;
+                    // Boot watcher + network + session ready
+                    self.app_lifecycle
+                        .ensure_ready()
+                        .await
+                        .map_err(SetupError::LifecycleFailed)?;
                     follow_up_events.push(SetupEvent::CreateSpaceSucceeded);
                 }
                 SetupAction::MarkSetupComplete => {
@@ -232,17 +243,24 @@ mod tests {
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex as StdMutex};
+    use uc_core::ports::network_control::NetworkControlPort;
     use uc_core::ports::security::encryption::EncryptionPort;
     use uc_core::ports::security::encryption_session::EncryptionSessionPort;
     use uc_core::ports::security::encryption_state::EncryptionStatePort;
     use uc_core::ports::security::key_material::KeyMaterialPort;
     use uc_core::ports::security::key_scope::{KeyScopePort, ScopeError};
+    use uc_core::ports::watcher_control::{WatcherControlError, WatcherControlPort};
     use uc_core::security::model::{
         EncryptedBlob, EncryptionAlgo, EncryptionError, Kek, KeyScope, KeySlot, MasterKey,
         Passphrase,
     };
     use uc_core::security::state::{EncryptionState, EncryptionStateError};
     use uc_core::setup::SetupStatus;
+
+    use crate::usecases::{
+        AppLifecycleCoordinatorDeps, LifecycleEvent, LifecycleEventEmitter, LifecycleState,
+        LifecycleStatusPort, SessionReadyEmitter, StartClipboardWatcher, StartNetworkAfterUnlock,
+    };
 
     struct MockSetupStatusPort {
         status: StdMutex<SetupStatus>,
@@ -533,6 +551,73 @@ mod tests {
         }
     }
 
+    // -- Lifecycle mocks -------------------------------------------------------
+
+    struct MockWatcherControl;
+
+    #[async_trait]
+    impl WatcherControlPort for MockWatcherControl {
+        async fn start_watcher(&self) -> Result<(), WatcherControlError> {
+            Ok(())
+        }
+
+        async fn stop_watcher(&self) -> Result<(), WatcherControlError> {
+            Ok(())
+        }
+    }
+
+    struct MockNetworkControl;
+
+    #[async_trait]
+    impl NetworkControlPort for MockNetworkControl {
+        async fn start_network(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct MockSessionReadyEmitter;
+
+    #[async_trait]
+    impl SessionReadyEmitter for MockSessionReadyEmitter {
+        async fn emit_ready(&self) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct MockLifecycleStatus;
+
+    #[async_trait]
+    impl LifecycleStatusPort for MockLifecycleStatus {
+        async fn set_state(&self, _state: LifecycleState) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn get_state(&self) -> LifecycleState {
+            LifecycleState::Idle
+        }
+    }
+
+    struct MockLifecycleEventEmitter;
+
+    #[async_trait]
+    impl LifecycleEventEmitter for MockLifecycleEventEmitter {
+        async fn emit_lifecycle_event(&self, _event: LifecycleEvent) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn build_mock_lifecycle() -> Arc<AppLifecycleCoordinator> {
+        Arc::new(AppLifecycleCoordinator::from_deps(
+            AppLifecycleCoordinatorDeps {
+                watcher: Arc::new(StartClipboardWatcher::new(Arc::new(MockWatcherControl))),
+                network: Arc::new(StartNetworkAfterUnlock::new(Arc::new(MockNetworkControl))),
+                emitter: Arc::new(MockSessionReadyEmitter),
+                status: Arc::new(MockLifecycleStatus),
+                lifecycle_emitter: Arc::new(MockLifecycleEventEmitter),
+            },
+        ))
+    }
+
     fn build_initialize_encryption() -> Arc<InitializeEncryption> {
         Arc::new(InitializeEncryption::from_ports(
             Arc::new(NoopEncryption),
@@ -559,7 +644,12 @@ mod tests {
     ) -> SetupOrchestrator {
         let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
 
-        SetupOrchestrator::new(initialize_encryption, mark_setup_complete, setup_status)
+        SetupOrchestrator::new(
+            initialize_encryption,
+            mark_setup_complete,
+            setup_status,
+            build_mock_lifecycle(),
+        )
     }
 
     fn build_orchestrator(setup_status: Arc<dyn SetupStatusPort>) -> SetupOrchestrator {
