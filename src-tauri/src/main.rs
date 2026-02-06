@@ -384,59 +384,6 @@ fn main() {
     run_app(config);
 }
 
-/// Macro to generate invoke handler with platform-specific commands
-macro_rules! generate_invoke_handler {
-    () => {
-        tauri::generate_handler![
-            // Clipboard commands
-            uc_tauri::commands::clipboard::get_clipboard_entries,
-            uc_tauri::commands::clipboard::get_clipboard_entry_detail,
-            uc_tauri::commands::clipboard::get_clipboard_entry_resource,
-            uc_tauri::commands::clipboard::delete_clipboard_entry,
-            uc_tauri::commands::clipboard::restore_clipboard_entry,
-            // Encryption commands
-            uc_tauri::commands::encryption::initialize_encryption,
-            uc_tauri::commands::encryption::is_encryption_initialized,
-            uc_tauri::commands::encryption::get_encryption_session_status,
-            uc_tauri::commands::encryption::unlock_encryption_session,
-            // Settings commands
-            uc_tauri::commands::settings::get_settings,
-            uc_tauri::commands::settings::update_settings,
-            // Onboarding commands
-            uc_tauri::commands::onboarding::get_onboarding_state,
-            uc_tauri::commands::onboarding::complete_onboarding,
-            uc_tauri::commands::onboarding::initialize_onboarding,
-            // Setup commands
-            uc_tauri::commands::setup::get_setup_state,
-            uc_tauri::commands::setup::dispatch_setup_event,
-            // Pairing commands
-            uc_tauri::commands::pairing::get_local_peer_id,
-            uc_tauri::commands::pairing::get_p2p_peers,
-            uc_tauri::commands::pairing::get_local_device_info,
-            uc_tauri::commands::pairing::get_paired_peers,
-            uc_tauri::commands::pairing::get_paired_peers_with_status,
-            uc_tauri::commands::pairing::initiate_p2p_pairing,
-            uc_tauri::commands::pairing::verify_p2p_pairing_pin,
-            uc_tauri::commands::pairing::reject_p2p_pairing,
-            uc_tauri::commands::pairing::accept_p2p_pairing,
-            uc_tauri::commands::pairing::unpair_p2p_device,
-            uc_tauri::commands::pairing::list_paired_devices,
-            uc_tauri::commands::pairing::set_pairing_state,
-            // Autostart commands
-            uc_tauri::commands::autostart::enable_autostart,
-            uc_tauri::commands::autostart::disable_autostart,
-            uc_tauri::commands::autostart::is_autostart_enabled,
-            // macOS-specific commands (conditionally compiled)
-            #[cfg(target_os = "macos")]
-            plugins::mac_rounded_corners::enable_rounded_corners,
-            #[cfg(target_os = "macos")]
-            plugins::mac_rounded_corners::enable_modern_window_style,
-            #[cfg(target_os = "macos")]
-            plugins::mac_rounded_corners::reposition_traffic_lights,
-        ]
-    };
-}
-
 /// Run the Tauri application
 fn run_app(config: AppConfig) {
     use tauri::Builder;
@@ -648,7 +595,53 @@ fn run_app(config: AppConfig) {
             info!("App runtime initialized, backend initialization started");
             Ok(())
         })
-        .invoke_handler(generate_invoke_handler!())
+        .invoke_handler(tauri::generate_handler![
+            // Clipboard commands
+            uc_tauri::commands::clipboard::get_clipboard_entries,
+            uc_tauri::commands::clipboard::get_clipboard_entry_detail,
+            uc_tauri::commands::clipboard::get_clipboard_entry_resource,
+            uc_tauri::commands::clipboard::delete_clipboard_entry,
+            uc_tauri::commands::clipboard::restore_clipboard_entry,
+            // Encryption commands
+            uc_tauri::commands::encryption::initialize_encryption,
+            uc_tauri::commands::encryption::get_encryption_session_status,
+            uc_tauri::commands::encryption::unlock_encryption_session,
+            // Settings commands
+            uc_tauri::commands::settings::get_settings,
+            uc_tauri::commands::settings::update_settings,
+            // Setup commands
+            uc_tauri::commands::setup::get_setup_state,
+            uc_tauri::commands::setup::start_new_space,
+            uc_tauri::commands::setup::start_join_space,
+            uc_tauri::commands::setup::select_device,
+            uc_tauri::commands::setup::submit_passphrase,
+            uc_tauri::commands::setup::verify_passphrase,
+            uc_tauri::commands::setup::cancel_setup,
+            // Pairing commands
+            uc_tauri::commands::pairing::get_local_peer_id,
+            uc_tauri::commands::pairing::get_p2p_peers,
+            uc_tauri::commands::pairing::get_local_device_info,
+            uc_tauri::commands::pairing::get_paired_peers,
+            uc_tauri::commands::pairing::get_paired_peers_with_status,
+            uc_tauri::commands::pairing::initiate_p2p_pairing,
+            uc_tauri::commands::pairing::verify_p2p_pairing_pin,
+            uc_tauri::commands::pairing::reject_p2p_pairing,
+            uc_tauri::commands::pairing::accept_p2p_pairing,
+            uc_tauri::commands::pairing::unpair_p2p_device,
+            uc_tauri::commands::pairing::list_paired_devices,
+            uc_tauri::commands::pairing::set_pairing_state,
+            // Autostart commands
+            uc_tauri::commands::autostart::enable_autostart,
+            uc_tauri::commands::autostart::disable_autostart,
+            uc_tauri::commands::autostart::is_autostart_enabled,
+            // macOS-specific commands (conditionally compiled)
+            #[cfg(target_os = "macos")]
+            plugins::mac_rounded_corners::enable_rounded_corners,
+            #[cfg(target_os = "macos")]
+            plugins::mac_rounded_corners::enable_modern_window_style,
+            #[cfg(target_os = "macos")]
+            plugins::mac_rounded_corners::reposition_traffic_lights,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -2,7 +2,6 @@ pub mod autostart;
 pub mod clipboard;
 pub mod encryption;
 pub mod error;
-pub mod onboarding;
 pub mod pairing;
 pub mod settings;
 pub mod setup;
@@ -15,7 +14,6 @@ use uc_core::ports::observability::TraceMetadata;
 pub use autostart::*;
 pub use clipboard::*;
 pub use encryption::*;
-pub use onboarding::*;
 pub use pairing::*;
 pub use settings::*;
 pub use setup::*;
@@ -111,11 +109,5 @@ mod tests {
             output.contains("trace_ts=1737100000000"),
             "missing trace_ts"
         );
-    }
-
-    #[test]
-    fn setup_commands_are_registered() {
-        let _ = crate::commands::setup::get_setup_state;
-        let _ = crate::commands::setup::dispatch_setup_event;
     }
 }
