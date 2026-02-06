@@ -3,7 +3,7 @@
 
 use crate::bootstrap::AppRuntime;
 use crate::commands::record_trace_fields;
-use crate::events::{forward_libp2p_start_failed, EncryptionEvent};
+use crate::events::EncryptionEvent;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tauri::{AppHandle, Emitter, Runtime, State};
@@ -66,43 +66,13 @@ pub async fn initialize_encryption(
         })?;
     tracing::info!("Encryption initialized successfully");
 
-    match runtime.usecases().start_clipboard_watcher().execute().await {
-        Ok(()) => {
-            tracing::info!("Clipboard watcher started after encryption initialization");
-        }
-        Err(e) => {
-            tracing::error!("Failed to start clipboard watcher: {}", e);
-            if let Err(err) = app_handle.emit("encryption://watcher-start-failed", format!("{}", e))
-            {
-                tracing::error!("Failed to emit watcher start failure event: {}", err);
-            }
-            return Err(format!(
-                "Encryption initialized, but failed to start clipboard watcher: {}",
-                e
-            ));
-        }
-    }
-
     if let Err(e) = runtime
         .usecases()
-        .start_network_after_unlock()
-        .execute()
+        .app_lifecycle_coordinator()
+        .ensure_ready()
         .await
     {
-        warn!(
-            "{} Failed to start network after encryption init: {}",
-            LOG_CONTEXT, e
-        );
-        if let Err(emit_err) = forward_libp2p_start_failed(&app_handle, e.to_string()) {
-            warn!(
-                "{} Failed to emit libp2p start failed event: {}",
-                LOG_CONTEXT, emit_err
-            );
-        }
-    }
-
-    if let Err(e) = emit_session_ready(&app_handle) {
-        tracing::warn!("Failed to emit encryption session ready event: {}", e);
+        warn!("Failed to boot lifecycle after encryption init: {}", e);
     }
 
     // Emit onboarding-password-set event for frontend
@@ -122,6 +92,7 @@ pub async fn initialize_encryption(
     Ok(())
 }
 
+#[cfg(test)]
 fn emit_session_ready<R: Runtime>(app_handle: &tauri::AppHandle<R>) -> Result<(), String> {
     app_handle
         .emit("encryption://event", EncryptionEvent::SessionReady)
@@ -155,43 +126,14 @@ pub async fn unlock_encryption_session_with_runtime<R: Runtime>(
         match uc.execute().await {
             Ok(true) => {
                 info!("{} Keyring unlock completed", UNLOCK_CONTEXT);
-                if let Err(e) = emit_session_ready(app_handle) {
-                    warn!(
-                        "{} Failed to emit session ready event: {}",
-                        UNLOCK_CONTEXT, e
-                    );
-                }
-
-                if let Err(e) = runtime.usecases().start_clipboard_watcher().execute().await {
-                    warn!(
-                        "{} Failed to start clipboard watcher: {}",
-                        UNLOCK_CONTEXT, e
-                    );
-                    if let Err(emit_err) =
-                        app_handle.emit("encryption://watcher-start-failed", format!("{}", e))
-                    {
-                        warn!(
-                            "{} Failed to emit watcher-start-failed event: {}",
-                            UNLOCK_CONTEXT, emit_err
-                        );
-                    }
-                }
-
                 if let Err(e) = runtime
                     .usecases()
-                    .start_network_after_unlock()
-                    .execute()
+                    .app_lifecycle_coordinator()
+                    .ensure_ready()
                     .await
                 {
-                    warn!("{} Failed to start network: {}", UNLOCK_CONTEXT, e);
-                    if let Err(emit_err) = forward_libp2p_start_failed(app_handle, e.to_string()) {
-                        warn!(
-                            "{} Failed to emit libp2p start failed event: {}",
-                            UNLOCK_CONTEXT, emit_err
-                        );
-                    }
+                    warn!("{} Auto lifecycle boot failed: {}", UNLOCK_CONTEXT, e);
                 }
-
                 Ok(true)
             }
             Ok(false) => {
