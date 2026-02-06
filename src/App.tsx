@@ -2,10 +2,9 @@ import { listen } from '@tauri-apps/api/event'
 import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { type EncryptionSessionStatus } from '@/api/security'
+import { getSetupState, type SetupState } from '@/api/setup'
 import { TitleBar } from '@/components'
 import { Toaster } from '@/components/ui/sonner'
-import { useOnboarding } from '@/contexts/onboarding-context'
-import { OnboardingProvider } from '@/contexts/OnboardingContext'
 import { useSearch } from '@/contexts/search-context'
 import { SearchProvider } from '@/contexts/SearchContext'
 import { SettingProvider } from '@/contexts/SettingContext'
@@ -15,8 +14,8 @@ import { usePlatform } from '@/hooks/usePlatform'
 import { MainLayout, SettingsFullLayout, WindowShell } from '@/layouts'
 import DashboardPage from '@/pages/DashboardPage'
 import DevicesPage from '@/pages/DevicesPage'
-import OnboardingPage from '@/pages/OnboardingPage'
 import SettingsPage from '@/pages/SettingsPage'
+import SetupPage from '@/pages/SetupPage'
 import UnlockPage from '@/pages/UnlockPage'
 import { useGetEncryptionSessionStatusQuery } from '@/store/api'
 import './App.css'
@@ -31,15 +30,20 @@ const AuthenticatedLayout = () => {
 }
 
 // 主应用程序内容
-const AppContent = () => {
-  const { status, loading } = useOnboarding()
+const AppContent = ({
+  isSetupActive,
+  onSetupComplete,
+}: {
+  isSetupActive: boolean
+  onSetupComplete: () => void
+}) => {
   const [encryptionStatus, setEncryptionStatus] = useState<EncryptionSessionStatus | null>(null)
   const [encryptionError, setEncryptionError] = useState<string | null>(null)
   const {
     data: encryptionData,
     isLoading: encryptionLoading,
     error: encryptionQueryError,
-  } = useGetEncryptionSessionStatusQuery()
+  } = useGetEncryptionSessionStatusQuery(undefined, { skip: isSetupActive })
 
   useEffect(() => {
     const unlistenPromise = listen<'SessionReady' | { type: string }>(
@@ -81,8 +85,11 @@ const AppContent = () => {
 
   const resolvedEncryptionStatus = encryptionStatus ?? encryptionData ?? null
 
-  // Wait for onboarding status to load
-  if (loading || status === null || encryptionLoading) {
+  if (isSetupActive) {
+    return <SetupPage onCompleteSetup={onSetupComplete} />
+  }
+
+  if (encryptionLoading) {
     return null
   }
 
@@ -94,10 +101,6 @@ const AppContent = () => {
         </div>
       </div>
     )
-  }
-
-  if (!status.has_completed) {
-    return <OnboardingPage />
   }
 
   // If initialized but not ready, show unlock page
@@ -133,35 +136,102 @@ export default function App() {
   return (
     <Router>
       <SearchProvider>
-        <OnboardingProvider>
-          <SettingProvider>
-            <UpdateProvider>
-              <AppContentWithBar />
-            </UpdateProvider>
-          </SettingProvider>
-        </OnboardingProvider>
+        <SettingProvider>
+          <UpdateProvider>
+            <AppContentWithBar />
+          </UpdateProvider>
+        </SettingProvider>
       </SearchProvider>
     </Router>
   )
 }
 
 // TitleBar wrapper with search context
-const TitleBarWithSearch = () => {
+const TitleBarWithSearch = ({ isSetupActive }: { isSetupActive: boolean }) => {
   const { searchValue, setSearchValue } = useSearch()
-  return <TitleBar searchValue={searchValue} onSearchChange={setSearchValue} />
+  return (
+    <TitleBar
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      isSetupActive={isSetupActive}
+    />
+  )
 }
 
 // App content with WindowShell structure
+const SETUP_ACK_STORAGE_KEY = 'setup.completedAcknowledged'
+
 const AppContentWithBar = () => {
   // WindowShell provides the correct window-level structure:
   // - TitleBar: Window chrome layer (full-width, drag region)
   // - Content: App layout layer (Sidebar + Main via routes)
   const { isMac, isTauri } = usePlatform()
   const showCustomTitleBar = !isTauri || isMac
+  const [setupState, setSetupState] = useState<SetupState | null>(null)
+  const [hasAcknowledgedSetup, setHasAcknowledgedSetup] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+    return window.localStorage.getItem(SETUP_ACK_STORAGE_KEY) === 'true'
+  })
+  const isSetupActive = setupState !== 'Completed' || !hasAcknowledgedSetup
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let isMounted = true
+
+    const loadSetupState = async () => {
+      try {
+        const state = await getSetupState()
+        if (!isMounted) return
+        setSetupState(state)
+        if (state !== 'Completed') {
+          timer = setTimeout(loadSetupState, 1000)
+        }
+      } catch (error) {
+        console.error(error)
+        if (!isMounted) return
+        timer = setTimeout(loadSetupState, 2000)
+      }
+    }
+
+    loadSetupState()
+
+    return () => {
+      isMounted = false
+      if (timer) clearTimeout(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!setupState || setupState === 'Completed') {
+      return
+    }
+    if (hasAcknowledgedSetup) {
+      setHasAcknowledgedSetup(false)
+    }
+  }, [setupState, hasAcknowledgedSetup])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    if (hasAcknowledgedSetup) {
+      window.localStorage.setItem(SETUP_ACK_STORAGE_KEY, 'true')
+    } else {
+      window.localStorage.removeItem(SETUP_ACK_STORAGE_KEY)
+    }
+  }, [hasAcknowledgedSetup])
+
+  const handleSetupComplete = () => {
+    setHasAcknowledgedSetup(true)
+  }
 
   return (
-    <WindowShell titleBar={showCustomTitleBar ? <TitleBarWithSearch /> : null}>
-      <AppContent />
+    <WindowShell
+      titleBar={showCustomTitleBar ? <TitleBarWithSearch isSetupActive={isSetupActive} /> : null}
+    >
+      <AppContent isSetupActive={isSetupActive} onSetupComplete={handleSetupComplete} />
     </WindowShell>
   )
 }
