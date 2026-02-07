@@ -32,16 +32,23 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tauri::Emitter;
+use tokio::sync::Mutex;
 use uc_app::{
     usecases::{
-        space_access::SpaceAccessOrchestrator, PairingConfig, PairingOrchestrator, SetupOrchestrator,
+        space_access::{
+            DefaultSpaceAccessCryptoFactory, HmacProofAdapter, SpaceAccessOrchestrator,
+            SpaceAccessPersistenceAdapter,
+        },
+        PairingConfig, PairingOrchestrator, SetupOrchestrator,
     },
     App, AppDeps,
 };
 use uc_core::config::AppConfig;
 use uc_core::network::DiscoveredPeer;
-use uc_core::ports::{ClipboardChangeHandler, DiscoveryPort, NetworkPort};
+use uc_core::ports::space::SpaceAccessTransportPort;
+use uc_core::ports::{ClipboardChangeHandler, DiscoveryPort, NetworkPort, TimerPort};
 use uc_core::{ClipboardChangeOrigin, SystemClipboardSnapshot};
+use uc_infra::time::Timer;
 
 use crate::events::ClipboardEvent;
 
@@ -149,7 +156,8 @@ impl AppRuntime {
         let lifecycle_status: Arc<dyn uc_app::usecases::LifecycleStatusPort> =
             Arc::new(crate::adapters::lifecycle::InMemoryLifecycleStatus::new());
 
-        let setup_orchestrator = Self::build_setup_orchestrator(&deps, &lifecycle_status, &setup_ports);
+        let setup_orchestrator =
+            Self::build_setup_orchestrator(&deps, &lifecycle_status, &setup_ports);
 
         Self {
             deps,
@@ -228,6 +236,22 @@ impl AppRuntime {
                 ),
             },
         ));
+        let crypto_factory = Arc::new(DefaultSpaceAccessCryptoFactory::new(
+            deps.encryption.clone(),
+            deps.key_material.clone(),
+            deps.key_scope.clone(),
+            deps.encryption_state.clone(),
+            deps.encryption_session.clone(),
+        ));
+        let transport_port: Arc<Mutex<dyn SpaceAccessTransportPort>> =
+            Arc::new(Mutex::new(NoopSpaceAccessTransport));
+        let proof_port: Arc<dyn uc_core::ports::space::ProofPort> =
+            Arc::new(HmacProofAdapter::new());
+        let timer_port: Arc<Mutex<dyn TimerPort>> = Arc::new(Mutex::new(Timer::new()));
+        let persistence_port = Arc::new(Mutex::new(SpaceAccessPersistenceAdapter::new(
+            deps.encryption_state.clone(),
+            deps.paired_device_repo.clone(),
+        )));
 
         Arc::new(SetupOrchestrator::new(
             initialize_encryption,
@@ -237,6 +261,12 @@ impl AppRuntime {
             setup_ports.pairing_orchestrator.clone(),
             setup_ports.space_access_orchestrator.clone(),
             setup_ports.discovery_port.clone(),
+            crypto_factory,
+            deps.network.clone(),
+            transport_port,
+            proof_port,
+            timer_port,
+            persistence_port,
         ))
     }
 
@@ -270,6 +300,32 @@ struct EmptyDiscoveryPort;
 impl DiscoveryPort for EmptyDiscoveryPort {
     async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
         Ok(Vec::new())
+    }
+}
+
+struct NoopSpaceAccessTransport;
+
+#[async_trait]
+impl SpaceAccessTransportPort for NoopSpaceAccessTransport {
+    async fn send_offer(
+        &mut self,
+        _session_id: &uc_core::network::SessionId,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn send_proof(
+        &mut self,
+        _session_id: &uc_core::network::SessionId,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn send_result(
+        &mut self,
+        _session_id: &uc_core::network::SessionId,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
