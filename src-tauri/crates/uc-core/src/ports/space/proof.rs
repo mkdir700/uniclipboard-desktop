@@ -5,7 +5,7 @@ use crate::{
 };
 
 #[async_trait::async_trait]
-pub trait ProofPort: Send {
+pub trait ProofPort: Send + Sync {
     async fn build_proof(
         &self,
         pairing_session_id: &SessionId,
