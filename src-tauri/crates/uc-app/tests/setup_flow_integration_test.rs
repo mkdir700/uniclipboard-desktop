@@ -125,6 +125,7 @@ fn build_mock_lifecycle() -> Arc<AppLifecycleCoordinator> {
         AppLifecycleCoordinatorDeps {
             watcher: Arc::new(StartClipboardWatcher::new(Arc::new(MockWatcherControl))),
             network: Arc::new(StartNetworkAfterUnlock::new(Arc::new(MockNetworkControl))),
+            announcer: None,
             emitter: Arc::new(MockSessionReadyEmitter),
             status: Arc::new(MockLifecycleStatus),
             lifecycle_emitter: Arc::new(MockLifecycleEventEmitter),

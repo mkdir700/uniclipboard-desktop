@@ -52,6 +52,7 @@ fn test_fixtures() -> (TestMocks, AppLifecycleCoordinator) {
     let coordinator = AppLifecycleCoordinator::from_deps(AppLifecycleCoordinatorDeps {
         watcher,
         network,
+        announcer: None,
         emitter,
         status,
         lifecycle_emitter,
@@ -162,4 +163,100 @@ async fn coordinator_starts_watcher_network_and_emits_ready() {
     let events = mocks.lifecycle_events.lock().await;
     assert_eq!(events.len(), 1);
     assert_eq!(events[0], LifecycleEvent::Ready);
+}
+
+#[tokio::test]
+async fn unlock_triggers_ready_and_network_once() {
+    let (mocks, coordinator) = test_fixtures();
+
+    coordinator
+        .ensure_ready()
+        .await
+        .expect("unlock path should reach Ready");
+
+    assert_eq!(
+        mocks.watcher_calls.load(Ordering::SeqCst),
+        1,
+        "unlock should start clipboard watcher exactly once"
+    );
+    assert_eq!(
+        mocks.network_calls.load(Ordering::SeqCst),
+        1,
+        "unlock should start network exactly once"
+    );
+
+    let lifecycle_states = mocks.status_states.lock().await;
+    assert_eq!(
+        lifecycle_states.as_slice(),
+        [LifecycleState::Pending, LifecycleState::Ready],
+        "unlock should transition Pending -> Ready only once"
+    );
+
+    let lifecycle_events = mocks.lifecycle_events.lock().await;
+    assert_eq!(
+        lifecycle_events.as_slice(),
+        [LifecycleEvent::Ready],
+        "unlock should emit exactly one Ready lifecycle event"
+    );
+
+    let ready_events = mocks.emitted_events.lock().await;
+    assert_eq!(
+        ready_events.as_slice(),
+        ["ready"],
+        "Ready signal emitted once"
+    );
+}
+
+#[tokio::test]
+async fn repeated_unlock_attempts_do_not_restart_network_when_ready() {
+    let (mocks, coordinator) = test_fixtures();
+
+    coordinator
+        .ensure_ready()
+        .await
+        .expect("first unlock should transition to Ready");
+
+    let states_after_first = mocks.status_states.lock().await.len();
+    assert_eq!(
+        states_after_first, 2,
+        "initial unlock should write Pending + Ready"
+    );
+
+    let second_attempt = coordinator.ensure_ready().await;
+    assert!(
+        second_attempt.is_ok(),
+        "repeated unlock attempts should be idempotent"
+    );
+
+    assert_eq!(
+        mocks.watcher_calls.load(Ordering::SeqCst),
+        1,
+        "ready coordinator must not restart watcher after Ready"
+    );
+    assert_eq!(
+        mocks.network_calls.load(Ordering::SeqCst),
+        1,
+        "ready coordinator must not restart network after Ready"
+    );
+
+    let lifecycle_states = mocks.status_states.lock().await;
+    assert_eq!(
+        lifecycle_states.as_slice(),
+        [LifecycleState::Pending, LifecycleState::Ready],
+        "unlock re-entry should not add new lifecycle states"
+    );
+
+    let lifecycle_events = mocks.lifecycle_events.lock().await;
+    assert_eq!(
+        lifecycle_events.as_slice(),
+        [LifecycleEvent::Ready],
+        "unlock re-entry should not emit extra lifecycle events"
+    );
+
+    let ready_events = mocks.emitted_events.lock().await;
+    assert_eq!(
+        ready_events.as_slice(),
+        ["ready"],
+        "Ready signal should be emitted only once even if unlock retried"
+    );
 }

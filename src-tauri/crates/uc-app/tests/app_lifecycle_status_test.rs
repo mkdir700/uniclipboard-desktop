@@ -163,6 +163,7 @@ fn build_coordinator(
     let coordinator = AppLifecycleCoordinator::from_deps(AppLifecycleCoordinatorDeps {
         watcher,
         network,
+        announcer: None,
         emitter,
         status,
         lifecycle_emitter,

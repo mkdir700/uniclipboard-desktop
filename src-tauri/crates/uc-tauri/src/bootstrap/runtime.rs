@@ -519,10 +519,15 @@ impl<'a> UseCases<'a> {
     ///
     /// 获取 AppLifecycleCoordinator 用例以编排剪贴板监视器、网络启动和会话就绪。
     pub fn app_lifecycle_coordinator(&self) -> uc_app::usecases::AppLifecycleCoordinator {
+        let announcer = Arc::new(crate::adapters::lifecycle::DeviceNameAnnouncer::new(
+            self.runtime.deps.network.clone(),
+            self.runtime.deps.settings.clone(),
+        ));
         uc_app::usecases::AppLifecycleCoordinator::from_deps(
             uc_app::usecases::AppLifecycleCoordinatorDeps {
                 watcher: Arc::new(self.start_clipboard_watcher()),
                 network: Arc::new(self.start_network_after_unlock()),
+                announcer: Some(announcer),
                 emitter: Arc::new(crate::adapters::lifecycle::LoggingSessionReadyEmitter),
                 status: self.runtime.lifecycle_status.clone(),
                 lifecycle_emitter: Arc::new(

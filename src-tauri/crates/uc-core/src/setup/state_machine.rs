@@ -304,4 +304,24 @@ mod tests {
         assert_eq!(next, from);
         assert_eq!(actions, vec![SetupAction::AbortPairing {}]);
     }
+
+    #[test]
+    fn mark_setup_complete_is_the_ready_bridge() {
+        // TODO(start-network-after-unlock): Setup state machine itself has no explicit Ready state.
+        // Ready is emitted by uc-app's AppLifecycleCoordinator after MarkSetupComplete succeeds.
+
+        let (create_next, create_actions) = SetupStateMachine::transition(
+            SetupState::ProcessingCreateSpace { message: None },
+            SetupEvent::CreateSpaceSucceeded,
+        );
+        assert_eq!(create_next, SetupState::Completed);
+        assert_eq!(create_actions, vec![SetupAction::MarkSetupComplete]);
+
+        let (join_next, join_actions) = SetupStateMachine::transition(
+            SetupState::ProcessingJoinSpace { message: None },
+            SetupEvent::JoinSpaceSucceeded,
+        );
+        assert_eq!(join_next, SetupState::Completed);
+        assert_eq!(join_actions, vec![SetupAction::MarkSetupComplete]);
+    }
 }
