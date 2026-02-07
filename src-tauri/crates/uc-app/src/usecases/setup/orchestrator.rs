@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
-use tracing::{error, info_span, Instrument};
+use tracing::{debug, error, info, info_span, Instrument};
 
 use uc_core::{
     ports::SetupStatusPort,
@@ -123,7 +123,10 @@ impl SetupOrchestrator {
             let mut pending_events = vec![event];
 
             while let Some(event) = pending_events.pop() {
+                let from = current.clone();
+                let event_name = format!("{:?}", event);
                 let (next, actions) = SetupStateMachine::transition(current, event);
+                info!(from = ?from, to = ?next, event = %event_name, "setup state transition");
                 let follow_up_events = self.execute_actions(actions).await?;
                 self.context.set_state(next.clone()).await;
                 current = next;
@@ -142,6 +145,7 @@ impl SetupOrchestrator {
     ) -> Result<Vec<SetupEvent>, SetupError> {
         let mut follow_up_events = Vec::new();
         for action in actions {
+            debug!(?action, "setup executing action");
             match action {
                 SetupAction::CreateEncryptedSpace => {
                     let passphrase = self.take_passphrase().await?;
@@ -152,9 +156,11 @@ impl SetupOrchestrator {
                         .await
                         .map_err(SetupError::LifecycleFailed)?;
                     follow_up_events.push(SetupEvent::CreateSpaceSucceeded);
+                    debug!("setup action CreateEncryptedSpace completed");
                 }
                 SetupAction::MarkSetupComplete => {
                     self.mark_setup_complete.execute().await?;
+                    debug!("setup action MarkSetupComplete completed");
                 }
                 SetupAction::EnsureDiscovery => {
                     error!("Setup action EnsureDiscovery is not implemented yet");

@@ -78,16 +78,28 @@ pub struct AppRuntime {
     /// Shared lifecycle status port – stored here so that every call to
     /// `usecases().app_lifecycle_coordinator()` shares the same state.
     lifecycle_status: Arc<dyn uc_app::usecases::LifecycleStatusPort>,
+    /// Cached setup orchestrator – shared across all Tauri commands so that
+    /// the in-memory setup state machine is not reset on every call.
+    ///
+    /// 缓存的 Setup 编排器 – 在所有 Tauri 命令间共享，
+    /// 避免每次调用都重置内存中的 Setup 状态机。
+    setup_orchestrator: Arc<SetupOrchestrator>,
 }
 
 impl AppRuntime {
     /// Create a new AppRuntime from dependencies.
     /// 从依赖创建新的 AppRuntime。
     pub fn new(deps: AppDeps) -> Self {
+        let lifecycle_status: Arc<dyn uc_app::usecases::LifecycleStatusPort> =
+            Arc::new(crate::adapters::lifecycle::InMemoryLifecycleStatus::new());
+
+        let setup_orchestrator = Self::build_setup_orchestrator(&deps, &lifecycle_status);
+
         Self {
             deps,
             app_handle: std::sync::RwLock::new(None),
-            lifecycle_status: Arc::new(crate::adapters::lifecycle::InMemoryLifecycleStatus::new()),
+            lifecycle_status,
+            setup_orchestrator,
         }
     }
 
@@ -120,6 +132,52 @@ impl AppRuntime {
     /// 获取用例访问器。
     pub fn usecases(&self) -> UseCases<'_> {
         UseCases::new(self)
+    }
+
+    fn build_setup_orchestrator(
+        deps: &AppDeps,
+        lifecycle_status: &Arc<dyn uc_app::usecases::LifecycleStatusPort>,
+    ) -> Arc<SetupOrchestrator> {
+        let initialize_encryption = Arc::new(uc_app::usecases::InitializeEncryption::from_ports(
+            deps.encryption.clone(),
+            deps.key_material.clone(),
+            deps.key_scope.clone(),
+            deps.encryption_state.clone(),
+            deps.encryption_session.clone(),
+        ));
+        let mark_setup_complete = Arc::new(uc_app::usecases::MarkSetupComplete::from_ports(
+            deps.setup_status.clone(),
+        ));
+
+        let announcer = Arc::new(crate::adapters::lifecycle::DeviceNameAnnouncer::new(
+            deps.network.clone(),
+            deps.settings.clone(),
+        ));
+        let start_watcher = Arc::new(uc_app::usecases::StartClipboardWatcher::from_port(
+            deps.watcher_control.clone(),
+        ));
+        let start_network = Arc::new(uc_app::usecases::StartNetworkAfterUnlock::from_port(
+            deps.network_control.clone(),
+        ));
+        let app_lifecycle = Arc::new(uc_app::usecases::AppLifecycleCoordinator::from_deps(
+            uc_app::usecases::AppLifecycleCoordinatorDeps {
+                watcher: start_watcher,
+                network: start_network,
+                announcer: Some(announcer),
+                emitter: Arc::new(crate::adapters::lifecycle::LoggingSessionReadyEmitter),
+                status: lifecycle_status.clone(),
+                lifecycle_emitter: Arc::new(
+                    crate::adapters::lifecycle::LoggingLifecycleEventEmitter,
+                ),
+            },
+        ));
+
+        Arc::new(SetupOrchestrator::new(
+            initialize_encryption,
+            mark_setup_complete,
+            deps.setup_status.clone(),
+            app_lifecycle,
+        ))
     }
 }
 
@@ -378,14 +436,7 @@ impl<'a> UseCases<'a> {
     }
 
     pub fn setup_orchestrator(&self) -> Arc<SetupOrchestrator> {
-        Arc::new(uc_app::usecases::SetupOrchestrator::new(
-            Arc::new(self.runtime.usecases().initialize_encryption()),
-            Arc::new(uc_app::usecases::MarkSetupComplete::from_ports(
-                self.runtime.deps.setup_status.clone(),
-            )),
-            self.runtime.deps.setup_status.clone(),
-            Arc::new(self.runtime.usecases().app_lifecycle_coordinator()),
-        ))
+        self.runtime.setup_orchestrator.clone()
     }
 
     /// Settings use cases / 设置用例
