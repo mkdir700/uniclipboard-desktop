@@ -31,8 +31,8 @@ pub mod start_network_after_unlock;
 pub mod update_settings;
 
 pub use app_lifecycle::{
-    AppLifecycleCoordinator, AppLifecycleCoordinatorDeps, LifecycleEvent, LifecycleEventEmitter,
-    LifecycleState, LifecycleStatusPort, SessionReadyEmitter,
+    AppLifecycleCoordinator, AppLifecycleCoordinatorDeps, DeviceAnnouncer, LifecycleEvent,
+    LifecycleEventEmitter, LifecycleState, LifecycleStatusPort, SessionReadyEmitter,
 };
 pub use auto_unlock_encryption_session::AutoUnlockEncryptionSession;
 pub use clipboard::list_entry_projections::{

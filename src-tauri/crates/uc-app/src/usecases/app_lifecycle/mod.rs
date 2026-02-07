@@ -66,6 +66,15 @@ pub trait SessionReadyEmitter: Send + Sync {
     async fn emit_ready(&self) -> Result<()>;
 }
 
+/// Port for announcing the local device after the network starts.
+///
+/// Implementations typically resolve the device name from settings and
+/// broadcast it over the network so that peers can discover this device.
+#[async_trait]
+pub trait DeviceAnnouncer: Send + Sync {
+    async fn announce(&self) -> Result<()>;
+}
+
 // ---------------------------------------------------------------------------
 // Coordinator
 // ---------------------------------------------------------------------------
@@ -82,6 +91,7 @@ pub trait SessionReadyEmitter: Send + Sync {
 pub struct AppLifecycleCoordinator {
     watcher: Arc<StartClipboardWatcher>,
     network: Arc<StartNetworkAfterUnlock>,
+    announcer: Option<Arc<dyn DeviceAnnouncer>>,
     emitter: Arc<dyn SessionReadyEmitter>,
     status: Arc<dyn LifecycleStatusPort>,
     lifecycle_emitter: Arc<dyn LifecycleEventEmitter>,
@@ -91,6 +101,7 @@ pub struct AppLifecycleCoordinator {
 pub struct AppLifecycleCoordinatorDeps {
     pub watcher: Arc<StartClipboardWatcher>,
     pub network: Arc<StartNetworkAfterUnlock>,
+    pub announcer: Option<Arc<dyn DeviceAnnouncer>>,
     pub emitter: Arc<dyn SessionReadyEmitter>,
     pub status: Arc<dyn LifecycleStatusPort>,
     pub lifecycle_emitter: Arc<dyn LifecycleEventEmitter>,
@@ -101,6 +112,7 @@ impl AppLifecycleCoordinator {
     pub fn new(
         watcher: Arc<StartClipboardWatcher>,
         network: Arc<StartNetworkAfterUnlock>,
+        announcer: Option<Arc<dyn DeviceAnnouncer>>,
         emitter: Arc<dyn SessionReadyEmitter>,
         status: Arc<dyn LifecycleStatusPort>,
         lifecycle_emitter: Arc<dyn LifecycleEventEmitter>,
@@ -108,6 +120,7 @@ impl AppLifecycleCoordinator {
         Self {
             watcher,
             network,
+            announcer,
             emitter,
             status,
             lifecycle_emitter,
@@ -119,12 +132,20 @@ impl AppLifecycleCoordinator {
         let AppLifecycleCoordinatorDeps {
             watcher,
             network,
+            announcer,
             emitter,
             status,
             lifecycle_emitter,
         } = deps;
 
-        Self::new(watcher, network, emitter, status, lifecycle_emitter)
+        Self::new(
+            watcher,
+            network,
+            announcer,
+            emitter,
+            status,
+            lifecycle_emitter,
+        )
     }
 
     /// Ensure the application lifecycle is ready by booting watcher,
@@ -138,6 +159,11 @@ impl AppLifecycleCoordinator {
         let span = info_span!("usecase.app_lifecycle_coordinator.ensure_ready");
 
         async {
+            let current_state = self.status.get_state().await;
+            if matches!(current_state, LifecycleState::Ready) {
+                info!("Lifecycle already Ready; skipping duplicate ensure_ready call");
+                return Ok(());
+            }
             // 1. Mark as pending
             self.status.set_state(LifecycleState::Pending).await?;
             info!("Lifecycle state set to Pending");
@@ -162,6 +188,13 @@ impl AppLifecycleCoordinator {
                     .emit_lifecycle_event(LifecycleEvent::NetworkFailed(msg.clone()))
                     .await?;
                 return Err(anyhow::anyhow!(msg));
+            }
+
+            // 3.5. Announce device name (best-effort, failure is non-fatal)
+            if let Some(announcer) = &self.announcer {
+                if let Err(e) = announcer.announce().await {
+                    warn!(error = %e, "Failed to announce device name after network start");
+                }
             }
 
             // 4. All good – mark ready and emit events
