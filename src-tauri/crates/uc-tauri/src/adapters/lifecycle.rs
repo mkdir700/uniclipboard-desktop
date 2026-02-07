@@ -7,8 +7,14 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use uc_app::usecases::{
-    LifecycleEvent, LifecycleEventEmitter, LifecycleState, LifecycleStatusPort, SessionReadyEmitter,
+    DeviceAnnouncer, LifecycleEvent, LifecycleEventEmitter, LifecycleState, LifecycleStatusPort,
+    SessionReadyEmitter,
 };
+use uc_core::ports::{NetworkPort, SettingsPort};
+
+use std::sync::Arc;
+
+use crate::bootstrap::wiring::resolve_pairing_device_name;
 
 // ---------------------------------------------------------------------------
 // InMemoryLifecycleStatus
@@ -77,6 +83,33 @@ impl SessionReadyEmitter for LoggingSessionReadyEmitter {
     async fn emit_ready(&self) -> Result<()> {
         tracing::info!("Session ready");
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DeviceNameAnnouncer
+// ---------------------------------------------------------------------------
+
+/// Resolves the device name from settings and announces it over the network.
+///
+/// Used by `AppLifecycleCoordinator` to broadcast the device name after
+/// the network runtime has started.
+pub struct DeviceNameAnnouncer {
+    network: Arc<dyn NetworkPort>,
+    settings: Arc<dyn SettingsPort>,
+}
+
+impl DeviceNameAnnouncer {
+    pub fn new(network: Arc<dyn NetworkPort>, settings: Arc<dyn SettingsPort>) -> Self {
+        Self { network, settings }
+    }
+}
+
+#[async_trait]
+impl DeviceAnnouncer for DeviceNameAnnouncer {
+    async fn announce(&self) -> Result<()> {
+        let device_name = resolve_pairing_device_name(self.settings.clone()).await;
+        self.network.announce_device_name(device_name).await
     }
 }
 
