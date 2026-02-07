@@ -7,10 +7,11 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, info_span, warn, Instrument};
-use anyhow::anyhow;
 
 use uc_core::{
-    ports::{DiscoveryPort, SetupStatusPort},
+    ports::space::{PersistencePort, ProofPort, SpaceAccessTransportPort},
+    ports::{DiscoveryPort, NetworkPort, SetupStatusPort, TimerPort},
+    security::space_access::event::SpaceAccessEvent,
     security::{model::Passphrase, SecretString},
     setup::{SetupAction, SetupEvent, SetupState, SetupStateMachine},
 };
@@ -19,7 +20,9 @@ use crate::usecases::initialize_encryption::InitializeEncryptionError;
 use crate::usecases::pairing::{PairingDomainEvent, PairingEventPort, PairingOrchestrator};
 use crate::usecases::setup::context::SetupContext;
 use crate::usecases::setup::MarkSetupComplete;
-use crate::usecases::space_access::SpaceAccessOrchestrator;
+use crate::usecases::space_access::{
+    SpaceAccessCryptoFactory, SpaceAccessExecutor, SpaceAccessOrchestrator,
+};
 use crate::usecases::AppLifecycleCoordinator;
 use crate::usecases::InitializeEncryption;
 
@@ -55,6 +58,12 @@ pub struct SetupOrchestrator {
     pairing_orchestrator: Arc<PairingOrchestrator>,
     space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
     discovery_port: Arc<dyn DiscoveryPort>,
+    crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
+    network_port: Arc<dyn NetworkPort>,
+    transport_port: Arc<Mutex<dyn SpaceAccessTransportPort>>,
+    proof_port: Arc<dyn ProofPort>,
+    timer_port: Arc<Mutex<dyn TimerPort>>,
+    persistence_port: Arc<Mutex<dyn PersistencePort>>,
 }
 
 impl SetupOrchestrator {
@@ -66,6 +75,12 @@ impl SetupOrchestrator {
         pairing_orchestrator: Arc<PairingOrchestrator>,
         space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
         discovery_port: Arc<dyn DiscoveryPort>,
+        crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
+        network_port: Arc<dyn NetworkPort>,
+        transport_port: Arc<Mutex<dyn SpaceAccessTransportPort>>,
+        proof_port: Arc<dyn ProofPort>,
+        timer_port: Arc<Mutex<dyn TimerPort>>,
+        persistence_port: Arc<Mutex<dyn PersistencePort>>,
     ) -> Self {
         Self {
             context: SetupContext::default().arc(),
@@ -80,6 +95,12 @@ impl SetupOrchestrator {
             pairing_orchestrator,
             space_access_orchestrator,
             discovery_port,
+            crypto_factory,
+            network_port,
+            transport_port,
+            proof_port,
+            timer_port,
+            persistence_port,
         }
     }
 
@@ -203,15 +224,64 @@ impl SetupOrchestrator {
                     debug!("setup action AbortPairing completed");
                 }
                 SetupAction::StartJoinSpaceAccess => {
-                    warn!("StartJoinSpaceAccess invoked without space access wiring");
-                    return Err(SetupError::LifecycleFailed(anyhow!(
-                        "join space access flow is not available"
-                    )));
+                    self.start_join_space_access().await?;
+                    debug!("setup action StartJoinSpaceAccess completed");
                 }
             }
         }
 
         Ok(follow_up_events)
+    }
+
+    async fn start_join_space_access(&self) -> Result<(), SetupError> {
+        let passphrase = {
+            let guard = self.passphrase.lock().await;
+            guard.as_ref().map(|p| SecretString::new(p.0.clone()))
+        }
+        .ok_or_else(|| {
+            error!("start join space access requested without passphrase");
+            SetupError::PairingFailed
+        })?;
+
+        let pairing_session_id = {
+            let guard = self.pairing_session_id.lock().await;
+            guard.clone()
+        }
+        .ok_or_else(|| {
+            error!("start join space access requested without pairing session id");
+            SetupError::PairingFailed
+        })?;
+
+        let crypto = self.crypto_factory.build(passphrase);
+        let mut transport = self.transport_port.lock().await;
+        let mut timer = self.timer_port.lock().await;
+        let mut store = self.persistence_port.lock().await;
+        let mut executor = SpaceAccessExecutor {
+            crypto: crypto.as_ref(),
+            net: self.network_port.as_ref(),
+            transport: &mut *transport,
+            proof: self.proof_port.as_ref(),
+            timer: &mut *timer,
+            store: &mut *store,
+        };
+
+        self.space_access_orchestrator
+            .dispatch(
+                &mut executor,
+                SpaceAccessEvent::PassphraseSubmitted,
+                Some(pairing_session_id.clone()),
+            )
+            .await
+            .map_err(|err| {
+                error!(
+                    error = %err,
+                    pairing_session_id = %pairing_session_id,
+                    "space access dispatch failed during setup"
+                );
+                SetupError::PairingFailed
+            })?;
+
+        Ok(())
     }
 
     async fn capture_context(&self, event: SetupEvent) -> SetupEvent {
@@ -377,14 +447,16 @@ impl SetupOrchestrator {
                             .await;
                         break;
                     }
-                    PairingDomainEvent::PairingFailed { session_id: event_session_id, .. }
-                        if event_session_id == session_id =>
-                    {
+                    PairingDomainEvent::PairingFailed {
+                        session_id: event_session_id,
+                        ..
+                    } if event_session_id == session_id => {
                         break;
                     }
-                    PairingDomainEvent::PairingSucceeded { session_id: event_session_id, .. }
-                        if event_session_id == session_id =>
-                    {
+                    PairingDomainEvent::PairingSucceeded {
+                        session_id: event_session_id,
+                        ..
+                    } if event_session_id == session_id => {
                         break;
                     }
                     _ => {}
@@ -408,9 +480,9 @@ impl SetupOrchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::usecases::pairing::{PairingConfig, PairingOrchestrator};
     use crate::usecases::space_access::SpaceAccessOrchestrator;
+    use async_trait::async_trait;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex as StdMutex};
     use uc_core::network::{DiscoveredPeer, PairedDevice, PairingState};
@@ -420,14 +492,17 @@ mod tests {
     use uc_core::ports::security::encryption_state::EncryptionStatePort;
     use uc_core::ports::security::key_material::KeyMaterialPort;
     use uc_core::ports::security::key_scope::{KeyScopePort, ScopeError};
+    use uc_core::ports::space::{CryptoPort, PersistencePort, ProofPort, SpaceAccessTransportPort};
     use uc_core::ports::watcher_control::{WatcherControlError, WatcherControlPort};
     use uc_core::ports::{
-        DiscoveryPort, PairedDeviceRepositoryError, PairedDeviceRepositoryPort,
+        DiscoveryPort, NetworkPort, PairedDeviceRepositoryError, PairedDeviceRepositoryPort,
+        TimerPort,
     };
     use uc_core::security::model::{
         EncryptedBlob, EncryptionAlgo, EncryptionError, Kek, KeyScope, KeySlot, MasterKey,
         Passphrase,
     };
+    use uc_core::security::space_access::SpaceAccessProofArtifact;
     use uc_core::security::state::{EncryptionState, EncryptionStateError};
     use uc_core::setup::{SetupError as SetupDomainError, SetupStatus};
     use uc_core::PeerId;
@@ -796,10 +871,7 @@ mod tests {
             Ok(Vec::new())
         }
 
-        async fn upsert(
-            &self,
-            _device: PairedDevice,
-        ) -> Result<(), PairedDeviceRepositoryError> {
+        async fn upsert(&self, _device: PairedDevice) -> Result<(), PairedDeviceRepositoryError> {
             Ok(())
         }
 
@@ -819,10 +891,7 @@ mod tests {
             Ok(())
         }
 
-        async fn delete(
-            &self,
-            _peer_id: &PeerId,
-        ) -> Result<(), PairedDeviceRepositoryError> {
+        async fn delete(&self, _peer_id: &PeerId) -> Result<(), PairedDeviceRepositoryError> {
             Ok(())
         }
     }
@@ -833,6 +902,211 @@ mod tests {
     impl DiscoveryPort for NoopDiscoveryPort {
         async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
             Ok(Vec::new())
+        }
+    }
+
+    struct NoopSpaceAccessCrypto;
+
+    #[async_trait]
+    impl CryptoPort for NoopSpaceAccessCrypto {
+        async fn generate_nonce32(&self) -> [u8; 32] {
+            [0u8; 32]
+        }
+
+        async fn export_keyslot_blob(
+            &self,
+            _space_id: &uc_core::ids::SpaceId,
+        ) -> anyhow::Result<KeySlot> {
+            Err(anyhow::anyhow!("noop crypto export_keyslot_blob"))
+        }
+
+        async fn derive_master_key_from_keyslot(
+            &self,
+            _keyslot_blob: &[u8],
+            _passphrase: SecretString,
+        ) -> anyhow::Result<MasterKey> {
+            Err(anyhow::anyhow!(
+                "noop crypto derive_master_key_from_keyslot"
+            ))
+        }
+    }
+
+    struct NoopSpaceAccessCryptoFactory;
+
+    impl SpaceAccessCryptoFactory for NoopSpaceAccessCryptoFactory {
+        fn build(&self, _passphrase: SecretString) -> Box<dyn CryptoPort> {
+            Box::new(NoopSpaceAccessCrypto)
+        }
+    }
+
+    struct NoopSpaceAccessNetworkPort;
+
+    #[async_trait]
+    impl NetworkPort for NoopSpaceAccessNetworkPort {
+        async fn send_clipboard(
+            &self,
+            _peer_id: &str,
+            _encrypted_data: Vec<u8>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn broadcast_clipboard(&self, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_clipboard(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<uc_core::network::ClipboardMessage>>
+        {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+
+        async fn get_discovered_peers(
+            &self,
+        ) -> anyhow::Result<Vec<uc_core::network::DiscoveredPeer>> {
+            Ok(vec![])
+        }
+
+        async fn get_connected_peers(
+            &self,
+        ) -> anyhow::Result<Vec<uc_core::network::ConnectedPeer>> {
+            Ok(vec![])
+        }
+
+        fn local_peer_id(&self) -> String {
+            "local".to_string()
+        }
+
+        async fn announce_device_name(&self, _device_name: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn open_pairing_session(
+            &self,
+            _peer_id: String,
+            _session_id: String,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_on_session(
+            &self,
+            _session_id: String,
+            _message: uc_core::network::PairingMessage,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn close_pairing_session(
+            &self,
+            _session_id: String,
+            _reason: Option<String>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn unpair_device(&self, _peer_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_events(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<uc_core::network::NetworkEvent>> {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+    }
+
+    struct NoopSpaceAccessTransportPort;
+
+    #[async_trait]
+    impl SpaceAccessTransportPort for NoopSpaceAccessTransportPort {
+        async fn send_offer(
+            &mut self,
+            _session_id: &uc_core::network::SessionId,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_proof(
+            &mut self,
+            _session_id: &uc_core::network::SessionId,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_result(
+            &mut self,
+            _session_id: &uc_core::network::SessionId,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct NoopSpaceAccessProofPort;
+
+    #[async_trait]
+    impl ProofPort for NoopSpaceAccessProofPort {
+        async fn build_proof(
+            &self,
+            pairing_session_id: &uc_core::SessionId,
+            space_id: &uc_core::ids::SpaceId,
+            challenge_nonce: [u8; 32],
+            _master_key: &MasterKey,
+        ) -> anyhow::Result<SpaceAccessProofArtifact> {
+            Ok(SpaceAccessProofArtifact {
+                pairing_session_id: pairing_session_id.clone(),
+                space_id: space_id.clone(),
+                challenge_nonce,
+                proof_bytes: vec![],
+            })
+        }
+
+        async fn verify_proof(
+            &self,
+            _proof: &SpaceAccessProofArtifact,
+            _expected_nonce: [u8; 32],
+        ) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+    }
+
+    struct NoopSpaceAccessTimerPort;
+
+    #[async_trait]
+    impl TimerPort for NoopSpaceAccessTimerPort {
+        async fn start(
+            &mut self,
+            _session_id: &uc_core::SessionId,
+            _ttl_secs: u64,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn stop(&mut self, _session_id: &uc_core::SessionId) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct NoopSpaceAccessPersistencePort;
+
+    #[async_trait]
+    impl PersistencePort for NoopSpaceAccessPersistencePort {
+        async fn persist_joiner_access(
+            &mut self,
+            _space_id: &uc_core::ids::SpaceId,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn persist_sponsor_access(
+            &mut self,
+            _space_id: &uc_core::ids::SpaceId,
+            _peer_id: &str,
+        ) -> anyhow::Result<()> {
+            Ok(())
         }
     }
 
@@ -890,6 +1164,30 @@ mod tests {
         Arc::new(NoopDiscoveryPort)
     }
 
+    fn build_crypto_factory() -> Arc<dyn SpaceAccessCryptoFactory> {
+        Arc::new(NoopSpaceAccessCryptoFactory)
+    }
+
+    fn build_network_port() -> Arc<dyn NetworkPort> {
+        Arc::new(NoopSpaceAccessNetworkPort)
+    }
+
+    fn build_transport_port() -> Arc<Mutex<dyn SpaceAccessTransportPort>> {
+        Arc::new(Mutex::new(NoopSpaceAccessTransportPort))
+    }
+
+    fn build_proof_port() -> Arc<dyn ProofPort> {
+        Arc::new(NoopSpaceAccessProofPort)
+    }
+
+    fn build_timer_port() -> Arc<Mutex<dyn TimerPort>> {
+        Arc::new(Mutex::new(NoopSpaceAccessTimerPort))
+    }
+
+    fn build_persistence_port() -> Arc<Mutex<dyn PersistencePort>> {
+        Arc::new(Mutex::new(NoopSpaceAccessPersistencePort))
+    }
+
     fn build_orchestrator_with_initialize_encryption(
         setup_status: Arc<dyn SetupStatusPort>,
         initialize_encryption: Arc<InitializeEncryption>,
@@ -904,6 +1202,12 @@ mod tests {
             build_pairing_orchestrator(),
             build_space_access_orchestrator(),
             build_discovery_port(),
+            build_crypto_factory(),
+            build_network_port(),
+            build_transport_port(),
+            build_proof_port(),
+            build_timer_port(),
+            build_persistence_port(),
         )
     }
 
@@ -981,6 +1285,74 @@ mod tests {
         }
 
         assert!(orchestrator.passphrase.lock().await.is_some());
+    }
+
+    #[tokio::test]
+    async fn start_join_space_access_maps_space_access_error() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator(setup_status);
+        let space_id = uc_core::ids::SpaceId::new();
+        let pairing_session_id = "session-join".to_string();
+
+        let crypto = orchestrator
+            .crypto_factory
+            .build(SecretString::new("seed-pass".to_string()));
+        let mut transport = orchestrator.transport_port.lock().await;
+        let mut timer = orchestrator.timer_port.lock().await;
+        let mut store = orchestrator.persistence_port.lock().await;
+        let mut executor = SpaceAccessExecutor {
+            crypto: crypto.as_ref(),
+            net: orchestrator.network_port.as_ref(),
+            transport: &mut *transport,
+            proof: orchestrator.proof_port.as_ref(),
+            timer: &mut *timer,
+            store: &mut *store,
+        };
+
+        orchestrator
+            .space_access_orchestrator
+            .dispatch(
+                &mut executor,
+                SpaceAccessEvent::JoinRequested {
+                    pairing_session_id: pairing_session_id.clone(),
+                    ttl_secs: 60,
+                },
+                Some(pairing_session_id.clone()),
+            )
+            .await
+            .unwrap();
+        orchestrator
+            .space_access_orchestrator
+            .dispatch(
+                &mut executor,
+                SpaceAccessEvent::OfferAccepted {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id,
+                    expires_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+                },
+                Some(pairing_session_id.clone()),
+            )
+            .await
+            .unwrap();
+
+        drop(executor);
+        drop(store);
+        drop(timer);
+        drop(transport);
+
+        *orchestrator.pairing_session_id.lock().await = Some(pairing_session_id);
+        orchestrator
+            .context
+            .set_state(SetupState::JoinSpaceInputPassphrase { error: None })
+            .await;
+
+        let result = orchestrator
+            .dispatch(SetupEvent::SubmitPassphrase {
+                passphrase: SecretString::new("join-secret".to_string()),
+            })
+            .await;
+
+        assert!(matches!(result, Err(SetupError::PairingFailed)));
     }
 
     enum JoinStepAction {
@@ -1082,22 +1454,38 @@ mod tests {
                 JoinStepAction::ForceState(state) => {
                     orchestrator.context.set_state(state.clone()).await;
                     let current = orchestrator.context.get_state().await;
-                    assert_eq!(current, step.expected_state, "{} state mismatch", step.label);
+                    assert_eq!(
+                        current, step.expected_state,
+                        "{} state mismatch",
+                        step.label
+                    );
                 }
                 JoinStepAction::SimulatePassphrase(passphrase) => {
                     simulate_passphrase_submission(orchestrator, passphrase).await;
                     let current = orchestrator.context.get_state().await;
-                    assert_eq!(current, step.expected_state, "{} state mismatch", step.label);
+                    assert_eq!(
+                        current, step.expected_state,
+                        "{} state mismatch",
+                        step.label
+                    );
                 }
                 JoinStepAction::SelectPeer(peer_id) => {
                     *orchestrator.selected_peer_id.lock().await = Some((*peer_id).to_string());
                     let current = orchestrator.context.get_state().await;
-                    assert_eq!(current, step.expected_state, "{} state mismatch", step.label);
+                    assert_eq!(
+                        current, step.expected_state,
+                        "{} state mismatch",
+                        step.label
+                    );
                 }
                 JoinStepAction::SetPairingSession(session_id) => {
                     *orchestrator.pairing_session_id.lock().await = Some((*session_id).to_string());
                     let current = orchestrator.context.get_state().await;
-                    assert_eq!(current, step.expected_state, "{} state mismatch", step.label);
+                    assert_eq!(
+                        current, step.expected_state,
+                        "{} state mismatch",
+                        step.label
+                    );
                 }
             }
         }
