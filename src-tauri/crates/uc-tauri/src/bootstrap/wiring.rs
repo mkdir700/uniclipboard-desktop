@@ -40,10 +40,7 @@ use tauri::{async_runtime, AppHandle, Emitter, Runtime};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
-use crate::events::{
-    forward_libp2p_start_failed, P2PPairingVerificationEvent, P2PPeerConnectionEvent,
-    P2PPeerNameUpdatedEvent,
-};
+use crate::events::{P2PPairingVerificationEvent, P2PPeerConnectionEvent, P2PPeerNameUpdatedEvent};
 use uc_app::app_paths::AppPaths;
 use uc_app::usecases::{PairingConfig, PairingOrchestrator, ResolveConnectionPolicy};
 use uc_app::AppDeps;
@@ -916,7 +913,7 @@ pub fn start_background_tasks<R: Runtime>(
     pairing_action_rx: mpsc::Receiver<PairingAction>,
 ) {
     let BackgroundRuntimeDeps {
-        libp2p_network,
+        libp2p_network: _,
         representation_cache,
         spool_manager,
         spool_rx,
@@ -929,19 +926,7 @@ pub fn start_background_tasks<R: Runtime>(
 
     info!("Starting background clipboard spooler and blob worker");
 
-    let libp2p_app_handle = app_handle.clone();
-    let libp2p_network_spawn = libp2p_network.clone();
     let pairing_app_handle = app_handle.clone();
-    async_runtime::spawn(async move {
-        if let Err(err) = libp2p_network_spawn.spawn_swarm() {
-            warn!(error = %err, "Failed to start libp2p swarm");
-            if let Some(app_handle) = libp2p_app_handle {
-                if let Err(emit_err) = forward_libp2p_start_failed(&app_handle, err.to_string()) {
-                    warn!("Failed to emit libp2p start failed event: {emit_err}");
-                }
-            }
-        }
-    });
     let representation_repo = deps.representation_repo.clone();
     let worker_tx = deps.worker_tx.clone();
     let blob_writer = deps.blob_writer.clone();
@@ -950,15 +935,6 @@ pub fn start_background_tasks<R: Runtime>(
     let thumbnail_repo = deps.thumbnail_repo.clone();
     let thumbnail_generator = deps.thumbnail_generator.clone();
     let pairing_network = deps.network.clone();
-    let announce_network = deps.network.clone();
-    let announce_settings = deps.settings.clone();
-
-    async_runtime::spawn(async move {
-        let device_name = resolve_pairing_device_name(announce_settings).await;
-        if let Err(err) = announce_network.announce_device_name(device_name).await {
-            warn!(error = %err, "Failed to announce device name at startup");
-        }
-    });
 
     async_runtime::spawn(async move {
         let scanner = SpoolScanner::new(spool_dir, representation_repo.clone(), worker_tx.clone());
