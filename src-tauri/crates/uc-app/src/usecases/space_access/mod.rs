@@ -12,7 +12,9 @@ pub use crypto_adapter::{
     DefaultSpaceAccessCryptoFactory, SpaceAccessCryptoAdapter, SpaceAccessCryptoError,
 };
 pub use executor::SpaceAccessExecutor;
-pub use initialize_new_space::{InitializeNewSpace, InitializeNewSpaceError};
+pub use initialize_new_space::{
+    InitializeNewSpace, InitializeNewSpaceError, SpaceAccessCryptoFactory,
+};
 pub use network_adapter::SpaceAccessNetworkAdapter;
 pub use orchestrator::{SpaceAccessError, SpaceAccessOrchestrator};
 pub use persistence_adapter::SpaceAccessPersistenceAdapter;

@@ -3,9 +3,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use uc_core::ids::SpaceId;
-use uc_core::ports::space::{
-    CryptoPort, PersistencePort, ProofPort, SpaceAccessTransportPort,
-};
+use uc_core::ports::space::{CryptoPort, PersistencePort, ProofPort, SpaceAccessTransportPort};
 use uc_core::ports::{NetworkPort, TimerPort};
 use uc_core::security::space_access::state::SpaceAccessState;
 use uc_core::security::SecretString;
@@ -91,12 +89,12 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use uc_core::ids::SessionId as CoreSessionId;
     use uc_core::network::SessionId as NetworkSessionId;
+    use uc_core::ports::space::{ProofPort, SpaceAccessTransportPort};
     use uc_core::security::model::{
         EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, KeyScope, KeySlot, WrappedMasterKey,
     };
     use uc_core::security::space_access::SpaceAccessProofArtifact;
     use uc_core::security::{MasterKey, SecretString};
-    use uc_core::ports::space::{ProofPort, SpaceAccessTransportPort};
 
     struct MockCryptoPort {
         exported: Arc<AtomicBool>,
@@ -233,7 +231,11 @@ mod tests {
 
     #[async_trait]
     impl TimerPort for MockTimerPort {
-        async fn start(&mut self, _session_id: &CoreSessionId, _ttl_secs: u64) -> anyhow::Result<()> {
+        async fn start(
+            &mut self,
+            _session_id: &CoreSessionId,
+            _ttl_secs: u64,
+        ) -> anyhow::Result<()> {
             Ok(())
         }
 
@@ -292,11 +294,17 @@ mod tests {
 
     #[async_trait]
     impl SpaceAccessTransportPort for MockTransportPort {
-        async fn send_offer(&mut self, _session_id: &NetworkSessionId) {}
+        async fn send_offer(&mut self, _session_id: &NetworkSessionId) -> anyhow::Result<()> {
+            Ok(())
+        }
 
-        async fn send_proof(&mut self, _session_id: &NetworkSessionId) {}
+        async fn send_proof(&mut self, _session_id: &NetworkSessionId) -> anyhow::Result<()> {
+            Ok(())
+        }
 
-        async fn send_result(&mut self, _session_id: &NetworkSessionId) {}
+        async fn send_result(&mut self, _session_id: &NetworkSessionId) -> anyhow::Result<()> {
+            Ok(())
+        }
     }
 
     struct MockProofPort;

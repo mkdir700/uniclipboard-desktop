@@ -75,7 +75,7 @@ impl SpaceAccessOrchestrator {
         self.state.lock().await.clone()
     }
 
-    async fn dispatch(
+    pub async fn dispatch(
         &self,
         executor: &mut SpaceAccessExecutor<'_>,
         event: SpaceAccessEvent,
@@ -122,9 +122,9 @@ impl SpaceAccessOrchestrator {
                     let _ = pairing_session_id;
                 }
                 SpaceAccessAction::SendOffer => {
-                    let session_id = pairing_session_id
-                        .ok_or(SpaceAccessError::MissingPairingSessionId)?;
-                    executor.transport.send_offer(session_id).await;
+                    let session_id =
+                        pairing_session_id.ok_or(SpaceAccessError::MissingPairingSessionId)?;
+                    executor.transport.send_offer(session_id).await?;
                 }
                 SpaceAccessAction::StartTimer { ttl_secs } => {
                     let session_id =
@@ -147,8 +147,8 @@ impl SpaceAccessOrchestrator {
                         .map_err(SpaceAccessError::Timer)?;
                 }
                 SpaceAccessAction::RequestSpaceKeyDerivation { space_id } => {
-                    let session_id = pairing_session_id
-                        .ok_or(SpaceAccessError::MissingPairingSessionId)?;
+                    let session_id =
+                        pairing_session_id.ok_or(SpaceAccessError::MissingPairingSessionId)?;
                     let (offer, passphrase) = {
                         let mut context = self.context.lock().await;
                         let offer = context
@@ -166,9 +166,7 @@ impl SpaceAccessOrchestrator {
                         let passphrase = context
                             .joiner_passphrase
                             .take()
-                            .ok_or(SpaceAccessError::MissingContext(
-                                "joiner passphrase",
-                            ))?;
+                            .ok_or(SpaceAccessError::MissingContext("joiner passphrase"))?;
 
                         (offer, passphrase)
                     };
@@ -192,14 +190,14 @@ impl SpaceAccessOrchestrator {
                     context.proof_artifact = Some(proof);
                 }
                 SpaceAccessAction::SendProof => {
-                    let session_id = pairing_session_id
-                        .ok_or(SpaceAccessError::MissingPairingSessionId)?;
-                    executor.transport.send_proof(session_id).await;
+                    let session_id =
+                        pairing_session_id.ok_or(SpaceAccessError::MissingPairingSessionId)?;
+                    executor.transport.send_proof(session_id).await?;
                 }
                 SpaceAccessAction::SendResult => {
-                    let session_id = pairing_session_id
-                        .ok_or(SpaceAccessError::MissingPairingSessionId)?;
-                    executor.transport.send_result(session_id).await;
+                    let session_id =
+                        pairing_session_id.ok_or(SpaceAccessError::MissingPairingSessionId)?;
+                    executor.transport.send_result(session_id).await?;
                 }
                 SpaceAccessAction::PersistJoinerAccess { space_id } => {
                     executor
@@ -237,9 +235,11 @@ mod tests {
     use async_trait::async_trait;
     use chrono::{Duration, Utc};
     use tokio::sync::mpsc;
-    use uc_core::ids::{SpaceId, SessionId as CoreSessionId};
-    use uc_core::network::{ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage};
+    use uc_core::ids::{SessionId as CoreSessionId, SpaceId};
     use uc_core::network::SessionId as NetSessionId;
+    use uc_core::network::{
+        ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage,
+    };
     use uc_core::ports::space::{CryptoPort, PersistencePort, ProofPort, SpaceAccessTransportPort};
     use uc_core::ports::{NetworkPort, TimerPort};
     use uc_core::security::model::{
@@ -266,12 +266,18 @@ mod tests {
             build_offer: Box<dyn Fn() -> SpaceAccessJoinerOffer + Send + Sync>,
             build_passphrase: Box<dyn Fn() -> SecretString + Send + Sync>,
         },
-        SetSponsorPeer { peer_id: &'static str },
+        SetSponsorPeer {
+            peer_id: &'static str,
+        },
     }
 
     impl AccessTestStep {
         fn dispatch(label: &'static str, event: SpaceAccessEvent, assert: StateAssert) -> Self {
-            Self::Dispatch { label, event, assert }
+            Self::Dispatch {
+                label,
+                event,
+                assert,
+            }
         }
 
         fn prepare_joiner_input<FOffer, FPass>(
@@ -426,7 +432,11 @@ mod tests {
                     space_id: space_id.clone(),
                     reason: DenyReason::InvalidProof,
                 },
-                expect_denied(session_id.clone(), space_id.clone(), DenyReason::InvalidProof),
+                expect_denied(
+                    session_id.clone(),
+                    space_id.clone(),
+                    DenyReason::InvalidProof,
+                ),
             ),
         ];
 
@@ -472,7 +482,10 @@ mod tests {
 
         assert_eq!(harness.transport.offers(), vec![session_id.clone()]);
         assert_eq!(harness.transport.results(), vec![session_id.clone()]);
-        assert_eq!(harness.store.sponsor_access, vec![(space_id.clone(), "peer-sponsor".into())]);
+        assert_eq!(
+            harness.store.sponsor_access,
+            vec![(space_id.clone(), "peer-sponsor".into())]
+        );
         assert_eq!(harness.timer.start_calls.len(), 1);
         assert_eq!(harness.timer.stop_calls.len(), 1);
     }
@@ -504,7 +517,11 @@ mod tests {
                     space_id: space_id.clone(),
                     reason: DenyReason::InvalidProof,
                 },
-                expect_denied(session_id.clone(), space_id.clone(), DenyReason::InvalidProof),
+                expect_denied(
+                    session_id.clone(),
+                    space_id.clone(),
+                    DenyReason::InvalidProof,
+                ),
             ),
         ];
 
@@ -524,7 +541,11 @@ mod tests {
     ) {
         for step in steps {
             match step {
-                AccessTestStep::Dispatch { label, event, assert } => {
+                AccessTestStep::Dispatch {
+                    label,
+                    event,
+                    assert,
+                } => {
                     let next = orchestrator
                         .dispatch(executor, event.clone(), Some(pairing_session_id.clone()))
                         .await
@@ -550,7 +571,9 @@ mod tests {
 
     fn expect_waiting_offer(expected_session: NetSessionId) -> StateAssert {
         Box::new(move |state| match state {
-            SpaceAccessState::WaitingOffer { pairing_session_id, .. } => {
+            SpaceAccessState::WaitingOffer {
+                pairing_session_id, ..
+            } => {
                 assert_eq!(pairing_session_id, &expected_session)
             }
             other => panic!("expected WaitingOffer, got {:?}", other),
@@ -742,16 +765,19 @@ mod tests {
 
     #[async_trait]
     impl SpaceAccessTransportPort for MockTransport {
-        async fn send_offer(&mut self, session_id: &NetSessionId) {
+        async fn send_offer(&mut self, session_id: &NetSessionId) -> anyhow::Result<()> {
             self.offers.push(session_id.clone());
+            Ok(())
         }
 
-        async fn send_proof(&mut self, session_id: &NetSessionId) {
+        async fn send_proof(&mut self, session_id: &NetSessionId) -> anyhow::Result<()> {
             self.proofs.push(session_id.clone());
+            Ok(())
         }
 
-        async fn send_result(&mut self, session_id: &NetSessionId) {
+        async fn send_result(&mut self, session_id: &NetSessionId) -> anyhow::Result<()> {
             self.results.push(session_id.clone());
+            Ok(())
         }
     }
 
@@ -803,7 +829,11 @@ mod tests {
 
     #[async_trait]
     impl NetworkPort for NoopNetwork {
-        async fn send_clipboard(&self, _peer_id: &str, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+        async fn send_clipboard(
+            &self,
+            _peer_id: &str,
+            _encrypted_data: Vec<u8>,
+        ) -> anyhow::Result<()> {
             Ok(())
         }
 
@@ -832,7 +862,11 @@ mod tests {
             Ok(())
         }
 
-        async fn open_pairing_session(&self, _peer_id: String, _session_id: String) -> anyhow::Result<()> {
+        async fn open_pairing_session(
+            &self,
+            _peer_id: String,
+            _session_id: String,
+        ) -> anyhow::Result<()> {
             Ok(())
         }
 
