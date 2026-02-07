@@ -1470,3 +1470,8 @@ pub async fn get_state(&self) -> SetupState {
 
 - 2026-02-06: Frontend gating now uses setup state (SetupPage until Completed) with TitleBar hidden during setup; onboarding API/context/pages/tests removed and app API no longer exposes onboarding status.
 - 2026-02-06: Removed onboarding backend modules (uc-core/uc-app/uc-infra/uc-tauri) and wiring/commands; removed onboarding i18n namespaces; rg verification shows remaining onboarding only in src-tauri/src-legacy.
+
+## SpaceAccess transport Result migration (2026-02-07)
+
+- SpaceAccessTransportPort now returns anyhow::Result<()>; orchestrator and test transports must propagate/return Result explicitly.
+- Space-access payload transport can use NetworkPort.send_pairing_on_session with PairingMessage::ChallengeResponse carrying serde_json bytes in encrypted_challenge.
