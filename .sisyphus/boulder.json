@@ -1,11 +1,7 @@
 {
-  "active_plan": "/Users/mark/.superset/worktrees/uniclipboard-desktop/repair/.sisyphus/plans/space-access-new-space-usecase.md",
-  "started_at": "2026-01-31T08:31:27.019Z",
-  "session_ids": [
-    "ses_3ecd25107ffeagg4mLsy2XPXHj",
-    "ses_3ecbd1edeffeLIlzhd0e26SXx2",
-    "ses_3ec92d2dbffeUfZ6WIPQJoUkZU",
-    "ses_3d715fa6affeS5u6JZrt0zwfHu"
-  ],
-  "plan_name": "space-access-new-space-usecase"
+  "active_plan": "/Users/mark/.superset/worktrees/uniclipboard-desktop/repair/.sisyphus/plans/start-network-after-unlock.md",
+  "started_at": "2026-02-07T04:42:29.275Z",
+  "session_ids": ["ses_3ca26d6adffeQrp4IglcFdA5R7"],
+  "plan_name": "start-network-after-unlock",
+  "agent": "atlas"
 }
