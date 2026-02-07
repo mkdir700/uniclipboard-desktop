@@ -3,7 +3,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use uc_core::ids::SpaceId;
-use uc_core::ports::space::{CryptoPort, PersistencePort};
+use uc_core::ports::space::{
+    CryptoPort, PersistencePort, ProofPort, SpaceAccessTransportPort,
+};
 use uc_core::ports::{NetworkPort, TimerPort};
 use uc_core::security::space_access::state::SpaceAccessState;
 use uc_core::security::SecretString;
@@ -25,6 +27,8 @@ pub struct InitializeNewSpace {
     orchestrator: Arc<SpaceAccessOrchestrator>,
     crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
     network: Arc<dyn NetworkPort>,
+    transport: Arc<Mutex<dyn SpaceAccessTransportPort>>,
+    proof: Arc<dyn ProofPort>,
     timer: Arc<Mutex<dyn TimerPort>>,
     store: Arc<Mutex<dyn PersistencePort>>,
     ttl_secs: u64,
@@ -35,6 +39,8 @@ impl InitializeNewSpace {
         orchestrator: Arc<SpaceAccessOrchestrator>,
         crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
         network: Arc<dyn NetworkPort>,
+        transport: Arc<Mutex<dyn SpaceAccessTransportPort>>,
+        proof: Arc<dyn ProofPort>,
         timer: Arc<Mutex<dyn TimerPort>>,
         store: Arc<Mutex<dyn PersistencePort>>,
     ) -> Self {
@@ -42,6 +48,8 @@ impl InitializeNewSpace {
             orchestrator,
             crypto_factory,
             network,
+            transport,
+            proof,
             timer,
             store,
             ttl_secs: 0,
@@ -57,9 +65,12 @@ impl InitializeNewSpace {
         let crypto = self.crypto_factory.build(passphrase);
         let mut timer = self.timer.lock().await;
         let mut store = self.store.lock().await;
+        let mut transport = self.transport.lock().await;
         let mut executor = SpaceAccessExecutor {
             crypto: crypto.as_ref(),
             net: self.network.as_ref(),
+            transport: &mut *transport,
+            proof: self.proof.as_ref(),
             timer: &mut *timer,
             store: &mut *store,
         };
@@ -78,11 +89,14 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use uc_core::ids::SessionId;
+    use uc_core::ids::SessionId as CoreSessionId;
+    use uc_core::network::SessionId as NetworkSessionId;
     use uc_core::security::model::{
         EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, KeyScope, KeySlot, WrappedMasterKey,
     };
+    use uc_core::security::space_access::SpaceAccessProofArtifact;
     use uc_core::security::{MasterKey, SecretString};
+    use uc_core::ports::space::{ProofPort, SpaceAccessTransportPort};
 
     struct MockCryptoPort {
         exported: Arc<AtomicBool>,
@@ -219,11 +233,11 @@ mod tests {
 
     #[async_trait]
     impl TimerPort for MockTimerPort {
-        async fn start(&mut self, _session_id: &SessionId, _ttl_secs: u64) -> anyhow::Result<()> {
+        async fn start(&mut self, _session_id: &CoreSessionId, _ttl_secs: u64) -> anyhow::Result<()> {
             Ok(())
         }
 
-        async fn stop(&mut self, _session_id: &SessionId) -> anyhow::Result<()> {
+        async fn stop(&mut self, _session_id: &CoreSessionId) -> anyhow::Result<()> {
             Ok(())
         }
     }
@@ -252,15 +266,64 @@ mod tests {
             exported: exported.clone(),
         });
         let network = Arc::new(MockNetworkPort);
+        let transport = Arc::new(Mutex::new(MockTransportPort));
+        let proof = Arc::new(MockProofPort);
         let timer = Arc::new(Mutex::new(MockTimerPort));
         let store = Arc::new(Mutex::new(MockStorePort));
         let orchestrator = Arc::new(SpaceAccessOrchestrator::new());
 
-        let uc = InitializeNewSpace::new(orchestrator, crypto_factory, network, timer, store);
+        let uc = InitializeNewSpace::new(
+            orchestrator,
+            crypto_factory,
+            network,
+            transport,
+            proof,
+            timer,
+            store,
+        );
 
         let result = uc.execute(SecretString::from("passphrase")).await;
 
         assert!(result.is_ok(), "expected initialize new space to succeed");
         assert!(exported.load(Ordering::SeqCst));
+    }
+
+    struct MockTransportPort;
+
+    #[async_trait]
+    impl SpaceAccessTransportPort for MockTransportPort {
+        async fn send_offer(&mut self, _session_id: &NetworkSessionId) {}
+
+        async fn send_proof(&mut self, _session_id: &NetworkSessionId) {}
+
+        async fn send_result(&mut self, _session_id: &NetworkSessionId) {}
+    }
+
+    struct MockProofPort;
+
+    #[async_trait]
+    impl ProofPort for MockProofPort {
+        async fn build_proof(
+            &self,
+            pairing_session_id: &CoreSessionId,
+            space_id: &SpaceId,
+            challenge_nonce: [u8; 32],
+            _master_key: &MasterKey,
+        ) -> anyhow::Result<SpaceAccessProofArtifact> {
+            Ok(SpaceAccessProofArtifact {
+                pairing_session_id: pairing_session_id.clone(),
+                space_id: space_id.clone(),
+                challenge_nonce,
+                proof_bytes: vec![],
+            })
+        }
+
+        async fn verify_proof(
+            &self,
+            _proof: &SpaceAccessProofArtifact,
+            _expected_nonce: [u8; 32],
+        ) -> anyhow::Result<bool> {
+            Ok(true)
+        }
     }
 }

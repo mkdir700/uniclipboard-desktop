@@ -148,6 +148,29 @@ pub async fn verify_passphrase(
 }
 
 #[tauri::command]
+pub async fn confirm_peer_trust(
+    runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
+) -> Result<String, String> {
+    let span = info_span!(
+        "command.setup.confirm_peer_trust",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+    );
+    record_trace_fields(&span, &_trace);
+    async {
+        let orchestrator = runtime.usecases().setup_orchestrator();
+        let state = orchestrator
+            .confirm_peer_trust()
+            .await
+            .map_err(|e| e.to_string())?;
+        encode_setup_state(state)
+    }
+    .instrument(span)
+    .await
+}
+
+#[tauri::command]
 pub async fn cancel_setup(
     runtime: State<'_, Arc<AppRuntime>>,
     _trace: Option<TraceMetadata>,

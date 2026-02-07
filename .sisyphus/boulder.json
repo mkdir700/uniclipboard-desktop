@@ -1,7 +1,7 @@
 {
-  "active_plan": "/Users/mark/.superset/worktrees/uniclipboard-desktop/repair/.sisyphus/plans/start-network-after-unlock.md",
-  "started_at": "2026-02-07T04:42:29.275Z",
-  "session_ids": ["ses_3ca26d6adffeQrp4IglcFdA5R7"],
-  "plan_name": "start-network-after-unlock",
+  "active_plan": "/Users/mark/MyProjects/uniclipboard-desktop/.sisyphus/plans/setup-join-space.md",
+  "started_at": "2026-02-07T08:42:42.373Z",
+  "session_ids": ["ses_3c8bb7edeffel9lDCVkRgXCzZ5"],
+  "plan_name": "setup-join-space",
   "agent": "atlas"
 }

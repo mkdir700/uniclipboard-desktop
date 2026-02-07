@@ -4,7 +4,7 @@ mod executor;
 mod initialize_new_space;
 mod orchestrator;
 
-pub use context::{SpaceAccessContext, SpaceAccessOffer};
+pub use context::{SpaceAccessContext, SpaceAccessOffer, SpaceAccessJoinerOffer};
 pub use crypto_adapter::{
     DefaultSpaceAccessCryptoFactory, SpaceAccessCryptoAdapter, SpaceAccessCryptoError,
 };

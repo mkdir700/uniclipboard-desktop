@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
-use tracing::{error, info_span, warn, Instrument};
+use tracing::{info_span, Instrument};
 
 use uc_core::ids::SpaceId;
 use uc_core::network::SessionId;
@@ -25,10 +25,14 @@ pub enum SpaceAccessError {
     ActionNotImplemented(&'static str),
     #[error("space access missing pairing session id")]
     MissingPairingSessionId,
+    #[error("space access missing context: {0}")]
+    MissingContext(&'static str),
     #[error("space access crypto failed: {0}")]
     Crypto(#[from] anyhow::Error),
     #[error("space access timer failed: {0}")]
     Timer(#[source] anyhow::Error),
+    #[error("space access persistence failed: {0}")]
+    Persistence(#[source] anyhow::Error),
 }
 
 /// Orchestrator that drives space access state and side effects.
@@ -118,7 +122,9 @@ impl SpaceAccessOrchestrator {
                     let _ = pairing_session_id;
                 }
                 SpaceAccessAction::SendOffer => {
-                    warn!("space access send_offer is not wired yet");
+                    let session_id = pairing_session_id
+                        .ok_or(SpaceAccessError::MissingPairingSessionId)?;
+                    executor.transport.send_offer(session_id).await;
                 }
                 SpaceAccessAction::StartTimer { ttl_secs } => {
                     let session_id =
@@ -140,35 +146,719 @@ impl SpaceAccessOrchestrator {
                         .await
                         .map_err(SpaceAccessError::Timer)?;
                 }
-                SpaceAccessAction::RequestSpaceKeyDerivation { .. } => {
-                    error!("space access action RequestSpaceKeyDerivation is not implemented");
-                    return Err(SpaceAccessError::ActionNotImplemented(
-                        "RequestSpaceKeyDerivation",
-                    ));
+                SpaceAccessAction::RequestSpaceKeyDerivation { space_id } => {
+                    let session_id = pairing_session_id
+                        .ok_or(SpaceAccessError::MissingPairingSessionId)?;
+                    let (offer, passphrase) = {
+                        let mut context = self.context.lock().await;
+                        let offer = context
+                            .joiner_offer
+                            .as_ref()
+                            .ok_or(SpaceAccessError::MissingContext("joiner offer"))?
+                            .clone();
+
+                        if offer.space_id != space_id {
+                            return Err(SpaceAccessError::MissingContext(
+                                "joiner offer space mismatch",
+                            ));
+                        }
+
+                        let passphrase = context
+                            .joiner_passphrase
+                            .take()
+                            .ok_or(SpaceAccessError::MissingContext(
+                                "joiner passphrase",
+                            ))?;
+
+                        (offer, passphrase)
+                    };
+
+                    let master_key = executor
+                        .crypto
+                        .derive_master_key_from_keyslot(&offer.keyslot_blob, passphrase)
+                        .await?;
+
+                    let proof = executor
+                        .proof
+                        .build_proof(
+                            &CoreSessionId::from(session_id.as_str()),
+                            &space_id,
+                            offer.challenge_nonce,
+                            &master_key,
+                        )
+                        .await?;
+
+                    let mut context = self.context.lock().await;
+                    context.proof_artifact = Some(proof);
                 }
                 SpaceAccessAction::SendProof => {
-                    error!("space access action SendProof is not implemented");
-                    return Err(SpaceAccessError::ActionNotImplemented("SendProof"));
+                    let session_id = pairing_session_id
+                        .ok_or(SpaceAccessError::MissingPairingSessionId)?;
+                    executor.transport.send_proof(session_id).await;
                 }
                 SpaceAccessAction::SendResult => {
-                    error!("space access action SendResult is not implemented");
-                    return Err(SpaceAccessError::ActionNotImplemented("SendResult"));
+                    let session_id = pairing_session_id
+                        .ok_or(SpaceAccessError::MissingPairingSessionId)?;
+                    executor.transport.send_result(session_id).await;
                 }
-                SpaceAccessAction::PersistJoinerAccess { .. } => {
-                    error!("space access action PersistJoinerAccess is not implemented");
-                    return Err(SpaceAccessError::ActionNotImplemented(
-                        "PersistJoinerAccess",
-                    ));
+                SpaceAccessAction::PersistJoinerAccess { space_id } => {
+                    executor
+                        .store
+                        .persist_joiner_access(&space_id)
+                        .await
+                        .map_err(SpaceAccessError::Persistence)?;
                 }
-                SpaceAccessAction::PersistSponsorAccess { .. } => {
-                    error!("space access action PersistSponsorAccess is not implemented");
-                    return Err(SpaceAccessError::ActionNotImplemented(
-                        "PersistSponsorAccess",
-                    ));
+                SpaceAccessAction::PersistSponsorAccess { space_id } => {
+                    let peer_id = {
+                        let context = self.context.lock().await;
+                        context
+                            .sponsor_peer_id
+                            .as_ref()
+                            .cloned()
+                            .ok_or(SpaceAccessError::MissingContext("sponsor peer id"))?
+                    };
+
+                    executor
+                        .store
+                        .persist_sponsor_access(&space_id, &peer_id)
+                        .await
+                        .map_err(SpaceAccessError::Persistence)?;
                 }
             }
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use chrono::{Duration, Utc};
+    use tokio::sync::mpsc;
+    use uc_core::ids::{SpaceId, SessionId as CoreSessionId};
+    use uc_core::network::{ClipboardMessage, ConnectedPeer, DiscoveredPeer, NetworkEvent, PairingMessage};
+    use uc_core::network::SessionId as NetSessionId;
+    use uc_core::ports::space::{CryptoPort, PersistencePort, ProofPort, SpaceAccessTransportPort};
+    use uc_core::ports::{NetworkPort, TimerPort};
+    use uc_core::security::model::{
+        EncryptedBlob, EncryptionAlgo, EncryptionFormatVersion, KdfParams, KeyScope, KeySlot,
+        KeySlotVersion, MasterKey, WrappedMasterKey,
+    };
+    use uc_core::security::space_access::domain::SpaceAccessProofArtifact;
+    use uc_core::security::space_access::event::SpaceAccessEvent;
+    use uc_core::security::space_access::state::{DenyReason, SpaceAccessState};
+    use uc_core::security::SecretString;
+
+    use crate::usecases::space_access::SpaceAccessJoinerOffer;
+
+    type StateAssert = Box<dyn Fn(&SpaceAccessState) + Send + Sync>;
+
+    enum AccessTestStep {
+        Dispatch {
+            label: &'static str,
+            event: SpaceAccessEvent,
+            assert: StateAssert,
+        },
+        PrepareJoinerInput {
+            label: &'static str,
+            build_offer: Box<dyn Fn() -> SpaceAccessJoinerOffer + Send + Sync>,
+            build_passphrase: Box<dyn Fn() -> SecretString + Send + Sync>,
+        },
+        SetSponsorPeer { peer_id: &'static str },
+    }
+
+    impl AccessTestStep {
+        fn dispatch(label: &'static str, event: SpaceAccessEvent, assert: StateAssert) -> Self {
+            Self::Dispatch { label, event, assert }
+        }
+
+        fn prepare_joiner_input<FOffer, FPass>(
+            label: &'static str,
+            build_offer: FOffer,
+            build_passphrase: FPass,
+        ) -> Self
+        where
+            FOffer: Fn() -> SpaceAccessJoinerOffer + Send + Sync + 'static,
+            FPass: Fn() -> SecretString + Send + Sync + 'static,
+        {
+            Self::PrepareJoinerInput {
+                label,
+                build_offer: Box::new(build_offer),
+                build_passphrase: Box::new(build_passphrase),
+            }
+        }
+
+        fn set_sponsor_peer(peer_id: &'static str) -> Self {
+            Self::SetSponsorPeer { peer_id }
+        }
+    }
+
+    #[derive(Default)]
+    struct AccessTestHarness {
+        crypto: MockCrypto,
+        net: NoopNetwork,
+        transport: MockTransport,
+        proof: MockProof,
+        timer: MockTimer,
+        store: MockStore,
+    }
+
+    impl AccessTestHarness {
+        fn executor(&mut self) -> SpaceAccessExecutor<'_> {
+            SpaceAccessExecutor {
+                crypto: &self.crypto,
+                net: &self.net,
+                transport: &mut self.transport,
+                proof: &self.proof,
+                timer: &mut self.timer,
+                store: &mut self.store,
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn joiner_side_happy_path() {
+        let session_id: NetSessionId = "session-join".into();
+        let space_id: SpaceId = "space-join".into();
+        let ttl_secs = 30_u64;
+        let expires_at = Utc::now() + Duration::seconds(ttl_secs as i64);
+        let orchestrator = SpaceAccessOrchestrator::new();
+        let mut harness = AccessTestHarness::default();
+        let mut executor = harness.executor();
+
+        let steps = vec![
+            AccessTestStep::dispatch(
+                "join requested",
+                SpaceAccessEvent::JoinRequested {
+                    pairing_session_id: session_id.clone(),
+                    ttl_secs,
+                },
+                expect_waiting_offer(session_id.clone()),
+            ),
+            AccessTestStep::dispatch(
+                "offer accepted",
+                SpaceAccessEvent::OfferAccepted {
+                    pairing_session_id: session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at,
+                },
+                expect_waiting_user_passphrase(session_id.clone(), space_id.clone()),
+            ),
+            AccessTestStep::prepare_joiner_input(
+                "prepare joiner input",
+                {
+                    let space_id = space_id.clone();
+                    move || build_joiner_offer(&space_id)
+                },
+                || SecretString::new("join-pass".into()),
+            ),
+            AccessTestStep::dispatch(
+                "passphrase submitted",
+                SpaceAccessEvent::PassphraseSubmitted,
+                expect_waiting_decision(session_id.clone(), space_id.clone()),
+            ),
+            AccessTestStep::dispatch(
+                "access granted",
+                SpaceAccessEvent::AccessGranted {
+                    pairing_session_id: session_id.clone(),
+                    space_id: space_id.clone(),
+                },
+                expect_granted(session_id.clone(), space_id.clone()),
+            ),
+        ];
+
+        run_access_steps(&orchestrator, &mut executor, &session_id, &steps).await;
+
+        assert_eq!(harness.transport.proofs(), vec![session_id.clone()]);
+        assert!(harness.transport.results().is_empty());
+        assert_eq!(harness.timer.start_calls.len(), 2);
+        assert_eq!(harness.timer.stop_calls.len(), 2);
+        assert_eq!(harness.store.joiner_access, vec![space_id.clone()]);
+    }
+
+    #[tokio::test]
+    async fn joiner_side_denied() {
+        let session_id: NetSessionId = "session-denied".into();
+        let space_id: SpaceId = "space-denied".into();
+        let ttl_secs = 45_u64;
+        let expires_at = Utc::now() + Duration::seconds(ttl_secs as i64);
+        let orchestrator = SpaceAccessOrchestrator::new();
+        let mut harness = AccessTestHarness::default();
+        let mut executor = harness.executor();
+
+        let steps = vec![
+            AccessTestStep::dispatch(
+                "join requested",
+                SpaceAccessEvent::JoinRequested {
+                    pairing_session_id: session_id.clone(),
+                    ttl_secs,
+                },
+                expect_waiting_offer(session_id.clone()),
+            ),
+            AccessTestStep::dispatch(
+                "offer accepted",
+                SpaceAccessEvent::OfferAccepted {
+                    pairing_session_id: session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at,
+                },
+                expect_waiting_user_passphrase(session_id.clone(), space_id.clone()),
+            ),
+            AccessTestStep::prepare_joiner_input(
+                "prepare joiner input",
+                {
+                    let space_id = space_id.clone();
+                    move || build_joiner_offer(&space_id)
+                },
+                || SecretString::new("bad-pass".into()),
+            ),
+            AccessTestStep::dispatch(
+                "passphrase submitted",
+                SpaceAccessEvent::PassphraseSubmitted,
+                expect_waiting_decision(session_id.clone(), space_id.clone()),
+            ),
+            AccessTestStep::dispatch(
+                "access denied",
+                SpaceAccessEvent::AccessDenied {
+                    pairing_session_id: session_id.clone(),
+                    space_id: space_id.clone(),
+                    reason: DenyReason::InvalidProof,
+                },
+                expect_denied(session_id.clone(), space_id.clone(), DenyReason::InvalidProof),
+            ),
+        ];
+
+        run_access_steps(&orchestrator, &mut executor, &session_id, &steps).await;
+
+        assert_eq!(harness.transport.proofs(), vec![session_id.clone()]);
+        assert!(harness.transport.results().is_empty());
+        assert_eq!(harness.store.joiner_access.len(), 0);
+        assert_eq!(harness.timer.stop_calls.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn sponsor_side_happy_path() {
+        let session_id: NetSessionId = "session-sponsor".into();
+        let space_id: SpaceId = "space-sponsor".into();
+        let ttl_secs = 60_u64;
+        let orchestrator = SpaceAccessOrchestrator::new();
+        let mut harness = AccessTestHarness::default();
+        let mut executor = harness.executor();
+
+        let steps = vec![
+            AccessTestStep::dispatch(
+                "sponsor authorization requested",
+                SpaceAccessEvent::SponsorAuthorizationRequested {
+                    pairing_session_id: session_id.clone(),
+                    space_id: space_id.clone(),
+                    ttl_secs,
+                },
+                expect_waiting_joiner_proof(session_id.clone(), space_id.clone()),
+            ),
+            AccessTestStep::set_sponsor_peer("peer-sponsor"),
+            AccessTestStep::dispatch(
+                "proof verified",
+                SpaceAccessEvent::ProofVerified {
+                    pairing_session_id: session_id.clone(),
+                    space_id: space_id.clone(),
+                },
+                expect_granted(session_id.clone(), space_id.clone()),
+            ),
+        ];
+
+        run_access_steps(&orchestrator, &mut executor, &session_id, &steps).await;
+
+        assert_eq!(harness.transport.offers(), vec![session_id.clone()]);
+        assert_eq!(harness.transport.results(), vec![session_id.clone()]);
+        assert_eq!(harness.store.sponsor_access, vec![(space_id.clone(), "peer-sponsor".into())]);
+        assert_eq!(harness.timer.start_calls.len(), 1);
+        assert_eq!(harness.timer.stop_calls.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn sponsor_side_denied() {
+        let session_id: NetSessionId = "session-deny".into();
+        let space_id: SpaceId = "space-deny".into();
+        let ttl_secs = 90_u64;
+        let orchestrator = SpaceAccessOrchestrator::new();
+        let mut harness = AccessTestHarness::default();
+        let mut executor = harness.executor();
+
+        let steps = vec![
+            AccessTestStep::dispatch(
+                "sponsor authorization requested",
+                SpaceAccessEvent::SponsorAuthorizationRequested {
+                    pairing_session_id: session_id.clone(),
+                    space_id: space_id.clone(),
+                    ttl_secs,
+                },
+                expect_waiting_joiner_proof(session_id.clone(), space_id.clone()),
+            ),
+            AccessTestStep::set_sponsor_peer("peer-deny"),
+            AccessTestStep::dispatch(
+                "proof rejected",
+                SpaceAccessEvent::ProofRejected {
+                    pairing_session_id: session_id.clone(),
+                    space_id: space_id.clone(),
+                    reason: DenyReason::InvalidProof,
+                },
+                expect_denied(session_id.clone(), space_id.clone(), DenyReason::InvalidProof),
+            ),
+        ];
+
+        run_access_steps(&orchestrator, &mut executor, &session_id, &steps).await;
+
+        assert_eq!(harness.transport.offers(), vec![session_id.clone()]);
+        assert_eq!(harness.transport.results(), vec![session_id.clone()]);
+        assert!(harness.store.sponsor_access.is_empty());
+        assert_eq!(harness.timer.stop_calls.len(), 1);
+    }
+
+    async fn run_access_steps(
+        orchestrator: &SpaceAccessOrchestrator,
+        executor: &mut SpaceAccessExecutor<'_>,
+        pairing_session_id: &NetSessionId,
+        steps: &[AccessTestStep],
+    ) {
+        for step in steps {
+            match step {
+                AccessTestStep::Dispatch { label, event, assert } => {
+                    let next = orchestrator
+                        .dispatch(executor, event.clone(), Some(pairing_session_id.clone()))
+                        .await
+                        .unwrap_or_else(|err| panic!("{} failed: {:?}", label, err));
+                    assert(&next);
+                }
+                AccessTestStep::PrepareJoinerInput {
+                    build_offer,
+                    build_passphrase,
+                    ..
+                } => {
+                    let mut guard = orchestrator.context.lock().await;
+                    guard.joiner_offer = Some(build_offer());
+                    guard.joiner_passphrase = Some(build_passphrase());
+                }
+                AccessTestStep::SetSponsorPeer { peer_id } => {
+                    let mut guard = orchestrator.context.lock().await;
+                    guard.sponsor_peer_id = Some((*peer_id).to_string());
+                }
+            }
+        }
+    }
+
+    fn expect_waiting_offer(expected_session: NetSessionId) -> StateAssert {
+        Box::new(move |state| match state {
+            SpaceAccessState::WaitingOffer { pairing_session_id, .. } => {
+                assert_eq!(pairing_session_id, &expected_session)
+            }
+            other => panic!("expected WaitingOffer, got {:?}", other),
+        })
+    }
+
+    fn expect_waiting_user_passphrase(
+        expected_session: NetSessionId,
+        expected_space: SpaceId,
+    ) -> StateAssert {
+        Box::new(move |state| match state {
+            SpaceAccessState::WaitingUserPassphrase {
+                pairing_session_id,
+                space_id,
+                ..
+            } => {
+                assert_eq!(pairing_session_id, &expected_session);
+                assert_eq!(space_id, &expected_space);
+            }
+            other => panic!("expected WaitingUserPassphrase, got {:?}", other),
+        })
+    }
+
+    fn expect_waiting_decision(
+        expected_session: NetSessionId,
+        expected_space: SpaceId,
+    ) -> StateAssert {
+        Box::new(move |state| match state {
+            SpaceAccessState::WaitingDecision {
+                pairing_session_id,
+                space_id,
+                ..
+            } => {
+                assert_eq!(pairing_session_id, &expected_session);
+                assert_eq!(space_id, &expected_space);
+            }
+            other => panic!("expected WaitingDecision, got {:?}", other),
+        })
+    }
+
+    fn expect_waiting_joiner_proof(
+        expected_session: NetSessionId,
+        expected_space: SpaceId,
+    ) -> StateAssert {
+        Box::new(move |state| match state {
+            SpaceAccessState::WaitingJoinerProof {
+                pairing_session_id,
+                space_id,
+                ..
+            } => {
+                assert_eq!(pairing_session_id, &expected_session);
+                assert_eq!(space_id, &expected_space);
+            }
+            other => panic!("expected WaitingJoinerProof, got {:?}", other),
+        })
+    }
+
+    fn expect_granted(expected_session: NetSessionId, expected_space: SpaceId) -> StateAssert {
+        Box::new(move |state| match state {
+            SpaceAccessState::Granted {
+                pairing_session_id,
+                space_id,
+            } => {
+                assert_eq!(pairing_session_id, &expected_session);
+                assert_eq!(space_id, &expected_space);
+            }
+            other => panic!("expected Granted, got {:?}", other),
+        })
+    }
+
+    fn expect_denied(
+        expected_session: NetSessionId,
+        expected_space: SpaceId,
+        expected_reason: DenyReason,
+    ) -> StateAssert {
+        Box::new(move |state| match state {
+            SpaceAccessState::Denied {
+                pairing_session_id,
+                space_id,
+                reason,
+            } => {
+                assert_eq!(pairing_session_id, &expected_session);
+                assert_eq!(space_id, &expected_space);
+                assert_eq!(reason, &expected_reason);
+            }
+            other => panic!("expected Denied, got {:?}", other),
+        })
+    }
+
+    fn build_joiner_offer(space_id: &SpaceId) -> SpaceAccessJoinerOffer {
+        SpaceAccessJoinerOffer {
+            space_id: space_id.clone(),
+            keyslot_blob: vec![1, 2, 3, 4],
+            challenge_nonce: [5u8; 32],
+        }
+    }
+
+    #[derive(Default)]
+    struct MockCrypto;
+
+    #[async_trait]
+    impl CryptoPort for MockCrypto {
+        async fn generate_nonce32(&self) -> [u8; 32] {
+            [42u8; 32]
+        }
+
+        async fn export_keyslot_blob(&self, _space_id: &SpaceId) -> anyhow::Result<KeySlot> {
+            Ok(sample_keyslot())
+        }
+
+        async fn derive_master_key_from_keyslot(
+            &self,
+            _keyslot_blob: &[u8],
+            _passphrase: SecretString,
+        ) -> anyhow::Result<MasterKey> {
+            Ok(MasterKey([7u8; 32]))
+        }
+    }
+
+    fn sample_keyslot() -> KeySlot {
+        KeySlot {
+            version: KeySlotVersion::V1,
+            scope: KeyScope {
+                profile_id: "default".into(),
+            },
+            kdf: KdfParams::for_initialization(),
+            salt: vec![0u8; 16],
+            wrapped_master_key: Some(WrappedMasterKey {
+                blob: EncryptedBlob {
+                    version: EncryptionFormatVersion::V1,
+                    aead: EncryptionAlgo::XChaCha20Poly1305,
+                    nonce: vec![0u8; 24],
+                    ciphertext: vec![0u8; 32],
+                    aad_fingerprint: None,
+                },
+            }),
+        }
+    }
+
+    #[derive(Default)]
+    struct MockProof;
+
+    #[async_trait]
+    impl ProofPort for MockProof {
+        async fn build_proof(
+            &self,
+            pairing_session_id: &CoreSessionId,
+            space_id: &SpaceId,
+            challenge_nonce: [u8; 32],
+            _master_key: &MasterKey,
+        ) -> anyhow::Result<SpaceAccessProofArtifact> {
+            Ok(SpaceAccessProofArtifact {
+                pairing_session_id: pairing_session_id.clone(),
+                space_id: space_id.clone(),
+                challenge_nonce,
+                proof_bytes: vec![9, 9, 9],
+            })
+        }
+
+        async fn verify_proof(
+            &self,
+            _proof: &SpaceAccessProofArtifact,
+            _expected_nonce: [u8; 32],
+        ) -> anyhow::Result<bool> {
+            Ok(true)
+        }
+    }
+
+    #[derive(Default)]
+    struct MockTransport {
+        offers: Vec<String>,
+        proofs: Vec<String>,
+        results: Vec<String>,
+    }
+
+    impl MockTransport {
+        fn offers(&self) -> Vec<String> {
+            self.offers.clone()
+        }
+
+        fn proofs(&self) -> Vec<String> {
+            self.proofs.clone()
+        }
+
+        fn results(&self) -> Vec<String> {
+            self.results.clone()
+        }
+    }
+
+    #[async_trait]
+    impl SpaceAccessTransportPort for MockTransport {
+        async fn send_offer(&mut self, session_id: &NetSessionId) {
+            self.offers.push(session_id.clone());
+        }
+
+        async fn send_proof(&mut self, session_id: &NetSessionId) {
+            self.proofs.push(session_id.clone());
+        }
+
+        async fn send_result(&mut self, session_id: &NetSessionId) {
+            self.results.push(session_id.clone());
+        }
+    }
+
+    #[derive(Default)]
+    struct MockTimer {
+        start_calls: Vec<(String, u64)>,
+        stop_calls: Vec<String>,
+    }
+
+    #[async_trait]
+    impl TimerPort for MockTimer {
+        async fn start(&mut self, session_id: &CoreSessionId, ttl_secs: u64) -> anyhow::Result<()> {
+            self.start_calls.push((session_id.to_string(), ttl_secs));
+            Ok(())
+        }
+
+        async fn stop(&mut self, session_id: &CoreSessionId) -> anyhow::Result<()> {
+            self.stop_calls.push(session_id.to_string());
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct MockStore {
+        joiner_access: Vec<SpaceId>,
+        sponsor_access: Vec<(SpaceId, String)>,
+    }
+
+    #[async_trait]
+    impl PersistencePort for MockStore {
+        async fn persist_joiner_access(&mut self, space_id: &SpaceId) -> anyhow::Result<()> {
+            self.joiner_access.push(space_id.clone());
+            Ok(())
+        }
+
+        async fn persist_sponsor_access(
+            &mut self,
+            space_id: &SpaceId,
+            peer_id: &str,
+        ) -> anyhow::Result<()> {
+            self.sponsor_access
+                .push((space_id.clone(), peer_id.to_string()));
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct NoopNetwork;
+
+    #[async_trait]
+    impl NetworkPort for NoopNetwork {
+        async fn send_clipboard(&self, _peer_id: &str, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn broadcast_clipboard(&self, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_clipboard(&self) -> anyhow::Result<mpsc::Receiver<ClipboardMessage>> {
+            let (_tx, rx) = mpsc::channel(1);
+            Ok(rx)
+        }
+
+        async fn get_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+            Ok(Vec::new())
+        }
+
+        async fn get_connected_peers(&self) -> anyhow::Result<Vec<ConnectedPeer>> {
+            Ok(Vec::new())
+        }
+
+        fn local_peer_id(&self) -> String {
+            "local-peer".into()
+        }
+
+        async fn announce_device_name(&self, _device_name: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn open_pairing_session(&self, _peer_id: String, _session_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_on_session(
+            &self,
+            _session_id: String,
+            _message: PairingMessage,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn close_pairing_session(
+            &self,
+            _session_id: String,
+            _reason: Option<String>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn unpair_device(&self, _peer_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_events(&self) -> anyhow::Result<mpsc::Receiver<NetworkEvent>> {
+            let (_tx, rx) = mpsc::channel(1);
+            Ok(rx)
+        }
     }
 }

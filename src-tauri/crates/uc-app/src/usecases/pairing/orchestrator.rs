@@ -737,15 +737,70 @@ impl PairingOrchestrator {
                             .await
                             .context("Failed to queue send action")?;
                     }
-                    PairingAction::ShowVerification { .. }
-                    | PairingAction::ShowVerifying { .. } => {
+                    PairingAction::ShowVerification {
+                        session_id: action_session_id,
+                        short_code,
+                        local_fingerprint,
+                        peer_fingerprint,
+                        peer_display_name,
+                    } => {
+                        let short_code_clone = short_code.clone();
+                        let local_fingerprint_clone = local_fingerprint.clone();
+                        let peer_fingerprint_clone = peer_fingerprint.clone();
+                        let peer_id_for_event = {
+                            let peers = session_peers.read().await;
+                            peers
+                                .get(&action_session_id)
+                                .map(|info| info.peer_id.clone())
+                        };
+                        if let Some(peer_id) = peer_id_for_event {
+                            Self::emit_event_to_senders(
+                                event_senders.clone(),
+                                PairingDomainEvent::PairingVerificationRequired {
+                                    session_id: action_session_id.clone(),
+                                    peer_id,
+                                    short_code: short_code_clone,
+                                    local_fingerprint: local_fingerprint_clone,
+                                    peer_fingerprint: peer_fingerprint_clone,
+                                },
+                            )
+                            .await;
+                        } else {
+                            tracing::warn!(
+                                session_id = %action_session_id,
+                                "Pairing verification event missing peer info"
+                            );
+                        }
                         tracing::debug!(
-                            session_id = %session_id,
-                            action = ?action,
+                            session_id = %action_session_id,
+                            action = "ShowVerification",
                             "Sending UI action to frontend"
                         );
                         action_tx
-                            .send(action)
+                            .send(PairingAction::ShowVerification {
+                                session_id: action_session_id,
+                                short_code,
+                                local_fingerprint,
+                                peer_fingerprint,
+                                peer_display_name,
+                            })
+                            .await
+                            .context("Failed to queue ui action")?;
+                    }
+                    PairingAction::ShowVerifying {
+                        session_id: verifying_session_id,
+                        peer_display_name,
+                    } => {
+                        tracing::debug!(
+                            session_id = %verifying_session_id,
+                            action = "ShowVerifying",
+                            "Sending UI action to frontend"
+                        );
+                        action_tx
+                            .send(PairingAction::ShowVerifying {
+                                session_id: verifying_session_id,
+                                peer_display_name,
+                            })
                             .await
                             .context("Failed to queue ui action")?;
                     }
@@ -1729,6 +1784,75 @@ mod tests {
                 assert!(matches!(reason, FailureReason::Other(_)));
             }
             _ => panic!("expected PairingFailed event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn pairing_orchestrator_emits_verification_required_event() {
+        let config = PairingConfig::default();
+        let device_repo = Arc::new(MockDeviceRepository);
+        let (orchestrator, mut action_rx) = PairingOrchestrator::new(
+            config,
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![0u8; 32],
+        );
+
+        orchestrator
+            .record_session_peer(
+                "session-verify",
+                "peer-remote".to_string(),
+                Some("Remote".to_string()),
+            )
+            .await;
+
+        let mut event_rx = crate::usecases::pairing::PairingEventPort::subscribe(&orchestrator)
+            .await
+            .expect("subscribe event port");
+
+        orchestrator
+            .execute_action(
+                "session-verify",
+                "peer-remote",
+                PairingAction::ShowVerification {
+                    session_id: "session-verify".to_string(),
+                    short_code: "111-222".to_string(),
+                    local_fingerprint: "LOCAL".to_string(),
+                    peer_fingerprint: "PEER".to_string(),
+                    peer_display_name: "Remote".to_string(),
+                },
+            )
+            .await
+            .expect("execute action");
+
+        // consume action forwarded to UI channel
+        timeout(Duration::from_secs(1), action_rx.recv())
+            .await
+            .expect("action timeout")
+            .expect("action missing");
+
+        let event = timeout(Duration::from_secs(1), event_rx.recv())
+            .await
+            .expect("event timeout")
+            .expect("event missing");
+
+        match event {
+            crate::usecases::pairing::PairingDomainEvent::PairingVerificationRequired {
+                session_id,
+                peer_id,
+                short_code,
+                local_fingerprint,
+                peer_fingerprint,
+            } => {
+                assert_eq!(session_id, "session-verify");
+                assert_eq!(peer_id, "peer-remote");
+                assert_eq!(short_code, "111-222");
+                assert_eq!(local_fingerprint, "LOCAL");
+                assert_eq!(peer_fingerprint, "PEER");
+            }
+            _ => panic!("expected PairingVerificationRequired event"),
         }
     }
 }

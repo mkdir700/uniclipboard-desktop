@@ -15,7 +15,7 @@ use tauri_plugin_stronghold;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use uc_app::usecases::pairing::PairingOrchestrator;
+use uc_app::usecases::{pairing::PairingOrchestrator, space_access::SpaceAccessOrchestrator};
 use uc_core::config::AppConfig;
 use uc_core::ports::AppDirsPort;
 use uc_core::ports::ClipboardChangeHandler;
@@ -29,7 +29,7 @@ use uc_platform::runtime::runtime::PlatformRuntime;
 use uc_tauri::bootstrap::tracing as bootstrap_tracing;
 use uc_tauri::bootstrap::{
     ensure_default_device_name, load_config, resolve_pairing_config, resolve_pairing_device_name,
-    start_background_tasks, wire_dependencies, AppRuntime,
+    start_background_tasks, wire_dependencies, AppRuntime, SetupRuntimePorts,
 };
 use uc_tauri::protocol::{parse_uc_request, UcRoute};
 
@@ -408,18 +408,10 @@ fn run_app(config: AppConfig) {
     let deps = wired.deps;
     let background = wired.background;
 
-    // Create AppRuntime from dependencies
-    let runtime = AppRuntime::new(deps);
-
-    // Wrap runtime in Arc for clipboard handler (PlatformRuntime needs Arc<dyn ClipboardChangeHandler>)
-    let runtime_for_handler = Arc::new(runtime);
-
-    // Clone Arc for Tauri state management (will have app_handle injected in setup)
-    let runtime_for_tauri = runtime_for_handler.clone();
-
-    let pairing_device_repo = runtime_for_handler.deps.paired_device_repo.clone();
-    let pairing_device_identity = runtime_for_handler.deps.device_identity.clone();
-    let pairing_settings = runtime_for_handler.deps.settings.clone();
+    let pairing_device_repo = deps.paired_device_repo.clone();
+    let pairing_device_identity = deps.device_identity.clone();
+    let pairing_settings = deps.settings.clone();
+    let discovery_network = deps.network.clone();
     let pairing_peer_id = background.libp2p_network.local_peer_id();
     let pairing_identity_pubkey = background.libp2p_network.local_identity_pubkey();
     let (pairing_device_name, pairing_config) = tauri::async_runtime::block_on(async move {
@@ -437,6 +429,21 @@ fn run_app(config: AppConfig) {
         pairing_identity_pubkey,
     );
     let pairing_orchestrator = Arc::new(pairing_orchestrator);
+
+    let runtime = AppRuntime::with_setup(
+        deps,
+        SetupRuntimePorts::from_network(
+            pairing_orchestrator.clone(),
+            Arc::new(SpaceAccessOrchestrator::new()),
+            discovery_network,
+        ),
+    );
+
+    // Wrap runtime in Arc for clipboard handler (PlatformRuntime needs Arc<dyn ClipboardChangeHandler>)
+    let runtime_for_handler = Arc::new(runtime);
+
+    // Clone Arc for Tauri state management (will have app_handle injected in setup)
+    let runtime_for_tauri = runtime_for_handler.clone();
 
     // Startup barrier used to coordinate backend readiness and main window show timing.
     let startup_barrier = Arc::new(uc_tauri::commands::startup::StartupBarrier::default());
@@ -616,6 +623,7 @@ fn run_app(config: AppConfig) {
             uc_tauri::commands::setup::select_device,
             uc_tauri::commands::setup::submit_passphrase,
             uc_tauri::commands::setup::verify_passphrase,
+            uc_tauri::commands::setup::confirm_peer_trust,
             uc_tauri::commands::setup::cancel_setup,
             // Pairing commands
             uc_tauri::commands::pairing::get_local_peer_id,

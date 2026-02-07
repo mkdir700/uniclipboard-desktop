@@ -89,6 +89,14 @@ export async function verifyPassphrase(passphrase: string): Promise<SetupState> 
 }
 
 /**
+ * Confirm trust for the selected peer device
+ * 确认选中设备的可信度
+ */
+export async function confirmPeerTrust(): Promise<SetupState> {
+  return decodeSetupState(await invokeWithTrace('confirm_peer_trust'))
+}
+
+/**
  * Cancel setup flow
  * 取消设置流程
  */

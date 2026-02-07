@@ -29,11 +29,18 @@
 //! 2. Add a method to `UseCases` that calls `new()` with deps
 //! 3. Commands can now call `runtime.usecases().your_use_case()`
 
+use async_trait::async_trait;
 use std::sync::Arc;
 use tauri::Emitter;
-use uc_app::{usecases::SetupOrchestrator, App, AppDeps};
+use uc_app::{
+    usecases::{
+        space_access::SpaceAccessOrchestrator, PairingConfig, PairingOrchestrator, SetupOrchestrator,
+    },
+    App, AppDeps,
+};
 use uc_core::config::AppConfig;
-use uc_core::ports::ClipboardChangeHandler;
+use uc_core::network::DiscoveredPeer;
+use uc_core::ports::{ClipboardChangeHandler, DiscoveryPort, NetworkPort};
 use uc_core::{ClipboardChangeOrigin, SystemClipboardSnapshot};
 
 use crate::events::ClipboardEvent;
@@ -86,14 +93,63 @@ pub struct AppRuntime {
     setup_orchestrator: Arc<SetupOrchestrator>,
 }
 
+/// Setup wiring dependencies for runtime-level orchestrators.
+pub struct SetupRuntimePorts {
+    pairing_orchestrator: Arc<PairingOrchestrator>,
+    space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
+    discovery_port: Arc<dyn DiscoveryPort>,
+}
+
+impl SetupRuntimePorts {
+    /// Create a new SetupRuntimePorts bundle.
+    pub fn new(
+        pairing_orchestrator: Arc<PairingOrchestrator>,
+        space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
+        discovery_port: Arc<dyn DiscoveryPort>,
+    ) -> Self {
+        Self {
+            pairing_orchestrator,
+            space_access_orchestrator,
+            discovery_port,
+        }
+    }
+
+    /// Create a bundle using the network port as the discovery adapter.
+    pub fn from_network(
+        pairing_orchestrator: Arc<PairingOrchestrator>,
+        space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
+        network: Arc<dyn NetworkPort>,
+    ) -> Self {
+        Self::new(
+            pairing_orchestrator,
+            space_access_orchestrator,
+            Arc::new(NetworkDiscoveryPort { network }),
+        )
+    }
+
+    fn placeholder(deps: &AppDeps) -> Self {
+        Self::new(
+            AppRuntime::placeholder_pairing_orchestrator(deps),
+            Arc::new(SpaceAccessOrchestrator::new()),
+            Arc::new(EmptyDiscoveryPort),
+        )
+    }
+}
+
 impl AppRuntime {
     /// Create a new AppRuntime from dependencies.
     /// 从依赖创建新的 AppRuntime。
     pub fn new(deps: AppDeps) -> Self {
+        let setup_ports = SetupRuntimePorts::placeholder(&deps);
+        Self::with_setup(deps, setup_ports)
+    }
+
+    /// Create a new AppRuntime with explicit setup orchestrator dependencies.
+    pub fn with_setup(deps: AppDeps, setup_ports: SetupRuntimePorts) -> Self {
         let lifecycle_status: Arc<dyn uc_app::usecases::LifecycleStatusPort> =
             Arc::new(crate::adapters::lifecycle::InMemoryLifecycleStatus::new());
 
-        let setup_orchestrator = Self::build_setup_orchestrator(&deps, &lifecycle_status);
+        let setup_orchestrator = Self::build_setup_orchestrator(&deps, &lifecycle_status, &setup_ports);
 
         Self {
             deps,
@@ -137,6 +193,7 @@ impl AppRuntime {
     fn build_setup_orchestrator(
         deps: &AppDeps,
         lifecycle_status: &Arc<dyn uc_app::usecases::LifecycleStatusPort>,
+        setup_ports: &SetupRuntimePorts,
     ) -> Arc<SetupOrchestrator> {
         let initialize_encryption = Arc::new(uc_app::usecases::InitializeEncryption::from_ports(
             deps.encryption.clone(),
@@ -177,7 +234,42 @@ impl AppRuntime {
             mark_setup_complete,
             deps.setup_status.clone(),
             app_lifecycle,
+            setup_ports.pairing_orchestrator.clone(),
+            setup_ports.space_access_orchestrator.clone(),
+            setup_ports.discovery_port.clone(),
         ))
+    }
+
+    fn placeholder_pairing_orchestrator(deps: &AppDeps) -> Arc<PairingOrchestrator> {
+        let (orchestrator, _rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            deps.paired_device_repo.clone(),
+            "setup-placeholder-device".to_string(),
+            "setup-placeholder-device-id".to_string(),
+            "setup-placeholder-peer-id".to_string(),
+            vec![],
+        );
+        Arc::new(orchestrator)
+    }
+}
+
+struct NetworkDiscoveryPort {
+    network: Arc<dyn NetworkPort>,
+}
+
+#[async_trait]
+impl DiscoveryPort for NetworkDiscoveryPort {
+    async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+        self.network.get_discovered_peers().await
+    }
+}
+
+struct EmptyDiscoveryPort;
+
+#[async_trait]
+impl DiscoveryPort for EmptyDiscoveryPort {
+    async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+        Ok(Vec::new())
     }
 }
 

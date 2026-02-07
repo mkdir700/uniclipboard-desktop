@@ -6,15 +6,22 @@ use tempfile::TempDir;
 use uc_app::usecases::{
     AppLifecycleCoordinator, AppLifecycleCoordinatorDeps, InitializeEncryption, LifecycleEvent,
     LifecycleEventEmitter, LifecycleState, LifecycleStatusPort, MarkSetupComplete,
-    SessionReadyEmitter, SetupOrchestrator, StartClipboardWatcher, StartNetworkAfterUnlock,
+    PairingConfig, PairingOrchestrator, SessionReadyEmitter, SetupOrchestrator,
+    StartClipboardWatcher, StartNetworkAfterUnlock,
 };
+use uc_app::usecases::space_access::SpaceAccessOrchestrator;
+use uc_core::network::{DiscoveredPeer, PairedDevice, PairingState};
 use uc_core::ports::network_control::NetworkControlPort;
 use uc_core::ports::security::key_scope::{KeyScopePort, ScopeError};
 use uc_core::ports::security::secure_storage::{SecureStorageError, SecureStoragePort};
 use uc_core::ports::watcher_control::{WatcherControlError, WatcherControlPort};
-use uc_core::ports::{EncryptionSessionPort, SetupStatusPort};
+use uc_core::ports::{
+    DiscoveryPort, EncryptionSessionPort, PairedDeviceRepositoryError, PairedDeviceRepositoryPort,
+    SetupStatusPort,
+};
 use uc_core::security::model::KeyScope;
 use uc_core::setup::SetupState;
+use uc_core::PeerId;
 use uc_infra::fs::key_slot_store::JsonKeySlotStore;
 use uc_infra::security::{
     DefaultKeyMaterialService, EncryptionRepository, FileEncryptionStateRepository,
@@ -120,6 +127,61 @@ impl LifecycleEventEmitter for MockLifecycleEventEmitter {
     }
 }
 
+struct NoopPairedDeviceRepository;
+
+#[async_trait]
+impl PairedDeviceRepositoryPort for NoopPairedDeviceRepository {
+    async fn get_by_peer_id(
+        &self,
+        _peer_id: &PeerId,
+    ) -> Result<Option<PairedDevice>, PairedDeviceRepositoryError> {
+        Ok(None)
+    }
+
+    async fn list_all(&self) -> Result<Vec<PairedDevice>, PairedDeviceRepositoryError> {
+        Ok(Vec::new())
+    }
+
+    async fn upsert(
+        &self,
+        _device: PairedDevice,
+    ) -> Result<(), PairedDeviceRepositoryError> {
+        Ok(())
+    }
+
+    async fn set_state(
+        &self,
+        _peer_id: &PeerId,
+        _state: PairingState,
+    ) -> Result<(), PairedDeviceRepositoryError> {
+        Ok(())
+    }
+
+    async fn update_last_seen(
+        &self,
+        _peer_id: &PeerId,
+        _last_seen_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), PairedDeviceRepositoryError> {
+        Ok(())
+    }
+
+    async fn delete(
+        &self,
+        _peer_id: &PeerId,
+    ) -> Result<(), PairedDeviceRepositoryError> {
+        Ok(())
+    }
+}
+
+struct NoopDiscoveryPort;
+
+#[async_trait]
+impl DiscoveryPort for NoopDiscoveryPort {
+    async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+        Ok(Vec::new())
+    }
+}
+
 fn build_mock_lifecycle() -> Arc<AppLifecycleCoordinator> {
     Arc::new(AppLifecycleCoordinator::from_deps(
         AppLifecycleCoordinatorDeps {
@@ -131,6 +193,27 @@ fn build_mock_lifecycle() -> Arc<AppLifecycleCoordinator> {
             lifecycle_emitter: Arc::new(MockLifecycleEventEmitter),
         },
     ))
+}
+
+fn build_pairing_orchestrator() -> Arc<PairingOrchestrator> {
+    let repo = Arc::new(NoopPairedDeviceRepository);
+    let (orchestrator, _rx) = PairingOrchestrator::new(
+        PairingConfig::default(),
+        repo,
+        "test-device".to_string(),
+        "test-device-id".to_string(),
+        "test-peer-id".to_string(),
+        vec![],
+    );
+    Arc::new(orchestrator)
+}
+
+fn build_space_access_orchestrator() -> Arc<SpaceAccessOrchestrator> {
+    Arc::new(SpaceAccessOrchestrator::new())
+}
+
+fn build_discovery_port() -> Arc<dyn DiscoveryPort> {
+    Arc::new(NoopDiscoveryPort)
 }
 
 #[tokio::test]
@@ -166,6 +249,9 @@ async fn create_space_flow_marks_setup_complete_and_persists_state() {
         mark_setup_complete,
         setup_status.clone(),
         build_mock_lifecycle(),
+        build_pairing_orchestrator(),
+        build_space_access_orchestrator(),
+        build_discovery_port(),
     );
 
     orchestrator.new_space().await.expect("new space");

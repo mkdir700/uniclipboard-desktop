@@ -12,6 +12,13 @@ pub enum PairingDomainEvent {
         keyslot_file: KeySlotFile,
         challenge: Vec<u8>,
     },
+    PairingVerificationRequired {
+        session_id: String,
+        peer_id: String,
+        short_code: String,
+        local_fingerprint: String,
+        peer_fingerprint: String,
+    },
     PairingSucceeded {
         session_id: String,
         peer_id: String,

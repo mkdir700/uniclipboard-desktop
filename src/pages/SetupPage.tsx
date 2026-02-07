@@ -8,6 +8,7 @@ import { getP2PPeers, P2PPeerInfo } from '@/api/p2p'
 import {
   cancelSetup,
   getSetupState,
+  confirmPeerTrust,
   selectJoinPeer,
   startJoinSpace,
   startNewSpace,
@@ -171,7 +172,7 @@ export default function SetupPage({ onCompleteSetup }: SetupPageProps = {}) {
           <PairingConfirmStep
             shortCode={short_code}
             peerFingerprint={peer_fingerprint}
-            onConfirm={() => runAction(() => cancelSetup())}
+            onConfirm={() => runAction(() => confirmPeerTrust())}
             onCancel={() => runAction(() => cancelSetup())}
             error={error}
             loading={loading}

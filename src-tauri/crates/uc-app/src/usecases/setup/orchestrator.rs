@@ -6,17 +6,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, info_span, Instrument};
+use tracing::{debug, error, info, info_span, warn, Instrument};
+use anyhow::anyhow;
 
 use uc_core::{
-    ports::SetupStatusPort,
+    ports::{DiscoveryPort, SetupStatusPort},
     security::{model::Passphrase, SecretString},
     setup::{SetupAction, SetupEvent, SetupState, SetupStateMachine},
 };
 
 use crate::usecases::initialize_encryption::InitializeEncryptionError;
+use crate::usecases::pairing::{PairingDomainEvent, PairingEventPort, PairingOrchestrator};
 use crate::usecases::setup::context::SetupContext;
 use crate::usecases::setup::MarkSetupComplete;
+use crate::usecases::space_access::SpaceAccessOrchestrator;
 use crate::usecases::AppLifecycleCoordinator;
 use crate::usecases::InitializeEncryption;
 
@@ -31,6 +34,8 @@ pub enum SetupError {
     LifecycleFailed(#[source] anyhow::Error),
     #[error("setup action not implemented: {0}")]
     ActionNotImplemented(&'static str),
+    #[error("pairing operation failed")]
+    PairingFailed,
 }
 
 /// Orchestrator that drives setup state and side effects.
@@ -38,6 +43,7 @@ pub struct SetupOrchestrator {
     context: Arc<SetupContext>,
 
     selected_peer_id: Arc<Mutex<Option<String>>>,
+    pairing_session_id: Arc<Mutex<Option<String>>>,
     passphrase: Arc<Mutex<Option<Passphrase>>>,
     seeded: AtomicBool,
 
@@ -46,6 +52,9 @@ pub struct SetupOrchestrator {
     mark_setup_complete: Arc<MarkSetupComplete>,
     setup_status: Arc<dyn SetupStatusPort>,
     app_lifecycle: Arc<AppLifecycleCoordinator>,
+    pairing_orchestrator: Arc<PairingOrchestrator>,
+    space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
+    discovery_port: Arc<dyn DiscoveryPort>,
 }
 
 impl SetupOrchestrator {
@@ -54,16 +63,23 @@ impl SetupOrchestrator {
         mark_setup_complete: Arc<MarkSetupComplete>,
         setup_status: Arc<dyn SetupStatusPort>,
         app_lifecycle: Arc<AppLifecycleCoordinator>,
+        pairing_orchestrator: Arc<PairingOrchestrator>,
+        space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
+        discovery_port: Arc<dyn DiscoveryPort>,
     ) -> Self {
         Self {
             context: SetupContext::default().arc(),
             selected_peer_id: Arc::new(Mutex::new(None)),
+            pairing_session_id: Arc::new(Mutex::new(None)),
             passphrase: Arc::new(Mutex::new(None)),
             seeded: AtomicBool::new(false),
             initialize_encryption,
             mark_setup_complete,
             setup_status,
             app_lifecycle,
+            pairing_orchestrator,
+            space_access_orchestrator,
+            discovery_port,
         }
     }
 
@@ -94,9 +110,14 @@ impl SetupOrchestrator {
     }
 
     pub async fn verify_passphrase(&self, passphrase: String) -> Result<SetupState, SetupError> {
-        let event = SetupEvent::VerifyPassphrase {
+        let event = SetupEvent::SubmitPassphrase {
             passphrase: SecretString::new(passphrase),
         };
+        self.dispatch(event).await
+    }
+
+    pub async fn confirm_peer_trust(&self) -> Result<SetupState, SetupError> {
+        let event = SetupEvent::ConfirmPeerTrust;
         self.dispatch(event).await
     }
 
@@ -163,24 +184,29 @@ impl SetupOrchestrator {
                     debug!("setup action MarkSetupComplete completed");
                 }
                 SetupAction::EnsureDiscovery => {
-                    error!("Setup action EnsureDiscovery is not implemented yet");
-                    return Err(SetupError::ActionNotImplemented("EnsureDiscovery"));
+                    if let Err(err) = self.discovery_port.list_discovered_peers().await {
+                        warn!(error = %err, "failed to ensure discovery state");
+                    } else {
+                        debug!("setup action EnsureDiscovery completed");
+                    }
                 }
                 SetupAction::EnsurePairing => {
-                    error!("Setup action EnsurePairing is not implemented yet");
-                    return Err(SetupError::ActionNotImplemented("EnsurePairing"));
+                    self.ensure_pairing_session().await?;
+                    debug!("setup action EnsurePairing completed");
                 }
                 SetupAction::ConfirmPeerTrust => {
-                    error!("Setup action ConfirmPeerTrust is not implemented yet");
-                    return Err(SetupError::ActionNotImplemented("ConfirmPeerTrust"));
+                    self.confirm_peer_trust_action().await?;
+                    debug!("setup action ConfirmPeerTrust completed");
                 }
                 SetupAction::AbortPairing => {
-                    error!("Setup action AbortPairing is not implemented yet");
-                    return Err(SetupError::ActionNotImplemented("AbortPairing"));
+                    self.abort_pairing_session().await;
+                    debug!("setup action AbortPairing completed");
                 }
                 SetupAction::StartJoinSpaceAccess => {
-                    error!("Setup action StartJoinSpaceAccess is not implemented yet");
-                    return Err(SetupError::ActionNotImplemented("StartJoinSpaceAccess"));
+                    warn!("StartJoinSpaceAccess invoked without space access wiring");
+                    return Err(SetupError::LifecycleFailed(anyhow!(
+                        "join space access flow is not available"
+                    )));
                 }
             }
         }
@@ -204,7 +230,7 @@ impl SetupOrchestrator {
             SetupEvent::VerifyPassphrase { passphrase } => {
                 let (event_passphrase, stored_passphrase) = Self::split_passphrase(passphrase);
                 *self.passphrase.lock().await = Some(stored_passphrase);
-                SetupEvent::VerifyPassphrase {
+                SetupEvent::SubmitPassphrase {
                     passphrase: event_passphrase,
                 }
             }
@@ -241,14 +267,153 @@ impl SetupOrchestrator {
             }
         }
     }
+
+    async fn ensure_pairing_session(&self) -> Result<(), SetupError> {
+        let peer_id = {
+            let guard = self.selected_peer_id.lock().await;
+            guard.clone()
+        }
+        .ok_or_else(|| {
+            error!("ensure pairing requested without selected peer");
+            SetupError::PairingFailed
+        })?;
+
+        let session_id = self
+            .pairing_orchestrator
+            .initiate_pairing(peer_id.clone())
+            .await
+            .map_err(|err| {
+                error!(error = %err, peer_id = %peer_id, "failed to initiate pairing session");
+                SetupError::PairingFailed
+            })?;
+
+        {
+            let mut guard = self.pairing_session_id.lock().await;
+            *guard = Some(session_id.clone());
+        }
+
+        self.start_pairing_verification_listener(session_id).await;
+        Ok(())
+    }
+
+    async fn confirm_peer_trust_action(&self) -> Result<(), SetupError> {
+        let session_id = {
+            let guard = self.pairing_session_id.lock().await;
+            guard.clone()
+        }
+        .ok_or_else(|| {
+            error!("confirm peer trust requested without active session");
+            SetupError::PairingFailed
+        })?;
+
+        self.pairing_orchestrator
+            .user_accept_pairing(&session_id)
+            .await
+            .map_err(|err| {
+                error!(error = %err, session_id = %session_id, "failed to accept pairing session");
+                SetupError::PairingFailed
+            })?;
+
+        self.context
+            .set_state(SetupState::JoinSpaceInputPassphrase { error: None })
+            .await;
+        Ok(())
+    }
+
+    async fn abort_pairing_session(&self) {
+        let session_id = {
+            let mut guard = self.pairing_session_id.lock().await;
+            guard.take()
+        };
+        if let Some(session_id) = session_id {
+            if let Err(err) = self
+                .pairing_orchestrator
+                .user_reject_pairing(&session_id)
+                .await
+            {
+                warn!(error = %err, session_id = %session_id, "failed to reject pairing session");
+            }
+        }
+
+        {
+            let mut guard = self.selected_peer_id.lock().await;
+            guard.take();
+        }
+    }
+
+    async fn start_pairing_verification_listener(&self, session_id: String) {
+        let mut event_rx = match self.pairing_orchestrator.subscribe().await {
+            Ok(rx) => rx,
+            Err(err) => {
+                error!(
+                    error = %err,
+                    session_id = %session_id,
+                    "failed to subscribe pairing events"
+                );
+                return;
+            }
+        };
+        let context = Arc::clone(&self.context);
+        let pairing_session_id = Arc::clone(&self.pairing_session_id);
+
+        tokio::spawn(async move {
+            while let Some(event) = event_rx.recv().await {
+                if !Self::pairing_session_matches(&pairing_session_id, &session_id).await {
+                    break;
+                }
+                match event {
+                    PairingDomainEvent::PairingVerificationRequired {
+                        session_id: event_session_id,
+                        short_code,
+                        peer_fingerprint,
+                        ..
+                    } if event_session_id == session_id => {
+                        context
+                            .set_state(SetupState::JoinSpaceConfirmPeer {
+                                short_code,
+                                peer_fingerprint: Some(peer_fingerprint),
+                                error: None,
+                            })
+                            .await;
+                        break;
+                    }
+                    PairingDomainEvent::PairingFailed { session_id: event_session_id, .. }
+                        if event_session_id == session_id =>
+                    {
+                        break;
+                    }
+                    PairingDomainEvent::PairingSucceeded { session_id: event_session_id, .. }
+                        if event_session_id == session_id =>
+                    {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    async fn pairing_session_matches(
+        pairing_session: &Arc<Mutex<Option<String>>>,
+        target_session: &str,
+    ) -> bool {
+        let guard = pairing_session.lock().await;
+        guard
+            .as_ref()
+            .map(|current| current == target_session)
+            .unwrap_or(false)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use crate::usecases::pairing::{PairingConfig, PairingOrchestrator};
+    use crate::usecases::space_access::SpaceAccessOrchestrator;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex as StdMutex};
+    use uc_core::network::{DiscoveredPeer, PairedDevice, PairingState};
     use uc_core::ports::network_control::NetworkControlPort;
     use uc_core::ports::security::encryption::EncryptionPort;
     use uc_core::ports::security::encryption_session::EncryptionSessionPort;
@@ -256,12 +421,16 @@ mod tests {
     use uc_core::ports::security::key_material::KeyMaterialPort;
     use uc_core::ports::security::key_scope::{KeyScopePort, ScopeError};
     use uc_core::ports::watcher_control::{WatcherControlError, WatcherControlPort};
+    use uc_core::ports::{
+        DiscoveryPort, PairedDeviceRepositoryError, PairedDeviceRepositoryPort,
+    };
     use uc_core::security::model::{
         EncryptedBlob, EncryptionAlgo, EncryptionError, Kek, KeyScope, KeySlot, MasterKey,
         Passphrase,
     };
     use uc_core::security::state::{EncryptionState, EncryptionStateError};
-    use uc_core::setup::SetupStatus;
+    use uc_core::setup::{SetupError as SetupDomainError, SetupStatus};
+    use uc_core::PeerId;
 
     use crate::usecases::{
         AppLifecycleCoordinatorDeps, LifecycleEvent, LifecycleEventEmitter, LifecycleState,
@@ -612,6 +781,61 @@ mod tests {
         }
     }
 
+    struct NoopPairedDeviceRepository;
+
+    #[async_trait]
+    impl PairedDeviceRepositoryPort for NoopPairedDeviceRepository {
+        async fn get_by_peer_id(
+            &self,
+            _peer_id: &PeerId,
+        ) -> Result<Option<PairedDevice>, PairedDeviceRepositoryError> {
+            Ok(None)
+        }
+
+        async fn list_all(&self) -> Result<Vec<PairedDevice>, PairedDeviceRepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn upsert(
+            &self,
+            _device: PairedDevice,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn set_state(
+            &self,
+            _peer_id: &PeerId,
+            _state: PairingState,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn update_last_seen(
+            &self,
+            _peer_id: &PeerId,
+            _last_seen_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn delete(
+            &self,
+            _peer_id: &PeerId,
+        ) -> Result<(), PairedDeviceRepositoryError> {
+            Ok(())
+        }
+    }
+
+    struct NoopDiscoveryPort;
+
+    #[async_trait]
+    impl DiscoveryPort for NoopDiscoveryPort {
+        async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+            Ok(Vec::new())
+        }
+    }
+
     fn build_mock_lifecycle() -> Arc<AppLifecycleCoordinator> {
         Arc::new(AppLifecycleCoordinator::from_deps(
             AppLifecycleCoordinatorDeps {
@@ -645,6 +869,27 @@ mod tests {
         ))
     }
 
+    fn build_pairing_orchestrator() -> Arc<PairingOrchestrator> {
+        let repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            repo,
+            "test-device".to_string(),
+            "test-device-id".to_string(),
+            "test-peer-id".to_string(),
+            vec![],
+        );
+        Arc::new(orchestrator)
+    }
+
+    fn build_space_access_orchestrator() -> Arc<SpaceAccessOrchestrator> {
+        Arc::new(SpaceAccessOrchestrator::new())
+    }
+
+    fn build_discovery_port() -> Arc<dyn DiscoveryPort> {
+        Arc::new(NoopDiscoveryPort)
+    }
+
     fn build_orchestrator_with_initialize_encryption(
         setup_status: Arc<dyn SetupStatusPort>,
         initialize_encryption: Arc<InitializeEncryption>,
@@ -656,6 +901,9 @@ mod tests {
             mark_setup_complete,
             setup_status,
             build_mock_lifecycle(),
+            build_pairing_orchestrator(),
+            build_space_access_orchestrator(),
+            build_discovery_port(),
         )
     }
 
@@ -714,5 +962,346 @@ mod tests {
         let status = setup_status.get_status().await.unwrap();
         assert!(status.has_completed);
         assert_eq!(setup_status.set_call_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn capture_context_normalizes_verify_passphrase_events() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator(setup_status);
+
+        let event = orchestrator
+            .capture_context(SetupEvent::VerifyPassphrase {
+                passphrase: SecretString::new("secret".to_string()),
+            })
+            .await;
+
+        match event {
+            SetupEvent::SubmitPassphrase { .. } => {}
+            other => panic!("unexpected event returned: {:?}", other),
+        }
+
+        assert!(orchestrator.passphrase.lock().await.is_some());
+    }
+
+    enum JoinStepAction {
+        Dispatch(Box<dyn Fn() -> SetupEvent + Send + Sync>),
+        ForceState(SetupState),
+        SimulatePassphrase(&'static str),
+        SelectPeer(&'static str),
+        SetPairingSession(&'static str),
+    }
+
+    struct JoinTestStep {
+        label: &'static str,
+        action: JoinStepAction,
+        expected_state: SetupState,
+    }
+
+    impl JoinTestStep {
+        fn dispatch<F>(label: &'static str, builder: F, expected_state: SetupState) -> Self
+        where
+            F: Fn() -> SetupEvent + Send + Sync + 'static,
+        {
+            Self {
+                label,
+                action: JoinStepAction::Dispatch(Box::new(builder)),
+                expected_state,
+            }
+        }
+
+        fn force_state(label: &'static str, state: SetupState) -> Self {
+            Self {
+                label,
+                action: JoinStepAction::ForceState(state.clone()),
+                expected_state: state,
+            }
+        }
+
+        fn simulate_passphrase(
+            label: &'static str,
+            passphrase: &'static str,
+            expected_state: SetupState,
+        ) -> Self {
+            Self {
+                label,
+                action: JoinStepAction::SimulatePassphrase(passphrase),
+                expected_state,
+            }
+        }
+
+        fn select_peer(
+            label: &'static str,
+            peer_id: &'static str,
+            expected_state: SetupState,
+        ) -> Self {
+            Self {
+                label,
+                action: JoinStepAction::SelectPeer(peer_id),
+                expected_state,
+            }
+        }
+
+        fn set_pairing_session(
+            label: &'static str,
+            session_id: &'static str,
+            expected_state: SetupState,
+        ) -> Self {
+            Self {
+                label,
+                action: JoinStepAction::SetPairingSession(session_id),
+                expected_state,
+            }
+        }
+    }
+
+    async fn simulate_passphrase_submission(orchestrator: &SetupOrchestrator, passphrase: &str) {
+        let _ = orchestrator
+            .capture_context(SetupEvent::SubmitPassphrase {
+                passphrase: SecretString::new(passphrase.to_string()),
+            })
+            .await;
+
+        orchestrator
+            .context
+            .set_state(SetupState::ProcessingJoinSpace {
+                message: Some("Verifying passphrase…".into()),
+            })
+            .await;
+    }
+
+    async fn run_join_steps(orchestrator: &SetupOrchestrator, steps: &[JoinTestStep]) {
+        for step in steps {
+            match &step.action {
+                JoinStepAction::Dispatch(builder) => {
+                    let next = orchestrator
+                        .dispatch(builder())
+                        .await
+                        .unwrap_or_else(|err| panic!("{} failed: {:?}", step.label, err));
+                    assert_eq!(next, step.expected_state, "{} state mismatch", step.label);
+                }
+                JoinStepAction::ForceState(state) => {
+                    orchestrator.context.set_state(state.clone()).await;
+                    let current = orchestrator.context.get_state().await;
+                    assert_eq!(current, step.expected_state, "{} state mismatch", step.label);
+                }
+                JoinStepAction::SimulatePassphrase(passphrase) => {
+                    simulate_passphrase_submission(orchestrator, passphrase).await;
+                    let current = orchestrator.context.get_state().await;
+                    assert_eq!(current, step.expected_state, "{} state mismatch", step.label);
+                }
+                JoinStepAction::SelectPeer(peer_id) => {
+                    *orchestrator.selected_peer_id.lock().await = Some((*peer_id).to_string());
+                    let current = orchestrator.context.get_state().await;
+                    assert_eq!(current, step.expected_state, "{} state mismatch", step.label);
+                }
+                JoinStepAction::SetPairingSession(session_id) => {
+                    *orchestrator.pairing_session_id.lock().await = Some((*session_id).to_string());
+                    let current = orchestrator.context.get_state().await;
+                    assert_eq!(current, step.expected_state, "{} state mismatch", step.label);
+                }
+            }
+        }
+    }
+
+    fn join_processing_state(message: &str) -> SetupState {
+        SetupState::ProcessingJoinSpace {
+            message: Some(message.to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn join_space_happy_path() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator(setup_status.clone());
+
+        let steps = vec![
+            JoinTestStep::dispatch(
+                "start join space",
+                || SetupEvent::StartJoinSpace,
+                SetupState::JoinSpaceSelectDevice { error: None },
+            ),
+            JoinTestStep::select_peer(
+                "remember peer selection",
+                "peer-123",
+                SetupState::JoinSpaceSelectDevice { error: None },
+            ),
+            JoinTestStep::force_state(
+                "transition to processing",
+                join_processing_state("Connecting to selected device…"),
+            ),
+            JoinTestStep::force_state(
+                "pairing verification delivered",
+                SetupState::JoinSpaceConfirmPeer {
+                    short_code: "123-456".into(),
+                    peer_fingerprint: Some("fp".into()),
+                    error: None,
+                },
+            ),
+            JoinTestStep::set_pairing_session(
+                "store pairing session",
+                "session-1",
+                SetupState::JoinSpaceConfirmPeer {
+                    short_code: "123-456".into(),
+                    peer_fingerprint: Some("fp".into()),
+                    error: None,
+                },
+            ),
+            JoinTestStep::force_state(
+                "transition to passphrase input",
+                SetupState::JoinSpaceInputPassphrase { error: None },
+            ),
+            JoinTestStep::simulate_passphrase(
+                "submit passphrase",
+                "join-secret",
+                join_processing_state("Verifying passphrase…"),
+            ),
+            JoinTestStep::dispatch(
+                "space access granted",
+                || SetupEvent::JoinSpaceSucceeded,
+                SetupState::Completed,
+            ),
+        ];
+
+        run_join_steps(&orchestrator, &steps).await;
+
+        let status = setup_status.get_status().await.unwrap();
+        assert!(status.has_completed, "setup status should mark completion");
+    }
+
+    #[tokio::test]
+    async fn join_space_pairing_fails() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator(setup_status);
+
+        let steps = vec![
+            JoinTestStep::dispatch(
+                "start join space",
+                || SetupEvent::StartJoinSpace,
+                SetupState::JoinSpaceSelectDevice { error: None },
+            ),
+            JoinTestStep::select_peer(
+                "remember peer selection",
+                "peer-fail",
+                SetupState::JoinSpaceSelectDevice { error: None },
+            ),
+            JoinTestStep::force_state(
+                "transition to processing",
+                join_processing_state("Connecting to selected device…"),
+            ),
+            JoinTestStep::set_pairing_session(
+                "store pairing session",
+                "session-fail",
+                join_processing_state("Connecting to selected device…"),
+            ),
+            JoinTestStep::dispatch(
+                "pairing failure propagates",
+                || SetupEvent::JoinSpaceFailed {
+                    error: SetupDomainError::PairingFailed,
+                },
+                SetupState::JoinSpaceInputPassphrase {
+                    error: Some(SetupDomainError::PairingFailed),
+                },
+            ),
+        ];
+
+        run_join_steps(&orchestrator, &steps).await;
+    }
+
+    #[tokio::test]
+    async fn join_space_passphrase_wrong() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator(setup_status);
+
+        let steps = vec![
+            JoinTestStep::dispatch(
+                "start join space",
+                || SetupEvent::StartJoinSpace,
+                SetupState::JoinSpaceSelectDevice { error: None },
+            ),
+            JoinTestStep::select_peer(
+                "remember peer selection",
+                "peer-pass",
+                SetupState::JoinSpaceSelectDevice { error: None },
+            ),
+            JoinTestStep::force_state(
+                "transition to processing",
+                join_processing_state("Connecting to selected device…"),
+            ),
+            JoinTestStep::force_state(
+                "pairing verification delivered",
+                SetupState::JoinSpaceConfirmPeer {
+                    short_code: "777-888".into(),
+                    peer_fingerprint: None,
+                    error: None,
+                },
+            ),
+            JoinTestStep::set_pairing_session(
+                "store pairing session",
+                "session-pass",
+                SetupState::JoinSpaceConfirmPeer {
+                    short_code: "777-888".into(),
+                    peer_fingerprint: None,
+                    error: None,
+                },
+            ),
+            JoinTestStep::force_state(
+                "transition to passphrase input",
+                SetupState::JoinSpaceInputPassphrase { error: None },
+            ),
+            JoinTestStep::simulate_passphrase(
+                "submit wrong passphrase",
+                "wrong-pass",
+                join_processing_state("Verifying passphrase…"),
+            ),
+            JoinTestStep::dispatch(
+                "space access denied",
+                || SetupEvent::JoinSpaceFailed {
+                    error: SetupDomainError::PassphraseInvalidOrMismatch,
+                },
+                SetupState::JoinSpaceInputPassphrase {
+                    error: Some(SetupDomainError::PassphraseInvalidOrMismatch),
+                },
+            ),
+        ];
+
+        run_join_steps(&orchestrator, &steps).await;
+    }
+
+    #[tokio::test]
+    async fn join_space_cancel_during_pairing() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator(setup_status);
+
+        let steps = vec![
+            JoinTestStep::dispatch(
+                "start join space",
+                || SetupEvent::StartJoinSpace,
+                SetupState::JoinSpaceSelectDevice { error: None },
+            ),
+            JoinTestStep::select_peer(
+                "remember peer selection",
+                "peer-cancel",
+                SetupState::JoinSpaceSelectDevice { error: None },
+            ),
+            JoinTestStep::force_state(
+                "transition to processing",
+                join_processing_state("Connecting to selected device…"),
+            ),
+            JoinTestStep::set_pairing_session(
+                "store pairing session",
+                "session-cancel",
+                join_processing_state("Connecting to selected device…"),
+            ),
+            JoinTestStep::dispatch(
+                "user cancels during pairing",
+                || SetupEvent::CancelSetup,
+                SetupState::Welcome,
+            ),
+        ];
+
+        run_join_steps(&orchestrator, &steps).await;
+
+        assert!(orchestrator.selected_peer_id.lock().await.is_none());
+        assert!(orchestrator.pairing_session_id.lock().await.is_none());
     }
 }

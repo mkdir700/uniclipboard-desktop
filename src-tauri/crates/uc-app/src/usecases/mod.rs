@@ -23,6 +23,7 @@ pub mod initialize_encryption;
 pub mod internal;
 pub mod list_clipboard_entries;
 pub mod pairing;
+pub mod space_access;
 pub mod settings;
 pub mod setup;
 pub mod start_clipboard_watcher;
