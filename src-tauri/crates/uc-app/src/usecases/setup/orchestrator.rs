@@ -1365,7 +1365,7 @@ mod tests {
         let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
         let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
         let setup_event_port = Arc::new(MockSetupEventPort::default());
-        let (pairing_orchestrator, _action_rx) = build_pairing_orchestrator_with_actions();
+        let (pairing_orchestrator, action_rx) = build_pairing_orchestrator_with_actions();
         let orchestrator = SetupOrchestrator::new(
             build_initialize_encryption(),
             mark_setup_complete,
@@ -1390,6 +1390,14 @@ mod tests {
             .await
             .unwrap();
 
+        {
+            let mut rx = action_rx.lock().await;
+            assert!(
+                rx.try_recv().is_ok(),
+                "pairing orchestrator should queue initial action"
+            );
+        }
+
         assert!(matches!(state, SetupState::ProcessingJoinSpace { .. }));
 
         let emitted = setup_event_port.snapshot().await;
@@ -1403,7 +1411,7 @@ mod tests {
         let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
         let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
         let setup_event_port = Arc::new(MockSetupEventPort::default());
-        let (pairing_orchestrator, _action_rx) = build_pairing_orchestrator_with_actions();
+        let (pairing_orchestrator, action_rx) = build_pairing_orchestrator_with_actions();
         let orchestrator = SetupOrchestrator::new(
             build_initialize_encryption(),
             mark_setup_complete,
@@ -1427,6 +1435,14 @@ mod tests {
             .select_device("peer-verify".to_string())
             .await
             .unwrap();
+
+        {
+            let mut rx = action_rx.lock().await;
+            assert!(
+                rx.try_recv().is_ok(),
+                "pairing orchestrator should queue initial action"
+            );
+        }
 
         let session_deadline = Instant::now() + Duration::from_secs(1);
         let session_id = loop {
