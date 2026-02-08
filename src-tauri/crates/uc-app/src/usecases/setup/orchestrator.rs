@@ -307,17 +307,31 @@ impl SetupOrchestrator {
                 SetupError::PairingFailed
             })?;
 
-        let joiner_offer = {
+        let joiner_offer = if let Some(local_offer) = {
             let guard = self.joiner_offer.lock().await;
             guard.clone()
+        } {
+            local_offer
+        } else {
+            let context_offer = {
+                let context = self.space_access_orchestrator.context();
+                let guard = context.lock().await;
+                guard.joiner_offer.clone()
+            };
+
+            context_offer.ok_or_else(|| {
+                error!(
+                    pairing_session_id = %pairing_session_id,
+                    "start join space access requested without received offer"
+                );
+                SetupError::PairingFailed
+            })?
+        };
+
+        {
+            let mut guard = self.joiner_offer.lock().await;
+            *guard = Some(joiner_offer.clone());
         }
-        .ok_or_else(|| {
-            error!(
-                pairing_session_id = %pairing_session_id,
-                "start join space access requested without received offer"
-            );
-            SetupError::PairingFailed
-        })?;
 
         {
             let context = self.space_access_orchestrator.context();
@@ -579,7 +593,6 @@ impl SetupOrchestrator {
                         setup_event_port
                             .emit_setup_state_changed(next_state, Some(session_id.clone()))
                             .await;
-                        break;
                     }
                     PairingDomainEvent::PairingFailed {
                         session_id: event_session_id,
@@ -682,7 +695,8 @@ mod tests {
         SetupEventPort, TimerPort,
     };
     use uc_core::security::model::{
-        EncryptedBlob, EncryptionAlgo, EncryptionError, Kek, KeyScope, KeySlot, MasterKey,
+        EncryptedBlob, EncryptionAlgo, EncryptionError, EncryptionFormatVersion, KdfAlgorithm,
+        KdfParams, KdfParamsV1, Kek, KeyScope, KeySlot, KeySlotFile, KeySlotVersion, MasterKey,
         Passphrase,
     };
     use uc_core::security::space_access::SpaceAccessProofArtifact;
@@ -1444,6 +1458,33 @@ mod tests {
         build_orchestrator_with_initialize_encryption(setup_status, build_initialize_encryption())
     }
 
+    fn sample_keyslot_file(profile_id: &str) -> KeySlotFile {
+        KeySlotFile {
+            version: KeySlotVersion::V1,
+            scope: KeyScope {
+                profile_id: profile_id.to_string(),
+            },
+            kdf: KdfParams {
+                alg: KdfAlgorithm::Argon2id,
+                params: KdfParamsV1 {
+                    mem_kib: 1024,
+                    iters: 2,
+                    parallelism: 1,
+                },
+            },
+            salt: vec![1, 2, 3, 4],
+            wrapped_master_key: EncryptedBlob {
+                version: EncryptionFormatVersion::V1,
+                aead: EncryptionAlgo::XChaCha20Poly1305,
+                nonce: vec![9; 24],
+                ciphertext: vec![7; 32],
+                aad_fingerprint: None,
+            },
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
     #[tokio::test]
     async fn get_state_seeds_completed_when_setup_status_completed() {
         let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus {
@@ -1629,6 +1670,117 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn pairing_verification_listener_keeps_listening_for_keyslot_after_verification() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
+        let setup_event_port = Arc::new(MockSetupEventPort::default());
+        let (pairing_orchestrator, action_rx) = build_pairing_orchestrator_with_actions();
+        let orchestrator = SetupOrchestrator::new(
+            build_initialize_encryption(),
+            mark_setup_complete,
+            setup_status,
+            build_mock_lifecycle(),
+            pairing_orchestrator,
+            setup_event_port.clone(),
+            build_space_access_orchestrator(),
+            build_discovery_port(),
+            build_network_control(),
+            build_crypto_factory(),
+            build_network_port(),
+            build_transport_port(),
+            build_proof_port(),
+            build_timer_port(),
+            build_persistence_port(),
+        );
+
+        orchestrator.join_space().await.unwrap();
+        orchestrator
+            .select_device("peer-verify".to_string())
+            .await
+            .unwrap();
+
+        {
+            let mut rx = action_rx.lock().await;
+            assert!(
+                rx.try_recv().is_ok(),
+                "pairing orchestrator should queue initial action"
+            );
+        }
+
+        let session_deadline = Instant::now() + Duration::from_secs(1);
+        let session_id = loop {
+            if let Some(session_id) = orchestrator.pairing_session_id.lock().await.clone() {
+                break session_id;
+            }
+            assert!(
+                Instant::now() < session_deadline,
+                "pairing session id was not created"
+            );
+            sleep(Duration::from_millis(10)).await;
+        };
+
+        orchestrator
+            .pairing_orchestrator
+            .handle_challenge(
+                &session_id,
+                "peer-verify",
+                uc_core::network::protocol::PairingChallenge {
+                    session_id: session_id.clone(),
+                    pin: "654321".to_string(),
+                    device_name: "remote-device".to_string(),
+                    device_id: "remote-device-id".to_string(),
+                    identity_pubkey: vec![9; 32],
+                    nonce: vec![2; 32],
+                },
+            )
+            .await
+            .unwrap();
+
+        let emit_deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let emitted = setup_event_port.snapshot().await;
+            let found = emitted.iter().any(|(state, sid)| {
+                matches!(state, SetupState::JoinSpaceConfirmPeer { .. })
+                    && sid.as_ref() == Some(&session_id)
+            });
+            if found {
+                break;
+            }
+            assert!(
+                Instant::now() < emit_deadline,
+                "setup-state-changed JoinSpaceConfirmPeer event timeout"
+            );
+            sleep(Duration::from_millis(10)).await;
+        }
+
+        orchestrator
+            .pairing_orchestrator
+            .handle_keyslot_offer(
+                &session_id,
+                "peer-verify",
+                uc_core::network::protocol::PairingKeyslotOffer {
+                    session_id: session_id.clone(),
+                    keyslot_file: Some(sample_keyslot_file("space-listener")),
+                    challenge: Some(vec![3; 32]),
+                },
+            )
+            .await
+            .unwrap();
+
+        let offer_deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            if orchestrator.joiner_offer.lock().await.is_some() {
+                break;
+            }
+            assert!(
+                Instant::now() < offer_deadline,
+                "joiner offer was not captured after verification event"
+            );
+            sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    #[tokio::test]
     async fn pairing_verification_listener_emits_join_space_failed_event_on_pairing_failure() {
         let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
         let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
@@ -1791,6 +1943,48 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(SetupError::PairingFailed)));
+    }
+
+    #[tokio::test]
+    async fn start_join_space_access_reads_offer_from_space_access_context() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator(setup_status);
+
+        let offer = SpaceAccessJoinerOffer {
+            space_id: uc_core::ids::SpaceId::from("space-from-context"),
+            keyslot_blob: vec![1, 2, 3],
+            challenge_nonce: [9; 32],
+        };
+
+        {
+            let context = orchestrator.space_access_orchestrator.context();
+            let mut guard = context.lock().await;
+            guard.joiner_offer = Some(offer.clone());
+        }
+
+        *orchestrator.pairing_session_id.lock().await = Some("session-context".to_string());
+        *orchestrator.selected_peer_id.lock().await = Some("peer-context".to_string());
+        orchestrator
+            .context
+            .set_state(SetupState::JoinSpaceInputPassphrase { error: None })
+            .await;
+
+        let result = orchestrator
+            .dispatch(SetupEvent::SubmitPassphrase {
+                passphrase: SecretString::new("join-secret".to_string()),
+            })
+            .await;
+
+        assert!(matches!(result, Err(SetupError::PairingFailed)));
+
+        let stored_offer = orchestrator
+            .joiner_offer
+            .lock()
+            .await
+            .clone()
+            .expect("local joiner offer should be hydrated from space access context");
+        assert_eq!(stored_offer.space_id.as_ref(), offer.space_id.as_ref());
+        assert_eq!(stored_offer.challenge_nonce, offer.challenge_nonce);
     }
 
     enum JoinStepAction {
