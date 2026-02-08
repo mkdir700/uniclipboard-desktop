@@ -1,6 +1,6 @@
-import { render, screen, act } from '@testing-library/react'
+import { render, act } from '@testing-library/react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { getSetupState } from '@/api/setup'
 import SetupPage from '@/pages/SetupPage'
 
@@ -52,13 +52,9 @@ vi.mock('@/api/setup', () => ({
 }))
 
 const navigateMock = vi.fn()
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
-  return {
-    ...actual,
-    useNavigate: () => navigateMock,
-  }
-})
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => navigateMock,
+}))
 
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -73,18 +69,18 @@ vi.mock('framer-motion', () => ({
 describe('setup-ready-flow', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('zh-CN')
-    vi.mocked(getSetupState).mockReset()
+    ;(getSetupState as Mock).mockReset()
     navigateMock.mockReset()
   })
 
   it('renders SetupDoneStep when setup state is Completed and allows entering app', async () => {
     const onComplete = vi.fn()
-    vi.mocked(getSetupState).mockResolvedValue('Completed')
+    ;(getSetupState as Mock).mockResolvedValue('Completed')
 
-    render(<SetupPage onCompleteSetup={onComplete} />)
+    const view = render(<SetupPage onCompleteSetup={onComplete} />)
 
-    expect(await screen.findByText('初始化完成')).toBeInTheDocument()
-    const enterButton = await screen.findByRole('button', { name: '进入 UniClipboard' })
+    expect(await view.findByText('初始化完成')).toBeTruthy()
+    const enterButton = await view.findByRole('button', { name: '进入 UniClipboard' })
 
     await act(async () => {
       enterButton.click()
