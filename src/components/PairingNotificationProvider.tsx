@@ -4,8 +4,10 @@ import { toast } from 'sonner'
 import {
   acceptP2PPairing,
   onP2PPairingVerification,
+  onSpaceAccessCompleted,
   rejectP2PPairing,
   type P2PPairingVerificationEvent,
+  type SpaceAccessCompletedEvent,
 } from '@/api/p2p'
 import PairingPinDialog from '@/components/PairingPinDialog'
 
@@ -28,6 +30,30 @@ export function PairingNotificationProvider() {
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId
   }, [activeSessionId])
+
+  useEffect(() => {
+    const unlistenPromise = onSpaceAccessCompleted((event: SpaceAccessCompletedEvent) => {
+      const currentSessionId = activeSessionIdRef.current
+
+      if (currentSessionId && event.sessionId === currentSessionId) {
+        if (event.success) {
+          setDialogState(prev => ({ ...prev, phase: 'success' }))
+          setTimeout(() => {
+            setDialogState(prev => ({ ...prev, open: false }))
+            setActiveSessionId(null)
+          }, 2000)
+        } else {
+          setDialogState(prev => ({ ...prev, open: false }))
+          toast.error(event.reason || t('pairing.failed', { defaultValue: 'Pairing failed' }))
+          setActiveSessionId(null)
+        }
+      }
+    })
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten())
+    }
+  }, [t])
 
   useEffect(() => {
     const unlistenPromise = onP2PPairingVerification((event: P2PPairingVerificationEvent) => {
@@ -82,11 +108,7 @@ export function PairingNotificationProvider() {
         } else if (event.kind === 'verifying') {
           setDialogState(prev => ({ ...prev, phase: 'verifying' }))
         } else if (event.kind === 'complete') {
-          setDialogState(prev => ({ ...prev, phase: 'success' }))
-          setTimeout(() => {
-            setDialogState(prev => ({ ...prev, open: false }))
-            setActiveSessionId(null)
-          }, 2000)
+          setDialogState(prev => ({ ...prev, phase: 'verifying' }))
         } else if (event.kind === 'failed') {
           setDialogState(prev => ({ ...prev, open: false }))
           toast.error(event.error || t('pairing.failed', { defaultValue: 'Pairing failed' }))
@@ -100,7 +122,10 @@ export function PairingNotificationProvider() {
     }
   }, [t])
 
-  const handleClose = () => {
+  const handleCancel = () => {
+    if (activeSessionIdRef.current && dialogState.peerId) {
+      rejectP2PPairing(activeSessionIdRef.current, dialogState.peerId).catch(console.error)
+    }
     setDialogState(prev => ({ ...prev, open: false }))
     setActiveSessionId(null)
   }
@@ -108,13 +133,13 @@ export function PairingNotificationProvider() {
   return (
     <PairingPinDialog
       open={dialogState.open}
-      onClose={handleClose}
+      onClose={handleCancel}
       pinCode={dialogState.pinCode}
       peerDeviceName={dialogState.peerDeviceName}
       isInitiator={false}
       onConfirm={matches => {
         if (!matches) {
-          handleClose()
+          handleCancel()
         }
       }}
       phase={dialogState.phase}
