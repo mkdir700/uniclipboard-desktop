@@ -58,6 +58,7 @@ use uc_core::ports::clipboard::{
     ClipboardChangeOriginPort, ClipboardRepresentationNormalizerPort, RepresentationCachePort,
     SpoolQueuePort, SpoolRequest,
 };
+use uc_core::ports::space::ProofPort;
 use uc_core::ports::*;
 use uc_core::security::model::KeySlot;
 use uc_core::security::space_access::event::SpaceAccessEvent;
@@ -1650,6 +1651,107 @@ async fn handle_pairing_message<R: Runtime>(
                                 }
                             }
                         }
+                    }
+                    Ok(SpaceAccessBusyPayload::Proof(proof_payload)) => {
+                        let pairing_session_id =
+                            uc_core::ids::SessionId::from(proof_payload.pairing_session_id.clone());
+                        let space_id = uc_core::ids::SpaceId::from(proof_payload.space_id.as_str());
+
+                        // Convert challenge_nonce to [u8; 32]
+                        if proof_payload.challenge_nonce.len() != 32 {
+                            warn!(
+                                session_id = %session_id,
+                                peer_id = %peer_id,
+                                nonce_len = proof_payload.challenge_nonce.len(),
+                                "Invalid challenge_nonce length in space_access_proof"
+                            );
+                            return;
+                        }
+                        let challenge_nonce: [u8; 32] =
+                            match proof_payload.challenge_nonce.try_into() {
+                                Ok(nonce) => nonce,
+                                Err(_) => {
+                                    warn!(
+                                        session_id = %session_id,
+                                        peer_id = %peer_id,
+                                        "Failed to convert challenge_nonce to [u8; 32]"
+                                    );
+                                    return;
+                                }
+                            };
+
+                        // Create proof artifact
+                        let proof_artifact =
+                            uc_core::security::space_access::SpaceAccessProofArtifact {
+                                pairing_session_id: pairing_session_id.clone(),
+                                space_id: space_id.clone(),
+                                challenge_nonce,
+                                proof_bytes: proof_payload.proof_bytes.clone(),
+                            };
+
+                        // Verify proof using proof port
+                        let proof_port = NoopSpaceAccessProof;
+                        let is_valid = match proof_port
+                            .verify_proof(&proof_artifact, challenge_nonce)
+                            .await
+                        {
+                            Ok(valid) => valid,
+                            Err(err) => {
+                                warn!(
+                                    session_id = %session_id,
+                                    peer_id = %peer_id,
+                                    error = %err,
+                                    "Proof verification failed"
+                                );
+                                false
+                            }
+                        };
+
+                        // Dispatch appropriate event based on verification result
+                        let space_access_event = if is_valid {
+                            SpaceAccessEvent::ProofVerified {
+                                pairing_session_id: session_id.clone(),
+                                space_id: space_id.clone(),
+                            }
+                        } else {
+                            SpaceAccessEvent::ProofRejected {
+                                pairing_session_id: session_id.clone(),
+                                space_id: space_id.clone(),
+                                reason:
+                                    uc_core::security::space_access::state::DenyReason::InvalidProof,
+                            }
+                        };
+
+                        let mut noop_transport = NoopSpaceAccessTransport;
+                        let mut timer_guard = space_access_timer.lock().await;
+                        let mut noop_store = NoopSpaceAccessPersistence;
+                        let noop_crypto = NoopSpaceAccessCrypto;
+
+                        if let Err(err) = space_access_orchestrator
+                            .dispatch(
+                                &mut uc_app::usecases::space_access::SpaceAccessExecutor {
+                                    crypto: &noop_crypto,
+                                    net: network,
+                                    transport: &mut noop_transport,
+                                    proof: &proof_port,
+                                    timer: &mut *timer_guard,
+                                    store: &mut noop_store,
+                                },
+                                space_access_event,
+                                Some(session_id.clone()),
+                            )
+                            .await
+                        {
+                            warn!(
+                                error = %err,
+                                session_id = %session_id,
+                                peer_id = %peer_id,
+                                "Failed to dispatch proof verification event"
+                            );
+                        }
+                    }
+                    Ok(SpaceAccessBusyPayload::Result(_)) => {
+                        // Task 5: Route space_access_result to Joiner
                     }
                     Ok(_) => {}
                     Err(err) => {
