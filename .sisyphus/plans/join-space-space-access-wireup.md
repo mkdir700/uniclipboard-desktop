@@ -61,11 +61,11 @@ Ensure Joiner and Sponsor complete the full space-access handshake over producti
 
 ### Definition of Done
 
-- [ ] Joiner no longer dispatches local `AccessGranted` before Sponsor result.
-- [ ] Busy payloads (`space_access_offer`, `space_access_proof`, `space_access_result`) are parsed and routed in wiring.
-- [ ] Sponsor auto-starts `start_sponsor_authorization(...)` only for sponsor path.
-- [ ] Session closes only on failure/terminal/timeout policy.
-- [ ] Happy + failure + timeout tests pass.
+- [x] Joiner no longer dispatches local `AccessGranted` before Sponsor result.
+- [x] Busy payloads (`space_access_offer`, `space_access_proof`, `space_access_result`) are parsed and routed in wiring.
+- [x] Sponsor auto-starts `start_sponsor_authorization(...)` only for sponsor path.
+- [x] Session closes only on failure/terminal/timeout policy.
+- [x] Happy + failure + timeout tests pass.
 
 ### Must Have
 
@@ -202,9 +202,9 @@ Critical Path: 0 -> 1 -> 2 -> 4 -> 6 -> 7
   - `src-tauri/crates/uc-tauri/src/bootstrap/wiring.rs` - sponsor auto-trigger call site.
 
   **Acceptance Criteria**:
-  - [ ] No sponsor authorization path uses `initialize_new_space` naming.
-  - [ ] All references compile with new name.
-  - [ ] Tests updated with no semantic drift.
+  - [x] No sponsor authorization path uses `initialize_new_space` naming.
+  - [x] All references compile with new name.
+  - [x] Tests updated with no semantic drift.
 
   **Commit**: YES
   - Message: `refactor(space-access): rename sponsor authorization entrypoints`
@@ -239,8 +239,8 @@ Critical Path: 0 -> 1 -> 2 -> 4 -> 6 -> 7
   - `src-tauri/crates/uc-core/src/security/space_access/state_machine.rs` - valid Joiner transitions and terminal states.
 
   **Acceptance Criteria**:
-  - [ ] `start_join_space_access` no longer dispatches local `AccessGranted`.
-  - [ ] Joiner can remain in `WaitingDecision` pending sponsor result.
+  - [x] `start_join_space_access` no longer dispatches local `AccessGranted`.
+  - [x] Joiner can remain in `WaitingDecision` pending sponsor result.
 
   **Commit**: YES
   - Message: `fix(setup): remove local joiner access-granted convergence`
@@ -271,8 +271,8 @@ Critical Path: 0 -> 1 -> 2 -> 4 -> 6 -> 7
   - `src-tauri/crates/uc-app/src/usecases/space_access/network_adapter.rs` - sender payload schema (`space_access_offer/proof/result`).
 
   **Acceptance Criteria**:
-  - [ ] Wiring parser accepts all 3 known Busy kinds.
-  - [ ] Unknown/malformed payloads are logged and ignored safely.
+  - [x] Wiring parser accepts all 3 known Busy kinds.
+  - [x] Unknown/malformed payloads are logged and ignored safely.
 
   **Commit**: YES
   - Message: `impl(wiring): add busy payload dto and parser`
@@ -302,9 +302,9 @@ Critical Path: 0 -> 1 -> 2 -> 4 -> 6 -> 7
   - `src-tauri/crates/uc-app/src/usecases/setup/orchestrator.rs` - keyslot/offer capture points.
 
   **Acceptance Criteria**:
-  - [ ] Valid offer payload reaches Joiner state transition path.
-  - [ ] Invalid challenge length emits warning and does not crash.
-  - [ ] Joiner `space_id` used for transition equals payload `space_id` from sponsor offer.
+  - [x] Valid offer payload reaches Joiner state transition path.
+  - [x] Invalid challenge length emits warning and does not crash.
+  - [x] Joiner `space_id` used for transition equals payload `space_id` from sponsor offer.
 
   **Commit**: YES
   - Message: `impl(wiring): route space_access_offer payload`
@@ -333,8 +333,8 @@ Critical Path: 0 -> 1 -> 2 -> 4 -> 6 -> 7
   - `src-tauri/crates/uc-app/src/usecases/space_access/orchestrator.rs` - dispatch and completion event emit.
 
   **Acceptance Criteria**:
-  - [ ] Sponsor receives proof and resolves verified/rejected deterministically.
-  - [ ] Result send action is triggered by sponsor-side transition.
+  - [x] Sponsor receives proof and resolves verified/rejected deterministically.
+  - [x] Result send action is triggered by sponsor-side transition.
 
   **Commit**: YES
   - Message: `impl(space-access): route and verify sponsor proof payload`
@@ -363,8 +363,8 @@ Critical Path: 0 -> 1 -> 2 -> 4 -> 6 -> 7
   - `src-tauri/crates/uc-app/src/usecases/setup/orchestrator.rs` - join state propagation path.
 
   **Acceptance Criteria**:
-  - [ ] Joiner terminal state is result-driven.
-  - [ ] Denied path surfaces failure in setup state.
+  - [x] Joiner terminal state is result-driven.
+  - [x] Denied path surfaces failure in setup state.
 
   **Commit**: YES
   - Message: `impl(space-access): route result payload to joiner terminal state`
@@ -395,14 +395,14 @@ Critical Path: 0 -> 1 -> 2 -> 4 -> 6 -> 7
   - `src-tauri/crates/uc-app/src/usecases/space_access/events.rs` - completion event contract.
 
   **Acceptance Criteria**:
-  - [ ] Sponsor auto-start occurs only on sponsor branch.
-  - [ ] Setup receives success/failure convergence from completion bridge.
-  - [ ] Session is not closed before space-access terminal state.
+  - [x] Sponsor auto-start occurs only on sponsor branch.
+  - [x] Setup receives success/failure convergence from completion bridge.
+  - [x] Session is not closed before space-access terminal state.
 
   **Commit**: YES
   - Message: `fix(wiring): bridge completion and enforce session close lifecycle`
 
-- [ ] 7. Add Wiring-Focused and End-to-End Tests
+- [x] 7. Add Wiring-Focused and End-to-End Tests
 
   **What to do**:
   - Add/update tests for Busy routing (offer/proof/result).
@@ -427,10 +427,10 @@ Critical Path: 0 -> 1 -> 2 -> 4 -> 6 -> 7
   - `src-tauri/crates/uc-tauri/src/bootstrap/wiring.rs` - routing code under test.
 
   **Acceptance Criteria**:
-  - [ ] Happy path: offer -> proof -> result(granted) completes.
-  - [ ] Failure path: proof rejected -> denied surface.
-  - [ ] Timeout path: no sponsor result -> observable setup failure.
-  - [ ] Session close occurs after terminal state only.
+  - [x] Happy path: offer -> proof -> result(granted) completes.
+  - [x] Failure path: proof rejected -> denied surface.
+  - [x] Timeout path: no sponsor result -> observable setup failure.
+  - [x] Session close occurs after terminal state only.
 
   **Commit**: YES
   - Message: `test(space-access): add wiring route and convergence coverage`
@@ -463,9 +463,9 @@ cd src-tauri && cargo test -p uc-tauri wiring -- --nocapture
 
 ### Final Checklist
 
-- [ ] All Must Have items implemented
-- [ ] All Must NOT Have guardrails respected
-- [ ] No local forced success path on joiner
-- [ ] Busy routing complete for offer/proof/result
-- [ ] Sponsor auto-trigger and completion bridge verified
-- [ ] Session lifecycle policy enforced and tested
+- [x] All Must Have items implemented
+- [x] All Must NOT Have guardrails respected
+- [x] No local forced success path on joiner
+- [x] Busy routing complete for offer/proof/result
+- [x] Sponsor auto-trigger and completion bridge verified
+- [x] Session lifecycle policy enforced and tested

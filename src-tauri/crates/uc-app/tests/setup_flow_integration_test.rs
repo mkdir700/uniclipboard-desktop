@@ -19,7 +19,7 @@ use uc_core::network::{DiscoveredPeer, PairedDevice, PairingState};
 use uc_core::ports::network_control::NetworkControlPort;
 use uc_core::ports::security::key_scope::{KeyScopePort, ScopeError};
 use uc_core::ports::security::secure_storage::{SecureStorageError, SecureStoragePort};
-use uc_core::ports::space::SpaceAccessTransportPort;
+use uc_core::ports::space::{CryptoPort, PersistencePort, SpaceAccessTransportPort};
 use uc_core::ports::watcher_control::{WatcherControlError, WatcherControlPort};
 use uc_core::ports::{
     DiscoveryPort, EncryptionSessionPort, PairedDeviceRepositoryError, PairedDeviceRepositoryPort,
@@ -313,6 +313,133 @@ impl uc_core::ports::NetworkPort for NoopSpaceAccessNetworkPort {
         let (_tx, rx) = tokio::sync::mpsc::channel(1);
         Ok(rx)
     }
+}
+
+struct DeterministicSpaceAccessCrypto;
+
+#[async_trait]
+impl CryptoPort for DeterministicSpaceAccessCrypto {
+    async fn generate_nonce32(&self) -> [u8; 32] {
+        [1; 32]
+    }
+
+    async fn export_keyslot_blob(
+        &self,
+        _space_id: &uc_core::ids::SpaceId,
+    ) -> anyhow::Result<uc_core::security::model::KeySlot> {
+        Ok(uc_core::security::model::KeySlot {
+            version: uc_core::security::model::KeySlotVersion::V1,
+            scope: uc_core::security::model::KeyScope {
+                profile_id: "space-access-test".to_string(),
+            },
+            kdf: uc_core::security::model::KdfParams::for_initialization(),
+            salt: vec![2; 16],
+            wrapped_master_key: None,
+        })
+    }
+
+    async fn derive_master_key_from_keyslot(
+        &self,
+        _keyslot_blob: &[u8],
+        _passphrase: uc_core::security::SecretString,
+    ) -> anyhow::Result<uc_core::security::model::MasterKey> {
+        uc_core::security::model::MasterKey::from_bytes(&[3; 32])
+            .map_err(|err| anyhow::anyhow!(err.to_string()))
+    }
+}
+
+struct DeterministicSpaceAccessPersistence;
+
+#[async_trait]
+impl PersistencePort for DeterministicSpaceAccessPersistence {
+    async fn persist_joiner_access(
+        &mut self,
+        _space_id: &uc_core::ids::SpaceId,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn persist_sponsor_access(
+        &mut self,
+        _space_id: &uc_core::ids::SpaceId,
+        _peer_id: &str,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+async fn drive_space_access_to_waiting_decision(
+    orchestrator: &SpaceAccessOrchestrator,
+    pairing_session_id: String,
+    space_id: uc_core::ids::SpaceId,
+) {
+    {
+        let context = orchestrator.context();
+        let mut guard = context.lock().await;
+        guard.joiner_offer = Some(uc_app::usecases::space_access::SpaceAccessJoinerOffer {
+            space_id: space_id.clone(),
+            keyslot_blob: vec![9, 8, 7],
+            challenge_nonce: [4; 32],
+        });
+        guard.joiner_passphrase = Some(uc_core::security::SecretString::new(
+            "join-secret".to_string(),
+        ));
+        guard.sponsor_peer_id = Some("peer-join".to_string());
+    }
+
+    let network_port = NoopSpaceAccessNetworkPort;
+    let crypto = DeterministicSpaceAccessCrypto;
+    let mut transport = NoopSpaceAccessTransport;
+    let proof = HmacProofAdapter::new();
+    let mut timer = Timer::new();
+    let mut store = DeterministicSpaceAccessPersistence;
+    let mut executor = SpaceAccessExecutor {
+        crypto: &crypto,
+        net: &network_port,
+        transport: &mut transport,
+        proof: &proof,
+        timer: &mut timer,
+        store: &mut store,
+    };
+
+    orchestrator
+        .dispatch(
+            &mut executor,
+            SpaceAccessEvent::JoinRequested {
+                pairing_session_id: pairing_session_id.clone(),
+                ttl_secs: 60,
+            },
+            Some(pairing_session_id.clone()),
+        )
+        .await
+        .expect("join requested");
+
+    orchestrator
+        .dispatch(
+            &mut executor,
+            SpaceAccessEvent::OfferAccepted {
+                pairing_session_id: pairing_session_id.clone(),
+                space_id: space_id.clone(),
+                expires_at: chrono::Utc::now() + chrono::Duration::seconds(60),
+            },
+            Some(pairing_session_id.clone()),
+        )
+        .await
+        .expect("offer accepted");
+
+    let state = orchestrator
+        .dispatch(
+            &mut executor,
+            SpaceAccessEvent::PassphraseSubmitted,
+            Some(pairing_session_id),
+        )
+        .await
+        .expect("passphrase submitted");
+
+    assert!(matches!(
+        state,
+        uc_core::security::space_access::state::SpaceAccessState::WaitingDecision { .. }
+    ));
 }
 
 fn build_mock_lifecycle() -> Arc<AppLifecycleCoordinator> {
@@ -797,5 +924,147 @@ async fn join_space_access_propagates_space_access_error() {
     assert!(matches!(
         result,
         Err(uc_app::usecases::setup::SetupError::PairingFailed)
+    ));
+}
+
+#[tokio::test]
+async fn join_space_flow_converges_to_granted_on_access_granted_result() {
+    let space_access_orchestrator = build_space_access_orchestrator();
+    let pairing_session_id = "session-granted".to_string();
+    let space_id = uc_core::ids::SpaceId::new();
+
+    drive_space_access_to_waiting_decision(
+        space_access_orchestrator.as_ref(),
+        pairing_session_id.clone(),
+        space_id.clone(),
+    )
+    .await;
+
+    let network_port = NoopSpaceAccessNetworkPort;
+    let crypto = DeterministicSpaceAccessCrypto;
+    let mut transport = NoopSpaceAccessTransport;
+    let proof = HmacProofAdapter::new();
+    let mut timer = Timer::new();
+    let mut store = DeterministicSpaceAccessPersistence;
+    let mut executor = SpaceAccessExecutor {
+        crypto: &crypto,
+        net: &network_port,
+        transport: &mut transport,
+        proof: &proof,
+        timer: &mut timer,
+        store: &mut store,
+    };
+
+    let state = space_access_orchestrator
+        .dispatch(
+            &mut executor,
+            SpaceAccessEvent::AccessGranted {
+                pairing_session_id: pairing_session_id.clone(),
+                space_id: space_id.clone(),
+            },
+            Some(pairing_session_id),
+        )
+        .await
+        .expect("access granted convergence");
+
+    assert!(matches!(
+        state,
+        uc_core::security::space_access::state::SpaceAccessState::Granted { .. }
+    ));
+}
+
+#[tokio::test]
+async fn join_space_flow_converges_to_denied_on_access_denied_result() {
+    let space_access_orchestrator = build_space_access_orchestrator();
+    let pairing_session_id = "session-denied".to_string();
+    let space_id = uc_core::ids::SpaceId::new();
+
+    drive_space_access_to_waiting_decision(
+        space_access_orchestrator.as_ref(),
+        pairing_session_id.clone(),
+        space_id.clone(),
+    )
+    .await;
+
+    let network_port = NoopSpaceAccessNetworkPort;
+    let crypto = DeterministicSpaceAccessCrypto;
+    let mut transport = NoopSpaceAccessTransport;
+    let proof = HmacProofAdapter::new();
+    let mut timer = Timer::new();
+    let mut store = DeterministicSpaceAccessPersistence;
+    let mut executor = SpaceAccessExecutor {
+        crypto: &crypto,
+        net: &network_port,
+        transport: &mut transport,
+        proof: &proof,
+        timer: &mut timer,
+        store: &mut store,
+    };
+
+    let state = space_access_orchestrator
+        .dispatch(
+            &mut executor,
+            SpaceAccessEvent::AccessDenied {
+                pairing_session_id: pairing_session_id.clone(),
+                space_id,
+                reason: uc_core::security::space_access::state::DenyReason::InvalidProof,
+            },
+            Some(pairing_session_id),
+        )
+        .await
+        .expect("access denied convergence");
+
+    assert!(matches!(
+        state,
+        uc_core::security::space_access::state::SpaceAccessState::Denied {
+            reason: uc_core::security::space_access::state::DenyReason::InvalidProof,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn join_space_flow_times_out_when_result_does_not_arrive() {
+    let space_access_orchestrator = build_space_access_orchestrator();
+    let pairing_session_id = "session-timeout".to_string();
+    let space_id = uc_core::ids::SpaceId::new();
+
+    drive_space_access_to_waiting_decision(
+        space_access_orchestrator.as_ref(),
+        pairing_session_id.clone(),
+        space_id,
+    )
+    .await;
+
+    let network_port = NoopSpaceAccessNetworkPort;
+    let crypto = DeterministicSpaceAccessCrypto;
+    let mut transport = NoopSpaceAccessTransport;
+    let proof = HmacProofAdapter::new();
+    let mut timer = Timer::new();
+    let mut store = DeterministicSpaceAccessPersistence;
+    let mut executor = SpaceAccessExecutor {
+        crypto: &crypto,
+        net: &network_port,
+        transport: &mut transport,
+        proof: &proof,
+        timer: &mut timer,
+        store: &mut store,
+    };
+
+    let state = space_access_orchestrator
+        .dispatch(
+            &mut executor,
+            SpaceAccessEvent::Timeout,
+            Some(pairing_session_id),
+        )
+        .await
+        .expect("timeout convergence");
+
+    assert!(matches!(
+        state,
+        uc_core::security::space_access::state::SpaceAccessState::Cancelled {
+            reason: uc_core::security::space_access::state::CancelReason::Timeout,
+            ..
+        }
     ));
 }
