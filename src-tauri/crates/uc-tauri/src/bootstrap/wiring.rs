@@ -33,6 +33,7 @@
 //! > But this privilege is only for "assembly", not for "decision making".
 //! > 但这种特权仅用于"组装"，不用于"决策"。
 
+use chrono::Utc;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -43,7 +44,8 @@ use tracing::{error, info, warn};
 use crate::events::{P2PPairingVerificationEvent, P2PPeerConnectionEvent, P2PPeerNameUpdatedEvent};
 use uc_app::app_paths::AppPaths;
 use uc_app::usecases::space_access::{
-    SpaceAccessCompletedEvent, SpaceAccessEventPort, SpaceAccessOrchestrator,
+    SpaceAccessCompletedEvent, SpaceAccessContext, SpaceAccessEventPort, SpaceAccessJoinerOffer,
+    SpaceAccessOrchestrator,
 };
 use uc_app::usecases::{PairingConfig, PairingOrchestrator, ResolveConnectionPolicy};
 use uc_app::AppDeps;
@@ -58,6 +60,7 @@ use uc_core::ports::clipboard::{
 };
 use uc_core::ports::*;
 use uc_core::security::model::KeySlot;
+use uc_core::security::space_access::event::SpaceAccessEvent;
 use uc_core::settings::model::Settings;
 use uc_core::setup::SetupState;
 use uc_infra::blob::BlobWriter;
@@ -89,7 +92,7 @@ use uc_infra::security::{
     FileEncryptionStateRepository,
 };
 use uc_infra::settings::repository::FileSettingsRepository;
-use uc_infra::{FileSetupStatusRepository, SystemClock};
+use uc_infra::{FileSetupStatusRepository, SystemClock, Timer};
 
 use uc_platform::adapters::{
     FilesystemBlobStore, InMemoryEncryptionSessionPort, InMemoryWatcherControl,
@@ -970,6 +973,7 @@ pub fn start_background_tasks<R: Runtime>(
 
     let pairing_app_handle = app_handle.clone();
     let space_access_app_handle = app_handle.clone();
+    let pairing_space_access_orchestrator = space_access_orchestrator.clone();
     let representation_repo = deps.representation_repo.clone();
     let worker_tx = deps.worker_tx.clone();
     let blob_writer = deps.blob_writer.clone();
@@ -1081,6 +1085,7 @@ pub fn start_background_tasks<R: Runtime>(
             pairing_orchestrator,
             pairing_app_handle,
             pairing_network.clone(),
+            pairing_space_access_orchestrator,
         )
         .await;
         warn!("Pairing event loop stopped");
@@ -1220,6 +1225,105 @@ fn raw_payload_preview(payload: &str) -> String {
     preview
 }
 
+struct NoopSpaceAccessCrypto;
+
+#[async_trait::async_trait]
+impl uc_core::ports::space::CryptoPort for NoopSpaceAccessCrypto {
+    async fn generate_nonce32(&self) -> [u8; 32] {
+        [0u8; 32]
+    }
+
+    async fn export_keyslot_blob(
+        &self,
+        _space_id: &uc_core::ids::SpaceId,
+    ) -> anyhow::Result<uc_core::security::model::KeySlot> {
+        Err(anyhow::anyhow!(
+            "noop crypto port cannot export keyslot blob"
+        ))
+    }
+
+    async fn derive_master_key_from_keyslot(
+        &self,
+        _keyslot_blob: &[u8],
+        _passphrase: uc_core::security::SecretString,
+    ) -> anyhow::Result<uc_core::security::model::MasterKey> {
+        Err(anyhow::anyhow!("noop crypto port cannot derive master key"))
+    }
+}
+
+struct NoopSpaceAccessTransport;
+
+#[async_trait::async_trait]
+impl uc_core::ports::space::SpaceAccessTransportPort for NoopSpaceAccessTransport {
+    async fn send_offer(
+        &mut self,
+        _session_id: &uc_core::network::SessionId,
+    ) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("noop transport port cannot send offer"))
+    }
+
+    async fn send_proof(
+        &mut self,
+        _session_id: &uc_core::network::SessionId,
+    ) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("noop transport port cannot send proof"))
+    }
+
+    async fn send_result(
+        &mut self,
+        _session_id: &uc_core::network::SessionId,
+    ) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("noop transport port cannot send result"))
+    }
+}
+
+struct NoopSpaceAccessProof;
+
+#[async_trait::async_trait]
+impl uc_core::ports::space::ProofPort for NoopSpaceAccessProof {
+    async fn build_proof(
+        &self,
+        _pairing_session_id: &uc_core::ids::SessionId,
+        _space_id: &uc_core::ids::SpaceId,
+        _challenge_nonce: [u8; 32],
+        _master_key: &uc_core::security::model::MasterKey,
+    ) -> anyhow::Result<uc_core::security::space_access::SpaceAccessProofArtifact> {
+        Err(anyhow::anyhow!("noop proof port cannot build proof"))
+    }
+
+    async fn verify_proof(
+        &self,
+        _proof: &uc_core::security::space_access::SpaceAccessProofArtifact,
+        _expected_nonce: [u8; 32],
+    ) -> anyhow::Result<bool> {
+        Err(anyhow::anyhow!("noop proof port cannot verify proof"))
+    }
+}
+
+struct NoopSpaceAccessPersistence;
+
+#[async_trait::async_trait]
+impl uc_core::ports::space::PersistencePort for NoopSpaceAccessPersistence {
+    async fn persist_joiner_access(
+        &mut self,
+        _space_id: &uc_core::ids::SpaceId,
+    ) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "noop persistence port cannot persist joiner access"
+        ))
+    }
+
+    async fn persist_sponsor_access(
+        &mut self,
+        _space_id: &uc_core::ids::SpaceId,
+        _peer_id: &str,
+    ) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "noop persistence port cannot persist sponsor access"
+        ))
+    }
+}
+
 async fn run_space_access_completion_loop<R: Runtime>(
     mut event_rx: mpsc::Receiver<SpaceAccessCompletedEvent>,
     app_handle: Option<AppHandle<R>>,
@@ -1291,12 +1395,18 @@ async fn run_pairing_event_loop<R: Runtime>(
     orchestrator: Arc<PairingOrchestrator>,
     app_handle: Option<AppHandle<R>>,
     network: Arc<dyn NetworkPort>,
+    space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
 ) {
+    let space_access_timer = Arc::new(tokio::sync::Mutex::new(Timer::new()));
+
     while let Some(event) = event_rx.recv().await {
         match event {
             NetworkEvent::PairingMessageReceived { peer_id, message } => {
                 handle_pairing_message(
                     orchestrator.as_ref(),
+                    space_access_orchestrator.as_ref(),
+                    network.as_ref(),
+                    &space_access_timer,
                     peer_id,
                     message,
                     app_handle.as_ref(),
@@ -1376,6 +1486,9 @@ async fn run_pairing_event_loop<R: Runtime>(
 
 async fn handle_pairing_message<R: Runtime>(
     orchestrator: &PairingOrchestrator,
+    space_access_orchestrator: &SpaceAccessOrchestrator,
+    network: &dyn NetworkPort,
+    space_access_timer: &Arc<tokio::sync::Mutex<Timer>>,
     peer_id: String,
     message: PairingMessage,
     app_handle: Option<&AppHandle<R>>,
@@ -1465,7 +1578,80 @@ async fn handle_pairing_message<R: Runtime>(
             let session_id = busy.session_id.clone();
             if let Some(reason) = &busy.reason {
                 match parse_space_access_busy_payload(reason) {
-                    Ok(_payload) => {}
+                    Ok(SpaceAccessBusyPayload::Offer(offer)) => {
+                        let nonce_len = offer.nonce.len();
+                        if nonce_len != 32 {
+                            warn!(
+                                session_id = %session_id,
+                                peer_id = %peer_id,
+                                nonce_len,
+                                "Invalid challenge nonce length"
+                            );
+                        } else {
+                            let keyslot_blob = match serde_json::to_vec(&offer.keyslot) {
+                                Ok(blob) => blob,
+                                Err(err) => {
+                                    warn!(
+                                        session_id = %session_id,
+                                        peer_id = %peer_id,
+                                        error = %err,
+                                        "Failed to serialize keyslot for space access offer"
+                                    );
+                                    Vec::new()
+                                }
+                            };
+
+                            if !keyslot_blob.is_empty() {
+                                let challenge_nonce: [u8; 32] = offer.nonce.try_into().unwrap();
+                                let space_id = uc_core::ids::SpaceId::from(offer.space_id.as_str());
+                                let joiner_offer = SpaceAccessJoinerOffer {
+                                    space_id: space_id.clone(),
+                                    keyslot_blob,
+                                    challenge_nonce,
+                                };
+
+                                let context = space_access_orchestrator.context();
+                                let mut guard: tokio::sync::MutexGuard<'_, SpaceAccessContext> =
+                                    context.lock().await;
+                                guard.joiner_offer = Some(joiner_offer);
+                                drop(guard);
+
+                                let mut noop_transport = NoopSpaceAccessTransport;
+                                let noop_proof = NoopSpaceAccessProof;
+                                let mut timer_guard = space_access_timer.lock().await;
+                                let mut noop_store = NoopSpaceAccessPersistence;
+                                let noop_crypto = NoopSpaceAccessCrypto;
+
+                                if let Err(err) = space_access_orchestrator
+                                    .dispatch(
+                                        &mut uc_app::usecases::space_access::SpaceAccessExecutor {
+                                            crypto: &noop_crypto,
+                                            net: network,
+                                            transport: &mut noop_transport,
+                                            proof: &noop_proof,
+                                            timer: &mut *timer_guard,
+                                            store: &mut noop_store,
+                                        },
+                                        SpaceAccessEvent::OfferAccepted {
+                                            pairing_session_id: session_id.clone(),
+                                            space_id,
+                                            expires_at: Utc::now() + chrono::Duration::seconds(60),
+                                        },
+                                        Some(session_id.clone()),
+                                    )
+                                    .await
+                                {
+                                    warn!(
+                                        error = %err,
+                                        session_id = %session_id,
+                                        peer_id = %peer_id,
+                                        "Failed to dispatch space access offer accepted"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Ok(_) => {}
                     Err(err) => {
                         let payload_kind = err
                             .payload_kind()
@@ -1934,6 +2120,7 @@ mod tests {
             orchestrator.clone(),
             None,
             Arc::new(NoopNetwork),
+            Arc::new(SpaceAccessOrchestrator::new()),
         ));
 
         let request = PairingRequest {
@@ -2075,6 +2262,7 @@ mod tests {
             orchestrator,
             Some(app_handle.clone()),
             network,
+            Arc::new(SpaceAccessOrchestrator::new()),
         ));
 
         event_tx
