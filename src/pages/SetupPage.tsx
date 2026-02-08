@@ -1,6 +1,6 @@
 import { AnimatePresence } from 'framer-motion'
 import { Loader2, Shield, Wifi, Key } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -9,6 +9,7 @@ import {
   cancelSetup,
   getSetupState,
   confirmPeerTrust,
+  onSetupStateChanged,
   selectJoinPeer,
   startJoinSpace,
   startNewSpace,
@@ -37,19 +38,86 @@ export default function SetupPage({ onCompleteSetup }: SetupPageProps = {}) {
   const [peersLoading, setPeersLoading] = useState(false)
   const [isScanningInitial, setIsScanningInitial] = useState(true)
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
+  const activeEventSessionIdRef = useRef<string | null>(null)
+  const setupStateRef = useRef<SetupState | null>(null)
+
+  const isSetupFlowActive = useCallback((state: SetupState | null) => {
+    if (!state) return false
+    return state !== 'Welcome' && state !== 'Completed'
+  }, [])
+
+  const syncSetupState = useCallback((nextState: SetupState) => {
+    setSetupState(prevState => {
+      if (JSON.stringify(prevState) === JSON.stringify(nextState)) {
+        return prevState
+      }
+      return nextState
+    })
+  }, [])
 
   useEffect(() => {
     const loadState = async () => {
       try {
         const state = await getSetupState()
-        setSetupState(state)
+        syncSetupState(state)
       } catch (error) {
         console.error('Failed to load setup state:', error)
         toast.error(t('errors.loadSetupStateFailed'))
       }
     }
     loadState()
-  }, [t])
+  }, [syncSetupState, t])
+
+  useEffect(() => {
+    setupStateRef.current = setupState
+  }, [setupState])
+
+  useEffect(() => {
+    let mounted = true
+    let unlisten: (() => void) | null = null
+
+    const setupListener = async () => {
+      unlisten = await onSetupStateChanged(event => {
+        if (!mounted) {
+          return
+        }
+
+        if (!isSetupFlowActive(setupStateRef.current)) {
+          return
+        }
+
+        if (!activeEventSessionIdRef.current) {
+          activeEventSessionIdRef.current = event.sessionId
+        }
+
+        if (activeEventSessionIdRef.current !== event.sessionId) {
+          return
+        }
+
+        syncSetupState(event.state)
+
+        if (event.state === 'Completed' || event.state === 'Welcome') {
+          activeEventSessionIdRef.current = null
+        }
+      })
+    }
+
+    setupListener()
+
+    return () => {
+      mounted = false
+      activeEventSessionIdRef.current = null
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [isSetupFlowActive, syncSetupState])
+
+  useEffect(() => {
+    if (!isSetupFlowActive(setupState)) {
+      activeEventSessionIdRef.current = null
+    }
+  }, [isSetupFlowActive, setupState])
 
   const handleRefreshPeers = useCallback(async () => {
     setPeersLoading(true)
@@ -87,7 +155,7 @@ export default function SetupPage({ onCompleteSetup }: SetupPageProps = {}) {
     setLoading(true)
     try {
       const newState = await action()
-      setSetupState(newState)
+      syncSetupState(newState)
     } catch (error) {
       console.error('Failed to dispatch event:', error)
       toast.error(t('errors.operationFailed'))
