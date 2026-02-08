@@ -15,11 +15,14 @@ use tauri_plugin_stronghold;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
+use uc_app::app_paths::AppPaths;
 use uc_app::usecases::{pairing::PairingOrchestrator, space_access::SpaceAccessOrchestrator};
 use uc_core::config::AppConfig;
 use uc_core::ports::AppDirsPort;
 use uc_core::ports::ClipboardChangeHandler;
 use uc_core::ports::NetworkPort;
+use uc_infra::fs::key_slot_store::{JsonKeySlotStore, KeySlotStore};
+use uc_platform::app_dirs::DirsAppDirsAdapter;
 use uc_platform::ipc::PlatformCommand;
 use uc_platform::ports::PlatformCommandExecutorPort;
 use uc_platform::runtime::event_bus::{
@@ -430,6 +433,29 @@ fn run_app(config: AppConfig) {
     );
     let pairing_orchestrator = Arc::new(pairing_orchestrator);
     let space_access_orchestrator = Arc::new(SpaceAccessOrchestrator::new());
+    let key_slot_store: Arc<dyn KeySlotStore> = {
+        let app_dirs = match DirsAppDirsAdapter::new().get_app_dirs() {
+            Ok(dirs) => dirs,
+            Err(err) => {
+                error!(error = %err, "Failed to determine app directories for keyslot store");
+                panic!(
+                    "Failed to determine app directories for keyslot store: {}",
+                    err
+                );
+            }
+        };
+        let base_paths = AppPaths::from_app_dirs(&app_dirs);
+        let vault_dir = if config.vault_key_path.as_os_str().is_empty() {
+            base_paths.vault_dir
+        } else {
+            config
+                .vault_key_path
+                .parent()
+                .unwrap_or(&config.vault_key_path)
+                .to_path_buf()
+        };
+        Arc::new(JsonKeySlotStore::new(vault_dir.join("keyslot.json")))
+    };
 
     let runtime = AppRuntime::with_setup(
         deps,
@@ -521,6 +547,7 @@ fn run_app(config: AppConfig) {
                 pairing_orchestrator.clone(),
                 pairing_action_rx,
                 space_access_orchestrator.clone(),
+                key_slot_store.clone(),
             );
 
             // Clone handles for async blocks
