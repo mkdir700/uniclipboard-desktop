@@ -5,6 +5,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use chrono::{Duration as ChronoDuration, Utc};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, info_span, warn, Instrument};
 
@@ -15,7 +16,9 @@ use uc_core::{
     },
     security::space_access::event::SpaceAccessEvent,
     security::{model::Passphrase, SecretString},
-    setup::{SetupAction, SetupEvent, SetupState, SetupStateMachine},
+    setup::{
+        SetupAction, SetupError as SetupDomainError, SetupEvent, SetupState, SetupStateMachine,
+    },
 };
 
 use crate::usecases::initialize_encryption::InitializeEncryptionError;
@@ -23,7 +26,7 @@ use crate::usecases::pairing::{PairingDomainEvent, PairingEventPort, PairingOrch
 use crate::usecases::setup::context::SetupContext;
 use crate::usecases::setup::MarkSetupComplete;
 use crate::usecases::space_access::{
-    SpaceAccessCryptoFactory, SpaceAccessExecutor, SpaceAccessOrchestrator,
+    SpaceAccessCryptoFactory, SpaceAccessExecutor, SpaceAccessJoinerOffer, SpaceAccessOrchestrator,
 };
 use crate::usecases::AppLifecycleCoordinator;
 use crate::usecases::InitializeEncryption;
@@ -49,6 +52,7 @@ pub struct SetupOrchestrator {
 
     selected_peer_id: Arc<Mutex<Option<String>>>,
     pairing_session_id: Arc<Mutex<Option<String>>>,
+    joiner_offer: Arc<Mutex<Option<SpaceAccessJoinerOffer>>>,
     passphrase: Arc<Mutex<Option<Passphrase>>>,
     seeded: AtomicBool,
 
@@ -92,6 +96,7 @@ impl SetupOrchestrator {
             context: SetupContext::default().arc(),
             selected_peer_id: Arc::new(Mutex::new(None)),
             pairing_session_id: Arc::new(Mutex::new(None)),
+            joiner_offer: Arc::new(Mutex::new(None)),
             passphrase: Arc::new(Mutex::new(None)),
             seeded: AtomicBool::new(false),
             initialize_encryption,
@@ -253,6 +258,7 @@ impl SetupOrchestrator {
                 }
                 SetupAction::StartJoinSpaceAccess => {
                     self.start_join_space_access().await?;
+                    follow_up_events.push(SetupEvent::JoinSpaceSucceeded);
                     debug!("setup action StartJoinSpaceAccess completed");
                 }
             }
@@ -280,6 +286,47 @@ impl SetupOrchestrator {
             SetupError::PairingFailed
         })?;
 
+        let peer_id = {
+            let guard = self.selected_peer_id.lock().await;
+            guard.clone()
+        }
+        .ok_or_else(|| {
+            error!("start join space access requested without selected peer");
+            SetupError::PairingFailed
+        })?;
+
+        self.network_port
+            .open_pairing_session(peer_id, pairing_session_id.clone())
+            .await
+            .map_err(|err| {
+                error!(
+                    error = %err,
+                    pairing_session_id = %pairing_session_id,
+                    "failed to reopen pairing session for space access"
+                );
+                SetupError::PairingFailed
+            })?;
+
+        let joiner_offer = {
+            let guard = self.joiner_offer.lock().await;
+            guard.clone()
+        }
+        .ok_or_else(|| {
+            error!(
+                pairing_session_id = %pairing_session_id,
+                "start join space access requested without received offer"
+            );
+            SetupError::PairingFailed
+        })?;
+
+        {
+            let context = self.space_access_orchestrator.context();
+            let mut guard = context.lock().await;
+            guard.joiner_offer = Some(joiner_offer.clone());
+            guard.joiner_passphrase = Some(SecretString::new(passphrase.expose().to_string()));
+            guard.sponsor_peer_id = self.selected_peer_id.lock().await.clone();
+        }
+
         let crypto = self.crypto_factory.build(passphrase);
         let mut transport = self.transport_port.lock().await;
         let mut timer = self.timer_port.lock().await;
@@ -293,6 +340,47 @@ impl SetupOrchestrator {
             store: &mut *store,
         };
 
+        let space_id = joiner_offer.space_id.clone();
+
+        self.space_access_orchestrator
+            .dispatch(
+                &mut executor,
+                SpaceAccessEvent::JoinRequested {
+                    pairing_session_id: pairing_session_id.clone(),
+                    ttl_secs: 60,
+                },
+                Some(pairing_session_id.clone()),
+            )
+            .await
+            .map_err(|err| {
+                error!(
+                    error = %err,
+                    pairing_session_id = %pairing_session_id,
+                    "space access join requested failed during setup"
+                );
+                SetupError::PairingFailed
+            })?;
+
+        self.space_access_orchestrator
+            .dispatch(
+                &mut executor,
+                SpaceAccessEvent::OfferAccepted {
+                    pairing_session_id: pairing_session_id.clone(),
+                    space_id: space_id.clone(),
+                    expires_at: Utc::now() + ChronoDuration::seconds(60),
+                },
+                Some(pairing_session_id.clone()),
+            )
+            .await
+            .map_err(|err| {
+                error!(
+                    error = %err,
+                    pairing_session_id = %pairing_session_id,
+                    "space access offer accepted failed during setup"
+                );
+                SetupError::PairingFailed
+            })?;
+
         self.space_access_orchestrator
             .dispatch(
                 &mut executor,
@@ -304,7 +392,7 @@ impl SetupOrchestrator {
                 error!(
                     error = %err,
                     pairing_session_id = %pairing_session_id,
-                    "space access dispatch failed during setup"
+                    "space access passphrase submitted failed during setup"
                 );
                 SetupError::PairingFailed
             })?;
@@ -467,6 +555,7 @@ impl SetupOrchestrator {
         };
         let context = Arc::clone(&self.context);
         let pairing_session_id = Arc::clone(&self.pairing_session_id);
+        let joiner_offer = Arc::clone(&self.joiner_offer);
         let setup_event_port = Arc::clone(&self.setup_event_port);
 
         tokio::spawn(async move {
@@ -496,13 +585,61 @@ impl SetupOrchestrator {
                         session_id: event_session_id,
                         ..
                     } if event_session_id == session_id => {
+                        let next_state = SetupState::JoinSpaceInputPassphrase {
+                            error: Some(SetupDomainError::PairingFailed),
+                        };
+                        context.set_state(next_state.clone()).await;
+                        setup_event_port
+                            .emit_setup_state_changed(next_state, Some(session_id.clone()))
+                            .await;
                         break;
                     }
                     PairingDomainEvent::PairingSucceeded {
                         session_id: event_session_id,
                         ..
                     } if event_session_id == session_id => {
-                        break;
+                        continue;
+                    }
+                    PairingDomainEvent::KeyslotReceived {
+                        session_id: event_session_id,
+                        keyslot_file,
+                        challenge,
+                        ..
+                    } if event_session_id == session_id => {
+                        let challenge_len = challenge.len();
+                        let challenge_nonce: [u8; 32] = match challenge.try_into() {
+                            Ok(nonce) => nonce,
+                            Err(_) => {
+                                warn!(
+                                    session_id = %session_id,
+                                    challenge_len,
+                                    "received invalid keyslot challenge length"
+                                );
+                                continue;
+                            }
+                        };
+                        let keyslot: uc_core::security::model::KeySlot =
+                            keyslot_file.clone().into();
+                        let keyslot_blob = match serde_json::to_vec(&keyslot) {
+                            Ok(blob) => blob,
+                            Err(err) => {
+                                warn!(
+                                    error = %err,
+                                    session_id = %session_id,
+                                    "failed to serialize keyslot for space access"
+                                );
+                                continue;
+                            }
+                        };
+                        let offer = SpaceAccessJoinerOffer {
+                            space_id: uc_core::ids::SpaceId::from(
+                                keyslot_file.scope.profile_id.as_str(),
+                            ),
+                            keyslot_blob,
+                            challenge_nonce,
+                        };
+
+                        *joiner_offer.lock().await = Some(offer);
                     }
                     _ => {}
                 }
@@ -1486,6 +1623,84 @@ mod tests {
             assert!(
                 Instant::now() < emit_deadline,
                 "setup-state-changed JoinSpaceConfirmPeer event timeout"
+            );
+            sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn pairing_verification_listener_emits_join_space_failed_event_on_pairing_failure() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
+        let setup_event_port = Arc::new(MockSetupEventPort::default());
+        let (pairing_orchestrator, action_rx) = build_pairing_orchestrator_with_actions();
+        let orchestrator = SetupOrchestrator::new(
+            build_initialize_encryption(),
+            mark_setup_complete,
+            setup_status,
+            build_mock_lifecycle(),
+            pairing_orchestrator,
+            setup_event_port.clone(),
+            build_space_access_orchestrator(),
+            build_discovery_port(),
+            build_network_control(),
+            build_crypto_factory(),
+            build_network_port(),
+            build_transport_port(),
+            build_proof_port(),
+            build_timer_port(),
+            build_persistence_port(),
+        );
+
+        orchestrator.join_space().await.unwrap();
+        orchestrator
+            .select_device("peer-verify".to_string())
+            .await
+            .unwrap();
+
+        {
+            let mut rx = action_rx.lock().await;
+            assert!(
+                rx.try_recv().is_ok(),
+                "pairing orchestrator should queue initial action"
+            );
+        }
+
+        let session_deadline = Instant::now() + Duration::from_secs(1);
+        let session_id = loop {
+            if let Some(session_id) = orchestrator.pairing_session_id.lock().await.clone() {
+                break session_id;
+            }
+            assert!(
+                Instant::now() < session_deadline,
+                "pairing session id was not created"
+            );
+            sleep(Duration::from_millis(10)).await;
+        };
+
+        orchestrator
+            .pairing_orchestrator
+            .handle_transport_error(&session_id, "peer-verify", "stream closed".to_string())
+            .await
+            .unwrap();
+
+        let emit_deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let emitted = setup_event_port.snapshot().await;
+            let found = emitted.iter().any(|(state, sid)| {
+                matches!(
+                    state,
+                    SetupState::JoinSpaceInputPassphrase {
+                        error: Some(SetupDomainError::PairingFailed)
+                    }
+                ) && sid.as_ref() == Some(&session_id)
+            });
+            if found {
+                break;
+            }
+            assert!(
+                Instant::now() < emit_deadline,
+                "setup-state-changed JoinSpaceInputPassphrase error event timeout"
             );
             sleep(Duration::from_millis(10)).await;
         }
