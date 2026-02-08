@@ -182,12 +182,16 @@ impl AppLifecycleCoordinator {
             // 3. Start network
             if let Err(e) = self.network.execute().await {
                 let msg = e.to_string();
-                warn!(error = %msg, "Network failed to start");
-                self.status.set_state(LifecycleState::NetworkFailed).await?;
-                self.lifecycle_emitter
-                    .emit_lifecycle_event(LifecycleEvent::NetworkFailed(msg.clone()))
-                    .await?;
-                return Err(anyhow::anyhow!(msg));
+                if msg.to_ascii_lowercase().contains("already started") {
+                    info!(error = %msg, "network already started; skip");
+                } else {
+                    warn!(error = %msg, "Network failed to start");
+                    self.status.set_state(LifecycleState::NetworkFailed).await?;
+                    self.lifecycle_emitter
+                        .emit_lifecycle_event(LifecycleEvent::NetworkFailed(msg.clone()))
+                        .await?;
+                    return Err(anyhow::anyhow!(msg));
+                }
             }
 
             // 3.5. Announce device name (best-effort, failure is non-fatal)
