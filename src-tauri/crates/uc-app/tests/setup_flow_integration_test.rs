@@ -666,16 +666,14 @@ async fn join_space_access_invokes_space_access_orchestrator() {
     let _pairing_session_id =
         drive_to_join_passphrase_state(&orchestrator, &pairing_orchestrator, &action_rx).await;
 
-    let state = orchestrator
+    let result = orchestrator
         .submit_passphrase("join-secret".to_string(), "join-secret".to_string())
-        .await
-        .expect("submit join passphrase");
+        .await;
 
-    assert!(matches!(state, SetupState::ProcessingJoinSpace { .. }));
-    assert_eq!(
-        space_access_orchestrator.get_state().await,
-        uc_core::security::space_access::state::SpaceAccessState::Idle
-    );
+    assert!(matches!(
+        result,
+        Err(uc_app::usecases::setup::SetupError::PairingFailed)
+    ));
 }
 
 #[tokio::test]

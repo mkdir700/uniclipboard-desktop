@@ -277,6 +277,23 @@ pub async fn command_body(_trace: Option<TraceMetadata>) -> Result<(), CmdError>
 
 - Any type accessed via `tauri::State<T>` must be registered **before startup** with `.manage()`
 
+## Tauri Event Payload Serialization (CRITICAL)
+
+- **All `#[derive(serde::Serialize)]` structs emitted to the frontend via `app.emit()` MUST include `#[serde(rename_all = "camelCase")]`.**
+- Rust struct fields use `snake_case`; TypeScript/JavaScript expects `camelCase`.
+- Without `rename_all`, the frontend receives `session_id` instead of `sessionId`, causing **silent field mismatches** — `payload.sessionId` evaluates to `undefined` and events are silently dropped.
+- This applies to **all** event payloads, not just Tauri commands (commands use return values which go through a different path).
+
+### Checklist for new event payloads
+
+1. Add `#[serde(rename_all = "camelCase")]` to the struct.
+2. Verify the frontend listener field names match the camelCase output.
+3. Add a test that asserts camelCase keys are present and snake_case keys are absent (see `pairing_action_loop_emits_camelcase_payload` in `wiring.rs` for reference).
+
+### Known incident
+
+`SetupStateChangedPayload` was missing `rename_all`, causing **all async setup state transitions** (e.g., `ProcessingJoinSpace` → `JoinSpaceConfirmPeer`) to be invisible to the frontend. Synchronous command returns worked fine, masking the bug during manual testing.
+
 ## Frontend Layout Rules
 
 - **No fixed-pixel layouts.**

@@ -74,7 +74,7 @@ export async function startJoinSpace(): Promise<SetupState> {
  * 选择加入空间的设备
  */
 export async function selectJoinPeer(peerId: string): Promise<SetupState> {
-  return decodeSetupState(await invokeWithTrace('select_device', { peer_id: peerId }))
+  return decodeSetupState(await invokeWithTrace('select_device', { peerId }))
 }
 
 /**

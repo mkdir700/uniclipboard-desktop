@@ -27,7 +27,7 @@ describe('setup api', () => {
     await selectJoinPeer('peer-1')
 
     expect(invokeWithTraceMock).toHaveBeenCalledWith('select_device', {
-      peer_id: 'peer-1',
+      peerId: 'peer-1',
     })
   })
 

@@ -1033,6 +1033,13 @@ impl PairingOrchestrator {
         peers.get(session_id).cloned()
     }
 
+    pub async fn get_session_role(&self, session_id: &str) -> Option<PairingRole> {
+        let sessions = self.sessions.read().await;
+        sessions
+            .get(session_id)
+            .and_then(|ctx| ctx.state_machine.role())
+    }
+
     fn build_policy(&self) -> PairingPolicy {
         PairingPolicy {
             step_timeout_secs: self.config.step_timeout_secs,

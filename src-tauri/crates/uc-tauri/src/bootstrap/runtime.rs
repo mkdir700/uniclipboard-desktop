@@ -36,8 +36,8 @@ use tokio::sync::Mutex;
 use uc_app::{
     usecases::{
         space_access::{
-            DefaultSpaceAccessCryptoFactory, HmacProofAdapter, SpaceAccessOrchestrator,
-            SpaceAccessPersistenceAdapter,
+            DefaultSpaceAccessCryptoFactory, HmacProofAdapter, SpaceAccessNetworkAdapter,
+            SpaceAccessOrchestrator, SpaceAccessPersistenceAdapter,
         },
         PairingConfig, PairingOrchestrator, SetupOrchestrator,
     },
@@ -250,7 +250,10 @@ impl AppRuntime {
             deps.encryption_session.clone(),
         ));
         let transport_port: Arc<Mutex<dyn SpaceAccessTransportPort>> =
-            Arc::new(Mutex::new(NoopSpaceAccessTransport));
+            Arc::new(Mutex::new(SpaceAccessNetworkAdapter::new(
+                deps.network.clone(),
+                setup_ports.space_access_orchestrator.context(),
+            )));
         let proof_port: Arc<dyn uc_core::ports::space::ProofPort> =
             Arc::new(HmacProofAdapter::new());
         let timer_port: Arc<Mutex<dyn TimerPort>> = Arc::new(Mutex::new(Timer::new()));
@@ -311,32 +314,6 @@ struct EmptyDiscoveryPort;
 impl DiscoveryPort for EmptyDiscoveryPort {
     async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
         Ok(Vec::new())
-    }
-}
-
-struct NoopSpaceAccessTransport;
-
-#[async_trait]
-impl SpaceAccessTransportPort for NoopSpaceAccessTransport {
-    async fn send_offer(
-        &mut self,
-        _session_id: &uc_core::network::SessionId,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn send_proof(
-        &mut self,
-        _session_id: &uc_core::network::SessionId,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn send_result(
-        &mut self,
-        _session_id: &uc_core::network::SessionId,
-    ) -> anyhow::Result<()> {
-        Ok(())
     }
 }
 

@@ -52,7 +52,7 @@ use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ids::RepresentationId;
-use uc_core::network::pairing_state_machine::PairingAction;
+use uc_core::network::pairing_state_machine::{PairingAction, PairingRole};
 use uc_core::network::{NetworkEvent, PairingMessage};
 use uc_core::ports::clipboard::{
     ClipboardChangeOriginPort, ClipboardRepresentationNormalizerPort, RepresentationCachePort,
@@ -957,6 +957,7 @@ pub fn start_background_tasks<R: Runtime>(
     pairing_orchestrator: Arc<PairingOrchestrator>,
     pairing_action_rx: mpsc::Receiver<PairingAction>,
     space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
+    key_slot_store: Arc<dyn KeySlotStore>,
 ) {
     let BackgroundRuntimeDeps {
         libp2p_network: _,
@@ -1071,12 +1072,16 @@ pub fn start_background_tasks<R: Runtime>(
         let action_network = pairing_network.clone();
         let action_app_handle = pairing_app_handle.clone();
         let action_orchestrator = pairing_orchestrator.clone();
+        let action_space_access_orchestrator = pairing_space_access_orchestrator.clone();
+        let action_key_slot_store = key_slot_store.clone();
         async_runtime::spawn(async move {
             run_pairing_action_loop(
                 pairing_action_rx,
                 action_network,
                 action_app_handle,
                 action_orchestrator,
+                action_space_access_orchestrator,
+                action_key_slot_store,
             )
             .await;
         });
@@ -1322,6 +1327,23 @@ impl uc_core::ports::space::PersistencePort for NoopSpaceAccessPersistence {
         Err(anyhow::anyhow!(
             "noop persistence port cannot persist sponsor access"
         ))
+    }
+}
+
+struct NoopSpaceAccessTimer;
+
+#[async_trait::async_trait]
+impl uc_core::ports::TimerPort for NoopSpaceAccessTimer {
+    async fn start(
+        &mut self,
+        _session_id: &uc_core::ids::SessionId,
+        _ttl_secs: u64,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn stop(&mut self, _session_id: &uc_core::ids::SessionId) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -1750,10 +1772,55 @@ async fn handle_pairing_message<R: Runtime>(
                             );
                         }
                     }
-                    Ok(SpaceAccessBusyPayload::Result(_)) => {
-                        // Task 5: Route space_access_result to Joiner
+                    Ok(SpaceAccessBusyPayload::Result(result)) => {
+                        let space_id = uc_core::ids::SpaceId::from(result.sponsor_peer_id.as_str());
+
+                        let event = if result.prepared_offer_exists
+                            && result.joiner_offer_exists
+                            && result.proof_artifact_exists
+                        {
+                            SpaceAccessEvent::AccessGranted {
+                                pairing_session_id: session_id.clone(),
+                                space_id,
+                            }
+                        } else {
+                            SpaceAccessEvent::AccessDenied {
+                                pairing_session_id: session_id.clone(),
+                                space_id,
+                                reason:
+                                    uc_core::security::space_access::state::DenyReason::InvalidProof,
+                            }
+                        };
+
+                        let mut noop_transport = NoopSpaceAccessTransport;
+                        let noop_proof = NoopSpaceAccessProof;
+                        let mut timer_guard = space_access_timer.lock().await;
+                        let mut noop_store = NoopSpaceAccessPersistence;
+                        let noop_crypto = NoopSpaceAccessCrypto;
+
+                        if let Err(err) = space_access_orchestrator
+                            .dispatch(
+                                &mut uc_app::usecases::space_access::SpaceAccessExecutor {
+                                    crypto: &noop_crypto,
+                                    net: network,
+                                    transport: &mut noop_transport,
+                                    proof: &noop_proof,
+                                    timer: &mut *timer_guard,
+                                    store: &mut noop_store,
+                                },
+                                event,
+                                Some(session_id.clone()),
+                            )
+                            .await
+                        {
+                            warn!(
+                                error = %err,
+                                session_id = %session_id,
+                                peer_id = %peer_id,
+                                "Failed to dispatch space access result"
+                            );
+                        }
                     }
-                    Ok(_) => {}
                     Err(err) => {
                         let payload_kind = err
                             .payload_kind()
@@ -1796,6 +1863,8 @@ async fn run_pairing_action_loop<R: Runtime>(
     network: Arc<dyn NetworkPort>,
     app_handle: Option<AppHandle<R>>,
     orchestrator: Arc<PairingOrchestrator>,
+    space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
+    key_slot_store: Arc<dyn KeySlotStore>,
 ) {
     while let Some(action) = action_rx.recv().await {
         match action {
@@ -1917,10 +1986,12 @@ async fn run_pairing_action_loop<R: Runtime>(
                     .as_ref()
                     .map(|p| p.peer_id.as_str())
                     .unwrap_or("unknown");
+                let role = orchestrator.get_session_role(&session_id).await;
                 info!(
                     session_id = %session_id,
                     peer_id = %peer_id,
                     success = success,
+                    role = ?role,
                     reason = ?error,
                     "EmitResult received"
                 );
@@ -1936,6 +2007,58 @@ async fn run_pairing_action_loop<R: Runtime>(
                         );
                     }
                 }
+                if success && role == Some(PairingRole::Initiator) {
+                    match key_slot_store.load().await {
+                        Ok(keyslot_file) => {
+                            let space_id =
+                                uc_core::ids::SpaceId::from(keyslot_file.scope.profile_id.as_str());
+                            let mut noop_transport = NoopSpaceAccessTransport;
+                            let noop_proof = NoopSpaceAccessProof;
+                            let mut noop_timer = NoopSpaceAccessTimer;
+                            let mut noop_store = NoopSpaceAccessPersistence;
+                            let noop_crypto = NoopSpaceAccessCrypto;
+
+                            let mut executor =
+                                uc_app::usecases::space_access::SpaceAccessExecutor {
+                                    crypto: &noop_crypto,
+                                    net: network.as_ref(),
+                                    transport: &mut noop_transport,
+                                    proof: &noop_proof,
+                                    timer: &mut noop_timer,
+                                    store: &mut noop_store,
+                                };
+
+                            if let Err(err) = space_access_orchestrator
+                                .start_sponsor_authorization(
+                                    &mut executor,
+                                    session_id.clone(),
+                                    space_id,
+                                    300,
+                                )
+                                .await
+                            {
+                                warn!(
+                                    error = %err,
+                                    session_id = %session_id,
+                                    "Failed to start sponsor authorization"
+                                );
+                            } else {
+                                info!(
+                                    session_id = %session_id,
+                                    "Sponsor authorization started successfully"
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            warn!(
+                                error = %err,
+                                session_id = %session_id,
+                                "Failed to load keyslot for sponsor authorization"
+                            );
+                        }
+                    }
+                }
+
                 if let Some(app) = app_handle.as_ref() {
                     if success {
                         let (peer_id, device_name) = match peer_info {
@@ -2199,6 +2322,29 @@ mod tests {
             &self,
             _peer_id: &uc_core::ids::PeerId,
         ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+    }
+
+    struct NoopKeySlotStore;
+
+    #[async_trait]
+    impl KeySlotStore for NoopKeySlotStore {
+        async fn load(
+            &self,
+        ) -> Result<uc_core::security::model::KeySlotFile, uc_core::ports::errors::EncryptionError>
+        {
+            Err(uc_core::ports::errors::EncryptionError::KeyNotFound)
+        }
+
+        async fn store(
+            &self,
+            _slot: &uc_core::security::model::KeySlotFile,
+        ) -> Result<(), uc_core::ports::errors::EncryptionError> {
+            Ok(())
+        }
+
+        async fn delete(&self) -> Result<(), uc_core::ports::errors::EncryptionError> {
             Ok(())
         }
     }
@@ -2474,11 +2620,15 @@ mod tests {
 
         let (action_tx, action_rx) = mpsc::channel(1);
         let network = Arc::new(NoopNetwork);
+        let space_access_orchestrator = Arc::new(SpaceAccessOrchestrator::new());
+        let key_slot_store = Arc::new(NoopKeySlotStore);
         let loop_handle = tokio::spawn(run_pairing_action_loop::<tauri::test::MockRuntime>(
             action_rx,
             network,
             Some(app_handle.clone()),
             orchestrator.clone(),
+            space_access_orchestrator,
+            key_slot_store,
         ));
 
         action_tx
@@ -2540,11 +2690,15 @@ mod tests {
 
         let (action_tx, action_rx) = mpsc::channel(1);
         let network = Arc::new(NoopNetwork);
+        let space_access_orchestrator = Arc::new(SpaceAccessOrchestrator::new());
+        let key_slot_store = Arc::new(NoopKeySlotStore);
         let loop_handle = tokio::spawn(run_pairing_action_loop::<tauri::test::MockRuntime>(
             action_rx,
             network,
             Some(app_handle.clone()),
             orchestrator.clone(),
+            space_access_orchestrator,
+            key_slot_store,
         ));
 
         action_tx

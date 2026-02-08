@@ -19,3 +19,5 @@
 - 2026-02-07: AppRuntime 现在通过 SetupRuntimePorts 注入真实的 Pairing/SpaceAccess/Discovery 依赖，bootstrap wiring 必须在构造 runtime 前创建这些 orchestrator/adapters；单元测试若仍用 AppRuntime::new() 会得到占位实现。
 
 - 2026-02-07: StartJoinSpaceAccess action 不再抛 ActionNotImplemented，而是以 LifecycleFailed 形式提示 join space access 流程尚未接好，前端可据此展示合理错误。
+
+- 2026-02-08: SetupPage 订阅 `setup-state-changed` 时需同时做「流程激活状态 + sessionId」双重过滤，并在相同 state 事件下跳过 `setSetupState`，否则会出现重复渲染抖动。

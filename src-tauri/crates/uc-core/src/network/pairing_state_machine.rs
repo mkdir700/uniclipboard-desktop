@@ -467,6 +467,11 @@ impl PairingStateMachine {
         &self.state
     }
 
+    /// 获取当前角色
+    pub fn role(&self) -> Option<PairingRole> {
+        self.context.role
+    }
+
     /// 处理事件并返回新状态和动作列表
     ///
     /// 这是状态机的核心方法,实现了纯函数式状态转换。
