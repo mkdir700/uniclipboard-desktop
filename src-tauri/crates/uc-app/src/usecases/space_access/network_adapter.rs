@@ -7,19 +7,19 @@ use uc_core::ports::NetworkPort;
 
 use super::context::SpaceAccessContext;
 
-pub struct SpaceAccessNetworkAdapter<'a> {
-    network: &'a dyn NetworkPort,
+pub struct SpaceAccessNetworkAdapter {
+    network: Arc<dyn NetworkPort>,
     context: Arc<Mutex<SpaceAccessContext>>,
 }
 
-impl<'a> SpaceAccessNetworkAdapter<'a> {
-    pub fn new(network: &'a dyn NetworkPort, context: Arc<Mutex<SpaceAccessContext>>) -> Self {
+impl SpaceAccessNetworkAdapter {
+    pub fn new(network: Arc<dyn NetworkPort>, context: Arc<Mutex<SpaceAccessContext>>) -> Self {
         Self { network, context }
     }
 }
 
 #[async_trait::async_trait]
-impl<'a> SpaceAccessTransportPort for SpaceAccessNetworkAdapter<'a> {
+impl SpaceAccessTransportPort for SpaceAccessNetworkAdapter {
     async fn send_offer(&mut self, session_id: &SessionId) -> anyhow::Result<()> {
         let offer = {
             let context = self.context.lock().await;

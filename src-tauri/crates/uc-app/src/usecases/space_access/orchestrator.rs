@@ -59,7 +59,7 @@ impl SpaceAccessOrchestrator {
         }
     }
 
-    pub async fn initialize_new_space(
+    pub async fn start_sponsor_authorization(
         &self,
         executor: &mut SpaceAccessExecutor<'_>,
         pairing_session_id: SessionId,
@@ -77,6 +77,10 @@ impl SpaceAccessOrchestrator {
 
     pub async fn get_state(&self) -> SpaceAccessState {
         self.state.lock().await.clone()
+    }
+
+    pub fn context(&self) -> Arc<Mutex<SpaceAccessContext>> {
+        Arc::clone(&self.context)
     }
 
     pub async fn dispatch(

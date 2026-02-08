@@ -15,7 +15,7 @@ pub use crypto_adapter::{
 pub use events::{SpaceAccessCompletedEvent, SpaceAccessEventPort};
 pub use executor::SpaceAccessExecutor;
 pub use initialize_new_space::{
-    InitializeNewSpace, InitializeNewSpaceError, SpaceAccessCryptoFactory,
+    SpaceAccessCryptoFactory, StartSponsorAuthorization, StartSponsorAuthorizationError,
 };
 pub use network_adapter::SpaceAccessNetworkAdapter;
 pub use orchestrator::{SpaceAccessError, SpaceAccessOrchestrator};

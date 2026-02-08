@@ -12,7 +12,7 @@ use super::executor::SpaceAccessExecutor;
 use super::orchestrator::{SpaceAccessError, SpaceAccessOrchestrator};
 
 #[derive(Debug, thiserror::Error)]
-pub enum InitializeNewSpaceError {
+pub enum StartSponsorAuthorizationError {
     #[error("space access failed: {0}")]
     SpaceAccess(#[from] SpaceAccessError),
 }
@@ -21,7 +21,7 @@ pub trait SpaceAccessCryptoFactory: Send + Sync {
     fn build(&self, passphrase: SecretString) -> Box<dyn CryptoPort>;
 }
 
-pub struct InitializeNewSpace {
+pub struct StartSponsorAuthorization {
     orchestrator: Arc<SpaceAccessOrchestrator>,
     crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
     network: Arc<dyn NetworkPort>,
@@ -32,7 +32,7 @@ pub struct InitializeNewSpace {
     ttl_secs: u64,
 }
 
-impl InitializeNewSpace {
+impl StartSponsorAuthorization {
     pub fn new(
         orchestrator: Arc<SpaceAccessOrchestrator>,
         crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
@@ -57,7 +57,7 @@ impl InitializeNewSpace {
     pub async fn execute(
         &self,
         passphrase: SecretString,
-    ) -> Result<SpaceAccessState, InitializeNewSpaceError> {
+    ) -> Result<SpaceAccessState, StartSponsorAuthorizationError> {
         let space_id = SpaceId::new();
         let pairing_session_id = format!("setup-{}", uuid::Uuid::new_v4());
         let crypto = self.crypto_factory.build(passphrase);
@@ -75,7 +75,7 @@ impl InitializeNewSpace {
 
         let state = self
             .orchestrator
-            .initialize_new_space(&mut executor, pairing_session_id, space_id, self.ttl_secs)
+            .start_sponsor_authorization(&mut executor, pairing_session_id, space_id, self.ttl_secs)
             .await?;
 
         Ok(state)
@@ -262,7 +262,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn initialize_new_space_exports_keyslot() {
+    async fn start_sponsor_authorization_exports_keyslot() {
         let exported = Arc::new(AtomicBool::new(false));
         let crypto_factory = Arc::new(MockCryptoFactory {
             exported: exported.clone(),
@@ -274,7 +274,7 @@ mod tests {
         let store = Arc::new(Mutex::new(MockStorePort));
         let orchestrator = Arc::new(SpaceAccessOrchestrator::new());
 
-        let uc = InitializeNewSpace::new(
+        let uc = StartSponsorAuthorization::new(
             orchestrator,
             crypto_factory,
             network,
@@ -286,7 +286,10 @@ mod tests {
 
         let result = uc.execute(SecretString::from("passphrase")).await;
 
-        assert!(result.is_ok(), "expected initialize new space to succeed");
+        assert!(
+            result.is_ok(),
+            "expected sponsor authorization start to succeed"
+        );
         assert!(exported.load(Ordering::SeqCst));
     }
 

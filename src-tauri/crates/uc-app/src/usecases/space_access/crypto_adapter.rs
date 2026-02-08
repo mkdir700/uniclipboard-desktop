@@ -16,7 +16,7 @@ use uc_core::security::model::{
 use uc_core::security::state::{EncryptionState, EncryptionStateError};
 use uc_core::security::SecretString;
 
-use super::initialize_new_space::SpaceAccessCryptoFactory;
+use super::SpaceAccessCryptoFactory;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SpaceAccessCryptoError {
