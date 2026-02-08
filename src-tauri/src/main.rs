@@ -429,12 +429,13 @@ fn run_app(config: AppConfig) {
         pairing_identity_pubkey,
     );
     let pairing_orchestrator = Arc::new(pairing_orchestrator);
+    let space_access_orchestrator = Arc::new(SpaceAccessOrchestrator::new());
 
     let runtime = AppRuntime::with_setup(
         deps,
         SetupRuntimePorts::from_network(
             pairing_orchestrator.clone(),
-            Arc::new(SpaceAccessOrchestrator::new()),
+            space_access_orchestrator.clone(),
             discovery_network,
         ),
     );
@@ -519,6 +520,7 @@ fn run_app(config: AppConfig) {
                 Some(app.handle().clone()),
                 pairing_orchestrator.clone(),
                 pairing_action_rx,
+                space_access_orchestrator.clone(),
             );
 
             // Clone handles for async blocks

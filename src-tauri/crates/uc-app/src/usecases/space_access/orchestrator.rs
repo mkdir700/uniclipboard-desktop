@@ -4,18 +4,20 @@
 
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use chrono::Utc;
+use tokio::sync::{mpsc, Mutex};
 use tracing::{info_span, Instrument};
 
 use uc_core::ids::SpaceId;
 use uc_core::network::SessionId;
 use uc_core::security::space_access::action::SpaceAccessAction;
 use uc_core::security::space_access::event::SpaceAccessEvent;
-use uc_core::security::space_access::state::SpaceAccessState;
+use uc_core::security::space_access::state::{CancelReason, DenyReason, SpaceAccessState};
 use uc_core::security::space_access::state_machine::SpaceAccessStateMachine;
 use uc_core::SessionId as CoreSessionId;
 
 use super::context::{SpaceAccessContext, SpaceAccessOffer};
+use super::events::{SpaceAccessCompletedEvent, SpaceAccessEventPort};
 use super::executor::SpaceAccessExecutor;
 
 /// Errors produced by space access orchestrator.
@@ -40,6 +42,7 @@ pub struct SpaceAccessOrchestrator {
     context: Arc<Mutex<SpaceAccessContext>>,
     state: Arc<Mutex<SpaceAccessState>>,
     dispatch_lock: Arc<Mutex<()>>,
+    event_senders: Arc<Mutex<Vec<mpsc::Sender<SpaceAccessCompletedEvent>>>>,
 }
 
 impl SpaceAccessOrchestrator {
@@ -52,6 +55,7 @@ impl SpaceAccessOrchestrator {
             context: Arc::new(Mutex::new(context)),
             state: Arc::new(Mutex::new(SpaceAccessState::Idle)),
             dispatch_lock: Arc::new(Mutex::new(())),
+            event_senders: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -86,9 +90,45 @@ impl SpaceAccessOrchestrator {
         let span = info_span!("usecase.space_access_orchestrator.dispatch", event = ?event);
         async {
             let current = self.state.lock().await.clone();
-            let (next, actions) = SpaceAccessStateMachine::transition(current, event);
-            self.execute_actions(executor, pairing_session_id.as_ref(), actions)
-                .await?;
+            let (next, actions) = SpaceAccessStateMachine::transition(current.clone(), event);
+            let is_responder_flow = matches!(
+                current,
+                SpaceAccessState::WaitingJoinerProof {
+                    pairing_session_id: _,
+                    space_id: _,
+                    expires_at: _,
+                }
+            );
+
+            let sponsor_persisted = match self
+                .execute_actions(executor, pairing_session_id.as_ref(), actions)
+                .await
+            {
+                Ok(persisted) => persisted,
+                Err(err) => {
+                    if is_responder_flow {
+                        self.emit_responder_completion(
+                            &next,
+                            false,
+                            Some(err.to_string()),
+                            pairing_session_id.as_ref(),
+                        )
+                        .await;
+                    }
+                    return Err(err);
+                }
+            };
+
+            if is_responder_flow {
+                self.emit_responder_completion(
+                    &next,
+                    sponsor_persisted,
+                    None,
+                    pairing_session_id.as_ref(),
+                )
+                .await;
+            }
+
             let mut guard = self.state.lock().await;
             *guard = next.clone();
             Ok(next)
@@ -97,12 +137,130 @@ impl SpaceAccessOrchestrator {
         .await
     }
 
+    async fn emit_responder_completion(
+        &self,
+        next: &SpaceAccessState,
+        sponsor_persisted: bool,
+        action_error_reason: Option<String>,
+        fallback_session_id: Option<&SessionId>,
+    ) {
+        let session_id = Self::resolve_session_id(next, fallback_session_id);
+        let Some(session_id) = session_id else {
+            return;
+        };
+
+        if let Some(reason) = action_error_reason {
+            self.emit_completion(&session_id, false, Some(reason)).await;
+            return;
+        }
+
+        match next {
+            SpaceAccessState::Granted { .. } => {
+                if sponsor_persisted {
+                    self.emit_completion(&session_id, true, None).await;
+                } else {
+                    self.emit_completion(
+                        &session_id,
+                        false,
+                        Some("sponsor_persist_not_executed".to_string()),
+                    )
+                    .await;
+                }
+            }
+            SpaceAccessState::Denied { reason, .. } => {
+                self.emit_completion(&session_id, false, Some(Self::deny_reason_code(reason)))
+                    .await;
+            }
+            SpaceAccessState::Cancelled { reason, .. } => {
+                self.emit_completion(&session_id, false, Some(Self::cancel_reason_code(reason)))
+                    .await;
+            }
+            _ => {}
+        }
+    }
+
+    fn resolve_session_id(
+        state: &SpaceAccessState,
+        fallback_session_id: Option<&SessionId>,
+    ) -> Option<String> {
+        match state {
+            SpaceAccessState::WaitingOffer {
+                pairing_session_id, ..
+            }
+            | SpaceAccessState::WaitingUserPassphrase {
+                pairing_session_id, ..
+            }
+            | SpaceAccessState::WaitingDecision {
+                pairing_session_id, ..
+            }
+            | SpaceAccessState::WaitingJoinerProof {
+                pairing_session_id, ..
+            }
+            | SpaceAccessState::Granted {
+                pairing_session_id, ..
+            }
+            | SpaceAccessState::Denied {
+                pairing_session_id, ..
+            }
+            | SpaceAccessState::Cancelled {
+                pairing_session_id, ..
+            } => Some(pairing_session_id.clone()),
+            SpaceAccessState::Idle => fallback_session_id.cloned(),
+        }
+    }
+
+    fn deny_reason_code(reason: &DenyReason) -> String {
+        match reason {
+            DenyReason::Expired => "expired",
+            DenyReason::InvalidProof => "invalid_proof",
+            DenyReason::SpaceMismatch => "space_mismatch",
+            DenyReason::SessionMismatch => "session_mismatch",
+            DenyReason::InternalError => "internal_error",
+        }
+        .to_string()
+    }
+
+    fn cancel_reason_code(reason: &CancelReason) -> String {
+        match reason {
+            CancelReason::UserCancelled => "user_cancelled",
+            CancelReason::Timeout => "timeout",
+            CancelReason::SessionClosed => "session_closed",
+        }
+        .to_string()
+    }
+
+    async fn emit_completion(&self, session_id: &str, success: bool, reason: Option<String>) {
+        let peer_id = {
+            let context = self.context.lock().await;
+            context
+                .sponsor_peer_id
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string())
+        };
+
+        let event = SpaceAccessCompletedEvent {
+            session_id: session_id.to_string(),
+            peer_id,
+            success,
+            reason,
+            ts: Utc::now().timestamp_millis(),
+        };
+
+        let senders = { self.event_senders.lock().await.clone() };
+        for sender in senders {
+            if sender.send(event.clone()).await.is_err() {
+                tracing::debug!("space access completion receiver dropped");
+            }
+        }
+    }
+
     async fn execute_actions(
         &self,
         executor: &mut SpaceAccessExecutor<'_>,
         pairing_session_id: Option<&SessionId>,
         actions: Vec<SpaceAccessAction>,
-    ) -> Result<(), SpaceAccessError> {
+    ) -> Result<bool, SpaceAccessError> {
+        let mut sponsor_persisted = false;
         for action in actions {
             match action {
                 SpaceAccessAction::RequestOfferPreparation {
@@ -221,11 +379,22 @@ impl SpaceAccessOrchestrator {
                         .persist_sponsor_access(&space_id, &peer_id)
                         .await
                         .map_err(SpaceAccessError::Persistence)?;
+                    sponsor_persisted = true;
                 }
             }
         }
 
-        Ok(())
+        Ok(sponsor_persisted)
+    }
+}
+
+#[async_trait::async_trait]
+impl SpaceAccessEventPort for SpaceAccessOrchestrator {
+    async fn subscribe(&self) -> anyhow::Result<mpsc::Receiver<SpaceAccessCompletedEvent>> {
+        let (event_tx, event_rx) = mpsc::channel(100);
+        let mut senders = self.event_senders.lock().await;
+        senders.push(event_tx);
+        Ok(event_rx)
     }
 }
 
@@ -235,6 +404,7 @@ mod tests {
     use async_trait::async_trait;
     use chrono::{Duration, Utc};
     use tokio::sync::mpsc;
+    use tokio::time::{timeout, Duration as TokioDuration};
     use uc_core::ids::{SessionId as CoreSessionId, SpaceId};
     use uc_core::network::SessionId as NetSessionId;
     use uc_core::network::{
@@ -251,6 +421,7 @@ mod tests {
     use uc_core::security::space_access::state::{DenyReason, SpaceAccessState};
     use uc_core::security::SecretString;
 
+    use crate::usecases::space_access::SpaceAccessEventPort;
     use crate::usecases::space_access::SpaceAccessJoinerOffer;
 
     type StateAssert = Box<dyn Fn(&SpaceAccessState) + Send + Sync>;
@@ -454,6 +625,10 @@ mod tests {
         let space_id: SpaceId = "space-sponsor".into();
         let ttl_secs = 60_u64;
         let orchestrator = SpaceAccessOrchestrator::new();
+        let mut completion_rx = orchestrator
+            .subscribe()
+            .await
+            .expect("subscribe completion");
         let mut harness = AccessTestHarness::default();
         let mut executor = harness.executor();
 
@@ -488,6 +663,15 @@ mod tests {
         );
         assert_eq!(harness.timer.start_calls.len(), 1);
         assert_eq!(harness.timer.stop_calls.len(), 1);
+
+        let completion = timeout(TokioDuration::from_secs(1), completion_rx.recv())
+            .await
+            .expect("completion timeout")
+            .expect("completion missing");
+        assert_eq!(completion.session_id, session_id);
+        assert_eq!(completion.peer_id, "peer-sponsor");
+        assert!(completion.success);
+        assert!(completion.reason.is_none());
     }
 
     #[tokio::test]
@@ -496,6 +680,10 @@ mod tests {
         let space_id: SpaceId = "space-deny".into();
         let ttl_secs = 90_u64;
         let orchestrator = SpaceAccessOrchestrator::new();
+        let mut completion_rx = orchestrator
+            .subscribe()
+            .await
+            .expect("subscribe completion");
         let mut harness = AccessTestHarness::default();
         let mut executor = harness.executor();
 
@@ -531,6 +719,15 @@ mod tests {
         assert_eq!(harness.transport.results(), vec![session_id.clone()]);
         assert!(harness.store.sponsor_access.is_empty());
         assert_eq!(harness.timer.stop_calls.len(), 1);
+
+        let completion = timeout(TokioDuration::from_secs(1), completion_rx.recv())
+            .await
+            .expect("completion timeout")
+            .expect("completion missing");
+        assert_eq!(completion.session_id, session_id);
+        assert_eq!(completion.peer_id, "peer-deny");
+        assert!(!completion.success);
+        assert_eq!(completion.reason.as_deref(), Some("invalid_proof"));
     }
 
     async fn run_access_steps(

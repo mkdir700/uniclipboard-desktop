@@ -42,6 +42,9 @@ use tracing::{error, info, warn};
 
 use crate::events::{P2PPairingVerificationEvent, P2PPeerConnectionEvent, P2PPeerNameUpdatedEvent};
 use uc_app::app_paths::AppPaths;
+use uc_app::usecases::space_access::{
+    SpaceAccessCompletedEvent, SpaceAccessEventPort, SpaceAccessOrchestrator,
+};
 use uc_app::usecases::{PairingConfig, PairingOrchestrator, ResolveConnectionPolicy};
 use uc_app::AppDeps;
 use uc_core::clipboard::SelectRepresentationPolicyV1;
@@ -947,6 +950,7 @@ pub fn start_background_tasks<R: Runtime>(
     app_handle: Option<AppHandle<R>>,
     pairing_orchestrator: Arc<PairingOrchestrator>,
     pairing_action_rx: mpsc::Receiver<PairingAction>,
+    space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
 ) {
     let BackgroundRuntimeDeps {
         libp2p_network: _,
@@ -963,6 +967,7 @@ pub fn start_background_tasks<R: Runtime>(
     info!("Starting background clipboard spooler and blob worker");
 
     let pairing_app_handle = app_handle.clone();
+    let space_access_app_handle = app_handle.clone();
     let representation_repo = deps.representation_repo.clone();
     let worker_tx = deps.worker_tx.clone();
     let blob_writer = deps.blob_writer.clone();
@@ -1034,6 +1039,20 @@ pub fn start_background_tasks<R: Runtime>(
     });
 
     async_runtime::spawn(async move {
+        let completion_rx =
+            match SpaceAccessEventPort::subscribe(space_access_orchestrator.as_ref()).await {
+                Ok(rx) => rx,
+                Err(err) => {
+                    warn!(error = %err, "Failed to subscribe to space access completion events");
+                    return;
+                }
+            };
+
+        run_space_access_completion_loop(completion_rx, space_access_app_handle).await;
+        warn!("Space access completion loop stopped");
+    });
+
+    async_runtime::spawn(async move {
         let event_rx = match pairing_network.subscribe_events().await {
             Ok(rx) => rx,
             Err(err) => {
@@ -1064,6 +1083,37 @@ pub fn start_background_tasks<R: Runtime>(
         .await;
         warn!("Pairing event loop stopped");
     });
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpaceAccessCompletedPayload {
+    session_id: String,
+    peer_id: String,
+    success: bool,
+    reason: Option<String>,
+    ts: i64,
+}
+
+async fn run_space_access_completion_loop<R: Runtime>(
+    mut event_rx: mpsc::Receiver<SpaceAccessCompletedEvent>,
+    app_handle: Option<AppHandle<R>>,
+) {
+    while let Some(event) = event_rx.recv().await {
+        if let Some(app) = app_handle.as_ref() {
+            let payload = SpaceAccessCompletedPayload {
+                session_id: event.session_id,
+                peer_id: event.peer_id,
+                success: event.success,
+                reason: event.reason,
+                ts: event.ts,
+            };
+
+            if let Err(err) = app.emit("space-access-completed", payload) {
+                warn!(error = %err, "Failed to emit space-access-completed event");
+            }
+        }
+    }
 }
 
 const DEFAULT_PAIRING_DEVICE_NAME: &str = "Uniclipboard Device";
@@ -1878,6 +1928,52 @@ mod tests {
         let payload = payload_rx.recv().await.expect("event payload");
         assert!(payload.contains("peerId"));
         assert!(payload.contains("deviceName"));
+
+        drop(event_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
+    }
+
+    #[tokio::test]
+    async fn space_access_completion_loop_emits_frontend_event() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
+        let payload_tx_clone = payload_tx.clone();
+        app_handle.listen("space-access-completed", move |event: tauri::Event| {
+            let _ = payload_tx_clone.try_send(event.payload().to_string());
+        });
+
+        let (event_tx, event_rx) = mpsc::channel(1);
+        let loop_handle = tokio::spawn(
+            run_space_access_completion_loop::<tauri::test::MockRuntime>(
+                event_rx,
+                Some(app_handle.clone()),
+            ),
+        );
+
+        event_tx
+            .send(SpaceAccessCompletedEvent {
+                session_id: "session-space-1".to_string(),
+                peer_id: "peer-space-1".to_string(),
+                success: false,
+                reason: Some("timeout".to_string()),
+                ts: 1735689600000,
+            })
+            .await
+            .expect("send completion event");
+
+        let payload = tokio::time::timeout(Duration::from_secs(1), payload_rx.recv())
+            .await
+            .expect("timeout waiting for payload")
+            .expect("payload received");
+        let value: serde_json::Value = serde_json::from_str(&payload).expect("payload json");
+        assert_eq!(value["sessionId"], "session-space-1");
+        assert_eq!(value["peerId"], "peer-space-1");
+        assert_eq!(value["success"], false);
+        assert_eq!(value["reason"], "timeout");
+        assert_eq!(value["ts"], 1735689600000_i64);
+        assert!(value.get("session_id").is_none());
+        assert!(value.get("peer_id").is_none());
 
         drop(event_tx);
         let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
