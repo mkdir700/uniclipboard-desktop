@@ -35,6 +35,7 @@ export default function SetupPage({ onCompleteSetup }: SetupPageProps = {}) {
   const [loading, setLoading] = useState(false)
   const [peers, setPeers] = useState<Array<{ id: string; name: string; device_type: string }>>([])
   const [peersLoading, setPeersLoading] = useState(false)
+  const [isScanningInitial, setIsScanningInitial] = useState(true)
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -66,12 +67,19 @@ export default function SetupPage({ onCompleteSetup }: SetupPageProps = {}) {
       toast.error(t('errors.refreshPeersFailed'))
     } finally {
       setPeersLoading(false)
+      setIsScanningInitial(false)
     }
   }, [t, tCommon])
 
   useEffect(() => {
     if (setupState && typeof setupState === 'object' && 'JoinSpaceSelectDevice' in setupState) {
       handleRefreshPeers()
+      const interval = setInterval(handleRefreshPeers, 3000)
+      return () => {
+        clearInterval(interval)
+      }
+    } else {
+      setIsScanningInitial(true)
     }
   }, [setupState, handleRefreshPeers])
 
@@ -148,6 +156,7 @@ export default function SetupPage({ onCompleteSetup }: SetupPageProps = {}) {
             peers={peers}
             error={setupState.JoinSpaceSelectDevice.error}
             loading={loading || peersLoading}
+            isScanningInitial={isScanningInitial}
           />
         )
       }

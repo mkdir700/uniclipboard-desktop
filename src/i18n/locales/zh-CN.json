@@ -507,6 +507,10 @@
     "joinPickDevice": {
       "title": "选择要加入的设备",
       "subtitle": "请选择已经加入该加密空间的设备。",
+      "scanning": {
+        "title": "正在扫描设备...",
+        "description": "正在寻找局域网内的其他设备。"
+      },
       "errors": {
         "timeout": "扫描超时，请稍后重试。",
         "loadPeers": "获取设备列表失败。"

@@ -12,6 +12,7 @@ export default function JoinPickDeviceStep({
   peers,
   error,
   loading,
+  isScanningInitial,
 }: JoinPickDeviceStepProps) {
   const { t } = useTranslation(undefined, { keyPrefix: 'setup.joinPickDevice' })
   const { t: tCommon } = useTranslation(undefined, { keyPrefix: 'setup.common' })
@@ -67,7 +68,15 @@ export default function JoinPickDeviceStep({
       )}
 
       <div className="space-y-2">
-        {peers.length === 0 ? (
+        {isScanningInitial ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <RefreshCw className="mb-4 h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-foreground">{t('scanning.title')}</p>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              {t('scanning.description')}
+            </p>
+          </div>
+        ) : peers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-foreground">{t('empty.title')}</p>
             <p className="mt-2 max-w-sm text-sm text-muted-foreground">{t('empty.description')}</p>

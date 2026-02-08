@@ -19,6 +19,7 @@ export interface JoinPickDeviceStepProps extends StepProps {
   onBack: () => void
   onRefresh: () => void
   peers: Array<{ id: string; name: string; device_type: string }> // Simplified for now
+  isScanningInitial?: boolean
 }
 
 export interface JoinVerifyPassphraseStepProps extends StepProps {

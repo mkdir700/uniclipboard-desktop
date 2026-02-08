@@ -507,6 +507,10 @@
     "joinPickDevice": {
       "title": "Choose a device to pair",
       "subtitle": "Select a device that already joined the encrypted space.",
+      "scanning": {
+        "title": "Scanning for devices...",
+        "description": "Looking for other devices on your local network."
+      },
       "errors": {
         "timeout": "Scanning timed out. Please try again.",
         "loadPeers": "Failed to fetch device list."
