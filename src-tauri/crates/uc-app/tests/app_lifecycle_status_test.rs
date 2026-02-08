@@ -44,15 +44,15 @@ impl WatcherControlPort for MockWatcherControl {
 
 struct MockNetworkControl {
     calls: Arc<AtomicUsize>,
-    should_fail: bool,
+    error_message: Option<String>,
 }
 
 #[async_trait]
 impl NetworkControlPort for MockNetworkControl {
     async fn start_network(&self) -> anyhow::Result<()> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        if self.should_fail {
-            return Err(anyhow::anyhow!("network mock failure"));
+        if let Some(message) = &self.error_message {
+            return Err(anyhow::anyhow!(message.clone()));
         }
         Ok(())
     }
@@ -130,6 +130,18 @@ fn build_coordinator(
     watcher_fails: bool,
     network_fails: bool,
 ) -> (TestMocks, AppLifecycleCoordinator) {
+    let network_error = if network_fails {
+        Some("network mock failure")
+    } else {
+        None
+    };
+    build_coordinator_with_network_error(watcher_fails, network_error)
+}
+
+fn build_coordinator_with_network_error(
+    watcher_fails: bool,
+    network_error: Option<&str>,
+) -> (TestMocks, AppLifecycleCoordinator) {
     let watcher_calls = Arc::new(AtomicUsize::new(0));
     let network_calls = Arc::new(AtomicUsize::new(0));
     let session_events = Arc::new(Mutex::new(Vec::new()));
@@ -144,7 +156,7 @@ fn build_coordinator(
 
     let network_control = Arc::new(MockNetworkControl {
         calls: network_calls.clone(),
-        should_fail: network_fails,
+        error_message: network_error.map(ToString::to_string),
     });
     let network = Arc::new(StartNetworkAfterUnlock::new(network_control));
 
@@ -179,6 +191,32 @@ fn build_coordinator(
         },
         coordinator,
     )
+}
+
+#[tokio::test]
+async fn ensure_ready_succeeds_when_network_already_started() {
+    let (mocks, coordinator) =
+        build_coordinator_with_network_error(false, Some("network already started"));
+
+    let result = coordinator.ensure_ready().await;
+
+    assert!(
+        result.is_ok(),
+        "already started network should be treated as non-fatal"
+    );
+    assert_eq!(mocks.watcher_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(mocks.network_calls.load(Ordering::SeqCst), 1);
+
+    let states = mocks.status_states.lock().await;
+    assert_eq!(states.len(), 2);
+    assert_eq!(states[0], LifecycleState::Pending);
+    assert_eq!(states[1], LifecycleState::Ready);
+
+    let lifecycle_events = mocks.lifecycle_events.lock().await;
+    assert_eq!(lifecycle_events.as_slice(), [LifecycleEvent::Ready]);
+
+    let session_events = mocks.session_events.lock().await;
+    assert_eq!(session_events.as_slice(), ["ready"]);
 }
 
 // ---------------------------------------------------------------------------

@@ -107,6 +107,18 @@ impl NetworkControlPort for MockNetworkControl {
     }
 }
 
+struct OrderedNetworkControl {
+    calls: Arc<Mutex<Vec<&'static str>>>,
+}
+
+#[async_trait]
+impl NetworkControlPort for OrderedNetworkControl {
+    async fn start_network(&self) -> anyhow::Result<()> {
+        self.calls.lock().unwrap().push("network");
+        Ok(())
+    }
+}
+
 struct MockSessionReadyEmitter;
 
 #[async_trait]
@@ -183,6 +195,18 @@ struct NoopDiscoveryPort;
 #[async_trait]
 impl DiscoveryPort for NoopDiscoveryPort {
     async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+        Ok(Vec::new())
+    }
+}
+
+struct OrderedDiscoveryPort {
+    calls: Arc<Mutex<Vec<&'static str>>>,
+}
+
+#[async_trait]
+impl DiscoveryPort for OrderedDiscoveryPort {
+    async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+        self.calls.lock().unwrap().push("discovery");
         Ok(Vec::new())
     }
 }
@@ -297,6 +321,23 @@ fn build_mock_lifecycle() -> Arc<AppLifecycleCoordinator> {
     ))
 }
 
+fn build_ordered_mock_lifecycle(
+    calls: Arc<Mutex<Vec<&'static str>>>,
+) -> Arc<AppLifecycleCoordinator> {
+    Arc::new(AppLifecycleCoordinator::from_deps(
+        AppLifecycleCoordinatorDeps {
+            watcher: Arc::new(StartClipboardWatcher::new(Arc::new(MockWatcherControl))),
+            network: Arc::new(StartNetworkAfterUnlock::new(Arc::new(
+                OrderedNetworkControl { calls },
+            ))),
+            announcer: None,
+            emitter: Arc::new(MockSessionReadyEmitter),
+            status: Arc::new(MockLifecycleStatus),
+            lifecycle_emitter: Arc::new(MockLifecycleEventEmitter),
+        },
+    ))
+}
+
 fn build_pairing_orchestrator() -> Arc<PairingOrchestrator> {
     let repo = Arc::new(NoopPairedDeviceRepository);
     let (orchestrator, _rx) = PairingOrchestrator::new(
@@ -388,6 +429,7 @@ async fn create_space_flow_marks_setup_complete_and_persists_state() {
         build_pairing_orchestrator(),
         build_space_access_orchestrator(),
         build_discovery_port(),
+        Arc::new(MockNetworkControl),
         crypto_factory,
         Arc::new(NoopSpaceAccessNetworkPort),
         transport_port,
@@ -474,6 +516,79 @@ async fn drive_to_join_passphrase_state(
 }
 
 #[tokio::test]
+async fn ensure_discovery_starts_network_before_listing_peers() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let vault_dir = temp_dir.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).expect("create vault dir");
+
+    let keyslot_store = Arc::new(JsonKeySlotStore::new(vault_dir.clone()));
+    let secure_storage = Arc::new(InMemorySecureStorage::default());
+    let key_material = Arc::new(DefaultKeyMaterialService::new(
+        secure_storage,
+        keyslot_store,
+    ));
+    let encryption = Arc::new(EncryptionRepository);
+    let key_scope = Arc::new(TestKeyScope::default());
+    let encryption_state = Arc::new(FileEncryptionStateRepository::new(vault_dir.clone()));
+    let encryption_session = Arc::new(InMemoryEncryptionSession::new());
+
+    let initialize_encryption = Arc::new(InitializeEncryption::from_ports(
+        encryption.clone(),
+        key_material.clone(),
+        key_scope.clone(),
+        encryption_state.clone(),
+        encryption_session.clone(),
+    ));
+
+    let setup_status = Arc::new(FileSetupStatusRepository::with_defaults(vault_dir.clone()));
+    let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
+    let crypto_factory: Arc<dyn uc_app::usecases::space_access::SpaceAccessCryptoFactory> =
+        Arc::new(DefaultSpaceAccessCryptoFactory::new(
+            encryption,
+            key_material,
+            key_scope,
+            encryption_state.clone(),
+            encryption_session,
+        ));
+    let transport_port: Arc<tokio::sync::Mutex<dyn SpaceAccessTransportPort>> =
+        Arc::new(tokio::sync::Mutex::new(NoopSpaceAccessTransport));
+    let proof_port: Arc<dyn uc_core::ports::space::ProofPort> = Arc::new(HmacProofAdapter::new());
+    let timer_port: Arc<tokio::sync::Mutex<dyn TimerPort>> =
+        Arc::new(tokio::sync::Mutex::new(Timer::new()));
+    let persistence_port: Arc<tokio::sync::Mutex<dyn uc_core::ports::space::PersistencePort>> =
+        Arc::new(tokio::sync::Mutex::new(SpaceAccessPersistenceAdapter::new(
+            encryption_state,
+            Arc::new(NoopPairedDeviceRepository),
+        )));
+    let calls = Arc::new(Mutex::new(Vec::new()));
+
+    let orchestrator = SetupOrchestrator::new(
+        initialize_encryption,
+        mark_setup_complete,
+        setup_status,
+        build_ordered_mock_lifecycle(calls.clone()),
+        build_pairing_orchestrator(),
+        build_space_access_orchestrator(),
+        Arc::new(OrderedDiscoveryPort {
+            calls: calls.clone(),
+        }),
+        Arc::new(OrderedNetworkControl {
+            calls: calls.clone(),
+        }),
+        crypto_factory,
+        Arc::new(NoopSpaceAccessNetworkPort),
+        transport_port,
+        proof_port,
+        timer_port,
+        persistence_port,
+    );
+
+    let state = orchestrator.join_space().await.expect("join space");
+    assert_eq!(state, SetupState::JoinSpaceSelectDevice { error: None });
+    assert_eq!(calls.lock().unwrap().as_slice(), ["network", "discovery"]);
+}
+
+#[tokio::test]
 async fn join_space_access_invokes_space_access_orchestrator() {
     let temp_dir = TempDir::new().expect("temp dir");
     let vault_dir = temp_dir.path().join("vault");
@@ -529,6 +644,7 @@ async fn join_space_access_invokes_space_access_orchestrator() {
         pairing_orchestrator.clone(),
         space_access_orchestrator.clone(),
         build_discovery_port(),
+        Arc::new(MockNetworkControl),
         crypto_factory,
         Arc::new(NoopSpaceAccessNetworkPort),
         transport_port,
@@ -608,6 +724,7 @@ async fn join_space_access_propagates_space_access_error() {
         pairing_orchestrator.clone(),
         space_access_orchestrator.clone(),
         build_discovery_port(),
+        Arc::new(MockNetworkControl),
         crypto_factory.clone(),
         Arc::new(NoopSpaceAccessNetworkPort),
         transport_port.clone(),
