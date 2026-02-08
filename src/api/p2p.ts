@@ -135,6 +135,22 @@ export interface P2PPeerNameUpdatedEvent {
 }
 
 /**
+ * Space access completion event payload.
+ */
+export interface SpaceAccessCompletedEvent {
+  /** Session ID for idempotency and dedupe */
+  sessionId: string
+  /** Peer ID */
+  peerId: string
+  /** Whether access succeeded */
+  success: boolean
+  /** Optional reason when failed */
+  reason?: string
+  /** Event timestamp */
+  ts: number
+}
+
+/**
  * 获取本地 Peer ID
  */
 export async function getLocalPeerId(): Promise<string> {
@@ -288,6 +304,55 @@ export async function onP2PPeerNameUpdated(
     }
   } catch (error) {
     console.error('Failed to setup P2P peer name updated listener:', error)
+    return () => {}
+  }
+}
+
+/**
+ * 监听 Space 访问完成事件（带会话幂等过滤与去重）
+ */
+export async function onSpaceAccessCompleted(
+  callback: (event: SpaceAccessCompletedEvent) => void
+): Promise<() => void> {
+  try {
+    let activeSessionId: string | null = null
+    const seenEventKeys = new Set<string>()
+
+    const unlisten = await listen<SpaceAccessCompletedEvent>(
+      'p2p-space-access-completed',
+      event => {
+        const payload = event.payload
+
+        if (!payload.sessionId) {
+          return
+        }
+
+        if (activeSessionId === null) {
+          activeSessionId = payload.sessionId
+        }
+
+        if (payload.sessionId !== activeSessionId) {
+          return
+        }
+
+        const dedupeKey = `${payload.sessionId}:${payload.peerId}:${payload.success}:${payload.reason ?? ''}:${payload.ts}`
+        if (seenEventKeys.has(dedupeKey)) {
+          return
+        }
+        seenEventKeys.add(dedupeKey)
+
+        callback(payload)
+
+        activeSessionId = null
+        seenEventKeys.clear()
+      }
+    )
+
+    return () => {
+      unlisten()
+    }
+  } catch (error) {
+    console.error('Failed to setup space access completed listener:', error)
     return () => {}
   }
 }

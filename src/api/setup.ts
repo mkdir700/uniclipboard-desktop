@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event'
 import { invokeWithTrace } from '@/lib/tauri-command'
 
 export type SetupError =
@@ -25,6 +26,13 @@ export type SetupState =
   | { ProcessingCreateSpace: { message: string | null } }
   | { ProcessingJoinSpace: { message: string | null } }
   | 'Completed'
+
+export interface SetupStateChangedEvent {
+  sessionId: string
+  state: SetupState
+  source?: string
+  ts: number
+}
 
 function decodeSetupState(raw: unknown): SetupState {
   if (typeof raw === 'string') {
@@ -102,4 +110,52 @@ export async function confirmPeerTrust(): Promise<SetupState> {
  */
 export async function cancelSetup(): Promise<SetupState> {
   return decodeSetupState(await invokeWithTrace('cancel_setup'))
+}
+
+/**
+ * Listen setup state changes with session idempotency.
+ */
+export async function onSetupStateChanged(
+  callback: (event: SetupStateChangedEvent) => void
+): Promise<() => void> {
+  try {
+    let activeSessionId: string | null = null
+    const seenEventKeys = new Set<string>()
+
+    const unlisten = await listen<SetupStateChangedEvent>('setup-state-changed', event => {
+      const payload = event.payload
+
+      if (!payload.sessionId) {
+        return
+      }
+
+      if (activeSessionId === null) {
+        activeSessionId = payload.sessionId
+      }
+
+      if (payload.sessionId !== activeSessionId) {
+        return
+      }
+
+      const dedupeKey = `${payload.sessionId}:${JSON.stringify(payload.state)}:${payload.ts}`
+      if (seenEventKeys.has(dedupeKey)) {
+        return
+      }
+      seenEventKeys.add(dedupeKey)
+
+      callback(payload)
+
+      if (payload.state === 'Completed') {
+        activeSessionId = null
+        seenEventKeys.clear()
+      }
+    })
+
+    return () => {
+      unlisten()
+    }
+  } catch (error) {
+    console.error('Failed to setup setup state changed listener:', error)
+    return () => {}
+  }
 }
