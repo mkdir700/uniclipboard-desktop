@@ -31,3 +31,14 @@
 
 - 新增 `docs/plans/2026-02-07-lifecycle-ready-network.md` 描述 Ready→网络启动顺序、幂等行为与日志/验证命令，作为架构记录。
 - `AppLifecycleCoordinator::ensure_ready` 已在 span `usecase.app_lifecycle_coordinator.ensure_ready` 内记录 Pending/Ready，以及重复调用被跳过的 info 日志；文档也强调这些日志可观察性。
+
+## 2026-02-08 start_network 幂等 + 失败可重试
+
+- `Libp2pNetworkAdapter` 增加了 `AtomicU8` 启动状态（Idle/Starting/Started/Failed），`NetworkControlPort::start_network()` 使用 CAS 把并发入口收敛到单次启动；当状态为 Starting 或 Started 时直接返回 `Ok(())`，避免重复启动。
+- `start_network()` 在启动失败时先写入 Failed 再回滚到 Idle，允许下一次重试；并通过测试中“先拿走 business receiver 再恢复后重试”的场景验证回滚可用。
+- `keypair` 从一次性 `Mutex<Option<Keypair>>` 调整为可重复读取的 `Mutex<Keypair>` 并在 `take_keypair()` 中克隆，避免首次失败后出现“keypair already taken”导致不可重试。
+
+## 2026-02-08 ensure_ready 对已启动网络安全重入
+
+- `AppLifecycleCoordinator::ensure_ready` 的 network step 在收到包含 `already started` 的错误文案时不再走 `NetworkFailed` 分支，而是记录结构化 `info!(error = %msg, "network already started; skip")` 并继续后续 Ready 流程。
+- 新增回归测试 `ensure_ready_succeeds_when_network_already_started`（`src-tauri/crates/uc-app/tests/app_lifecycle_status_test.rs`），覆盖状态迁移 `Pending -> Ready` 且仅发出 `LifecycleEvent::Ready`，防止误报 `NetworkFailed`。
