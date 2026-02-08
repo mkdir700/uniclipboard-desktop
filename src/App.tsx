@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-
 import { type EncryptionSessionStatus } from '@/api/security'
 import { getSetupState, type SetupState } from '@/api/setup'
 import { TitleBar } from '@/components'
+import { PairingNotificationProvider } from '@/components/PairingNotificationProvider'
 import { Toaster } from '@/components/ui/sonner'
 import { useSearch } from '@/contexts/search-context'
 import { SearchProvider } from '@/contexts/SearchContext'
@@ -128,6 +129,7 @@ const AppContent = ({
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toaster />
+      <PairingNotificationProvider />
     </ShortcutProvider>
   )
 }
