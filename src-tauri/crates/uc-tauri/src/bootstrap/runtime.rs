@@ -261,6 +261,7 @@ impl AppRuntime {
             setup_ports.pairing_orchestrator.clone(),
             setup_ports.space_access_orchestrator.clone(),
             setup_ports.discovery_port.clone(),
+            deps.network_control.clone(),
             crypto_factory,
             deps.network.clone(),
             transport_port,

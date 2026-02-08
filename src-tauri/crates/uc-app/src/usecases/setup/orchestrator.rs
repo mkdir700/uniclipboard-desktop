@@ -10,7 +10,7 @@ use tracing::{debug, error, info, info_span, warn, Instrument};
 
 use uc_core::{
     ports::space::{PersistencePort, ProofPort, SpaceAccessTransportPort},
-    ports::{DiscoveryPort, NetworkPort, SetupStatusPort, TimerPort},
+    ports::{DiscoveryPort, NetworkControlPort, NetworkPort, SetupStatusPort, TimerPort},
     security::space_access::event::SpaceAccessEvent,
     security::{model::Passphrase, SecretString},
     setup::{SetupAction, SetupEvent, SetupState, SetupStateMachine},
@@ -58,6 +58,7 @@ pub struct SetupOrchestrator {
     pairing_orchestrator: Arc<PairingOrchestrator>,
     space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
     discovery_port: Arc<dyn DiscoveryPort>,
+    network_control: Arc<dyn NetworkControlPort>,
     crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
     network_port: Arc<dyn NetworkPort>,
     transport_port: Arc<Mutex<dyn SpaceAccessTransportPort>>,
@@ -75,6 +76,7 @@ impl SetupOrchestrator {
         pairing_orchestrator: Arc<PairingOrchestrator>,
         space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
         discovery_port: Arc<dyn DiscoveryPort>,
+        network_control: Arc<dyn NetworkControlPort>,
         crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
         network_port: Arc<dyn NetworkPort>,
         transport_port: Arc<Mutex<dyn SpaceAccessTransportPort>>,
@@ -95,6 +97,7 @@ impl SetupOrchestrator {
             pairing_orchestrator,
             space_access_orchestrator,
             discovery_port,
+            network_control,
             crypto_factory,
             network_port,
             transport_port,
@@ -205,11 +208,30 @@ impl SetupOrchestrator {
                     debug!("setup action MarkSetupComplete completed");
                 }
                 SetupAction::EnsureDiscovery => {
-                    if let Err(err) = self.discovery_port.list_discovered_peers().await {
-                        warn!(error = %err, "failed to ensure discovery state");
-                    } else {
-                        debug!("setup action EnsureDiscovery completed");
-                    }
+                    self.network_control.start_network().await.map_err(|err| {
+                        error!(
+                            action = "EnsureDiscovery",
+                            step = "start_network",
+                            error = %err,
+                            "setup ensure discovery failed"
+                        );
+                        SetupError::PairingFailed
+                    })?;
+
+                    self.discovery_port
+                        .list_discovered_peers()
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                action = "EnsureDiscovery",
+                                step = "list_discovered_peers",
+                                error = %err,
+                                "setup ensure discovery failed"
+                            );
+                            SetupError::PairingFailed
+                        })?;
+
+                    debug!("setup action EnsureDiscovery completed");
                 }
                 SetupAction::EnsurePairing => {
                     self.ensure_pairing_session().await?;
@@ -1164,6 +1186,10 @@ mod tests {
         Arc::new(NoopDiscoveryPort)
     }
 
+    fn build_network_control() -> Arc<dyn NetworkControlPort> {
+        Arc::new(MockNetworkControl)
+    }
+
     fn build_crypto_factory() -> Arc<dyn SpaceAccessCryptoFactory> {
         Arc::new(NoopSpaceAccessCryptoFactory)
     }
@@ -1202,6 +1228,7 @@ mod tests {
             build_pairing_orchestrator(),
             build_space_access_orchestrator(),
             build_discovery_port(),
+            build_network_control(),
             build_crypto_factory(),
             build_network_port(),
             build_transport_port(),
