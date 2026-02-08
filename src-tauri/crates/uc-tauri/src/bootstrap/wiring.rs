@@ -57,6 +57,7 @@ use uc_core::ports::clipboard::{
     SpoolQueuePort, SpoolRequest,
 };
 use uc_core::ports::*;
+use uc_core::security::model::KeySlot;
 use uc_core::settings::model::Settings;
 use uc_core::setup::SetupState;
 use uc_infra::blob::BlobWriter;
@@ -159,6 +160,7 @@ pub struct TauriSetupEventPort {
 }
 
 #[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SetupStateChangedPayload {
     state: SetupState,
     session_id: Option<String>,
@@ -1095,6 +1097,129 @@ struct SpaceAccessCompletedPayload {
     ts: i64,
 }
 
+const BUSY_PAYLOAD_PREVIEW_MAX_CHARS: usize = 256;
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpaceAccessBusyOfferPayload {
+    kind: String,
+    space_id: String,
+    nonce: Vec<u8>,
+    keyslot: KeySlot,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpaceAccessBusyProofPayload {
+    kind: String,
+    pairing_session_id: String,
+    space_id: String,
+    challenge_nonce: Vec<u8>,
+    proof_bytes: Vec<u8>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpaceAccessBusyResultPayload {
+    kind: String,
+    sponsor_peer_id: String,
+    prepared_offer_exists: bool,
+    joiner_offer_exists: bool,
+    proof_artifact_exists: bool,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+enum SpaceAccessBusyPayload {
+    Offer(SpaceAccessBusyOfferPayload),
+    Proof(SpaceAccessBusyProofPayload),
+    Result(SpaceAccessBusyResultPayload),
+}
+
+#[derive(Debug, thiserror::Error)]
+enum ParseError {
+    #[error("busy payload is not valid json: {source}")]
+    InvalidJson {
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("busy payload missing string field `kind`")]
+    MissingKind,
+    #[error("busy payload kind `{kind}` is not supported")]
+    UnknownKind { kind: String },
+    #[error("busy payload kind `{kind}` has invalid structure: {source}")]
+    InvalidStructure {
+        kind: String,
+        #[source]
+        source: serde_json::Error,
+    },
+}
+
+impl ParseError {
+    fn payload_kind(&self) -> Option<&str> {
+        match self {
+            Self::UnknownKind { kind } | Self::InvalidStructure { kind, .. } => Some(kind.as_str()),
+            Self::InvalidJson { .. } | Self::MissingKind => None,
+        }
+    }
+}
+
+fn parse_space_access_busy_payload(json: &str) -> Result<SpaceAccessBusyPayload, ParseError> {
+    let payload: serde_json::Value =
+        serde_json::from_str(json).map_err(|source| ParseError::InvalidJson { source })?;
+
+    let kind = payload
+        .get("kind")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(ParseError::MissingKind)?
+        .to_string();
+
+    match kind.as_str() {
+        "space_access_offer" => serde_json::from_value::<SpaceAccessBusyOfferPayload>(payload)
+            .map(SpaceAccessBusyPayload::Offer)
+            .map_err(|source| ParseError::InvalidStructure {
+                kind: kind.clone(),
+                source,
+            }),
+        "space_access_proof" => serde_json::from_value::<SpaceAccessBusyProofPayload>(payload)
+            .map(SpaceAccessBusyPayload::Proof)
+            .map_err(|source| ParseError::InvalidStructure {
+                kind: kind.clone(),
+                source,
+            }),
+        "space_access_result" => serde_json::from_value::<SpaceAccessBusyResultPayload>(payload)
+            .map(SpaceAccessBusyPayload::Result)
+            .map_err(|source| ParseError::InvalidStructure {
+                kind: kind.clone(),
+                source,
+            }),
+        _ => Err(ParseError::UnknownKind { kind }),
+    }
+}
+
+fn extract_space_access_busy_payload_kind(json: &str) -> Option<String> {
+    let payload: serde_json::Value = serde_json::from_str(json).ok()?;
+    payload
+        .get("kind")
+        .and_then(serde_json::Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn raw_payload_preview(payload: &str) -> String {
+    let mut chars = payload.chars();
+    let mut preview: String = chars
+        .by_ref()
+        .take(BUSY_PAYLOAD_PREVIEW_MAX_CHARS)
+        .collect();
+    if chars.next().is_some() {
+        preview.push_str("...");
+    }
+    preview
+}
+
 async fn run_space_access_completion_loop<R: Runtime>(
     mut event_rx: mpsc::Receiver<SpaceAccessCompletedEvent>,
     app_handle: Option<AppHandle<R>>,
@@ -1338,6 +1463,39 @@ async fn handle_pairing_message<R: Runtime>(
         }
         PairingMessage::Busy(busy) => {
             let session_id = busy.session_id.clone();
+            if let Some(reason) = &busy.reason {
+                match parse_space_access_busy_payload(reason) {
+                    Ok(_payload) => {}
+                    Err(err) => {
+                        let payload_kind = err
+                            .payload_kind()
+                            .map(ToOwned::to_owned)
+                            .or_else(|| extract_space_access_busy_payload_kind(reason))
+                            .unwrap_or_else(|| "unknown".to_string());
+                        let raw_payload_preview = raw_payload_preview(reason);
+
+                        if matches!(err, ParseError::UnknownKind { .. }) {
+                            warn!(
+                                session_id = %session_id,
+                                peer_id = %peer_id,
+                                payload_kind = %payload_kind,
+                                error = %err,
+                                raw_payload_preview = %raw_payload_preview,
+                                "Ignoring unknown pairing busy payload kind"
+                            );
+                        } else {
+                            warn!(
+                                session_id = %session_id,
+                                peer_id = %peer_id,
+                                payload_kind = %payload_kind,
+                                error = %err,
+                                raw_payload_preview = %raw_payload_preview,
+                                "Failed to parse pairing busy payload"
+                            );
+                        }
+                    }
+                }
+            }
             if let Err(err) = orchestrator.handle_busy(&session_id, &peer_id).await {
                 error!(error = %err, session_id = %session_id, "Failed to handle pairing busy");
             }
@@ -1476,17 +1634,19 @@ async fn run_pairing_action_loop<R: Runtime>(
                     peer_id = %peer_id,
                     success = success,
                     reason = ?error,
-                    "EmitResult triggered close_pairing_session"
+                    "EmitResult received"
                 );
-                if let Err(err) = network
-                    .close_pairing_session(session_id.clone(), error.clone())
-                    .await
-                {
-                    warn!(
-                        error = %err,
-                        session_id = %session_id,
-                        "Failed to close pairing session"
-                    );
+                if !success {
+                    if let Err(err) = network
+                        .close_pairing_session(session_id.clone(), error.clone())
+                        .await
+                    {
+                        warn!(
+                            error = %err,
+                            session_id = %session_id,
+                            "Failed to close pairing session"
+                        );
+                    }
                 }
                 if let Some(app) = app_handle.as_ref() {
                     if success {
