@@ -55,6 +55,7 @@ use uc_core::ports::clipboard::{
 };
 use uc_core::ports::*;
 use uc_core::settings::model::Settings;
+use uc_core::setup::SetupState;
 use uc_infra::blob::BlobWriter;
 use uc_infra::clipboard::{
     BackgroundBlobWorker, ClipboardRepresentationNormalizer, InMemoryClipboardChangeOrigin,
@@ -146,6 +147,41 @@ pub struct BackgroundRuntimeDeps {
     pub spool_ttl_days: u64,
     pub worker_retry_max_attempts: u32,
     pub worker_retry_backoff_ms: u64,
+}
+
+/// Tauri adapter that emits setup state changes to frontend listeners.
+#[derive(Clone)]
+pub struct TauriSetupEventPort {
+    app_handle: Arc<std::sync::RwLock<Option<AppHandle>>>,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct SetupStateChangedPayload {
+    state: SetupState,
+    session_id: Option<String>,
+}
+
+impl TauriSetupEventPort {
+    pub fn new(app_handle: Arc<std::sync::RwLock<Option<AppHandle>>>) -> Self {
+        Self { app_handle }
+    }
+}
+
+#[async_trait::async_trait]
+impl SetupEventPort for TauriSetupEventPort {
+    async fn emit_setup_state_changed(&self, state: SetupState, session_id: Option<String>) {
+        let guard = self.app_handle.read().unwrap_or_else(|poisoned| {
+            error!("RwLock poisoned in setup event emission, recovering from poisoned state");
+            poisoned.into_inner()
+        });
+
+        if let Some(app) = guard.as_ref() {
+            let payload = SetupStateChangedPayload { state, session_id };
+            if let Err(err) = app.emit("setup-state-changed", payload) {
+                warn!(error = %err, "Failed to emit setup-state-changed event");
+            }
+        }
+    }
 }
 
 const SPOOL_JANITOR_INTERVAL_SECS: u64 = 60 * 60;

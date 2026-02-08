@@ -10,7 +10,9 @@ use tracing::{debug, error, info, info_span, warn, Instrument};
 
 use uc_core::{
     ports::space::{PersistencePort, ProofPort, SpaceAccessTransportPort},
-    ports::{DiscoveryPort, NetworkControlPort, NetworkPort, SetupStatusPort, TimerPort},
+    ports::{
+        DiscoveryPort, NetworkControlPort, NetworkPort, SetupEventPort, SetupStatusPort, TimerPort,
+    },
     security::space_access::event::SpaceAccessEvent,
     security::{model::Passphrase, SecretString},
     setup::{SetupAction, SetupEvent, SetupState, SetupStateMachine},
@@ -56,6 +58,7 @@ pub struct SetupOrchestrator {
     setup_status: Arc<dyn SetupStatusPort>,
     app_lifecycle: Arc<AppLifecycleCoordinator>,
     pairing_orchestrator: Arc<PairingOrchestrator>,
+    setup_event_port: Arc<dyn SetupEventPort>,
     space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
     discovery_port: Arc<dyn DiscoveryPort>,
     network_control: Arc<dyn NetworkControlPort>,
@@ -74,6 +77,7 @@ impl SetupOrchestrator {
         setup_status: Arc<dyn SetupStatusPort>,
         app_lifecycle: Arc<AppLifecycleCoordinator>,
         pairing_orchestrator: Arc<PairingOrchestrator>,
+        setup_event_port: Arc<dyn SetupEventPort>,
         space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
         discovery_port: Arc<dyn DiscoveryPort>,
         network_control: Arc<dyn NetworkControlPort>,
@@ -95,6 +99,7 @@ impl SetupOrchestrator {
             setup_status,
             app_lifecycle,
             pairing_orchestrator,
+            setup_event_port,
             space_access_orchestrator,
             discovery_port,
             network_control,
@@ -173,7 +178,8 @@ impl SetupOrchestrator {
                 let (next, actions) = SetupStateMachine::transition(current, event);
                 info!(from = ?from, to = ?next, event = %event_name, "setup state transition");
                 let follow_up_events = self.execute_actions(actions).await?;
-                self.context.set_state(next.clone()).await;
+                self.set_state_and_emit(next.clone(), self.current_pairing_session_id().await)
+                    .await;
                 current = next;
                 pending_events.extend(follow_up_events);
             }
@@ -343,6 +349,18 @@ impl SetupOrchestrator {
         (SecretString::new(raw), stored)
     }
 
+    async fn current_pairing_session_id(&self) -> Option<String> {
+        let guard = self.pairing_session_id.lock().await;
+        guard.clone()
+    }
+
+    async fn set_state_and_emit(&self, state: SetupState, session_id: Option<String>) {
+        self.context.set_state(state.clone()).await;
+        self.setup_event_port
+            .emit_setup_state_changed(state, session_id)
+            .await;
+    }
+
     async fn seed_state_from_status(&self) {
         if self.seeded.swap(true, Ordering::SeqCst) {
             return;
@@ -351,7 +369,7 @@ impl SetupOrchestrator {
         match self.setup_status.get_status().await {
             Ok(status) => {
                 if status.has_completed {
-                    self.context.set_state(SetupState::Completed).await;
+                    self.set_state_and_emit(SetupState::Completed, None).await;
                 }
             }
             Err(err) => {
@@ -406,9 +424,11 @@ impl SetupOrchestrator {
                 SetupError::PairingFailed
             })?;
 
-        self.context
-            .set_state(SetupState::JoinSpaceInputPassphrase { error: None })
-            .await;
+        self.set_state_and_emit(
+            SetupState::JoinSpaceInputPassphrase { error: None },
+            Some(session_id),
+        )
+        .await;
         Ok(())
     }
 
@@ -447,6 +467,7 @@ impl SetupOrchestrator {
         };
         let context = Arc::clone(&self.context);
         let pairing_session_id = Arc::clone(&self.pairing_session_id);
+        let setup_event_port = Arc::clone(&self.setup_event_port);
 
         tokio::spawn(async move {
             while let Some(event) = event_rx.recv().await {
@@ -460,12 +481,14 @@ impl SetupOrchestrator {
                         peer_fingerprint,
                         ..
                     } if event_session_id == session_id => {
-                        context
-                            .set_state(SetupState::JoinSpaceConfirmPeer {
-                                short_code,
-                                peer_fingerprint: Some(peer_fingerprint),
-                                error: None,
-                            })
+                        let next_state = SetupState::JoinSpaceConfirmPeer {
+                            short_code,
+                            peer_fingerprint: Some(peer_fingerprint),
+                            error: None,
+                        };
+                        context.set_state(next_state.clone()).await;
+                        setup_event_port
+                            .emit_setup_state_changed(next_state, Some(session_id.clone()))
                             .await;
                         break;
                     }
@@ -507,6 +530,7 @@ mod tests {
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex as StdMutex};
+    use tokio::time::{sleep, Duration, Instant};
     use uc_core::network::{DiscoveredPeer, PairedDevice, PairingState};
     use uc_core::ports::network_control::NetworkControlPort;
     use uc_core::ports::security::encryption::EncryptionPort;
@@ -518,7 +542,7 @@ mod tests {
     use uc_core::ports::watcher_control::{WatcherControlError, WatcherControlPort};
     use uc_core::ports::{
         DiscoveryPort, NetworkPort, PairedDeviceRepositoryError, PairedDeviceRepositoryPort,
-        TimerPort,
+        SetupEventPort, TimerPort,
     };
     use uc_core::security::model::{
         EncryptedBlob, EncryptionAlgo, EncryptionError, Kek, KeyScope, KeySlot, MasterKey,
@@ -537,6 +561,24 @@ mod tests {
     struct MockSetupStatusPort {
         status: StdMutex<SetupStatus>,
         set_calls: AtomicUsize,
+    }
+
+    #[derive(Default)]
+    struct MockSetupEventPort {
+        emitted: tokio::sync::Mutex<Vec<(SetupState, Option<String>)>>,
+    }
+
+    impl MockSetupEventPort {
+        async fn snapshot(&self) -> Vec<(SetupState, Option<String>)> {
+            self.emitted.lock().await.clone()
+        }
+    }
+
+    #[async_trait]
+    impl SetupEventPort for MockSetupEventPort {
+        async fn emit_setup_state_changed(&self, state: SetupState, session_id: Option<String>) {
+            self.emitted.lock().await.push((state, session_id));
+        }
     }
 
     impl MockSetupStatusPort {
@@ -1173,9 +1215,27 @@ mod tests {
             "test-device".to_string(),
             "test-device-id".to_string(),
             "test-peer-id".to_string(),
-            vec![],
+            vec![1; 32],
         );
         Arc::new(orchestrator)
+    }
+
+    fn build_pairing_orchestrator_with_actions() -> (
+        Arc<PairingOrchestrator>,
+        tokio::sync::Mutex<
+            tokio::sync::mpsc::Receiver<uc_core::network::pairing_state_machine::PairingAction>,
+        >,
+    ) {
+        let repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            repo,
+            "test-device".to_string(),
+            "test-device-id".to_string(),
+            "test-peer-id".to_string(),
+            vec![1; 32],
+        );
+        (Arc::new(orchestrator), tokio::sync::Mutex::new(rx))
     }
 
     fn build_space_access_orchestrator() -> Arc<SpaceAccessOrchestrator> {
@@ -1214,6 +1274,10 @@ mod tests {
         Arc::new(Mutex::new(NoopSpaceAccessPersistencePort))
     }
 
+    fn build_setup_event_port() -> Arc<dyn SetupEventPort> {
+        Arc::new(MockSetupEventPort::default())
+    }
+
     fn build_orchestrator_with_initialize_encryption(
         setup_status: Arc<dyn SetupStatusPort>,
         initialize_encryption: Arc<InitializeEncryption>,
@@ -1226,6 +1290,7 @@ mod tests {
             setup_status,
             build_mock_lifecycle(),
             build_pairing_orchestrator(),
+            build_setup_event_port(),
             build_space_access_orchestrator(),
             build_discovery_port(),
             build_network_control(),
@@ -1293,6 +1358,121 @@ mod tests {
         let status = setup_status.get_status().await.unwrap();
         assert!(status.has_completed);
         assert_eq!(setup_status.set_call_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn select_device_dispatch_emits_processing_join_space_event() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
+        let setup_event_port = Arc::new(MockSetupEventPort::default());
+        let (pairing_orchestrator, _action_rx) = build_pairing_orchestrator_with_actions();
+        let orchestrator = SetupOrchestrator::new(
+            build_initialize_encryption(),
+            mark_setup_complete,
+            setup_status,
+            build_mock_lifecycle(),
+            pairing_orchestrator,
+            setup_event_port.clone(),
+            build_space_access_orchestrator(),
+            build_discovery_port(),
+            build_network_control(),
+            build_crypto_factory(),
+            build_network_port(),
+            build_transport_port(),
+            build_proof_port(),
+            build_timer_port(),
+            build_persistence_port(),
+        );
+
+        orchestrator.join_space().await.unwrap();
+        let state = orchestrator
+            .select_device("peer-event".to_string())
+            .await
+            .unwrap();
+
+        assert!(matches!(state, SetupState::ProcessingJoinSpace { .. }));
+
+        let emitted = setup_event_port.snapshot().await;
+        assert!(emitted
+            .iter()
+            .any(|(state, _)| matches!(state, SetupState::ProcessingJoinSpace { .. })));
+    }
+
+    #[tokio::test]
+    async fn pairing_verification_listener_emits_join_space_confirm_peer_event() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
+        let setup_event_port = Arc::new(MockSetupEventPort::default());
+        let (pairing_orchestrator, _action_rx) = build_pairing_orchestrator_with_actions();
+        let orchestrator = SetupOrchestrator::new(
+            build_initialize_encryption(),
+            mark_setup_complete,
+            setup_status,
+            build_mock_lifecycle(),
+            pairing_orchestrator,
+            setup_event_port.clone(),
+            build_space_access_orchestrator(),
+            build_discovery_port(),
+            build_network_control(),
+            build_crypto_factory(),
+            build_network_port(),
+            build_transport_port(),
+            build_proof_port(),
+            build_timer_port(),
+            build_persistence_port(),
+        );
+
+        orchestrator.join_space().await.unwrap();
+        orchestrator
+            .select_device("peer-verify".to_string())
+            .await
+            .unwrap();
+
+        let session_deadline = Instant::now() + Duration::from_secs(1);
+        let session_id = loop {
+            if let Some(session_id) = orchestrator.pairing_session_id.lock().await.clone() {
+                break session_id;
+            }
+            assert!(
+                Instant::now() < session_deadline,
+                "pairing session id was not created"
+            );
+            sleep(Duration::from_millis(10)).await;
+        };
+
+        orchestrator
+            .pairing_orchestrator
+            .handle_challenge(
+                &session_id,
+                "peer-verify",
+                uc_core::network::protocol::PairingChallenge {
+                    session_id: session_id.clone(),
+                    pin: "654321".to_string(),
+                    device_name: "remote-device".to_string(),
+                    device_id: "remote-device-id".to_string(),
+                    identity_pubkey: vec![9; 32],
+                    nonce: vec![2; 32],
+                },
+            )
+            .await
+            .unwrap();
+
+        let emit_deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let emitted = setup_event_port.snapshot().await;
+            let found = emitted.iter().any(|(state, sid)| {
+                matches!(state, SetupState::JoinSpaceConfirmPeer { .. })
+                    && sid.as_ref() == Some(&session_id)
+            });
+            if found {
+                break;
+            }
+            assert!(
+                Instant::now() < emit_deadline,
+                "setup-state-changed JoinSpaceConfirmPeer event timeout"
+            );
+            sleep(Duration::from_millis(10)).await;
+        }
     }
 
     #[tokio::test]

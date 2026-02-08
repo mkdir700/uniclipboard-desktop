@@ -23,7 +23,7 @@ use uc_core::ports::space::SpaceAccessTransportPort;
 use uc_core::ports::watcher_control::{WatcherControlError, WatcherControlPort};
 use uc_core::ports::{
     DiscoveryPort, EncryptionSessionPort, PairedDeviceRepositoryError, PairedDeviceRepositoryPort,
-    SetupStatusPort, TimerPort,
+    SetupEventPort, SetupStatusPort, TimerPort,
 };
 use uc_core::security::model::KeyScope;
 use uc_core::security::space_access::event::SpaceAccessEvent;
@@ -197,6 +197,13 @@ impl DiscoveryPort for NoopDiscoveryPort {
     async fn list_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
         Ok(Vec::new())
     }
+}
+
+struct NoopSetupEventPort;
+
+#[async_trait]
+impl SetupEventPort for NoopSetupEventPort {
+    async fn emit_setup_state_changed(&self, _state: SetupState, _session_id: Option<String>) {}
 }
 
 struct OrderedDiscoveryPort {
@@ -427,6 +434,7 @@ async fn create_space_flow_marks_setup_complete_and_persists_state() {
         setup_status.clone(),
         build_mock_lifecycle(),
         build_pairing_orchestrator(),
+        Arc::new(NoopSetupEventPort),
         build_space_access_orchestrator(),
         build_discovery_port(),
         Arc::new(MockNetworkControl),
@@ -568,6 +576,7 @@ async fn ensure_discovery_starts_network_before_listing_peers() {
         setup_status,
         build_ordered_mock_lifecycle(calls.clone()),
         build_pairing_orchestrator(),
+        Arc::new(NoopSetupEventPort),
         build_space_access_orchestrator(),
         Arc::new(OrderedDiscoveryPort {
             calls: calls.clone(),
@@ -642,6 +651,7 @@ async fn join_space_access_invokes_space_access_orchestrator() {
         setup_status,
         build_mock_lifecycle(),
         pairing_orchestrator.clone(),
+        Arc::new(NoopSetupEventPort),
         space_access_orchestrator.clone(),
         build_discovery_port(),
         Arc::new(MockNetworkControl),
@@ -722,6 +732,7 @@ async fn join_space_access_propagates_space_access_error() {
         setup_status,
         build_mock_lifecycle(),
         pairing_orchestrator.clone(),
+        Arc::new(NoopSetupEventPort),
         space_access_orchestrator.clone(),
         build_discovery_port(),
         Arc::new(MockNetworkControl),

@@ -88,7 +88,7 @@ pub struct AppRuntime {
     pub deps: AppDeps,
     /// Tauri AppHandle for emitting events (optional, set after Tauri setup)
     /// Uses RwLock for interior mutability since Arc<AppRuntime> is shared
-    app_handle: std::sync::RwLock<Option<tauri::AppHandle>>,
+    app_handle: Arc<std::sync::RwLock<Option<tauri::AppHandle>>>,
     /// Shared lifecycle status port – stored here so that every call to
     /// `usecases().app_lifecycle_coordinator()` shares the same state.
     lifecycle_status: Arc<dyn uc_app::usecases::LifecycleStatusPort>,
@@ -155,13 +155,18 @@ impl AppRuntime {
     pub fn with_setup(deps: AppDeps, setup_ports: SetupRuntimePorts) -> Self {
         let lifecycle_status: Arc<dyn uc_app::usecases::LifecycleStatusPort> =
             Arc::new(crate::adapters::lifecycle::InMemoryLifecycleStatus::new());
+        let app_handle = Arc::new(std::sync::RwLock::new(None));
 
-        let setup_orchestrator =
-            Self::build_setup_orchestrator(&deps, &lifecycle_status, &setup_ports);
+        let setup_orchestrator = Self::build_setup_orchestrator(
+            &deps,
+            &lifecycle_status,
+            &setup_ports,
+            app_handle.clone(),
+        );
 
         Self {
             deps,
-            app_handle: std::sync::RwLock::new(None),
+            app_handle,
             lifecycle_status,
             setup_orchestrator,
         }
@@ -202,6 +207,7 @@ impl AppRuntime {
         deps: &AppDeps,
         lifecycle_status: &Arc<dyn uc_app::usecases::LifecycleStatusPort>,
         setup_ports: &SetupRuntimePorts,
+        app_handle: Arc<std::sync::RwLock<Option<tauri::AppHandle>>>,
     ) -> Arc<SetupOrchestrator> {
         let initialize_encryption = Arc::new(uc_app::usecases::InitializeEncryption::from_ports(
             deps.encryption.clone(),
@@ -252,6 +258,9 @@ impl AppRuntime {
             deps.encryption_state.clone(),
             deps.paired_device_repo.clone(),
         )));
+        let setup_event_port = Arc::new(crate::bootstrap::wiring::TauriSetupEventPort::new(
+            app_handle,
+        ));
 
         Arc::new(SetupOrchestrator::new(
             initialize_encryption,
@@ -259,6 +268,7 @@ impl AppRuntime {
             deps.setup_status.clone(),
             app_lifecycle,
             setup_ports.pairing_orchestrator.clone(),
+            setup_event_port,
             setup_ports.space_access_orchestrator.clone(),
             setup_ports.discovery_port.clone(),
             deps.network_control.clone(),
