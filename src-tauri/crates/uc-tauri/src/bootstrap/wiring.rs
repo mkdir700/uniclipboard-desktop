@@ -60,7 +60,7 @@ use uc_core::ports::clipboard::{
 };
 use uc_core::ports::space::ProofPort;
 use uc_core::ports::*;
-use uc_core::security::model::KeySlot;
+use uc_core::security::model::{KeySlot, KeySlotFile};
 use uc_core::security::space_access::event::SpaceAccessEvent;
 use uc_core::settings::model::Settings;
 use uc_core::setup::SetupState;
@@ -1233,6 +1233,16 @@ fn raw_payload_preview(payload: &str) -> String {
 
 struct NoopSpaceAccessCrypto;
 
+struct LoadedKeyslotSpaceAccessCrypto {
+    keyslot_file: KeySlotFile,
+}
+
+impl LoadedKeyslotSpaceAccessCrypto {
+    fn new(keyslot_file: KeySlotFile) -> Self {
+        Self { keyslot_file }
+    }
+}
+
 #[async_trait::async_trait]
 impl uc_core::ports::space::CryptoPort for NoopSpaceAccessCrypto {
     async fn generate_nonce32(&self) -> [u8; 32] {
@@ -1254,6 +1264,30 @@ impl uc_core::ports::space::CryptoPort for NoopSpaceAccessCrypto {
         _passphrase: uc_core::security::SecretString,
     ) -> anyhow::Result<uc_core::security::model::MasterKey> {
         Err(anyhow::anyhow!("noop crypto port cannot derive master key"))
+    }
+}
+
+#[async_trait::async_trait]
+impl uc_core::ports::space::CryptoPort for LoadedKeyslotSpaceAccessCrypto {
+    async fn generate_nonce32(&self) -> [u8; 32] {
+        [0u8; 32]
+    }
+
+    async fn export_keyslot_blob(
+        &self,
+        _space_id: &uc_core::ids::SpaceId,
+    ) -> anyhow::Result<uc_core::security::model::KeySlot> {
+        Ok(self.keyslot_file.clone().into())
+    }
+
+    async fn derive_master_key_from_keyslot(
+        &self,
+        _keyslot_blob: &[u8],
+        _passphrase: uc_core::security::SecretString,
+    ) -> anyhow::Result<uc_core::security::model::MasterKey> {
+        Err(anyhow::anyhow!(
+            "loaded keyslot crypto cannot derive master key in sponsor flow"
+        ))
     }
 }
 
@@ -2007,22 +2041,27 @@ async fn run_pairing_action_loop<R: Runtime>(
                         );
                     }
                 }
-                if success && role == Some(PairingRole::Initiator) {
+                if success && role == Some(PairingRole::Responder) {
                     match key_slot_store.load().await {
                         Ok(keyslot_file) => {
                             let space_id =
                                 uc_core::ids::SpaceId::from(keyslot_file.scope.profile_id.as_str());
-                            let mut noop_transport = NoopSpaceAccessTransport;
+                            let context = space_access_orchestrator.context();
+                            let mut network_transport =
+                                uc_app::usecases::space_access::SpaceAccessNetworkAdapter::new(
+                                    network.clone(),
+                                    context,
+                                );
+                            let sponsor_crypto = LoadedKeyslotSpaceAccessCrypto::new(keyslot_file);
                             let noop_proof = NoopSpaceAccessProof;
                             let mut noop_timer = NoopSpaceAccessTimer;
                             let mut noop_store = NoopSpaceAccessPersistence;
-                            let noop_crypto = NoopSpaceAccessCrypto;
 
                             let mut executor =
                                 uc_app::usecases::space_access::SpaceAccessExecutor {
-                                    crypto: &noop_crypto,
+                                    crypto: &sponsor_crypto,
                                     net: network.as_ref(),
-                                    transport: &mut noop_transport,
+                                    transport: &mut network_transport,
                                     proof: &noop_proof,
                                     timer: &mut noop_timer,
                                     store: &mut noop_store,
@@ -2133,6 +2172,10 @@ mod tests {
         close_calls: Arc<Mutex<Vec<(String, Option<String>)>>>,
     }
 
+    struct OfferRecordingNetwork {
+        sent_messages: Arc<Mutex<Vec<(String, PairingMessage)>>>,
+    }
+
     struct SuccessSpaceAccessCrypto;
 
     struct SuccessSpaceAccessTransport;
@@ -2150,6 +2193,26 @@ mod tests {
             kdf: uc_core::security::model::KdfParams::for_initialization(),
             salt: vec![1; 16],
             wrapped_master_key: None,
+        }
+    }
+
+    fn test_keyslot_file(profile_id: &str) -> uc_core::security::model::KeySlotFile {
+        uc_core::security::model::KeySlotFile {
+            version: uc_core::security::model::KeySlotVersion::V1,
+            scope: uc_core::security::model::KeyScope {
+                profile_id: profile_id.to_string(),
+            },
+            kdf: uc_core::security::model::KdfParams::for_initialization(),
+            salt: vec![1; 16],
+            wrapped_master_key: uc_core::security::model::EncryptedBlob {
+                version: uc_core::security::model::EncryptionFormatVersion::V1,
+                aead: uc_core::security::model::EncryptionAlgo::XChaCha20Poly1305,
+                nonce: vec![2; 24],
+                ciphertext: vec![3; 32],
+                aad_fingerprint: None,
+            },
+            created_at: None,
+            updated_at: None,
         }
     }
 
@@ -2488,6 +2551,84 @@ mod tests {
     }
 
     #[async_trait]
+    impl NetworkPort for OfferRecordingNetwork {
+        async fn send_clipboard(
+            &self,
+            _peer_id: &str,
+            _encrypted_data: Vec<u8>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn broadcast_clipboard(&self, _encrypted_data: Vec<u8>) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_clipboard(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<uc_core::network::ClipboardMessage>>
+        {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+
+        async fn get_discovered_peers(&self) -> anyhow::Result<Vec<DiscoveredPeer>> {
+            Ok(vec![])
+        }
+
+        async fn get_connected_peers(&self) -> anyhow::Result<Vec<ConnectedPeer>> {
+            Ok(vec![])
+        }
+
+        fn local_peer_id(&self) -> String {
+            "local-peer".to_string()
+        }
+
+        async fn announce_device_name(&self, _device_name: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn open_pairing_session(
+            &self,
+            _peer_id: String,
+            _session_id: String,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn send_pairing_on_session(
+            &self,
+            session_id: String,
+            message: PairingMessage,
+        ) -> anyhow::Result<()> {
+            self.sent_messages
+                .lock()
+                .unwrap()
+                .push((session_id, message));
+            Ok(())
+        }
+
+        async fn close_pairing_session(
+            &self,
+            _session_id: String,
+            _reason: Option<String>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn unpair_device(&self, _peer_id: String) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn subscribe_events(
+            &self,
+        ) -> anyhow::Result<tokio::sync::mpsc::Receiver<NetworkEvent>> {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok(rx)
+        }
+    }
+
+    #[async_trait]
     impl uc_core::ports::space::CryptoPort for SuccessSpaceAccessCrypto {
         async fn generate_nonce32(&self) -> [u8; 32] {
             [3; 32]
@@ -2628,6 +2769,10 @@ mod tests {
 
     struct NoopKeySlotStore;
 
+    struct StaticKeySlotStore {
+        slot: uc_core::security::model::KeySlotFile,
+    }
+
     #[async_trait]
     impl KeySlotStore for NoopKeySlotStore {
         async fn load(
@@ -2635,6 +2780,27 @@ mod tests {
         ) -> Result<uc_core::security::model::KeySlotFile, uc_core::security::model::EncryptionError>
         {
             Err(uc_core::security::model::EncryptionError::KeyNotFound)
+        }
+
+        async fn store(
+            &self,
+            _slot: &uc_core::security::model::KeySlotFile,
+        ) -> Result<(), uc_core::security::model::EncryptionError> {
+            Ok(())
+        }
+
+        async fn delete(&self) -> Result<(), uc_core::security::model::EncryptionError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl KeySlotStore for StaticKeySlotStore {
+        async fn load(
+            &self,
+        ) -> Result<uc_core::security::model::KeySlotFile, uc_core::security::model::EncryptionError>
+        {
+            Ok(self.slot.clone())
         }
 
         async fn store(
@@ -3359,6 +3525,86 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "session-failed");
         assert_eq!(calls[0].1, Some("pairing failed".to_string()));
+
+        drop(action_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
+    }
+
+    #[tokio::test]
+    async fn pairing_action_loop_starts_sponsor_authorization_for_responder_role() {
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+
+        let request = PairingRequest {
+            session_id: "session-offer".to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-999".to_string(),
+            peer_id: "peer-local".to_string(),
+            identity_pubkey: vec![1; 32],
+            nonce: vec![2; 16],
+        };
+        orchestrator
+            .handle_incoming_request("peer-remote".to_string(), request)
+            .await
+            .expect("handle incoming request");
+
+        assert_eq!(
+            orchestrator.get_session_role("session-offer").await,
+            Some(PairingRole::Responder)
+        );
+
+        let sent_messages = Arc::new(Mutex::new(Vec::new()));
+        let network = Arc::new(OfferRecordingNetwork {
+            sent_messages: sent_messages.clone(),
+        });
+
+        let (action_tx, action_rx) = mpsc::channel(2);
+        let loop_handle = tokio::spawn(run_pairing_action_loop::<Wry>(
+            action_rx,
+            network,
+            None,
+            orchestrator,
+            Arc::new(SpaceAccessOrchestrator::new()),
+            Arc::new(StaticKeySlotStore {
+                slot: test_keyslot_file("space-offer"),
+            }),
+        ));
+
+        action_tx
+            .send(PairingAction::EmitResult {
+                session_id: "session-offer".to_string(),
+                success: true,
+                error: None,
+            })
+            .await
+            .expect("send success result");
+
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        let calls = sent_messages.lock().unwrap().clone();
+        let busy_offer = calls
+            .iter()
+            .find_map(|(session_id, message)| match message {
+                PairingMessage::Busy(busy) if session_id == "session-offer" => Some(busy),
+                _ => None,
+            });
+
+        let busy_offer = busy_offer.expect("expected space access offer busy message");
+        let payload = busy_offer
+            .reason
+            .as_ref()
+            .expect("busy payload should include reason");
+        let payload_json: serde_json::Value =
+            serde_json::from_str(payload).expect("busy payload should be json");
+        assert_eq!(payload_json["kind"], "space_access_offer");
 
         drop(action_tx);
         let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
