@@ -10,6 +10,7 @@ use libp2p::{
 };
 use libp2p_stream as stream;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
@@ -30,6 +31,10 @@ use crate::identity_store::load_or_create_identity;
 const BUSINESS_PROTOCOL_ID: &str = ProtocolId::Business.as_str();
 const BUSINESS_PAYLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
 const BUSINESS_READ_TIMEOUT: Duration = Duration::from_secs(30);
+const START_STATE_IDLE: u8 = 0;
+const START_STATE_STARTING: u8 = 1;
+const START_STATE_STARTED: u8 = 2;
+const START_STATE_FAILED: u8 = 3;
 
 #[derive(Debug)]
 enum BusinessCommand {
@@ -209,7 +214,8 @@ pub struct Libp2pNetworkAdapter {
     clipboard_rx: Mutex<Option<mpsc::Receiver<ClipboardMessage>>>,
     business_tx: mpsc::Sender<BusinessCommand>,
     business_rx: Mutex<Option<mpsc::Receiver<BusinessCommand>>>,
-    keypair: Mutex<Option<identity::Keypair>>,
+    keypair: Mutex<identity::Keypair>,
+    start_state: AtomicU8,
     policy_resolver: Arc<dyn ConnectionPolicyResolverPort>,
     stream_control: Mutex<Option<stream::Control>>,
     pairing_service: Mutex<Option<PairingStreamService>>,
@@ -244,7 +250,8 @@ impl Libp2pNetworkAdapter {
             clipboard_rx: Mutex::new(Some(clipboard_rx)),
             business_tx,
             business_rx: Mutex::new(Some(business_rx)),
-            keypair: Mutex::new(Some(keypair)),
+            keypair: Mutex::new(keypair),
+            start_state: AtomicU8::new(START_STATE_IDLE),
             policy_resolver,
             stream_control: Mutex::new(None),
             pairing_service,
@@ -331,13 +338,11 @@ impl Libp2pNetworkAdapter {
     }
 
     fn take_keypair(&self) -> Result<identity::Keypair> {
-        let mut guard = self
+        let guard = self
             .keypair
             .lock()
             .map_err(|_| anyhow!("libp2p keypair mutex poisoned"))?;
-        guard
-            .take()
-            .ok_or_else(|| anyhow!("libp2p keypair already taken"))
+        Ok(guard.clone())
     }
 
     fn take_receiver<T>(
@@ -490,7 +495,44 @@ impl NetworkPort for Libp2pNetworkAdapter {
 #[async_trait]
 impl NetworkControlPort for Libp2pNetworkAdapter {
     async fn start_network(&self) -> Result<()> {
-        self.spawn_swarm()
+        let mut state = self.start_state.load(Ordering::Acquire);
+        loop {
+            match state {
+                START_STATE_IDLE | START_STATE_FAILED => {
+                    match self.start_state.compare_exchange(
+                        state,
+                        START_STATE_STARTING,
+                        Ordering::AcqRel,
+                        Ordering::Acquire,
+                    ) {
+                        Ok(_) => break,
+                        Err(current) => {
+                            state = current;
+                            continue;
+                        }
+                    }
+                }
+                START_STATE_STARTING | START_STATE_STARTED => return Ok(()),
+                _ => {
+                    self.start_state.store(START_STATE_IDLE, Ordering::Release);
+                    state = START_STATE_IDLE;
+                }
+            }
+        }
+
+        match self.spawn_swarm() {
+            Ok(()) => {
+                self.start_state
+                    .store(START_STATE_STARTED, Ordering::Release);
+                Ok(())
+            }
+            Err(err) => {
+                self.start_state
+                    .store(START_STATE_FAILED, Ordering::Release);
+                self.start_state.store(START_STATE_IDLE, Ordering::Release);
+                Err(err)
+            }
+        }
     }
 }
 
@@ -1311,6 +1353,57 @@ mod tests {
         let resolver: Arc<dyn ConnectionPolicyResolverPort> = Arc::new(FakeResolver);
         let adapter = Libp2pNetworkAdapter::new(Arc::new(TestIdentityStore::default()), resolver);
         assert!(adapter.is_ok());
+    }
+
+    #[tokio::test]
+    async fn start_network_is_idempotent_when_called_twice() {
+        let adapter = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter");
+
+        let first = NetworkControlPort::start_network(&adapter).await;
+        let second = NetworkControlPort::start_network(&adapter).await;
+
+        assert!(first.is_ok(), "first start should succeed: {first:?}");
+        assert!(
+            second.is_ok(),
+            "second start should be idempotent: {second:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn start_network_can_retry_after_failed_start() {
+        let adapter = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter");
+
+        let stolen_business_rx =
+            Libp2pNetworkAdapter::take_receiver(&adapter.business_rx, "business")
+                .expect("take business receiver");
+
+        let first = NetworkControlPort::start_network(&adapter).await;
+        assert!(
+            first.is_err(),
+            "first start should fail when business receiver is missing"
+        );
+
+        {
+            let mut guard = adapter
+                .business_rx
+                .lock()
+                .expect("lock business receiver mutex");
+            *guard = Some(stolen_business_rx);
+        }
+
+        let retry = NetworkControlPort::start_network(&adapter).await;
+        assert!(
+            retry.is_ok(),
+            "retry after failed start should succeed: {retry:?}"
+        );
     }
 
     #[tokio::test]
