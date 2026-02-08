@@ -64,6 +64,9 @@ uuid = { version = "1", features = ["v4", "fast-rng"] }
 # Random number generation
 rand = "0.9"
 
+# Network utilities
+local-ip-address = "0.6"
+
 # Byte handling
 bytes = "1.7"
 

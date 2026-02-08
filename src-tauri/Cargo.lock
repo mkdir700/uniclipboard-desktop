@@ -9810,6 +9810,7 @@ dependencies = [
  "libp2p",
  "libp2p-request-response",
  "libp2p-stream",
+ "local-ip-address 0.6.8",
  "log",
  "once_cell",
  "png 0.18.0",

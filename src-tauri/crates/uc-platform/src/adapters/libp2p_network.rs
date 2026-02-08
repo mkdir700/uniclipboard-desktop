@@ -310,9 +310,14 @@ impl Libp2pNetworkAdapter {
             self.policy_resolver.clone(),
         );
 
+        let listen_ip = crate::net_utils::get_physical_lan_ip()
+            .map(|ip| ip.to_string())
+            .unwrap_or_else(|| "0.0.0.0".to_string());
+        let listen_addr_str = format!("/ip4/{listen_ip}/tcp/0");
+        info!(address = %listen_addr_str, "selected listen address");
         listen_on_swarm(
             &mut swarm,
-            "/ip4/0.0.0.0/tcp/0"
+            listen_addr_str
                 .parse()
                 .map_err(|e| anyhow!("failed to parse listen address: {e}"))?,
             &self.event_tx,
