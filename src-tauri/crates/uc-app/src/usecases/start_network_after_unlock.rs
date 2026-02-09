@@ -26,7 +26,10 @@ impl StartNetworkAfterUnlock {
 
         async {
             info!("Requesting network start after unlock");
-            self.network_control.start_network().await?;
+            if let Err(err) = self.network_control.start_network().await {
+                tracing::warn!(error = %err, "Network start after unlock failed");
+                return Err(err.into());
+            }
             info!("Network started successfully after unlock");
             Ok(())
         }

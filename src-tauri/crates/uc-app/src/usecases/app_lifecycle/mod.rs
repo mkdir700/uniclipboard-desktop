@@ -160,6 +160,7 @@ impl AppLifecycleCoordinator {
 
         async {
             let current_state = self.status.get_state().await;
+            info!(state = ?current_state, "Lifecycle ensure_ready invoked");
             if matches!(current_state, LifecycleState::Ready) {
                 info!("Lifecycle already Ready; skipping duplicate ensure_ready call");
                 return Ok(());

@@ -170,6 +170,11 @@ pub async fn get_p2p_peers(
                 e.to_string()
             })?;
         let connected_map = connected_peer_ids(&connected);
+        tracing::info!(
+            discovered_peer_count = discovered.len(),
+            connected_peer_count = connected_map.len(),
+            "assembled p2p peer snapshot"
+        );
 
         Ok(discovered
             .into_iter()
@@ -242,6 +247,12 @@ pub async fn get_paired_peers_with_status(
             })?;
         let discovered_map = discovered_peer_map(&discovered);
         let connected_map = connected_peer_ids(&connected);
+        tracing::info!(
+            paired_device_count = paired_devices.len(),
+            discovered_peer_count = discovered_map.len(),
+            connected_peer_count = connected_map.len(),
+            "assembled paired peers with status"
+        );
 
         Ok(paired_devices
             .into_iter()

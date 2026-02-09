@@ -219,6 +219,7 @@ impl SetupOrchestrator {
                     debug!("setup action MarkSetupComplete completed");
                 }
                 SetupAction::EnsureDiscovery => {
+                    info!("setup ensure discovery: requesting network start");
                     self.network_control.start_network().await.map_err(|err| {
                         error!(
                             action = "EnsureDiscovery",
@@ -229,7 +230,8 @@ impl SetupOrchestrator {
                         SetupError::PairingFailed
                     })?;
 
-                    self.discovery_port
+                    let discovered_peers = self
+                        .discovery_port
                         .list_discovered_peers()
                         .await
                         .map_err(|err| {
@@ -241,6 +243,11 @@ impl SetupOrchestrator {
                             );
                             SetupError::PairingFailed
                         })?;
+
+                    info!(
+                        discovered_peer_count = discovered_peers.len(),
+                        "setup ensure discovery: initial discovered peer snapshot"
+                    );
 
                     debug!("setup action EnsureDiscovery completed");
                 }

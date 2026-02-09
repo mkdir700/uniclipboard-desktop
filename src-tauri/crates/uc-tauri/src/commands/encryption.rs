@@ -73,6 +73,8 @@ pub async fn initialize_encryption(
         .await
     {
         warn!("Failed to boot lifecycle after encryption init: {}", e);
+    } else {
+        info!("Lifecycle boot completed after encryption init");
     }
 
     // Emit onboarding-password-set event for frontend
@@ -133,6 +135,8 @@ pub async fn unlock_encryption_session_with_runtime<R: Runtime>(
                     .await
                 {
                     warn!("{} Auto lifecycle boot failed: {}", UNLOCK_CONTEXT, e);
+                } else {
+                    info!("{} Auto lifecycle boot completed", UNLOCK_CONTEXT);
                 }
                 Ok(true)
             }
