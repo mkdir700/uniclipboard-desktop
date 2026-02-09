@@ -1,6 +1,6 @@
 use local_ip_address::list_afinet_netifas;
 use std::net::{IpAddr, Ipv4Addr};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 /// Detect the best physical LAN IPv4 address for libp2p to listen on.
 ///
@@ -24,14 +24,17 @@ pub fn get_physical_lan_ip() -> Option<Ipv4Addr> {
     for (iface_name, ip) in interfaces {
         if let IpAddr::V4(v4) = ip {
             if v4.is_loopback() || v4.is_link_local() {
+                debug!(interface = %iface_name, ip = %v4, "skip non-routable interface address");
                 continue;
             }
 
             if is_tunnel_interface(&iface_name) {
+                debug!(interface = %iface_name, ip = %v4, "skip tunnel interface for p2p listen");
                 continue;
             }
 
             if is_clash_tun_address(v4) {
+                debug!(interface = %iface_name, ip = %v4, "skip clash tun address for p2p listen");
                 continue;
             }
 
@@ -39,6 +42,8 @@ pub fn get_physical_lan_ip() -> Option<Ipv4Addr> {
                 info!(ip = %v4, interface = %iface_name, "detected physical LAN IP");
                 return Some(v4);
             }
+
+            debug!(interface = %iface_name, ip = %v4, "skip non-private ipv4 for p2p listen");
         }
     }
 

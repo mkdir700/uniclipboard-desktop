@@ -195,6 +195,16 @@ fn build_mdns_config() -> mdns::Config {
     config
 }
 
+fn start_state_name(state: u8) -> &'static str {
+    match state {
+        START_STATE_IDLE => "idle",
+        START_STATE_STARTING => "starting",
+        START_STATE_STARTED => "started",
+        START_STATE_FAILED => "failed",
+        _ => "unknown",
+    }
+}
+
 impl Libp2pBehaviour {
     fn new(local_peer_id: PeerId) -> Result<Self> {
         let mdns = mdns::tokio::Behaviour::new(build_mdns_config(), local_peer_id)
@@ -263,6 +273,14 @@ impl Libp2pNetworkAdapter {
     }
 
     pub fn spawn_swarm(&self) -> Result<()> {
+        let mdns_config = build_mdns_config();
+        info!(
+            query_interval_secs = mdns_config.query_interval.as_secs(),
+            ttl_secs = mdns_config.ttl.as_secs(),
+            enable_ipv6 = mdns_config.enable_ipv6,
+            local_peer_id = %self.local_peer_id,
+            "preparing libp2p swarm"
+        );
         let keypair = self.take_keypair()?;
         let local_peer_id = PeerId::from(keypair.public());
         let behaviour = Libp2pBehaviour::new(local_peer_id)
@@ -310,9 +328,16 @@ impl Libp2pNetworkAdapter {
             self.policy_resolver.clone(),
         );
 
-        let listen_ip = crate::net_utils::get_physical_lan_ip()
-            .map(|ip| ip.to_string())
-            .unwrap_or_else(|| "0.0.0.0".to_string());
+        let listen_ip = match crate::net_utils::get_physical_lan_ip() {
+            Some(ip) => ip.to_string(),
+            None => {
+                warn!(
+                    local_peer_id = %self.local_peer_id,
+                    "no physical LAN IP detected, fallback to 0.0.0.0"
+                );
+                "0.0.0.0".to_string()
+            }
+        };
         let listen_addr_str = format!("/ip4/{listen_ip}/tcp/0");
         info!(address = %listen_addr_str, "selected listen address");
         listen_on_swarm(
@@ -391,7 +416,13 @@ impl NetworkPort for Libp2pNetworkAdapter {
 
     async fn get_discovered_peers(&self) -> Result<Vec<DiscoveredPeer>> {
         let caches = self.caches.read().await;
-        Ok(caches.discovered_peers.values().cloned().collect())
+        let peers: Vec<DiscoveredPeer> = caches.discovered_peers.values().cloned().collect();
+        debug!(
+            discovered_peer_count = peers.len(),
+            reachable_peer_count = caches.reachable_peers.len(),
+            "snapshot discovered peers"
+        );
+        Ok(peers)
     }
 
     async fn get_connected_peers(&self) -> Result<Vec<ConnectedPeer>> {
@@ -501,6 +532,11 @@ impl NetworkPort for Libp2pNetworkAdapter {
 impl NetworkControlPort for Libp2pNetworkAdapter {
     async fn start_network(&self) -> Result<()> {
         let mut state = self.start_state.load(Ordering::Acquire);
+        info!(
+            state = start_state_name(state),
+            local_peer_id = %self.local_peer_id,
+            "start_network requested"
+        );
         loop {
             match state {
                 START_STATE_IDLE | START_STATE_FAILED => {
@@ -510,15 +546,41 @@ impl NetworkControlPort for Libp2pNetworkAdapter {
                         Ordering::AcqRel,
                         Ordering::Acquire,
                     ) {
-                        Ok(_) => break,
+                        Ok(_) => {
+                            info!(
+                                previous_state = start_state_name(state),
+                                next_state = start_state_name(START_STATE_STARTING),
+                                local_peer_id = %self.local_peer_id,
+                                "network start state transition"
+                            );
+                            break;
+                        }
                         Err(current) => {
+                            debug!(
+                                expected_state = start_state_name(state),
+                                current_state = start_state_name(current),
+                                local_peer_id = %self.local_peer_id,
+                                "network start race detected, retrying compare_exchange"
+                            );
                             state = current;
                             continue;
                         }
                     }
                 }
-                START_STATE_STARTING | START_STATE_STARTED => return Ok(()),
+                START_STATE_STARTING | START_STATE_STARTED => {
+                    info!(
+                        state = start_state_name(state),
+                        local_peer_id = %self.local_peer_id,
+                        "start_network no-op because network already active"
+                    );
+                    return Ok(());
+                }
                 _ => {
+                    warn!(
+                        state,
+                        local_peer_id = %self.local_peer_id,
+                        "start_network saw invalid start state, resetting to idle"
+                    );
                     self.start_state.store(START_STATE_IDLE, Ordering::Release);
                     state = START_STATE_IDLE;
                 }
@@ -529,12 +591,22 @@ impl NetworkControlPort for Libp2pNetworkAdapter {
             Ok(()) => {
                 self.start_state
                     .store(START_STATE_STARTED, Ordering::Release);
+                info!(
+                    state = start_state_name(START_STATE_STARTED),
+                    local_peer_id = %self.local_peer_id,
+                    "network swarm started successfully"
+                );
                 Ok(())
             }
             Err(err) => {
                 self.start_state
                     .store(START_STATE_FAILED, Ordering::Release);
                 self.start_state.store(START_STATE_IDLE, Ordering::Release);
+                error!(
+                    error = %err,
+                    local_peer_id = %self.local_peer_id,
+                    "failed to start network swarm"
+                );
                 Err(err)
             }
         }
@@ -787,7 +859,7 @@ async fn run_swarm(
     mut business_rx: mpsc::Receiver<BusinessCommand>,
     local_peer_id: String,
 ) {
-    info!("libp2p mDNS swarm started");
+    info!(local_peer_id = %local_peer_id, "libp2p mDNS swarm started");
 
     loop {
         tokio::select! {
@@ -795,6 +867,12 @@ async fn run_swarm(
                 match event {
                     SwarmEvent::Behaviour(Libp2pBehaviourEvent::Mdns(event)) => match event {
                         mdns::Event::Discovered(peers) => {
+                            let discovered_count = peers.len();
+                            debug!(
+                                discovered_count,
+                                local_peer_id = %local_peer_id,
+                                "received mdns discovered event"
+                            );
                             for (peer_id, address) in peers.iter() {
                                 swarm.add_peer_address(peer_id.clone(), address.clone());
                             }
@@ -804,16 +882,44 @@ async fn run_swarm(
                                 apply_mdns_discovered(&mut caches, discovered, Utc::now())
                             };
 
+                            let cache_size = {
+                                let caches = caches.read().await;
+                                caches.discovered_peers.len()
+                            };
+                            info!(
+                                emitted_event_count = events.len(),
+                                discovered_cache_size = cache_size,
+                                local_peer_id = %local_peer_id,
+                                "processed mdns discovered event"
+                            );
+
                             for event in events {
                                 let _ = try_send_event(&event_tx, event, "PeerDiscovered");
                             }
                         }
                         mdns::Event::Expired(peers) => {
+                            let expired_count = peers.len();
+                            debug!(
+                                expired_count,
+                                local_peer_id = %local_peer_id,
+                                "received mdns expired event"
+                            );
                             let expired = collect_mdns_expired(peers);
                             let events = {
                                 let mut caches = caches.write().await;
                                 apply_mdns_expired(&mut caches, expired)
                             };
+
+                            let cache_size = {
+                                let caches = caches.read().await;
+                                caches.discovered_peers.len()
+                            };
+                            info!(
+                                emitted_event_count = events.len(),
+                                discovered_cache_size = cache_size,
+                                local_peer_id = %local_peer_id,
+                                "processed mdns expired event"
+                            );
 
                             for event in events {
                                 let _ = try_send_event(&event_tx, event, "PeerLost");
@@ -844,6 +950,11 @@ async fn run_swarm(
 
                         if let Some(event) = event {
                             let _ = try_send_event(&event_tx, event, "PeerReady");
+                            info!(
+                                peer_id = %peer_id_string,
+                                local_peer_id = %local_peer_id,
+                                "peer connection established"
+                            );
                         } else {
                             debug!("connection established for unknown peer {peer_id_string}");
                         }
@@ -857,6 +968,11 @@ async fn run_swarm(
 
                         if let Some(event) = event {
                             let _ = try_send_event(&event_tx, event, "PeerNotReady");
+                            info!(
+                                peer_id = %peer_id,
+                                local_peer_id = %local_peer_id,
+                                "peer connection closed"
+                            );
                         }
                     }
                     SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
@@ -934,9 +1050,17 @@ async fn run_swarm(
                             caches.discovered_peers.keys().cloned().collect::<Vec<_>>()
                         };
                         if peer_ids.is_empty() {
-                            debug!("No discovered peers to announce device name");
+                            info!(
+                                local_peer_id = %local_peer_id,
+                                "skip device announce because discovered peer list is empty"
+                            );
                             continue;
                         }
+                        info!(
+                            target_peer_count = peer_ids.len(),
+                            local_peer_id = %local_peer_id,
+                            "broadcasting device announce to discovered peers"
+                        );
                         let message = ProtocolMessage::DeviceAnnounce(DeviceAnnounceMessage {
                             peer_id: local_peer_id.clone(),
                             device_name: device_name.clone(),
