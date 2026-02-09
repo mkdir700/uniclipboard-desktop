@@ -1502,7 +1502,7 @@ impl PairingStateMachine {
 
         Ok(PairedDevice {
             peer_id: PeerId::from(peer_id),
-            pairing_state: PairedDeviceState::Trusted,
+            pairing_state: PairedDeviceState::Pending,
             identity_fingerprint: fingerprint,
             paired_at: now,
             last_seen_at: None,
@@ -1907,9 +1907,11 @@ mod tests {
                 ..
             }
         )));
-        assert!(actions
-            .iter()
-            .any(|action| matches!(action, PairingAction::PersistPairedDevice { .. })));
+        assert!(actions.iter().any(|action| matches!(
+            action,
+            PairingAction::PersistPairedDevice { device, .. }
+                if device.pairing_state == PairedDeviceState::Pending
+        )));
     }
 
     #[test]
@@ -2139,6 +2141,7 @@ mod tests {
         match result {
             Ok(device) => {
                 assert_eq!(device.device_name, "Unknown Device");
+                assert_eq!(device.pairing_state, PairedDeviceState::Pending);
             }
             Err(e) => panic!("Expected Ok, got Err: {:?}", e),
         }
