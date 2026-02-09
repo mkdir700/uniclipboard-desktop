@@ -135,6 +135,20 @@ export interface P2PPeerNameUpdatedEvent {
 }
 
 /**
+ * P2P 设备发现状态变化事件数据
+ */
+export interface P2PPeerDiscoveryChangedEvent {
+  /** Peer ID */
+  peerId: string
+  /** Device name (may be null) */
+  deviceName?: string | null
+  /** Discovered addresses snapshot */
+  addresses: string[]
+  /** true=discovered, false=lost */
+  discovered: boolean
+}
+
+/**
  * Space access completion event payload.
  */
 export interface SpaceAccessCompletedEvent {
@@ -304,6 +318,29 @@ export async function onP2PPeerNameUpdated(
     }
   } catch (error) {
     console.error('Failed to setup P2P peer name updated listener:', error)
+    return () => {}
+  }
+}
+
+/**
+ * 监听 P2P 设备发现状态变化事件
+ */
+export async function onP2PPeerDiscoveryChanged(
+  callback: (event: P2PPeerDiscoveryChangedEvent) => void
+): Promise<() => void> {
+  try {
+    const unlisten = await listen<P2PPeerDiscoveryChangedEvent>(
+      'p2p-peer-discovery-changed',
+      event => {
+        callback(event.payload)
+      }
+    )
+
+    return () => {
+      unlisten()
+    }
+  } catch (error) {
+    console.error('Failed to setup P2P peer discovery changed listener:', error)
     return () => {}
   }
 }

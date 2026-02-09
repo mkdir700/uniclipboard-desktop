@@ -14,3 +14,12 @@ pub struct P2PPeerNameUpdatedEvent {
     pub peer_id: String,
     pub device_name: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct P2PPeerDiscoveryEvent {
+    pub peer_id: String,
+    pub device_name: Option<String>,
+    pub addresses: Vec<String>,
+    pub discovered: bool,
+}
