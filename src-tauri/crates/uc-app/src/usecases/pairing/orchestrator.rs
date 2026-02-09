@@ -20,6 +20,7 @@
 use anyhow::{Context, Result};
 
 use super::{PairingDomainEvent, PairingEventPort, PairingFacade};
+use crate::usecases::pairing::staged_paired_device_store;
 use chrono::{DateTime, Duration, Utc};
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
@@ -721,7 +722,6 @@ impl PairingOrchestrator {
     ) -> impl Future<Output = Result<()>> + Send {
         async move {
             let mut queue = VecDeque::from([action]);
-            let mut pending_error: Option<anyhow::Error> = None;
 
             while let Some(action) = queue.pop_front() {
                 match action {
@@ -863,66 +863,32 @@ impl PairingOrchestrator {
                         tracing::info!(
                             session_id = %session_id,
                             peer_id = %device.peer_id,
-                            "Starting to persist paired device"
+                            "Staging paired device until verification completes"
                         );
-                        match device_repo.upsert(device.clone()).await {
-                            Ok(()) => {
-                                tracing::info!(
-                                    session_id = %session_id,
-                                    peer_id = %device.peer_id,
-                                    "Paired device persisted successfully"
+                        let peer_id = device.peer_id.to_string();
+                        staged_paired_device_store::stage(&session_id, device);
+
+                        let actions = {
+                            let mut sessions = sessions.write().await;
+                            if let Some(context) = sessions.get_mut(&session_id) {
+                                let (_state, actions) = context.state_machine.handle_event(
+                                    PairingEvent::PersistOk {
+                                        session_id: session_id.clone(),
+                                        device_id: peer_id,
+                                    },
+                                    Utc::now(),
                                 );
-                                // 通知状态机持久化成功
-                                let actions = {
-                                    let mut sessions = sessions.write().await;
-                                    if let Some(context) = sessions.get_mut(&session_id) {
-                                        let (_state, actions) = context.state_machine.handle_event(
-                                            PairingEvent::PersistOk {
-                                                session_id: session_id.clone(),
-                                                device_id: device.peer_id.to_string(),
-                                            },
-                                            Utc::now(),
-                                        );
-                                        tracing::debug!(
-                                            session_id = %session_id,
-                                            num_actions = actions.len(),
-                                            "PersistOk event generated actions"
-                                        );
-                                        actions
-                                    } else {
-                                        vec![]
-                                    }
-                                };
-                                queue.extend(actions);
-                            }
-                            Err(err) => {
-                                tracing::error!(
+                                tracing::debug!(
                                     session_id = %session_id,
-                                    peer_id = %device.peer_id,
-                                    error = ?err,
-                                    "Failed to persist paired device"
+                                    num_actions = actions.len(),
+                                    "PersistOk event generated actions"
                                 );
-                                let actions = {
-                                    let mut sessions = sessions.write().await;
-                                    if let Some(context) = sessions.get_mut(&session_id) {
-                                        let (_state, actions) = context.state_machine.handle_event(
-                                            PairingEvent::PersistErr {
-                                                session_id: session_id.clone(),
-                                                error: err.to_string(),
-                                            },
-                                            Utc::now(),
-                                        );
-                                        actions
-                                    } else {
-                                        vec![]
-                                    }
-                                };
-                                queue.extend(actions);
-                                if pending_error.is_none() {
-                                    pending_error = Some(anyhow::Error::new(err));
-                                }
+                                actions
+                            } else {
+                                vec![]
                             }
-                        }
+                        };
+                        queue.extend(actions);
                     }
                     PairingAction::StartTimer {
                         session_id: action_session_id,
@@ -999,10 +965,6 @@ impl PairingOrchestrator {
                     }
                     PairingAction::NoOp => {}
                 }
-            }
-
-            if let Some(error) = pending_error {
-                return Err(error).context("Failed to persist paired device");
             }
 
             Ok(())
@@ -1200,6 +1162,8 @@ impl PairingEventPort for PairingOrchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::usecases::pairing::staged_paired_device_store;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
     use tokio::time::timeout;
     use uc_core::crypto::pin_hash::hash_pin;
@@ -1213,6 +1177,17 @@ mod tests {
     };
 
     struct MockDeviceRepository;
+
+    #[derive(Default)]
+    struct CountingDeviceRepository {
+        upsert_calls: AtomicUsize,
+    }
+
+    impl CountingDeviceRepository {
+        fn upsert_calls(&self) -> usize {
+            self.upsert_calls.load(Ordering::SeqCst)
+        }
+    }
 
     #[async_trait::async_trait]
     impl PairedDeviceRepositoryPort for MockDeviceRepository {
@@ -1260,6 +1235,93 @@ mod tests {
         ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
             Ok(())
         }
+    }
+
+    #[async_trait::async_trait]
+    impl PairedDeviceRepositoryPort for CountingDeviceRepository {
+        async fn get_by_peer_id(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+        ) -> Result<Option<PairedDevice>, uc_core::ports::errors::PairedDeviceRepositoryError>
+        {
+            Ok(None)
+        }
+
+        async fn list_all(
+            &self,
+        ) -> Result<Vec<PairedDevice>, uc_core::ports::errors::PairedDeviceRepositoryError>
+        {
+            Ok(vec![])
+        }
+
+        async fn upsert(
+            &self,
+            _device: PairedDevice,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            self.upsert_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        async fn set_state(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+            _state: PairingState,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn update_last_seen(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+            _last_seen_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn delete(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn pairing_stages_device_without_pre_verification_repo_commit() {
+        staged_paired_device_store::clear();
+        let device_repo = Arc::new(CountingDeviceRepository::default());
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo.clone(),
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![0u8; 32],
+        );
+
+        orchestrator
+            .execute_action(
+                "session-staged",
+                "peer-remote",
+                PairingAction::PersistPairedDevice {
+                    session_id: "session-staged".to_string(),
+                    device: PairedDevice {
+                        peer_id: uc_core::ids::PeerId::from("peer-remote"),
+                        pairing_state: PairingState::Pending,
+                        identity_fingerprint: "fp-remote".to_string(),
+                        paired_at: Utc::now(),
+                        last_seen_at: None,
+                        device_name: "Remote Device".to_string(),
+                    },
+                },
+            )
+            .await
+            .expect("stage paired device");
+
+        assert_eq!(device_repo.upsert_calls(), 0);
+
+        let staged = staged_paired_device_store::take_by_peer_id("peer-remote");
+        assert!(staged.is_some());
     }
 
     #[tokio::test]
