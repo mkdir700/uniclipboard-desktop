@@ -14,7 +14,10 @@ use uc_core::{
     ports::{
         DiscoveryPort, NetworkControlPort, NetworkPort, SetupEventPort, SetupStatusPort, TimerPort,
     },
-    security::space_access::event::SpaceAccessEvent,
+    security::space_access::{
+        event::SpaceAccessEvent,
+        state::{DenyReason, SpaceAccessState},
+    },
     security::{model::Passphrase, SecretString},
     setup::{
         SetupAction, SetupError as SetupDomainError, SetupEvent, SetupState, SetupStateMachine,
@@ -265,7 +268,6 @@ impl SetupOrchestrator {
                 }
                 SetupAction::StartJoinSpaceAccess => {
                     self.start_join_space_access().await?;
-                    follow_up_events.push(SetupEvent::JoinSpaceSucceeded);
                     debug!("setup action StartJoinSpaceAccess completed");
                 }
             }
@@ -313,6 +315,9 @@ impl SetupOrchestrator {
                 );
                 SetupError::PairingFailed
             })?;
+
+        self.start_space_access_result_listener(pairing_session_id.clone())
+            .await;
 
         let joiner_offer = if let Some(local_offer) = {
             let guard = self.joiner_offer.lock().await;
@@ -419,6 +424,94 @@ impl SetupOrchestrator {
             })?;
 
         Ok(())
+    }
+
+    async fn start_space_access_result_listener(&self, session_id: String) {
+        let context = Arc::clone(&self.context);
+        let setup_event_port = Arc::clone(&self.setup_event_port);
+        let mark_setup_complete = Arc::clone(&self.mark_setup_complete);
+        let pairing_session_id = Arc::clone(&self.pairing_session_id);
+        let space_access_orchestrator = Arc::clone(&self.space_access_orchestrator);
+
+        tokio::spawn(async move {
+            loop {
+                if !Self::pairing_session_matches(&pairing_session_id, &session_id).await {
+                    break;
+                }
+
+                let space_access_state = space_access_orchestrator.get_state().await;
+                let Some(setup_event) =
+                    Self::map_setup_event_from_space_access_state(&space_access_state, &session_id)
+                else {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    continue;
+                };
+
+                let _dispatch_guard = context.acquire_dispatch_lock().await;
+                let current = context.get_state().await;
+                let (next, actions) = SetupStateMachine::transition(current, setup_event);
+
+                for action in actions {
+                    if matches!(action, SetupAction::MarkSetupComplete) {
+                        if let Err(err) = mark_setup_complete.execute().await {
+                            error!(
+                                error = %err,
+                                session_id = %session_id,
+                                "mark setup complete failed after space access completion"
+                            );
+                            let failed_state = SetupState::JoinSpaceInputPassphrase {
+                                error: Some(SetupDomainError::PairingFailed),
+                            };
+                            context.set_state(failed_state.clone()).await;
+                            setup_event_port
+                                .emit_setup_state_changed(failed_state, Some(session_id.clone()))
+                                .await;
+                            return;
+                        }
+                    }
+                }
+
+                context.set_state(next.clone()).await;
+                setup_event_port
+                    .emit_setup_state_changed(next, Some(session_id.clone()))
+                    .await;
+                break;
+            }
+        });
+    }
+
+    fn map_setup_event_from_space_access_state(
+        space_access_state: &SpaceAccessState,
+        session_id: &str,
+    ) -> Option<SetupEvent> {
+        match space_access_state {
+            SpaceAccessState::Granted {
+                pairing_session_id, ..
+            } if pairing_session_id == session_id => Some(SetupEvent::JoinSpaceSucceeded),
+            SpaceAccessState::Denied {
+                pairing_session_id,
+                reason,
+                ..
+            } if pairing_session_id == session_id => Some(SetupEvent::JoinSpaceFailed {
+                error: Self::map_space_access_deny_reason(reason),
+            }),
+            SpaceAccessState::Cancelled {
+                pairing_session_id, ..
+            } if pairing_session_id == session_id => Some(SetupEvent::JoinSpaceFailed {
+                error: SetupDomainError::PairingFailed,
+            }),
+            _ => None,
+        }
+    }
+
+    fn map_space_access_deny_reason(reason: &DenyReason) -> SetupDomainError {
+        match reason {
+            DenyReason::InvalidProof => SetupDomainError::PassphraseInvalidOrMismatch,
+            DenyReason::Expired
+            | DenyReason::SpaceMismatch
+            | DenyReason::SessionMismatch
+            | DenyReason::InternalError => SetupDomainError::PairingFailed,
+        }
     }
 
     async fn capture_context(&self, event: SetupEvent) -> SetupEvent {
@@ -1161,6 +1254,38 @@ mod tests {
         }
     }
 
+    struct SucceedSpaceAccessCrypto;
+
+    #[async_trait]
+    impl CryptoPort for SucceedSpaceAccessCrypto {
+        async fn generate_nonce32(&self) -> [u8; 32] {
+            [1u8; 32]
+        }
+
+        async fn export_keyslot_blob(
+            &self,
+            _space_id: &uc_core::ids::SpaceId,
+        ) -> anyhow::Result<KeySlot> {
+            Err(anyhow::anyhow!("unused in joiner flow"))
+        }
+
+        async fn derive_master_key_from_keyslot(
+            &self,
+            _keyslot_blob: &[u8],
+            _passphrase: SecretString,
+        ) -> anyhow::Result<MasterKey> {
+            MasterKey::from_bytes(&[7u8; 32]).map_err(|err| anyhow::anyhow!(err.to_string()))
+        }
+    }
+
+    struct SucceedSpaceAccessCryptoFactory;
+
+    impl SpaceAccessCryptoFactory for SucceedSpaceAccessCryptoFactory {
+        fn build(&self, _passphrase: SecretString) -> Box<dyn CryptoPort> {
+            Box::new(SucceedSpaceAccessCrypto)
+        }
+    }
+
     struct NoopSpaceAccessNetworkPort;
 
     #[async_trait]
@@ -1412,6 +1537,10 @@ mod tests {
         Arc::new(NoopSpaceAccessCryptoFactory)
     }
 
+    fn build_success_crypto_factory() -> Arc<dyn SpaceAccessCryptoFactory> {
+        Arc::new(SucceedSpaceAccessCryptoFactory)
+    }
+
     fn build_network_port() -> Arc<dyn NetworkPort> {
         Arc::new(NoopSpaceAccessNetworkPort)
     }
@@ -1436,9 +1565,10 @@ mod tests {
         Arc::new(MockSetupEventPort::default())
     }
 
-    fn build_orchestrator_with_initialize_encryption(
+    fn build_orchestrator_with_initialize_encryption_and_crypto_factory(
         setup_status: Arc<dyn SetupStatusPort>,
         initialize_encryption: Arc<InitializeEncryption>,
+        crypto_factory: Arc<dyn SpaceAccessCryptoFactory>,
     ) -> SetupOrchestrator {
         let mark_setup_complete = Arc::new(MarkSetupComplete::new(setup_status.clone()));
 
@@ -1452,12 +1582,23 @@ mod tests {
             build_space_access_orchestrator(),
             build_discovery_port(),
             build_network_control(),
-            build_crypto_factory(),
+            crypto_factory,
             build_network_port(),
             build_transport_port(),
             build_proof_port(),
             build_timer_port(),
             build_persistence_port(),
+        )
+    }
+
+    fn build_orchestrator_with_initialize_encryption(
+        setup_status: Arc<dyn SetupStatusPort>,
+        initialize_encryption: Arc<InitializeEncryption>,
+    ) -> SetupOrchestrator {
+        build_orchestrator_with_initialize_encryption_and_crypto_factory(
+            setup_status,
+            initialize_encryption,
+            build_crypto_factory(),
         )
     }
 
@@ -1992,6 +2133,180 @@ mod tests {
             .expect("local joiner offer should be hydrated from space access context");
         assert_eq!(stored_offer.space_id.as_ref(), offer.space_id.as_ref());
         assert_eq!(stored_offer.challenge_nonce, offer.challenge_nonce);
+    }
+
+    async fn prepare_join_passphrase_submission(
+        orchestrator: &SetupOrchestrator,
+        session_id: &str,
+    ) {
+        let offer = SpaceAccessJoinerOffer {
+            space_id: uc_core::ids::SpaceId::from("space-join-await"),
+            keyslot_blob: vec![1, 2, 3, 4],
+            challenge_nonce: [3; 32],
+        };
+
+        {
+            let context = orchestrator.space_access_orchestrator.context();
+            let mut guard = context.lock().await;
+            guard.joiner_offer = Some(offer.clone());
+        }
+
+        *orchestrator.selected_peer_id.lock().await = Some("peer-join-await".to_string());
+        *orchestrator.pairing_session_id.lock().await = Some(session_id.to_string());
+        *orchestrator.joiner_offer.lock().await = Some(offer);
+
+        orchestrator
+            .context
+            .set_state(SetupState::JoinSpaceInputPassphrase { error: None })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn submit_passphrase_does_not_complete_before_space_access_result() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator_with_initialize_encryption_and_crypto_factory(
+            setup_status.clone(),
+            build_initialize_encryption(),
+            build_success_crypto_factory(),
+        );
+
+        prepare_join_passphrase_submission(&orchestrator, "session-join-await").await;
+
+        let state = orchestrator
+            .dispatch(SetupEvent::SubmitPassphrase {
+                passphrase: SecretString::new("join-secret".to_string()),
+            })
+            .await
+            .expect("submit passphrase should start async join flow");
+
+        assert!(matches!(state, SetupState::ProcessingJoinSpace { .. }));
+        let status = setup_status.get_status().await.expect("get setup status");
+        assert!(!status.has_completed);
+    }
+
+    async fn dispatch_space_access_result(
+        orchestrator: &SetupOrchestrator,
+        event: SpaceAccessEvent,
+        session_id: &str,
+    ) {
+        let crypto = orchestrator
+            .crypto_factory
+            .build(SecretString::new("join-secret".to_string()));
+        let mut transport = orchestrator.transport_port.lock().await;
+        let mut timer = orchestrator.timer_port.lock().await;
+        let mut store = orchestrator.persistence_port.lock().await;
+        let mut executor = SpaceAccessExecutor {
+            crypto: crypto.as_ref(),
+            net: orchestrator.network_port.as_ref(),
+            transport: &mut *transport,
+            proof: orchestrator.proof_port.as_ref(),
+            timer: &mut *timer,
+            store: &mut *store,
+        };
+
+        orchestrator
+            .space_access_orchestrator
+            .dispatch(&mut executor, event, Some(session_id.to_string()))
+            .await
+            .expect("space access result dispatch should succeed");
+    }
+
+    #[tokio::test]
+    async fn setup_completes_after_access_granted_result_arrives() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator_with_initialize_encryption_and_crypto_factory(
+            setup_status.clone(),
+            build_initialize_encryption(),
+            build_success_crypto_factory(),
+        );
+        let session_id = "session-join-granted";
+
+        prepare_join_passphrase_submission(&orchestrator, session_id).await;
+
+        let state = orchestrator
+            .dispatch(SetupEvent::SubmitPassphrase {
+                passphrase: SecretString::new("join-secret".to_string()),
+            })
+            .await
+            .expect("submit passphrase should enter processing");
+        assert!(matches!(state, SetupState::ProcessingJoinSpace { .. }));
+
+        dispatch_space_access_result(
+            &orchestrator,
+            SpaceAccessEvent::AccessGranted {
+                pairing_session_id: session_id.to_string(),
+                space_id: uc_core::ids::SpaceId::from("space-join-await"),
+            },
+            session_id,
+        )
+        .await;
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            if matches!(orchestrator.get_state().await, SetupState::Completed) {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "setup did not transition to completed after access granted"
+            );
+            sleep(Duration::from_millis(10)).await;
+        }
+
+        let status = setup_status.get_status().await.expect("get setup status");
+        assert!(status.has_completed);
+    }
+
+    #[tokio::test]
+    async fn setup_returns_to_passphrase_on_access_denied_result() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator_with_initialize_encryption_and_crypto_factory(
+            setup_status.clone(),
+            build_initialize_encryption(),
+            build_success_crypto_factory(),
+        );
+        let session_id = "session-join-denied";
+
+        prepare_join_passphrase_submission(&orchestrator, session_id).await;
+
+        let state = orchestrator
+            .dispatch(SetupEvent::SubmitPassphrase {
+                passphrase: SecretString::new("join-secret".to_string()),
+            })
+            .await
+            .expect("submit passphrase should enter processing");
+        assert!(matches!(state, SetupState::ProcessingJoinSpace { .. }));
+
+        dispatch_space_access_result(
+            &orchestrator,
+            SpaceAccessEvent::AccessDenied {
+                pairing_session_id: session_id.to_string(),
+                space_id: uc_core::ids::SpaceId::from("space-join-await"),
+                reason: uc_core::security::space_access::state::DenyReason::InvalidProof,
+            },
+            session_id,
+        )
+        .await;
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            if matches!(
+                orchestrator.get_state().await,
+                SetupState::JoinSpaceInputPassphrase {
+                    error: Some(SetupDomainError::PassphraseInvalidOrMismatch)
+                }
+            ) {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "setup did not transition back to passphrase input after access denied"
+            );
+            sleep(Duration::from_millis(10)).await;
+        }
+
+        let status = setup_status.get_status().await.expect("get setup status");
+        assert!(!status.has_completed);
     }
 
     enum JoinStepAction {

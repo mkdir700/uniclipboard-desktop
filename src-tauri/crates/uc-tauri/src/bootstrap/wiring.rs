@@ -1192,7 +1192,9 @@ struct SpaceAccessBusyProofPayload {
 #[serde(deny_unknown_fields)]
 struct SpaceAccessBusyResultPayload {
     kind: String,
-    sponsor_peer_id: String,
+    space_id: String,
+    #[serde(default)]
+    sponsor_peer_id: Option<String>,
     prepared_offer_exists: bool,
     joiner_offer_exists: bool,
     proof_artifact_exists: bool,
@@ -1378,8 +1380,12 @@ async fn run_space_access_completion_loop<R: Runtime>(
                 ts: event.ts,
             };
 
-            if let Err(err) = app.emit("space-access-completed", payload) {
+            if let Err(err) = app.emit("space-access-completed", &payload) {
                 warn!(error = %err, "Failed to emit space-access-completed event");
+            }
+
+            if let Err(err) = app.emit("p2p-space-access-completed", &payload) {
+                warn!(error = %err, "Failed to emit p2p-space-access-completed event");
             }
         }
     }
@@ -1803,7 +1809,7 @@ async fn handle_pairing_message<R: Runtime>(
                         }
                     }
                     Ok(SpaceAccessBusyPayload::Result(result)) => {
-                        let space_id = uc_core::ids::SpaceId::from(result.sponsor_peer_id.as_str());
+                        let space_id = uc_core::ids::SpaceId::from(result.space_id.as_str());
 
                         let event = if result.prepared_offer_exists
                             && result.joiner_offer_exists
@@ -3022,7 +3028,8 @@ mod tests {
 
         let reason = serde_json::json!({
             "kind": "space_access_result",
-            "sponsor_peer_id": "space-result-route",
+            "space_id": "space-result-route",
+            "sponsor_peer_id": "peer-sponsor",
             "prepared_offer_exists": true,
             "joiner_offer_exists": false,
             "proof_artifact_exists": true
@@ -3037,6 +3044,63 @@ mod tests {
             "peer-remote".to_string(),
             PairingMessage::Busy(uc_core::network::protocol::PairingBusy {
                 session_id: "session-result-route".to_string(),
+                reason: Some(reason),
+            }),
+            None,
+        )
+        .await;
+
+        let state = space_access_orchestrator.get_state().await;
+        assert!(matches!(
+            state,
+            uc_core::security::space_access::state::SpaceAccessState::Denied {
+                reason: uc_core::security::space_access::state::DenyReason::InvalidProof,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn busy_result_payload_allows_nullable_sponsor_peer_id() {
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+        let space_access_orchestrator = Arc::new(SpaceAccessOrchestrator::new());
+        let network: Arc<dyn NetworkPort> = Arc::new(NoopNetwork);
+        let runtime_ports =
+            test_runtime_space_access_ports(network.clone(), space_access_orchestrator.clone());
+        seed_waiting_decision_state(
+            space_access_orchestrator.as_ref(),
+            "session-null-sponsor-peer",
+            "space-null-sponsor-peer",
+        )
+        .await;
+
+        let reason = serde_json::json!({
+            "kind": "space_access_result",
+            "space_id": "space-null-sponsor-peer",
+            "sponsor_peer_id": null,
+            "prepared_offer_exists": true,
+            "joiner_offer_exists": false,
+            "proof_artifact_exists": false
+        })
+        .to_string();
+
+        handle_pairing_message::<Wry>(
+            orchestrator.as_ref(),
+            space_access_orchestrator.as_ref(),
+            network.as_ref(),
+            &runtime_ports,
+            "peer-remote".to_string(),
+            PairingMessage::Busy(uc_core::network::protocol::PairingBusy {
+                session_id: "session-null-sponsor-peer".to_string(),
                 reason: Some(reason),
             }),
             None,
@@ -3328,6 +3392,50 @@ mod tests {
         assert_eq!(value["ts"], 1735689600000_i64);
         assert!(value.get("session_id").is_none());
         assert!(value.get("peer_id").is_none());
+
+        drop(event_tx);
+        let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;
+    }
+
+    #[tokio::test]
+    async fn space_access_completion_loop_emits_p2p_frontend_event() {
+        let app = tauri::test::mock_app();
+        let app_handle = app.handle();
+        let (payload_tx, mut payload_rx) = mpsc::channel::<String>(1);
+        let payload_tx_clone = payload_tx.clone();
+        app_handle.listen("p2p-space-access-completed", move |event: tauri::Event| {
+            let _ = payload_tx_clone.try_send(event.payload().to_string());
+        });
+
+        let (event_tx, event_rx) = mpsc::channel(1);
+        let loop_handle = tokio::spawn(
+            run_space_access_completion_loop::<tauri::test::MockRuntime>(
+                event_rx,
+                Some(app_handle.clone()),
+            ),
+        );
+
+        event_tx
+            .send(SpaceAccessCompletedEvent {
+                session_id: "session-space-p2p".to_string(),
+                peer_id: "peer-space-p2p".to_string(),
+                success: true,
+                reason: None,
+                ts: 1735689600999,
+            })
+            .await
+            .expect("send completion event");
+
+        let payload = tokio::time::timeout(Duration::from_secs(1), payload_rx.recv())
+            .await
+            .expect("timeout waiting for payload")
+            .expect("payload received");
+        let value: serde_json::Value = serde_json::from_str(&payload).expect("payload json");
+        assert_eq!(value["sessionId"], "session-space-p2p");
+        assert_eq!(value["peerId"], "peer-space-p2p");
+        assert_eq!(value["success"], true);
+        assert_eq!(value["reason"], serde_json::Value::Null);
+        assert_eq!(value["ts"], 1735689600999_i64);
 
         drop(event_tx);
         let _ = tokio::time::timeout(Duration::from_secs(1), loop_handle).await;

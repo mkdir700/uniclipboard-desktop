@@ -80,8 +80,27 @@ impl SpaceAccessTransportPort for SpaceAccessNetworkAdapter {
     async fn send_result(&mut self, session_id: &SessionId) -> anyhow::Result<()> {
         let payload = {
             let context = self.context.lock().await;
+            let space_id = context
+                .prepared_offer
+                .as_ref()
+                .map(|offer| offer.space_id.as_str().to_string())
+                .or_else(|| {
+                    context
+                        .joiner_offer
+                        .as_ref()
+                        .map(|offer| offer.space_id.as_str().to_string())
+                })
+                .or_else(|| {
+                    context
+                        .proof_artifact
+                        .as_ref()
+                        .map(|proof| proof.space_id.as_str().to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("missing space_id in space access context"))?;
+
             serde_json::json!({
                 "kind": "space_access_result",
+                "space_id": space_id,
                 "sponsor_peer_id": context.sponsor_peer_id.clone(),
                 "prepared_offer_exists": context.prepared_offer.is_some(),
                 "joiner_offer_exists": context.joiner_offer.is_some(),
