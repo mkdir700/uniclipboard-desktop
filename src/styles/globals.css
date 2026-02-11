@@ -1,4 +1,6 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
+@source "../**/*.{ts,tsx,html}";
+@source "../../index.html";
 @import './decorum.css';
 
 @custom-variant dark (&:is(.dark *));
