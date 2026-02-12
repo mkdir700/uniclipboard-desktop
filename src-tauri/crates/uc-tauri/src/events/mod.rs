@@ -84,8 +84,8 @@ mod tests {
 
 /// Forward clipboard event to frontend
 /// 将剪贴板事件转发到前端
-pub fn forward_clipboard_event(
-    app: &AppHandle,
+pub fn forward_clipboard_event<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     event: ClipboardEvent,
 ) -> Result<(), Box<dyn std::error::Error>> {
     app.emit("clipboard://event", event)?;
@@ -94,8 +94,8 @@ pub fn forward_clipboard_event(
 
 /// Forward encryption event to frontend
 /// 将加密事件转发到前端
-pub fn forward_encryption_event(
-    app: &AppHandle,
+pub fn forward_encryption_event<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     event: EncryptionEvent,
 ) -> Result<(), Box<dyn std::error::Error>> {
     app.emit("encryption://event", event)?;

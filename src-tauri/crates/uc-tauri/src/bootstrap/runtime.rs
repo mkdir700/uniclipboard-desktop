@@ -235,7 +235,9 @@ impl AppRuntime {
                 watcher: start_watcher,
                 network: start_network,
                 announcer: Some(announcer),
-                emitter: Arc::new(crate::adapters::lifecycle::LoggingSessionReadyEmitter),
+                emitter: Arc::new(crate::adapters::lifecycle::TauriSessionReadyEmitter::new(
+                    app_handle.clone(),
+                )),
                 status: lifecycle_status.clone(),
                 lifecycle_emitter: Arc::new(
                     crate::adapters::lifecycle::LoggingLifecycleEventEmitter,
@@ -716,7 +718,9 @@ impl<'a> UseCases<'a> {
                 watcher: Arc::new(self.start_clipboard_watcher()),
                 network: Arc::new(self.start_network_after_unlock()),
                 announcer: Some(announcer),
-                emitter: Arc::new(crate::adapters::lifecycle::LoggingSessionReadyEmitter),
+                emitter: Arc::new(crate::adapters::lifecycle::TauriSessionReadyEmitter::new(
+                    self.runtime.app_handle.clone(),
+                )),
                 status: self.runtime.lifecycle_status.clone(),
                 lifecycle_emitter: Arc::new(
                     crate::adapters::lifecycle::LoggingLifecycleEventEmitter,
