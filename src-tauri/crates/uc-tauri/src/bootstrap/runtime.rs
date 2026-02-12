@@ -254,8 +254,9 @@ impl AppRuntime {
                 deps.network.clone(),
                 setup_ports.space_access_orchestrator.context(),
             )));
-        let proof_port: Arc<dyn uc_core::ports::space::ProofPort> =
-            Arc::new(HmacProofAdapter::new());
+        let proof_port: Arc<dyn uc_core::ports::space::ProofPort> = Arc::new(
+            HmacProofAdapter::new_with_encryption_session(deps.encryption_session.clone()),
+        );
         let timer_port: Arc<Mutex<dyn TimerPort>> = Arc::new(Mutex::new(Timer::new()));
         let persistence_port = Arc::new(Mutex::new(SpaceAccessPersistenceAdapter::new(
             deps.encryption_state.clone(),

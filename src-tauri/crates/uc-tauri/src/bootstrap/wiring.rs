@@ -39,7 +39,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{async_runtime, AppHandle, Emitter, Runtime};
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::events::{
     P2PPairingVerificationEvent, P2PPeerConnectionEvent, P2PPeerDiscoveryEvent,
@@ -66,6 +66,7 @@ use uc_core::ports::space::ProofPort;
 use uc_core::ports::*;
 use uc_core::security::model::{KeySlot, KeySlotFile};
 use uc_core::security::space_access::event::SpaceAccessEvent;
+use uc_core::security::space_access::{deny_reason_from_code, DENY_REASON_INVALID_PROOF};
 use uc_core::settings::model::Settings;
 use uc_core::setup::SetupState;
 use uc_infra::blob::BlobWriter;
@@ -993,7 +994,9 @@ pub fn start_background_tasks<R: Runtime>(
             pairing_network.clone(),
             pairing_space_access_orchestrator.context(),
         ))),
-        proof: Arc::new(HmacProofAdapter::new()),
+        proof: Arc::new(HmacProofAdapter::new_with_encryption_session(
+            deps.encryption_session.clone(),
+        )),
         timer: Arc::new(tokio::sync::Mutex::new(Timer::new())),
         persistence: Arc::new(tokio::sync::Mutex::new(SpaceAccessPersistenceAdapter::new(
             deps.encryption_state.clone(),
@@ -1195,9 +1198,9 @@ struct SpaceAccessBusyResultPayload {
     space_id: String,
     #[serde(default)]
     sponsor_peer_id: Option<String>,
-    prepared_offer_exists: bool,
-    joiner_offer_exists: bool,
-    proof_artifact_exists: bool,
+    success: bool,
+    #[serde(default)]
+    deny_reason: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -1698,24 +1701,39 @@ async fn handle_pairing_message<R: Runtime>(
                                 guard.joiner_offer = Some(joiner_offer);
                                 drop(guard);
 
-                                if let Err(err) = dispatch_space_access_busy_event(
-                                    space_access_orchestrator,
-                                    network,
-                                    space_access_runtime_ports,
-                                    SpaceAccessEvent::OfferAccepted {
-                                        pairing_session_id: session_id.clone(),
-                                        space_id,
-                                        expires_at: Utc::now() + chrono::Duration::seconds(60),
-                                    },
-                                    &session_id,
-                                )
-                                .await
-                                {
-                                    warn!(
-                                        error = %err,
+                                let state = space_access_orchestrator.get_state().await;
+                                if matches!(
+                                    state,
+                                    uc_core::security::space_access::state::SpaceAccessState::WaitingOffer {
+                                        ..
+                                    }
+                                ) {
+                                    if let Err(err) = dispatch_space_access_busy_event(
+                                        space_access_orchestrator,
+                                        network,
+                                        space_access_runtime_ports,
+                                        SpaceAccessEvent::OfferAccepted {
+                                            pairing_session_id: session_id.clone(),
+                                            space_id,
+                                            expires_at: Utc::now() + chrono::Duration::seconds(60),
+                                        },
+                                        &session_id,
+                                    )
+                                    .await
+                                    {
+                                        warn!(
+                                            error = %err,
+                                            session_id = %session_id,
+                                            peer_id = %peer_id,
+                                            "Failed to dispatch space access offer accepted"
+                                        );
+                                    }
+                                } else {
+                                    debug!(
                                         session_id = %session_id,
                                         peer_id = %peer_id,
-                                        "Failed to dispatch space access offer accepted"
+                                        ?state,
+                                        "Skipping OfferAccepted dispatch because state is not WaitingOffer"
                                     );
                                 }
                             }
@@ -1811,10 +1829,27 @@ async fn handle_pairing_message<R: Runtime>(
                     Ok(SpaceAccessBusyPayload::Result(result)) => {
                         let space_id = uc_core::ids::SpaceId::from(result.space_id.as_str());
 
-                        let event = if result.prepared_offer_exists
-                            && result.joiner_offer_exists
-                            && result.proof_artifact_exists
-                        {
+                        let deny_reason = match result.deny_reason.as_deref() {
+                            Some(code) => {
+                                if let Some(reason) = deny_reason_from_code(code) {
+                                    reason
+                                } else {
+                                    warn!(
+                                        session_id = %session_id,
+                                        peer_id = %peer_id,
+                                        deny_reason = %code,
+                                        fallback = DENY_REASON_INVALID_PROOF,
+                                        "Unknown deny reason in space access result, fallback to invalid_proof"
+                                    );
+                                    uc_core::security::space_access::state::DenyReason::InvalidProof
+                                }
+                            }
+                            None => {
+                                uc_core::security::space_access::state::DenyReason::InvalidProof
+                            }
+                        };
+
+                        let event = if result.success {
                             SpaceAccessEvent::AccessGranted {
                                 pairing_session_id: session_id.clone(),
                                 space_id,
@@ -1823,8 +1858,7 @@ async fn handle_pairing_message<R: Runtime>(
                             SpaceAccessEvent::AccessDenied {
                                 pairing_session_id: session_id.clone(),
                                 space_id,
-                                reason:
-                                    uc_core::security::space_access::state::DenyReason::InvalidProof,
+                                reason: deny_reason,
                             }
                         };
 
@@ -2137,12 +2171,13 @@ mod tests {
     use std::sync::Mutex;
     use std::time::Duration;
     use tauri::{Listener, Wry};
-    use tokio::sync::mpsc;
+    use tokio::sync::{mpsc, Mutex as TokioMutex};
     use uc_app::usecases::PairingConfig;
     use uc_core::network::paired_device::{PairedDevice, PairingState};
     use uc_core::network::protocol::{PairingChallenge, PairingRequest};
     use uc_core::network::{ConnectedPeer, DiscoveredPeer, PairingMessage};
-    use uc_core::ports::NetworkPort;
+    use uc_core::ports::{EncryptionSessionPort, NetworkPort};
+    use uc_core::security::model::{EncryptionError, MasterKey};
 
     #[test]
     fn test_wiring_error_display() {
@@ -2174,6 +2209,18 @@ mod tests {
     struct SuccessSpaceAccessProof;
 
     struct SuccessSpaceAccessPersistence;
+
+    struct FixedMasterKeyEncryptionSession {
+        master_key: TokioMutex<Option<MasterKey>>,
+    }
+
+    impl FixedMasterKeyEncryptionSession {
+        fn new(master_key: MasterKey) -> Self {
+            Self {
+                master_key: TokioMutex::new(Some(master_key)),
+            }
+        }
+    }
 
     fn test_keyslot(profile_id: &str) -> uc_core::security::model::KeySlot {
         uc_core::security::model::KeySlot {
@@ -2620,6 +2667,31 @@ mod tests {
     }
 
     #[async_trait]
+    impl EncryptionSessionPort for FixedMasterKeyEncryptionSession {
+        async fn is_ready(&self) -> bool {
+            self.master_key.lock().await.is_some()
+        }
+
+        async fn get_master_key(&self) -> Result<MasterKey, EncryptionError> {
+            self.master_key
+                .lock()
+                .await
+                .clone()
+                .ok_or(EncryptionError::NotInitialized)
+        }
+
+        async fn set_master_key(&self, master_key: MasterKey) -> Result<(), EncryptionError> {
+            *self.master_key.lock().await = Some(master_key);
+            Ok(())
+        }
+
+        async fn clear(&self) -> Result<(), EncryptionError> {
+            *self.master_key.lock().await = None;
+            Ok(())
+        }
+    }
+
+    #[async_trait]
     impl uc_core::ports::space::CryptoPort for SuccessSpaceAccessCrypto {
         async fn generate_nonce32(&self) -> [u8; 32] {
             [3; 32]
@@ -2810,15 +2882,61 @@ mod tests {
         network: Arc<dyn NetworkPort>,
         space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
     ) -> RuntimeSpaceAccessPorts {
+        test_runtime_space_access_ports_with_proof(
+            network,
+            space_access_orchestrator,
+            Arc::new(HmacProofAdapter::new()),
+        )
+    }
+
+    fn test_runtime_space_access_ports_with_proof(
+        network: Arc<dyn NetworkPort>,
+        space_access_orchestrator: Arc<SpaceAccessOrchestrator>,
+        proof: Arc<dyn uc_core::ports::space::ProofPort>,
+    ) -> RuntimeSpaceAccessPorts {
         RuntimeSpaceAccessPorts {
             transport: Arc::new(tokio::sync::Mutex::new(SpaceAccessNetworkAdapter::new(
                 network,
                 space_access_orchestrator.context(),
             ))),
-            proof: Arc::new(HmacProofAdapter::new()),
+            proof,
             timer: Arc::new(tokio::sync::Mutex::new(NoopSpaceAccessTimer)),
             persistence: Arc::new(tokio::sync::Mutex::new(SuccessSpaceAccessPersistence)),
         }
+    }
+
+    async fn seed_waiting_offer_state(orchestrator: &SpaceAccessOrchestrator, session_id: &str) {
+        let mut transport = SuccessSpaceAccessTransport;
+        let proof = SuccessSpaceAccessProof;
+        let mut timer = NoopSpaceAccessTimer;
+        let mut store = SuccessSpaceAccessPersistence;
+        let crypto = SuccessSpaceAccessCrypto;
+        let network = NoopNetwork;
+        let mut executor = uc_app::usecases::space_access::SpaceAccessExecutor {
+            crypto: &crypto,
+            net: &network,
+            transport: &mut transport,
+            proof: &proof,
+            timer: &mut timer,
+            store: &mut store,
+        };
+
+        let state = orchestrator
+            .dispatch(
+                &mut executor,
+                SpaceAccessEvent::JoinRequested {
+                    pairing_session_id: session_id.to_string(),
+                    ttl_secs: 60,
+                },
+                Some(session_id.to_string()),
+            )
+            .await
+            .expect("seed waiting offer state");
+
+        assert!(matches!(
+            state,
+            uc_core::security::space_access::state::SpaceAccessState::WaitingOffer { .. }
+        ));
     }
 
     #[tokio::test]
@@ -2919,6 +3037,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn busy_offer_payload_dispatches_offer_accepted_when_waiting_offer() {
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+        let space_access_orchestrator = Arc::new(SpaceAccessOrchestrator::new());
+        let network: Arc<dyn NetworkPort> = Arc::new(NoopNetwork);
+        let runtime_ports =
+            test_runtime_space_access_ports(network.clone(), space_access_orchestrator.clone());
+
+        seed_waiting_offer_state(space_access_orchestrator.as_ref(), "session-offer-waiting").await;
+
+        let reason = serde_json::json!({
+            "kind": "space_access_offer",
+            "space_id": "space-offer-waiting",
+            "nonce": vec![6; 32],
+            "keyslot": test_keyslot("space-offer-waiting")
+        })
+        .to_string();
+
+        handle_pairing_message::<Wry>(
+            orchestrator.as_ref(),
+            space_access_orchestrator.as_ref(),
+            network.as_ref(),
+            &runtime_ports,
+            "peer-remote".to_string(),
+            PairingMessage::Busy(uc_core::network::protocol::PairingBusy {
+                session_id: "session-offer-waiting".to_string(),
+                reason: Some(reason),
+            }),
+            None,
+        )
+        .await;
+
+        let state = space_access_orchestrator.get_state().await;
+        assert!(matches!(
+            state,
+            uc_core::security::space_access::state::SpaceAccessState::WaitingUserPassphrase { .. }
+        ));
+    }
+
+    #[tokio::test]
     async fn busy_proof_payload_routes_to_proof_branch_and_validates_nonce_length() {
         let device_repo = Arc::new(NoopPairedDeviceRepository);
         let (orchestrator, _action_rx) = PairingOrchestrator::new(
@@ -3004,6 +3170,90 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn busy_proof_payload_accepts_valid_hmac_with_session_master_key() {
+        let device_repo = Arc::new(NoopPairedDeviceRepository);
+        let (orchestrator, _action_rx) = PairingOrchestrator::new(
+            PairingConfig::default(),
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![9; 32],
+        );
+        let orchestrator = Arc::new(orchestrator);
+        let space_access_orchestrator = Arc::new(SpaceAccessOrchestrator::new());
+        let network: Arc<dyn NetworkPort> = Arc::new(NoopNetwork);
+        let master_key = MasterKey::from_bytes(&[4; 32]).expect("master key");
+        let proof_port: Arc<dyn uc_core::ports::space::ProofPort> =
+            Arc::new(HmacProofAdapter::new_with_encryption_session(Arc::new(
+                FixedMasterKeyEncryptionSession::new(master_key.clone()),
+            )));
+        let runtime_ports = test_runtime_space_access_ports_with_proof(
+            network.clone(),
+            space_access_orchestrator.clone(),
+            proof_port,
+        );
+
+        seed_waiting_joiner_proof_state(
+            space_access_orchestrator.as_ref(),
+            "session-proof-valid",
+            "space-proof-valid",
+        )
+        .await;
+
+        {
+            let context = space_access_orchestrator.context();
+            let mut guard = context.lock().await;
+            guard.sponsor_peer_id = Some("peer-sponsor".to_string());
+        }
+
+        let challenge_nonce = {
+            let context = space_access_orchestrator.context();
+            let guard = context.lock().await;
+            guard.prepared_offer.as_ref().expect("prepared offer").nonce
+        };
+
+        let proof = HmacProofAdapter::new()
+            .build_proof(
+                &uc_core::ids::SessionId::from("session-proof-valid"),
+                &uc_core::ids::SpaceId::from("space-proof-valid"),
+                challenge_nonce,
+                &master_key,
+            )
+            .await
+            .expect("build proof");
+
+        let reason = serde_json::json!({
+            "kind": "space_access_proof",
+            "pairing_session_id": "session-proof-valid",
+            "space_id": "space-proof-valid",
+            "challenge_nonce": challenge_nonce,
+            "proof_bytes": proof.proof_bytes
+        })
+        .to_string();
+
+        handle_pairing_message::<Wry>(
+            orchestrator.as_ref(),
+            space_access_orchestrator.as_ref(),
+            network.as_ref(),
+            &runtime_ports,
+            "peer-remote".to_string(),
+            PairingMessage::Busy(uc_core::network::protocol::PairingBusy {
+                session_id: "session-proof-valid".to_string(),
+                reason: Some(reason),
+            }),
+            None,
+        )
+        .await;
+
+        let state = space_access_orchestrator.get_state().await;
+        assert!(matches!(
+            state,
+            uc_core::security::space_access::state::SpaceAccessState::Granted { .. }
+        ));
+    }
+
+    #[tokio::test]
     async fn busy_result_payload_routes_to_access_denied_transition() {
         let device_repo = Arc::new(NoopPairedDeviceRepository);
         let (orchestrator, _action_rx) = PairingOrchestrator::new(
@@ -3030,9 +3280,8 @@ mod tests {
             "kind": "space_access_result",
             "space_id": "space-result-route",
             "sponsor_peer_id": "peer-sponsor",
-            "prepared_offer_exists": true,
-            "joiner_offer_exists": false,
-            "proof_artifact_exists": true
+            "success": false,
+            "deny_reason": DENY_REASON_INVALID_PROOF
         })
         .to_string();
 
@@ -3061,7 +3310,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn busy_result_payload_allows_nullable_sponsor_peer_id() {
+    async fn busy_result_payload_routes_to_access_granted_transition() {
         let device_repo = Arc::new(NoopPairedDeviceRepository);
         let (orchestrator, _action_rx) = PairingOrchestrator::new(
             PairingConfig::default(),
@@ -3078,18 +3327,17 @@ mod tests {
             test_runtime_space_access_ports(network.clone(), space_access_orchestrator.clone());
         seed_waiting_decision_state(
             space_access_orchestrator.as_ref(),
-            "session-null-sponsor-peer",
-            "space-null-sponsor-peer",
+            "session-result-granted",
+            "space-result-granted",
         )
         .await;
 
         let reason = serde_json::json!({
             "kind": "space_access_result",
-            "space_id": "space-null-sponsor-peer",
+            "space_id": "space-result-granted",
             "sponsor_peer_id": null,
-            "prepared_offer_exists": true,
-            "joiner_offer_exists": false,
-            "proof_artifact_exists": false
+            "success": true,
+            "deny_reason": null
         })
         .to_string();
 
@@ -3100,7 +3348,7 @@ mod tests {
             &runtime_ports,
             "peer-remote".to_string(),
             PairingMessage::Busy(uc_core::network::protocol::PairingBusy {
-                session_id: "session-null-sponsor-peer".to_string(),
+                session_id: "session-result-granted".to_string(),
                 reason: Some(reason),
             }),
             None,
@@ -3110,10 +3358,7 @@ mod tests {
         let state = space_access_orchestrator.get_state().await;
         assert!(matches!(
             state,
-            uc_core::security::space_access::state::SpaceAccessState::Denied {
-                reason: uc_core::security::space_access::state::DenyReason::InvalidProof,
-                ..
-            }
+            uc_core::security::space_access::state::SpaceAccessState::Granted { .. }
         ));
     }
 
