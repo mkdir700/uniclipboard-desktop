@@ -2,10 +2,12 @@ use async_trait::async_trait;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use uc_core::ids::{SessionId, SpaceId};
 use uc_core::ports::space::ProofPort;
+use uc_core::ports::EncryptionSessionPort;
 use uc_core::security::model::MasterKey;
 use uc_core::security::space_access::SpaceAccessProofArtifact;
 
@@ -20,12 +22,21 @@ struct ProofCacheKey {
 
 pub struct HmacProofAdapter {
     key_cache: Mutex<HashMap<ProofCacheKey, [u8; 32]>>,
+    encryption_session: Option<Arc<dyn EncryptionSessionPort>>,
 }
 
 impl HmacProofAdapter {
     pub fn new() -> Self {
         Self {
             key_cache: Mutex::new(HashMap::new()),
+            encryption_session: None,
+        }
+    }
+
+    pub fn new_with_encryption_session(encryption_session: Arc<dyn EncryptionSessionPort>) -> Self {
+        Self {
+            key_cache: Mutex::new(HashMap::new()),
+            encryption_session: Some(encryption_session),
         }
     }
 
@@ -118,6 +129,25 @@ impl ProofPort for HmacProofAdapter {
             cache.get(&cache_key).copied()
         };
 
+        let master_key = if let Some(master_key) = master_key {
+            Some(master_key)
+        } else if let Some(encryption_session) = &self.encryption_session {
+            match encryption_session.get_master_key().await {
+                Ok(master_key) => {
+                    let mut master_key_bytes = [0u8; 32];
+                    master_key_bytes.copy_from_slice(master_key.as_bytes());
+                    self.key_cache
+                        .lock()
+                        .await
+                        .insert(cache_key, master_key_bytes);
+                    Some(master_key_bytes)
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
         let Some(master_key) = master_key else {
             return Ok(false);
         };
@@ -136,6 +166,44 @@ impl ProofPort for HmacProofAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uc_core::security::model::EncryptionError;
+
+    struct TestEncryptionSessionPort {
+        master_key: Mutex<Option<MasterKey>>,
+    }
+
+    impl TestEncryptionSessionPort {
+        fn with_master_key(master_key: MasterKey) -> Self {
+            Self {
+                master_key: Mutex::new(Some(master_key)),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl EncryptionSessionPort for TestEncryptionSessionPort {
+        async fn is_ready(&self) -> bool {
+            self.master_key.lock().await.is_some()
+        }
+
+        async fn get_master_key(&self) -> Result<MasterKey, EncryptionError> {
+            self.master_key
+                .lock()
+                .await
+                .clone()
+                .ok_or_else(|| EncryptionError::NotInitialized)
+        }
+
+        async fn set_master_key(&self, master_key: MasterKey) -> Result<(), EncryptionError> {
+            *self.master_key.lock().await = Some(master_key);
+            Ok(())
+        }
+
+        async fn clear(&self) -> Result<(), EncryptionError> {
+            *self.master_key.lock().await = None;
+            Ok(())
+        }
+    }
 
     #[tokio::test]
     async fn build_and_verify_round_trip_succeeds() {
@@ -198,5 +266,29 @@ mod tests {
             .await
             .expect("verify proof");
         assert!(!valid);
+    }
+
+    #[tokio::test]
+    async fn verify_succeeds_with_encryption_session_fallback() {
+        let builder = HmacProofAdapter::new();
+        let session_id = SessionId::from("session-1");
+        let space_id = SpaceId::from("space-1");
+        let nonce = [4u8; 32];
+        let master_key = MasterKey::from_bytes(&[55u8; 32]).expect("master key");
+
+        let proof = builder
+            .build_proof(&session_id, &space_id, nonce, &master_key)
+            .await
+            .expect("build proof");
+
+        let verifier = HmacProofAdapter::new_with_encryption_session(Arc::new(
+            TestEncryptionSessionPort::with_master_key(master_key),
+        ));
+
+        let valid = verifier
+            .verify_proof(&proof, nonce)
+            .await
+            .expect("verify proof");
+        assert!(valid);
     }
 }
