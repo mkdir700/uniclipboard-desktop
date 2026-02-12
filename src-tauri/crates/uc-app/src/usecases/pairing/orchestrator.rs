@@ -863,25 +863,32 @@ impl PairingOrchestrator {
                         tracing::info!(
                             session_id = %session_id,
                             peer_id = %device.peer_id,
-                            "Staging paired device until verification completes"
+                            "Persisting paired device before verification completion"
                         );
                         let peer_id = device.peer_id.to_string();
-                        staged_paired_device_store::stage(&session_id, device);
+                        staged_paired_device_store::stage(&session_id, device.clone());
+
+                        let persist_result = device_repo.upsert(device).await;
 
                         let actions = {
                             let mut sessions = sessions.write().await;
                             if let Some(context) = sessions.get_mut(&session_id) {
-                                let (_state, actions) = context.state_machine.handle_event(
-                                    PairingEvent::PersistOk {
+                                let event = match persist_result {
+                                    Ok(()) => PairingEvent::PersistOk {
                                         session_id: session_id.clone(),
                                         device_id: peer_id,
                                     },
-                                    Utc::now(),
-                                );
+                                    Err(err) => PairingEvent::PersistErr {
+                                        session_id: session_id.clone(),
+                                        error: err.to_string(),
+                                    },
+                                };
+                                let (_state, actions) =
+                                    context.state_machine.handle_event(event, Utc::now());
                                 tracing::debug!(
                                     session_id = %session_id,
                                     num_actions = actions.len(),
-                                    "PersistOk event generated actions"
+                                    "Persist event generated actions"
                                 );
                                 actions
                             } else {
@@ -1183,6 +1190,8 @@ mod tests {
         upsert_calls: AtomicUsize,
     }
 
+    struct FailingDeviceRepository;
+
     impl CountingDeviceRepository {
         fn upsert_calls(&self) -> usize {
             self.upsert_calls.load(Ordering::SeqCst)
@@ -1286,8 +1295,60 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait]
+    impl PairedDeviceRepositoryPort for FailingDeviceRepository {
+        async fn get_by_peer_id(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+        ) -> Result<Option<PairedDevice>, uc_core::ports::errors::PairedDeviceRepositoryError>
+        {
+            Ok(None)
+        }
+
+        async fn list_all(
+            &self,
+        ) -> Result<Vec<PairedDevice>, uc_core::ports::errors::PairedDeviceRepositoryError>
+        {
+            Ok(vec![])
+        }
+
+        async fn upsert(
+            &self,
+            _device: PairedDevice,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Err(
+                uc_core::ports::errors::PairedDeviceRepositoryError::Storage(
+                    "injected upsert failure".to_string(),
+                ),
+            )
+        }
+
+        async fn set_state(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+            _state: PairingState,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn update_last_seen(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+            _last_seen_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+
+        async fn delete(
+            &self,
+            _peer_id: &uc_core::ids::PeerId,
+        ) -> Result<(), uc_core::ports::errors::PairedDeviceRepositoryError> {
+            Ok(())
+        }
+    }
+
     #[tokio::test]
-    async fn pairing_stages_device_without_pre_verification_repo_commit() {
+    async fn pairing_persists_device_before_marking_persist_ok() {
         staged_paired_device_store::clear();
         let device_repo = Arc::new(CountingDeviceRepository::default());
         let (orchestrator, _action_rx) = PairingOrchestrator::new(
@@ -1318,7 +1379,7 @@ mod tests {
             .await
             .expect("stage paired device");
 
-        assert_eq!(device_repo.upsert_calls(), 0);
+        assert_eq!(device_repo.upsert_calls(), 1);
 
         let staged = staged_paired_device_store::take_by_peer_id("peer-remote");
         assert!(staged.is_some());
@@ -1558,6 +1619,106 @@ mod tests {
         assert!(confirm.success);
         assert_eq!(confirm.sender_device_name, "LocalDevice");
         assert_eq!(confirm.device_id, "device-123");
+    }
+
+    #[tokio::test]
+    async fn pairing_emits_failed_event_when_persist_upsert_fails() {
+        staged_paired_device_store::clear();
+        let config = PairingConfig::default();
+        let device_repo = Arc::new(FailingDeviceRepository);
+        let (orchestrator, mut action_rx) = PairingOrchestrator::new(
+            config,
+            device_repo,
+            "LocalDevice".to_string(),
+            "device-123".to_string(),
+            "peer-local".to_string(),
+            vec![0u8; 32],
+        );
+
+        let mut event_rx = crate::usecases::pairing::PairingEventPort::subscribe(&orchestrator)
+            .await
+            .expect("subscribe event port");
+
+        let request = PairingRequest {
+            session_id: "session-persist-fail".to_string(),
+            device_name: "PeerDevice".to_string(),
+            device_id: "device-999".to_string(),
+            peer_id: "peer-local".to_string(),
+            identity_pubkey: vec![1; 32],
+            nonce: vec![2; 16],
+        };
+
+        orchestrator
+            .handle_incoming_request("peer-remote".to_string(), request)
+            .await
+            .expect("handle request");
+        orchestrator
+            .user_accept_pairing("session-persist-fail")
+            .await
+            .expect("accept pairing");
+
+        let challenge = loop {
+            let challenge_action = timeout(Duration::from_secs(1), action_rx.recv())
+                .await
+                .expect("challenge action timeout")
+                .expect("challenge action missing");
+            if let PairingAction::Send {
+                message: PairingMessage::Challenge(challenge),
+                ..
+            } = challenge_action
+            {
+                break challenge;
+            }
+        };
+
+        let pin_hash = hash_pin(&challenge.pin).expect("hash pin");
+        let response = PairingResponse {
+            session_id: challenge.session_id.clone(),
+            pin_hash,
+            accepted: true,
+        };
+
+        orchestrator
+            .handle_response(&challenge.session_id, "peer-remote", response)
+            .await
+            .expect("handle response");
+
+        let mut reason: Option<FailureReason> = None;
+        for _ in 0..4 {
+            let event = timeout(Duration::from_secs(1), event_rx.recv())
+                .await
+                .expect("event timeout")
+                .expect("event missing");
+            if let crate::usecases::pairing::PairingDomainEvent::PairingFailed {
+                reason: failed_reason,
+                ..
+            } = event
+            {
+                reason = Some(failed_reason);
+                break;
+            }
+        }
+
+        let reason = reason.expect("expected PairingFailed event");
+        match reason {
+            FailureReason::Other(message) => {
+                assert!(message.contains("injected upsert failure"));
+            }
+            other => panic!("expected FailureReason::Other, got {:?}", other),
+        }
+
+        for _ in 0..2 {
+            let maybe_event = timeout(Duration::from_millis(200), event_rx.recv()).await;
+            match maybe_event {
+                Ok(Some(crate::usecases::pairing::PairingDomainEvent::PairingSucceeded {
+                    ..
+                })) => {
+                    panic!("unexpected PairingSucceeded event after persist failure");
+                }
+                Ok(Some(_)) => continue,
+                Ok(None) | Err(_) => break,
+            }
+        }
     }
 
     #[tokio::test]
