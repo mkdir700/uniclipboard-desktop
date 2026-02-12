@@ -367,7 +367,7 @@ const DevicesPage: React.FC = () => {
 
           {/* Connected Devices Section */}
           <div id="connected" ref={connectedRef} className="scroll-mt-24 mb-12">
-            <DeviceList />
+            <DeviceList onAddDevice={handleAddDevice} />
           </div>
         </div>
       </div>

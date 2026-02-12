@@ -1,13 +1,20 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import OtherDevice from '../OtherDevice'
+import * as p2pApi from '@/api/p2p'
+
+vi.mock('../DeviceSettingsPanel', () => ({
+  default: ({ deviceName }: { deviceName: string }) => (
+    <div data-testid="device-settings-panel">Settings for {deviceName}</div>
+  ),
+}))
 
 const dispatchMock = vi.fn()
 const useAppSelectorMock = vi.fn()
 
 vi.mock('@/store/hooks', () => ({
   useAppDispatch: () => dispatchMock,
-  useAppSelector: vi.fn(fn => useAppSelectorMock(fn)),
+  useAppSelector: (selector: any) => useAppSelectorMock(selector),
 }))
 
 vi.mock('@/api/p2p', () => ({
@@ -24,22 +31,98 @@ vi.mock('@/store/slices/devicesSlice', () => ({
 }))
 
 describe('OtherDevice', () => {
-  it('renders empty state with discovery message when no devices are paired', () => {
-    useAppSelectorMock.mockImplementation(selector => {
-      const state = {
-        devices: {
-          pairedDevices: [],
-          pairedDevicesLoading: false,
-          pairedDevicesError: null,
-        },
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAppSelectorMock.mockImplementation(() => {
+      return {
+        pairedDevices: [],
+        pairedDevicesLoading: false,
+        pairedDevicesError: null,
       }
-      return selector(state)
+    })
+  })
+
+  it('renders empty state with discovery message when no devices are paired', () => {
+    render(<OtherDevice onAddDevice={vi.fn()} />)
+
+    expect(screen.getByText('No paired devices')).toBeInTheDocument()
+    expect(
+      screen.getByText('Connect your other devices to start syncing clipboard content instantly.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add Device' })).toBeInTheDocument()
+  })
+
+  it('renders paired devices in a list', () => {
+    const pairedDevices = [
+      { peerId: 'device-1', deviceName: 'iPhone 13', connected: true },
+      { peerId: 'device-2', deviceName: 'MacBook Pro', connected: false },
+    ]
+
+    useAppSelectorMock.mockImplementation(() => {
+      return {
+        pairedDevices,
+        pairedDevicesLoading: false,
+        pairedDevicesError: null,
+      }
     })
 
-    render(<OtherDevice />)
+    render(<OtherDevice onAddDevice={vi.fn()} />)
 
-    expect(screen.getByText('暂无已配对的设备')).toBeInTheDocument()
-    expect(screen.getByText(/正在发现设备/)).toBeInTheDocument()
-    expect(screen.getByText(/可能需要几秒钟/)).toBeInTheDocument()
+    expect(screen.getByText('iPhone 13')).toBeInTheDocument()
+    expect(screen.getByText('MacBook Pro')).toBeInTheDocument()
+    expect(screen.getByText('在线')).toBeInTheDocument()
+    expect(screen.getByText('离线')).toBeInTheDocument()
+  })
+
+  it('expands device row on click (accordion behavior)', async () => {
+    const pairedDevices = [
+      { peerId: 'device-1', deviceName: 'iPhone 13', connected: true },
+      { peerId: 'device-2', deviceName: 'MacBook Pro', connected: false },
+    ]
+
+    useAppSelectorMock.mockImplementation(() => {
+      return {
+        pairedDevices,
+        pairedDevicesLoading: false,
+        pairedDevicesError: null,
+      }
+    })
+
+    render(<OtherDevice onAddDevice={vi.fn()} />)
+
+    expect(screen.queryByTestId('device-settings-panel')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('iPhone 13'))
+
+    expect(await screen.findByText('Settings for iPhone 13')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('MacBook Pro'))
+
+    expect(await screen.findByText('Settings for MacBook Pro')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText('Settings for iPhone 13')).not.toBeInTheDocument()
+    })
+  })
+
+  it('unpair button click does not toggle expansion', async () => {
+    const pairedDevices = [{ peerId: 'device-1', deviceName: 'iPhone 13', connected: true }]
+
+    useAppSelectorMock.mockImplementation(() => {
+      return {
+        pairedDevices,
+        pairedDevicesLoading: false,
+        pairedDevicesError: null,
+      }
+    })
+
+    render(<OtherDevice onAddDevice={vi.fn()} />)
+
+    const unpairButton = screen.getByTitle('取消配对')
+
+    fireEvent.click(unpairButton)
+
+    expect(p2pApi.unpairP2PDevice).toHaveBeenCalledWith('device-1')
+
+    expect(screen.queryByTestId('device-settings-panel')).not.toBeInTheDocument()
   })
 })
