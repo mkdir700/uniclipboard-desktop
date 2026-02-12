@@ -11,6 +11,7 @@ use tracing::{info_span, Instrument};
 use uc_core::ids::SpaceId;
 use uc_core::network::SessionId;
 use uc_core::security::space_access::action::SpaceAccessAction;
+use uc_core::security::space_access::deny_reason_to_code;
 use uc_core::security::space_access::event::SpaceAccessEvent;
 use uc_core::security::space_access::state::{CancelReason, DenyReason, SpaceAccessState};
 use uc_core::security::space_access::state_machine::SpaceAccessStateMachine;
@@ -103,6 +104,24 @@ impl SpaceAccessOrchestrator {
                     expires_at: _,
                 }
             );
+
+            {
+                let mut context = self.context.lock().await;
+                match &next {
+                    SpaceAccessState::Granted { .. } => {
+                        context.result_success = Some(true);
+                        context.result_deny_reason = None;
+                    }
+                    SpaceAccessState::Denied { reason, .. } => {
+                        context.result_success = Some(false);
+                        context.result_deny_reason = Some(reason.clone());
+                    }
+                    _ => {
+                        context.result_success = None;
+                        context.result_deny_reason = None;
+                    }
+                }
+            }
 
             let sponsor_persisted = match self
                 .execute_actions(executor, pairing_session_id.as_ref(), actions)
@@ -214,14 +233,7 @@ impl SpaceAccessOrchestrator {
     }
 
     fn deny_reason_code(reason: &DenyReason) -> String {
-        match reason {
-            DenyReason::Expired => "expired",
-            DenyReason::InvalidProof => "invalid_proof",
-            DenyReason::SpaceMismatch => "space_mismatch",
-            DenyReason::SessionMismatch => "session_mismatch",
-            DenyReason::InternalError => "internal_error",
-        }
-        .to_string()
+        deny_reason_to_code(reason).to_string()
     }
 
     fn cancel_reason_code(reason: &CancelReason) -> String {
@@ -731,7 +743,10 @@ mod tests {
         assert_eq!(completion.session_id, session_id);
         assert_eq!(completion.peer_id, "peer-deny");
         assert!(!completion.success);
-        assert_eq!(completion.reason.as_deref(), Some("invalid_proof"));
+        assert_eq!(
+            completion.reason.as_deref(),
+            Some(uc_core::security::space_access::DENY_REASON_INVALID_PROOF)
+        );
     }
 
     async fn run_access_steps(

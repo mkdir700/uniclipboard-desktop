@@ -4,6 +4,7 @@ use tokio::sync::Mutex;
 use uc_core::network::{PairingBusy, PairingMessage, SessionId};
 use uc_core::ports::space::SpaceAccessTransportPort;
 use uc_core::ports::NetworkPort;
+use uc_core::security::space_access::deny_reason_to_code;
 
 use super::context::SpaceAccessContext;
 
@@ -98,13 +99,18 @@ impl SpaceAccessTransportPort for SpaceAccessNetworkAdapter {
                 })
                 .ok_or_else(|| anyhow::anyhow!("missing space_id in space access context"))?;
 
+            let success = context
+                .result_success
+                .ok_or_else(|| anyhow::anyhow!("missing result_success in space access context"))?;
+
+            let deny_reason = context.result_deny_reason.as_ref().map(deny_reason_to_code);
+
             serde_json::json!({
                 "kind": "space_access_result",
                 "space_id": space_id,
                 "sponsor_peer_id": context.sponsor_peer_id.clone(),
-                "prepared_offer_exists": context.prepared_offer.is_some(),
-                "joiner_offer_exists": context.joiner_offer.is_some(),
-                "proof_artifact_exists": context.proof_artifact.is_some(),
+                "success": success,
+                "deny_reason": deny_reason,
             })
         };
         let payload = serde_json::to_string(&payload)?;

@@ -1,5 +1,6 @@
 use uc_core::ids::SpaceId;
 use uc_core::security::model::KeySlot;
+use uc_core::security::space_access::state::DenyReason;
 use uc_core::security::space_access::SpaceAccessProofArtifact;
 use uc_core::security::SecretString;
 
@@ -24,4 +25,6 @@ pub struct SpaceAccessContext {
     pub joiner_passphrase: Option<SecretString>,
     pub proof_artifact: Option<SpaceAccessProofArtifact>,
     pub sponsor_peer_id: Option<String>,
+    pub result_success: Option<bool>,
+    pub result_deny_reason: Option<DenyReason>,
 }
