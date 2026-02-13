@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { SettingSectionHeader } from './SettingSectionHeader'
 import { Switch } from '@/components/ui'
 import { Card, CardContent } from '@/components/ui/card'
 import { useSetting } from '@/hooks/useSetting'
@@ -33,7 +34,8 @@ const SecuritySection: React.FC = () => {
 
   return (
     <Card>
-      <CardContent className="pt-6 space-y-4">
+      <SettingSectionHeader title={t('settings.sections.security.title')} />
+      <CardContent className="pt-0 space-y-4">
         {/* Auto unlock */}
         <div className="flex items-center justify-between py-2">
           <div className="space-y-0.5">
