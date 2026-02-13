@@ -10,6 +10,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import DeviceSettingsPanel from './DeviceSettingsPanel'
 import { onP2PPeerConnectionChanged, onP2PPeerNameUpdated, unpairP2PDevice } from '@/api/p2p'
 import { formatPeerIdForDisplay } from '@/lib/utils'
@@ -26,6 +27,7 @@ interface OtherDeviceProps {
 }
 
 const OtherDevice: React.FC<OtherDeviceProps> = ({ onAddDevice }) => {
+  const { t } = useTranslation()
   const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null)
   const dispatch = useAppDispatch()
   const { pairedDevices, pairedDevicesLoading, pairedDevicesError } = useAppSelector(
@@ -146,7 +148,7 @@ const OtherDevice: React.FC<OtherDeviceProps> = ({ onAddDevice }) => {
               type="button"
               onClick={handleRetry}
               className="p-1.5 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-              title="重试"
+              title={t('devices.list.actions.retry')}
             >
               <RefreshCw className="h-4 w-4" />
             </button>
@@ -162,17 +164,17 @@ const OtherDevice: React.FC<OtherDeviceProps> = ({ onAddDevice }) => {
         <div className="bg-muted/30 p-6 rounded-full mb-6 ring-1 ring-border/50">
           <Monitor className="h-12 w-12 text-muted-foreground/50" />
         </div>
-        <h3 className="text-xl font-semibold text-foreground mb-2">No paired devices</h3>
-        <p className="text-muted-foreground max-w-xs mb-8">
-          Connect your other devices to start syncing clipboard content instantly.
-        </p>
+        <h3 className="text-xl font-semibold text-foreground mb-2">
+          {t('devices.list.empty.title')}
+        </h3>
+        <p className="text-muted-foreground max-w-xs mb-8">{t('devices.list.empty.description')}</p>
         <button
           type="button"
           onClick={onAddDevice}
           className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 hover:shadow-primary/30 hover:-translate-y-0.5"
         >
           <Plus className="h-5 w-5" />
-          Add Device
+          {t('devices.list.actions.addDevice')}
         </button>
       </div>
     )
@@ -189,72 +191,70 @@ const OtherDevice: React.FC<OtherDeviceProps> = ({ onAddDevice }) => {
           return (
             <div key={device.peerId} className="flex flex-col bg-card/30">
               <div
-                role="button"
-                tabIndex={0}
-                aria-expanded={isExpanded}
-                aria-controls={`device-settings-${device.peerId}`}
-                onClick={() => toggleDevice(device.peerId)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    toggleDevice(device.peerId)
-                  }
-                }}
                 className={`
-                  relative flex items-center justify-between p-4 cursor-pointer outline-none
+                  relative flex items-center p-4
                   hover:bg-accent/50 transition-colors duration-200
                   ${isExpanded ? 'bg-accent/50' : ''}
                 `}
               >
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`h-10 w-10 rounded-lg flex items-center justify-center ring-1 shadow-sm ${iconColor}`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground text-sm">
-                        {device.deviceName || '未知设备'}
-                      </span>
-                      {device.connected && (
-                        <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground font-mono">
-                      {formatPeerIdForDisplay(device.peerId)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`text-xs px-2 py-0.5 rounded-full border ${
-                      device.connected
-                        ? 'bg-green-500/10 text-green-600 border-green-500/20'
-                        : 'bg-muted text-muted-foreground border-border'
-                    }`}
-                  >
-                    {device.connected ? '在线' : '离线'}
-                  </div>
-
-                  <div className="flex items-center gap-1 pl-2 border-l border-border/50">
-                    <button
-                      type="button"
-                      onClick={e => handleUnpair(e, device.peerId)}
-                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                      title="取消配对"
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={`device-settings-${device.peerId}`}
+                  onClick={() => toggleDevice(device.peerId)}
+                  className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left outline-none"
+                >
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div
+                      className={`h-10 w-10 rounded-lg flex items-center justify-center ring-1 shadow-sm ${iconColor}`}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                      <Icon className="h-5 w-5" />
+                    </div>
+
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium text-foreground text-sm">
+                          {device.deviceName || t('devices.list.labels.unknownDevice')}
+                        </span>
+                        {device.connected && (
+                          <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {formatPeerIdForDisplay(device.peerId)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`text-xs px-2 py-0.5 rounded-full border ${
+                        device.connected
+                          ? 'bg-green-500/10 text-green-600 border-green-500/20'
+                          : 'bg-muted text-muted-foreground border-border'
+                      }`}
+                    >
+                      {device.connected
+                        ? t('devices.list.status.online')
+                        : t('devices.list.status.offline')}
+                    </div>
+
                     <ChevronRight
                       className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
                         isExpanded ? 'rotate-90' : ''
                       }`}
                     />
                   </div>
-                </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={e => handleUnpair(e, device.peerId)}
+                  className="ml-2 p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                  title={t('devices.list.actions.unpair')}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
 
               <AnimatePresence>
@@ -270,7 +270,7 @@ const OtherDevice: React.FC<OtherDeviceProps> = ({ onAddDevice }) => {
                     <div className="p-4 border-t border-border/50">
                       <DeviceSettingsPanel
                         deviceId={device.peerId}
-                        deviceName={device.deviceName || '未知设备'}
+                        deviceName={device.deviceName || t('devices.list.labels.unknownDevice')}
                       />
                     </div>
                   </motion.div>
@@ -287,7 +287,7 @@ const OtherDevice: React.FC<OtherDeviceProps> = ({ onAddDevice }) => {
         className="w-full group relative overflow-hidden bg-card/30 hover:bg-card/50 border border-dashed border-border hover:border-primary/50 rounded-lg transition-all duration-300 p-3 flex items-center justify-center gap-2 text-muted-foreground hover:text-primary"
       >
         <Plus className="h-4 w-4" />
-        <span className="text-sm font-medium">Add another device</span>
+        <span className="text-sm font-medium">{t('devices.list.actions.addAnotherDevice')}</span>
       </button>
     </div>
   )

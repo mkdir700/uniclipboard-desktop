@@ -333,6 +333,58 @@
     "sections": {
       "requests": "Pairing Requests",
       "noRequests": "No pairing requests"
+    },
+    "list": {
+      "empty": {
+        "title": "No paired devices",
+        "description": "Connect your other devices to start syncing clipboard content instantly."
+      },
+      "status": {
+        "online": "Online",
+        "offline": "Offline"
+      },
+      "labels": {
+        "unknownDevice": "Unknown Device"
+      },
+      "actions": {
+        "retry": "Retry",
+        "unpair": "Unpair",
+        "addDevice": "Add Device",
+        "addAnotherDevice": "Add another device"
+      }
+    },
+    "settings": {
+      "sync": {
+        "title": "Sync Settings",
+        "restoreDefaults": "Restore defaults",
+        "rules": {
+          "autoSync": {
+            "title": "Auto Sync",
+            "description": "Automatically sync clipboard content when the device is unlocked"
+          },
+          "syncText": {
+            "title": "Sync Text",
+            "description": "Allow syncing text content"
+          },
+          "syncImage": {
+            "title": "Sync Images",
+            "description": "Allow syncing image content (may use more bandwidth)"
+          },
+          "syncFile": {
+            "title": "Sync Files",
+            "description": "Allow syncing file content (up to 10MB)"
+          }
+        }
+      },
+      "permissions": {
+        "title": "Access Permissions",
+        "items": {
+          "readClipboard": "Read clipboard",
+          "writeClipboard": "Write clipboard",
+          "historyAccess": "Access history",
+          "fileTransfer": "File transfer"
+        }
+      }
     }
   },
   "pairing": {

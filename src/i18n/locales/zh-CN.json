@@ -333,6 +333,58 @@
     "sections": {
       "requests": "配对请求",
       "noRequests": "暂无配对请求"
+    },
+    "list": {
+      "empty": {
+        "title": "暂无已配对设备",
+        "description": "连接你的其他设备，即可开始即时同步剪贴板内容。"
+      },
+      "status": {
+        "online": "在线",
+        "offline": "离线"
+      },
+      "labels": {
+        "unknownDevice": "未知设备"
+      },
+      "actions": {
+        "retry": "重试",
+        "unpair": "取消配对",
+        "addDevice": "添加设备",
+        "addAnotherDevice": "添加另一台设备"
+      }
+    },
+    "settings": {
+      "sync": {
+        "title": "同步设置",
+        "restoreDefaults": "恢复默认",
+        "rules": {
+          "autoSync": {
+            "title": "自动同步",
+            "description": "在设备解锁状态下自动同步剪贴板内容"
+          },
+          "syncText": {
+            "title": "同步文本",
+            "description": "允许同步文本内容"
+          },
+          "syncImage": {
+            "title": "同步图片",
+            "description": "允许同步图片内容（可能会消耗更多流量）"
+          },
+          "syncFile": {
+            "title": "同步文件",
+            "description": "允许同步文件内容（最大 10MB）"
+          }
+        }
+      },
+      "permissions": {
+        "title": "访问权限",
+        "items": {
+          "readClipboard": "读取剪贴板",
+          "writeClipboard": "写入剪贴板",
+          "historyAccess": "访问历史记录",
+          "fileTransfer": "传输文件"
+        }
+      }
     }
   },
   "pairing": {
