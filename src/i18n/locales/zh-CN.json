@@ -354,6 +354,10 @@
       }
     },
     "settings": {
+      "readOnly": "不可更改",
+      "badges": {
+        "mvp": "MVP"
+      },
       "sync": {
         "title": "同步设置",
         "restoreDefaults": "恢复默认",

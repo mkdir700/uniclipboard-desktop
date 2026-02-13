@@ -354,6 +354,10 @@
       }
     },
     "settings": {
+      "readOnly": "Locked",
+      "badges": {
+        "mvp": "MVP"
+      },
       "sync": {
         "title": "Sync Settings",
         "restoreDefaults": "Restore defaults",
