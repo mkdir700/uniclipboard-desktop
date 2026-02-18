@@ -206,7 +206,7 @@ Critical Path: 1 → 2+3 → 4+5+6+7 → 10
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
 Scenario: AAD determinism
   Tool: Bash
   Steps:
@@ -270,7 +270,7 @@ Scenario: AAD determinism
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
 Scenario: Outbound usecase sends protocol bytes
   Tool: Bash
   Preconditions: tests added under src-tauri/crates/uc-app/tests/
@@ -332,7 +332,7 @@ Scenario: Outbound usecase sends protocol bytes
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
 Scenario: Inbound apply writes snapshot with RemotePush origin
   Tool: Bash
   Steps:
@@ -378,7 +378,7 @@ Scenario: Inbound apply writes snapshot with RemotePush origin
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
 Scenario: uc-tauri builds with clipboard loop wired
   Tool: Bash
   Steps:
@@ -422,7 +422,7 @@ Scenario: uc-tauri builds with clipboard loop wired
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
 Scenario: RemotePush origin does not broadcast
   Tool: Bash
   Steps:
@@ -467,14 +467,14 @@ Scenario: RemotePush origin does not broadcast
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
+
 Scenario: Command is registered
-  Tool: Bash
-  Steps:
-    1. cd src-tauri
-    2. cargo test -p uc-tauri commands
-  Expected Result: tests pass; sync_clipboard_items symbol is reachable
-  Evidence: .sisyphus/evidence/task-6-command-tests.txt
+Tool: Bash
+Steps: 1. cd src-tauri 2. cargo test -p uc-tauri commands
+Expected Result: tests pass; sync_clipboard_items symbol is reachable
+Evidence: .sisyphus/evidence/task-6-command-tests.txt
+
 ```
 
 ### 7) Make restore propagate to peers (explicit send)
@@ -510,14 +510,14 @@ Scenario: Command is registered
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
+
 Scenario: Restore triggers sync
-  Tool: Bash
-  Steps:
-    1. cd src-tauri
-    2. cargo test -p uc-tauri restore
-  Expected Result: tests pass; outbound send observed
-  Evidence: .sisyphus/evidence/task-7-restore-sync-tests.txt
+Tool: Bash
+Steps: 1. cd src-tauri 2. cargo test -p uc-tauri restore
+Expected Result: tests pass; outbound send observed
+Evidence: .sisyphus/evidence/task-7-restore-sync-tests.txt
+
 ```
 
 ### 8) Enable single-machine multi-instance debugging (env-driven)
@@ -556,14 +556,14 @@ Scenario: Restore triggers sync
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
+
 Scenario: Profile isolation test
-  Tool: Bash
-  Steps:
-    1. cd src-tauri
-    2. cargo test -p uc-platform app_dirs
-  Expected Result: tests pass; app_data_root differs per profile
-  Evidence: .sisyphus/evidence/task-8-uc-platform-tests.txt
+Tool: Bash
+Steps: 1. cd src-tauri 2. cargo test -p uc-platform app_dirs
+Expected Result: tests pass; app_data_root differs per profile
+Evidence: .sisyphus/evidence/task-8-uc-platform-tests.txt
+
 ```
 
 ### 9) Add in-process dual-peer sync tests (single-machine correctness)
@@ -599,14 +599,14 @@ Scenario: Profile isolation test
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
+
 Scenario: E2E in-process dual-peer sync
-  Tool: Bash
-  Steps:
-    1. cd src-tauri
-    2. cargo test -p uc-app clipboard_sync_e2e
-  Expected Result: tests pass; inbound apply results in one write_snapshot on peer B
-  Evidence: .sisyphus/evidence/task-9-e2e-tests.txt
+Tool: Bash
+Steps: 1. cd src-tauri 2. cargo test -p uc-app clipboard_sync_e2e
+Expected Result: tests pass; inbound apply results in one write_snapshot on peer B
+Evidence: .sisyphus/evidence/task-9-e2e-tests.txt
+
 ```
 
 ### 10) Add libp2p adapter clipboard wire compatibility test
@@ -643,14 +643,14 @@ Scenario: E2E in-process dual-peer sync
 
 **Agent-Executed QA Scenarios**:
 
-```
+```text
+
 Scenario: libp2p clipboard message roundtrip
-  Tool: Bash
-  Steps:
-    1. cd src-tauri
-    2. cargo test -p uc-platform libp2p_network::tests::
-  Expected Result: tests pass; receiver yields ClipboardMessage
-  Evidence: .sisyphus/evidence/task-10-libp2p-tests.txt
+Tool: Bash
+Steps: 1. cd src-tauri 2. cargo test -p uc-platform libp2p_network::tests::
+Expected Result: tests pass; receiver yields ClipboardMessage
+Evidence: .sisyphus/evidence/task-10-libp2p-tests.txt
+
 ```
 
 ---
