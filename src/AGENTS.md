@@ -39,9 +39,12 @@ src/
 ## CONVENTIONS
 
 - Use alias imports `@/*` (configured in `tsconfig.json` and `vite.config.ts`).
+- New or edited imports should use `@/*` alias when targeting `src/*`; avoid adding new relative traversals when alias is available.
 - Keep import order strict: builtin -> external -> internal -> parent -> sibling -> index, no blank lines between groups.
 - Prefer API wrappers in `src/api/*` + `invokeWithTrace`; avoid ad-hoc direct `invoke()` in pages/components.
 - Keep route guards and page gating in `App.tsx`/layout layer, not duplicated in leaf components.
+- All async settings mutations (`update*`, `save*`, `mutate*`) must handle rejection (`try/catch` or `.catch`) with observable logging/feedback; no silent failures.
+- Within a component, similar mutations should use a consistent error-handling wrapper pattern.
 - Frontend tests use Vitest (`jsdom`) with setup file `src/test/setup.ts`; colocate tests in `__tests__`.
 
 ## ANTI-PATTERNS

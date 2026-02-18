@@ -29,6 +29,7 @@ It must not own business decisions.
 - For clipboard sync, subscribe via ports (for example `NetworkPort::subscribe_clipboard`) and hand off to `uc-app` use cases.
 - Do not parse domain policy in bootstrap. Domain decisions live in `uc-app` and `uc-core`.
 - Do not perform direct repository mutations from bootstrap loops.
+- Keep usecase constructor wiring in sync with `uc-app` signatures; when constructor params change, update bootstrap accessor wiring immediately.
 - Keep event payload compatibility strict:
   - any `app.emit(...)` payload struct must use `#[serde(rename_all = "camelCase")]`.
 - Use structured `tracing` and never log secrets or raw decrypted clipboard payload bytes.
@@ -52,6 +53,13 @@ It must not own business decisions.
 3. Clipboard apply path goes through app-layer use case, not direct adapter calls.
 4. `ClipboardChangeOrigin` safeguards are respected to avoid echo loops.
 5. Added tests cover successful forwarding and channel/error shutdown behavior.
+
+## CHECKLIST FOR USECASE WIRING CHANGES
+
+1. `UseCases::*` accessor constructor args exactly match current `uc-app` usecase signature.
+2. Command handlers affected by wiring changes still call accessors only (no fallback to `runtime.deps` business IO).
+3. Integration tests that construct the changed usecase are updated in the same diff.
+4. Verification includes `cargo check -p uc-tauri` and relevant `cargo test -p uc-app`/`uc-tauri` paths.
 
 ## COMMANDS
 

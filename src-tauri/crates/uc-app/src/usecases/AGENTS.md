@@ -32,6 +32,8 @@ They must not embed transport/storage implementation details.
 - Keep each usecase single-intent and observable with structured `tracing` spans.
 - For remote clipboard apply path, always respect `ClipboardChangeOrigin` contract to prevent re-capture loops.
 - For outbound clipboard sync, do serialization/encryption decisions in usecase layer, transport send via `NetworkPort`.
+- Protocol-level literals (MIME names, protocol tags, field identifiers) must come from shared `uc-core` constants/types, not duplicated string literals.
+- If command-side workflow needs "read current system state then execute", expose a dedicated usecase entrypoint instead of building flow in command handlers.
 - Propagate errors with context; no silent `Ok(())` fallbacks for failed sync actions.
 
 ## ANTI-PATTERNS
@@ -55,6 +57,7 @@ They must not embed transport/storage implementation details.
 3. `ClipboardChangeOrigin` is set/consumed correctly around restore/apply paths.
 4. Tests cover happy path, duplicate message, and channel/error path.
 5. Business policy remains in usecases; wiring/adapters stay mechanical.
+6. New/changed usecase entrypoints have focused tests (including command-facing entry methods when added).
 
 ## COMMANDS
 
