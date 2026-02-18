@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use tokio::sync::Mutex;
+use tokio::time::{sleep, Duration};
 use tracing::{debug, error, info, info_span, warn, Instrument};
 
 use uc_core::{
@@ -76,6 +77,12 @@ pub struct SetupOrchestrator {
     timer_port: Arc<Mutex<dyn TimerPort>>,
     persistence_port: Arc<Mutex<dyn PersistencePort>>,
 }
+
+#[cfg(test)]
+const JOINER_OFFER_WAIT_TIMEOUT: Duration = Duration::from_millis(300);
+#[cfg(not(test))]
+const JOINER_OFFER_WAIT_TIMEOUT: Duration = Duration::from_secs(3);
+const JOINER_OFFER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 impl SetupOrchestrator {
     pub fn new(
@@ -319,26 +326,17 @@ impl SetupOrchestrator {
         self.start_space_access_result_listener(pairing_session_id.clone())
             .await;
 
-        let joiner_offer = if let Some(local_offer) = {
-            let guard = self.joiner_offer.lock().await;
-            guard.clone()
-        } {
-            local_offer
-        } else {
-            let context_offer = {
-                let context = self.space_access_orchestrator.context();
-                let guard = context.lock().await;
-                guard.joiner_offer.clone()
-            };
-
-            context_offer.ok_or_else(|| {
+        let joiner_offer = self
+            .wait_for_joiner_offer(&pairing_session_id)
+            .await
+            .ok_or_else(|| {
                 error!(
                     pairing_session_id = %pairing_session_id,
+                    timeout_ms = JOINER_OFFER_WAIT_TIMEOUT.as_millis(),
                     "start join space access requested without received offer"
                 );
                 SetupError::PairingFailed
-            })?
-        };
+            })?;
 
         {
             let mut guard = self.joiner_offer.lock().await;
@@ -424,6 +422,47 @@ impl SetupOrchestrator {
             })?;
 
         Ok(())
+    }
+
+    async fn wait_for_joiner_offer(
+        &self,
+        pairing_session_id: &str,
+    ) -> Option<SpaceAccessJoinerOffer> {
+        let mut waited = Duration::ZERO;
+
+        loop {
+            if let Some(local_offer) = {
+                let guard = self.joiner_offer.lock().await;
+                guard.clone()
+            } {
+                return Some(local_offer);
+            }
+
+            let context_offer = {
+                let context = self.space_access_orchestrator.context();
+                let guard = context.lock().await;
+                guard.joiner_offer.clone()
+            };
+
+            if context_offer.is_some() {
+                return context_offer;
+            }
+
+            if waited >= JOINER_OFFER_WAIT_TIMEOUT {
+                return None;
+            }
+
+            if waited == Duration::ZERO {
+                warn!(
+                    pairing_session_id = %pairing_session_id,
+                    timeout_ms = JOINER_OFFER_WAIT_TIMEOUT.as_millis(),
+                    "waiting for joiner offer before starting join space access"
+                );
+            }
+
+            sleep(JOINER_OFFER_POLL_INTERVAL).await;
+            waited += JOINER_OFFER_POLL_INTERVAL;
+        }
     }
 
     async fn start_space_access_result_listener(&self, session_id: String) {
@@ -2133,6 +2172,45 @@ mod tests {
             .expect("local joiner offer should be hydrated from space access context");
         assert_eq!(stored_offer.space_id.as_ref(), offer.space_id.as_ref());
         assert_eq!(stored_offer.challenge_nonce, offer.challenge_nonce);
+    }
+
+    #[tokio::test]
+    async fn submit_passphrase_waits_for_late_joiner_offer() {
+        let setup_status = Arc::new(MockSetupStatusPort::new(SetupStatus::default()));
+        let orchestrator = build_orchestrator_with_initialize_encryption_and_crypto_factory(
+            setup_status,
+            build_initialize_encryption(),
+            build_success_crypto_factory(),
+        );
+
+        let session_id = "session-late-offer";
+        *orchestrator.selected_peer_id.lock().await = Some("peer-late-offer".to_string());
+        *orchestrator.pairing_session_id.lock().await = Some(session_id.to_string());
+        orchestrator
+            .context
+            .set_state(SetupState::JoinSpaceInputPassphrase { error: None })
+            .await;
+
+        let context = orchestrator.space_access_orchestrator.context();
+        tokio::spawn(async move {
+            sleep(Duration::from_millis(40)).await;
+            let mut guard = context.lock().await;
+            guard.joiner_offer = Some(SpaceAccessJoinerOffer {
+                space_id: uc_core::ids::SpaceId::from("space-late-offer"),
+                keyslot_blob: vec![1, 2, 3, 4],
+                challenge_nonce: [7; 32],
+            });
+        });
+
+        let state = orchestrator
+            .dispatch(SetupEvent::SubmitPassphrase {
+                passphrase: SecretString::new("join-secret".to_string()),
+            })
+            .await
+            .expect("submit passphrase should wait for late joiner offer");
+
+        assert!(matches!(state, SetupState::ProcessingJoinSpace { .. }));
+        assert!(orchestrator.joiner_offer.lock().await.is_some());
     }
 
     async fn prepare_join_passphrase_submission(
