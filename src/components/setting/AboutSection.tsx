@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { SettingSectionHeader } from './SettingSectionHeader'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,12 +78,7 @@ const AboutSection: React.FC = () => {
 
   return (
     <Card>
-      <div className="flex items-center gap-4 mb-4 px-6 pt-6">
-        <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-          {t('settings.sections.about.appName')}
-        </h3>
-        <div className="h-px flex-1 bg-border/50"></div>
-      </div>
+      <SettingSectionHeader title={t('settings.sections.about.appName')} />
       <CardContent className="pt-0">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
