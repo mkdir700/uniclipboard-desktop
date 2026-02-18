@@ -23,3 +23,9 @@
 - Status: FAILED (tooling availability)
 - Error detail: `Unknown binary 'rust-analyzer' in official toolchain 'stable-aarch64-apple-darwin'`
 - Workaround applied for Task 10: verified with compiler-backed checks (`cargo check -p uc-platform --tests`, `cargo test -p uc-platform libp2p_network`).
+
+### 2026-02-18 - workspace cleanup
+
+- Context: repository root contained an untracked placeholder file `1.`.
+- Action: documented this cleanup note and removed `1.` from the workspace.
+- Rationale: keep repository root free of ambiguous scratch files and preserve traceability in project notes.
