@@ -64,6 +64,14 @@ export default function AppearanceSection() {
     }
   }
 
+  const handleThemeColorChange = async (newThemeColor: string) => {
+    try {
+      await updateGeneralSetting({ theme_color: newThemeColor })
+    } catch (error) {
+      console.error('Failed to change theme color:', error)
+    }
+  }
+
   return (
     <>
       <SettingCard title={t('settings.sections.appearance.themeMode.title')}>
@@ -98,7 +106,7 @@ export default function AppearanceSection() {
             <div
               key={item.name}
               onClick={() => {
-                updateGeneralSetting({ theme_color: item.name })
+                void handleThemeColorChange(item.name)
               }}
               className={cn(
                 'cursor-pointer group relative flex flex-col items-center gap-2 p-2 rounded-xl border-2 transition-all hover:bg-muted/50',
