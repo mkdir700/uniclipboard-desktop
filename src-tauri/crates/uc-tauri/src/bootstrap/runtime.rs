@@ -697,6 +697,30 @@ impl<'a> UseCases<'a> {
         )
     }
 
+    pub fn sync_inbound_clipboard(
+        &self,
+    ) -> uc_app::usecases::clipboard::sync_inbound::SyncInboundClipboardUseCase {
+        uc_app::usecases::clipboard::sync_inbound::SyncInboundClipboardUseCase::new(
+            self.runtime.deps.system_clipboard.clone(),
+            self.runtime.deps.clipboard_change_origin.clone(),
+            self.runtime.deps.encryption_session.clone(),
+            self.runtime.deps.encryption.clone(),
+            self.runtime.deps.device_identity.clone(),
+        )
+    }
+
+    pub fn sync_outbound_clipboard(
+        &self,
+    ) -> uc_app::usecases::clipboard::sync_outbound::SyncOutboundClipboardUseCase {
+        uc_app::usecases::clipboard::sync_outbound::SyncOutboundClipboardUseCase::new(
+            self.runtime.deps.network.clone(),
+            self.runtime.deps.encryption_session.clone(),
+            self.runtime.deps.encryption.clone(),
+            self.runtime.deps.device_identity.clone(),
+            self.runtime.deps.settings.clone(),
+        )
+    }
+
     /// Get the lifecycle status port directly (for status queries).
     ///
     /// 直接获取生命周期状态端口（用于状态查询）。
@@ -838,6 +862,7 @@ impl ClipboardChangeHandler for AppRuntime {
             .clipboard_change_origin
             .consume_origin_or_default(ClipboardChangeOrigin::LocalCapture)
             .await;
+        let outbound_snapshot = snapshot.clone();
 
         // Create CaptureClipboardUseCase with dependencies
         let usecase = uc_app::usecases::internal::capture_clipboard::CaptureClipboardUseCase::new(
@@ -877,6 +902,25 @@ impl ClipboardChangeHandler for AppRuntime {
                     tracing::debug!("AppHandle not available, skipping event emission");
                 }
                 drop(app_handle_guard);
+
+                let outbound_sync_uc = self.usecases().sync_outbound_clipboard();
+                tauri::async_runtime::spawn(async move {
+                    match tokio::task::spawn_blocking(move || {
+                        outbound_sync_uc.execute(outbound_snapshot, origin)
+                    })
+                    .await
+                    {
+                        Ok(Ok(())) => {
+                            tracing::debug!("Outbound clipboard sync completed");
+                        }
+                        Ok(Err(err)) => {
+                            tracing::warn!(error = %err, "Outbound clipboard sync failed");
+                        }
+                        Err(err) => {
+                            tracing::warn!(error = %err, "Outbound clipboard sync task join failed");
+                        }
+                    }
+                });
 
                 Ok(())
             }

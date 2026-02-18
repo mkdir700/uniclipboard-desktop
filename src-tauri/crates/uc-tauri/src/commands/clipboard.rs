@@ -252,6 +252,51 @@ pub async fn get_clipboard_entry_resource(
     .await
 }
 
+#[tauri::command]
+pub async fn sync_clipboard_items(
+    runtime: State<'_, Arc<AppRuntime>>,
+    _trace: Option<TraceMetadata>,
+) -> Result<bool, String> {
+    let device_id = runtime.deps.device_identity.current_device_id();
+
+    let span = info_span!(
+        "command.clipboard.sync_items",
+        trace_id = tracing::field::Empty,
+        trace_ts = tracing::field::Empty,
+        device_id = %device_id,
+    );
+    record_trace_fields(&span, &_trace);
+
+    async move {
+        let snapshot = match runtime.deps.system_clipboard.read_snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(err) => {
+                tracing::warn!(error = %err, "Failed to read snapshot for outbound clipboard sync");
+                return Ok(true);
+            }
+        };
+
+        let outbound_sync_uc = runtime.usecases().sync_outbound_clipboard();
+        match tokio::task::spawn_blocking(move || {
+            outbound_sync_uc.execute(snapshot, uc_core::ClipboardChangeOrigin::LocalCapture)
+        })
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                tracing::warn!(error = %err, "Outbound clipboard sync command failed");
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "Outbound clipboard sync command task join failed");
+            }
+        }
+
+        Ok(true)
+    }
+    .instrument(span)
+    .await
+}
+
 /// Restore clipboard entry to system clipboard.
 /// 将历史剪贴板条目恢复到系统剪贴板。
 #[tauri::command]
@@ -296,12 +341,26 @@ async fn restore_clipboard_entry_impl(
             return Err("Entry not found".to_string());
         }
 
+        let outbound_snapshot = snapshot.clone();
         restore_uc.restore_snapshot(snapshot).await.map_err(|err| {
             tracing::error!(error = %err, entry_id = %entry_id, "Failed to write restore snapshot");
             err.to_string()
         })?;
 
-        // TODO(sync): emit restore-originated event to remote peers when sync is implemented.
+        let outbound_sync_uc = runtime.usecases().sync_outbound_clipboard();
+        match tokio::task::spawn_blocking(move || {
+            outbound_sync_uc.execute(outbound_snapshot, uc_core::ClipboardChangeOrigin::LocalRestore)
+        })
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                tracing::warn!(error = %err, entry_id = %entry_id, "Restore outbound sync failed");
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, entry_id = %entry_id, "Restore outbound sync task join failed");
+            }
+        }
 
         if let Some(app) = runtime.app_handle().as_ref() {
             if let Err(err) = crate::events::forward_clipboard_event(
