@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { SettingSectionHeader } from './SettingSectionHeader'
+import { SettingSectionHeader } from '@/components/setting/SettingSectionHeader'
 import { Card, CardContent } from '@/components/ui/card'
 
 interface SettingCardProps {
