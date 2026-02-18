@@ -14,9 +14,25 @@ pub struct JsonKeySlotStore {
 }
 
 impl JsonKeySlotStore {
-    pub fn new(config_dir: PathBuf) -> Self {
-        Self {
-            path: config_dir.join("keyslot.json"),
+    pub fn new(path_or_dir: PathBuf) -> Self {
+        let path = if path_or_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "keyslot.json")
+        {
+            path_or_dir
+        } else {
+            path_or_dir.join("keyslot.json")
+        };
+
+        Self { path }
+    }
+
+    fn effective_path(&self) -> PathBuf {
+        if self.path.is_dir() {
+            self.path.join("keyslot.json")
+        } else {
+            self.path.clone()
         }
     }
 }
@@ -24,11 +40,13 @@ impl JsonKeySlotStore {
 #[async_trait]
 impl KeySlotStore for JsonKeySlotStore {
     async fn load(&self) -> Result<KeySlotFile, EncryptionError> {
-        if !self.path.exists() {
+        let path = self.effective_path();
+
+        if !path.exists() {
             return Err(EncryptionError::KeyNotFound);
         }
 
-        let content = tokio::fs::read_to_string(&self.path)
+        let content = tokio::fs::read_to_string(&path)
             .await
             .map_err(|_| EncryptionError::IoFailure)?;
 
@@ -39,14 +57,22 @@ impl KeySlotStore for JsonKeySlotStore {
     }
 
     async fn store(&self, slot: &KeySlotFile) -> Result<(), EncryptionError> {
+        if self.path.is_dir() {
+            tokio::fs::remove_dir_all(&self.path)
+                .await
+                .map_err(|_| EncryptionError::IoFailure)?;
+        }
+
+        let path = self.effective_path();
+
         // Ensure parent directory exists
-        if let Some(parent) = self.path.parent() {
+        if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
                 .map_err(|_| EncryptionError::IoFailure)?;
         }
 
-        let tmp = self.path.with_extension("json.tmp");
+        let tmp = path.with_extension("json.tmp");
 
         let json =
             serde_json::to_string_pretty(slot).map_err(|_| EncryptionError::KeyMaterialCorrupt)?;
@@ -55,7 +81,7 @@ impl KeySlotStore for JsonKeySlotStore {
             .await
             .map_err(|_| EncryptionError::IoFailure)?;
 
-        tokio::fs::rename(&tmp, &self.path)
+        tokio::fs::rename(&tmp, &path)
             .await
             .map_err(|_| EncryptionError::IoFailure)?;
 
@@ -63,11 +89,20 @@ impl KeySlotStore for JsonKeySlotStore {
     }
 
     async fn delete(&self) -> Result<(), EncryptionError> {
-        if self.path.exists() {
-            tokio::fs::remove_file(&self.path)
+        let path = self.effective_path();
+
+        if path.exists() {
+            tokio::fs::remove_file(&path)
                 .await
                 .map_err(|_| EncryptionError::IoFailure)?;
         }
+
+        if self.path.is_dir() {
+            tokio::fs::remove_dir_all(&self.path)
+                .await
+                .map_err(|_| EncryptionError::IoFailure)?;
+        }
+
         Ok(())
     }
 }
@@ -161,6 +196,26 @@ mod tests {
 
         let path = dir.join("keyslot.json");
         assert!(!path.exists(), "keyslot.json should be removed");
+
+        std::fs::remove_dir_all(dir).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn load_supports_legacy_nested_keyslot_directory_layout() {
+        let dir = make_temp_dir();
+        let slot = sample_keyslot_file();
+        let json = serde_json::to_string_pretty(&slot).expect("serialize keyslot");
+
+        let legacy_dir = dir.join("keyslot.json");
+        std::fs::create_dir_all(&legacy_dir).expect("create legacy keyslot dir");
+        std::fs::write(legacy_dir.join("keyslot.json"), json).expect("write legacy keyslot file");
+
+        let store = JsonKeySlotStore::new(dir.clone());
+        let loaded = store
+            .load()
+            .await
+            .expect("load keyslot from legacy nested layout");
+        assert_eq!(loaded, slot);
 
         std::fs::remove_dir_all(dir).expect("cleanup temp dir");
     }

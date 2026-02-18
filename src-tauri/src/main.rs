@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::http::header::{
     HeaderValue, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
@@ -15,7 +15,6 @@ use tauri_plugin_stronghold;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use uc_app::app_paths::AppPaths;
 use uc_app::usecases::{pairing::PairingOrchestrator, space_access::SpaceAccessOrchestrator};
 use uc_core::config::AppConfig;
 use uc_core::ports::AppDirsPort;
@@ -314,9 +313,35 @@ mod tests {
         let expected = fs::canonicalize(root_dir.join("config.toml")).unwrap();
         assert_eq!(resolved, Some(expected));
     }
+
+    #[test]
+    fn test_resolve_config_path_finds_src_tauri_config_from_repo_root() {
+        let temp_dir = TempDir::new().unwrap();
+        let root_dir = temp_dir.path();
+        let src_tauri_dir = root_dir.join("src-tauri");
+        fs::create_dir_all(&src_tauri_dir).unwrap();
+        fs::write(src_tauri_dir.join("config.toml"), "").unwrap();
+
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(root_dir).unwrap();
+
+        let resolved = resolve_config_path().and_then(|path| fs::canonicalize(path).ok());
+
+        env::set_current_dir(original_dir).unwrap();
+
+        let expected = fs::canonicalize(src_tauri_dir.join("config.toml")).unwrap();
+        assert_eq!(resolved, Some(expected));
+    }
 }
 
 fn resolve_config_path() -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("UC_CONFIG_PATH") {
+        let explicit_path = PathBuf::from(explicit);
+        if explicit_path.is_file() {
+            return Some(explicit_path);
+        }
+    }
+
     let current_dir = std::env::current_dir().ok()?;
 
     for ancestor in current_dir.ancestors() {
@@ -324,9 +349,61 @@ fn resolve_config_path() -> Option<PathBuf> {
         if candidate.is_file() {
             return Some(candidate);
         }
+
+        let src_tauri_candidate = ancestor.join("src-tauri").join("config.toml");
+        if src_tauri_candidate.is_file() {
+            return Some(src_tauri_candidate);
+        }
     }
 
     None
+}
+
+fn apply_profile_suffix(path: PathBuf) -> PathBuf {
+    let profile = match std::env::var("UC_PROFILE") {
+        Ok(value) if !value.is_empty() => value,
+        _ => return path,
+    };
+
+    let file_name = match path.file_name().and_then(|name| name.to_str()) {
+        Some(name) => name.to_string(),
+        None => return path,
+    };
+
+    let mut updated = path;
+    updated.set_file_name(format!("{file_name}_{profile}"));
+    updated
+}
+
+fn resolve_keyslot_store_vault_dir(config: &AppConfig, app_data_root: PathBuf) -> PathBuf {
+    if config.vault_key_path.as_os_str().is_empty() {
+        return app_data_root.join("vault");
+    }
+
+    let configured_vault_root = config
+        .vault_key_path
+        .parent()
+        .unwrap_or(&config.vault_key_path)
+        .to_path_buf();
+
+    if config.database_path.as_os_str().is_empty() {
+        return apply_profile_suffix(configured_vault_root);
+    }
+
+    let configured_db_root = config
+        .database_path
+        .parent()
+        .unwrap_or(&config.database_path)
+        .to_path_buf();
+
+    if configured_vault_root.starts_with(&configured_db_root) {
+        let relative = configured_vault_root
+            .strip_prefix(&configured_db_root)
+            .unwrap_or(Path::new(""));
+        app_data_root.join(relative)
+    } else {
+        apply_profile_suffix(configured_vault_root)
+    }
 }
 
 /// Starts the application.
@@ -444,17 +521,19 @@ fn run_app(config: AppConfig) {
                 );
             }
         };
-        let base_paths = AppPaths::from_app_dirs(&app_dirs);
-        let vault_dir = if config.vault_key_path.as_os_str().is_empty() {
-            base_paths.vault_dir
+        let app_data_root = if config.database_path.as_os_str().is_empty() {
+            app_dirs.app_data_root.clone()
         } else {
-            config
-                .vault_key_path
+            let configured_db_root = config
+                .database_path
                 .parent()
-                .unwrap_or(&config.vault_key_path)
-                .to_path_buf()
+                .unwrap_or(&config.database_path)
+                .to_path_buf();
+            apply_profile_suffix(configured_db_root)
         };
-        Arc::new(JsonKeySlotStore::new(vault_dir.join("keyslot.json")))
+
+        let vault_dir = resolve_keyslot_store_vault_dir(&config, app_data_root);
+        Arc::new(JsonKeySlotStore::new(vault_dir))
     };
 
     let runtime = AppRuntime::with_setup(
@@ -483,7 +562,9 @@ fn run_app(config: AppConfig) {
     // Note: PlatformRuntime will be started in setup block
     // The actual startup will be completed in a follow-up task
 
-    Builder::default()
+    let disable_single_instance = std::env::var("UC_DISABLE_SINGLE_INSTANCE").as_deref() == Ok("1");
+
+    let builder = Builder::default()
         // Register AppRuntime for Tauri commands
         .manage(runtime_for_tauri)
         .manage(pairing_orchestrator.clone())
@@ -515,8 +596,16 @@ fn run_app(config: AppConfig) {
         // 1) In frontend devtools: fetch("uc://blob/<blob_id>")
         // 2) In frontend devtools: fetch("uc://thumbnail/<representation_id>")
         // 3) Network should show 200 with Access-Control-Allow-Origin matching http://localhost:1420
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
+        .plugin(tauri_plugin_opener::init());
+
+    let builder = if disable_single_instance {
+        info!("UC_DISABLE_SINGLE_INSTANCE=1 set; skipping single-instance plugin registration");
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
+    };
+
+    builder
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec![]),
@@ -638,6 +727,7 @@ fn run_app(config: AppConfig) {
             uc_tauri::commands::clipboard::get_clipboard_entry_resource,
             uc_tauri::commands::clipboard::delete_clipboard_entry,
             uc_tauri::commands::clipboard::restore_clipboard_entry,
+            uc_tauri::commands::clipboard::sync_clipboard_items,
             // Encryption commands
             uc_tauri::commands::encryption::initialize_encryption,
             uc_tauri::commands::encryption::get_encryption_session_status,

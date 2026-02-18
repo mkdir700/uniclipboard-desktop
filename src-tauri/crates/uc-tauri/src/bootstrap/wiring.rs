@@ -39,13 +39,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{async_runtime, AppHandle, Emitter, Runtime};
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, info_span, warn, Instrument};
 
 use crate::events::{
     P2PPairingVerificationEvent, P2PPeerConnectionEvent, P2PPeerDiscoveryEvent,
     P2PPeerNameUpdatedEvent,
 };
-use uc_app::app_paths::AppPaths;
+use uc_app::usecases::clipboard::sync_inbound::SyncInboundClipboardUseCase;
 use uc_app::usecases::space_access::{
     HmacProofAdapter, SpaceAccessCompletedEvent, SpaceAccessContext, SpaceAccessEventPort,
     SpaceAccessJoinerOffer, SpaceAccessNetworkAdapter, SpaceAccessOrchestrator,
@@ -57,7 +57,7 @@ use uc_core::clipboard::SelectRepresentationPolicyV1;
 use uc_core::config::AppConfig;
 use uc_core::ids::RepresentationId;
 use uc_core::network::pairing_state_machine::{PairingAction, PairingRole};
-use uc_core::network::{NetworkEvent, PairingMessage};
+use uc_core::network::{ClipboardMessage, NetworkEvent, PairingMessage};
 use uc_core::ports::clipboard::{
     ClipboardChangeOriginPort, ClipboardRepresentationNormalizerPort, RepresentationCachePort,
     SpoolQueuePort, SpoolRequest,
@@ -427,7 +427,7 @@ fn create_infra_layer(
 
     // Create key slot store
     // 创建密钥槽存储
-    let keyslot_store = JsonKeySlotStore::new(vault_path.join("keyslot.json"));
+    let keyslot_store = JsonKeySlotStore::new(vault_path.clone());
     let keyslot_store: Arc<dyn KeySlotStore> = Arc::new(keyslot_store);
 
     // Create key material service
@@ -708,33 +708,84 @@ fn derive_default_paths_from_app_dirs(
     app_dirs: &uc_core::app_dirs::AppDirs,
     config: &AppConfig,
 ) -> WiringResult<DefaultPaths> {
-    let base_paths = AppPaths::from_app_dirs(app_dirs);
+    let default_app_data_root = app_dirs.app_data_root.clone();
+
+    let app_data_root = if config.database_path.as_os_str().is_empty() {
+        default_app_data_root
+    } else {
+        let configured_root = config
+            .database_path
+            .parent()
+            .unwrap_or(&config.database_path)
+            .to_path_buf();
+        apply_profile_suffix(configured_root)
+    };
 
     let db_path = if config.database_path.as_os_str().is_empty() {
-        base_paths.db_path
+        app_data_root.join("uniclipboard.db")
     } else {
-        config.database_path.clone()
+        let db_file_name = config
+            .database_path
+            .file_name()
+            .map(|name| name.to_os_string())
+            .unwrap_or_else(|| std::ffi::OsString::from("uniclipboard.db"));
+        app_data_root.join(db_file_name)
     };
 
     let vault_dir = if config.vault_key_path.as_os_str().is_empty() {
-        base_paths.vault_dir
+        app_data_root.join("vault")
     } else {
-        config
+        let configured_vault_root = config
             .vault_key_path
             .parent()
             .unwrap_or(&config.vault_key_path)
-            .to_path_buf()
+            .to_path_buf();
+
+        if config.database_path.as_os_str().is_empty() {
+            apply_profile_suffix(configured_vault_root)
+        } else {
+            let configured_db_root = config
+                .database_path
+                .parent()
+                .unwrap_or(&config.database_path)
+                .to_path_buf();
+
+            if configured_vault_root.starts_with(&configured_db_root) {
+                let relative = configured_vault_root
+                    .strip_prefix(&configured_db_root)
+                    .unwrap_or(std::path::Path::new(""));
+                app_data_root.join(relative)
+            } else {
+                apply_profile_suffix(configured_vault_root)
+            }
+        }
     };
 
-    let settings_path = base_paths.settings_path;
+    let settings_path = app_data_root.join("settings.json");
 
     Ok(DefaultPaths {
-        app_data_root: app_dirs.app_data_root.clone(),
+        app_data_root,
         db_path,
         vault_dir,
         settings_path,
-        cache_dir: base_paths.cache_dir,
+        cache_dir: app_dirs.app_cache_root.clone(),
     })
+}
+
+fn apply_profile_suffix(path: PathBuf) -> PathBuf {
+    let profile = match std::env::var("UC_PROFILE") {
+        Ok(value) if !value.is_empty() => value,
+        _ => return path,
+    };
+
+    let file_name = match path.file_name().and_then(|name| name.to_str()) {
+        Some(name) => name.to_string(),
+        None => return path,
+    };
+
+    let mut updated = path;
+    updated.set_file_name(format!("{file_name}_{profile}"));
+    updated
 }
 
 /// Wires and constructs the application's dependency graph, returning ready-to-use dependencies.
@@ -989,6 +1040,8 @@ pub fn start_background_tasks<R: Runtime>(
     let thumbnail_repo = deps.thumbnail_repo.clone();
     let thumbnail_generator = deps.thumbnail_generator.clone();
     let pairing_network = deps.network.clone();
+    let clipboard_network = deps.network.clone();
+    let sync_inbound_usecase = new_sync_inbound_clipboard_usecase(deps);
     let space_access_runtime_ports = RuntimeSpaceAccessPorts {
         transport: Arc::new(tokio::sync::Mutex::new(SpaceAccessNetworkAdapter::new(
             pairing_network.clone(),
@@ -1079,6 +1132,21 @@ pub fn start_background_tasks<R: Runtime>(
         warn!("Space access completion loop stopped");
     });
 
+    async_runtime::spawn(
+        async move {
+            let clipboard_rx = match clipboard_network.subscribe_clipboard().await {
+                Ok(rx) => rx,
+                Err(err) => {
+                    warn!(error = %err, "Failed to subscribe to clipboard messages");
+                    return;
+                }
+            };
+
+            run_clipboard_receive_loop(clipboard_rx, sync_inbound_usecase).await;
+        }
+        .instrument(info_span!("loop.clipboard.receive_task")),
+    );
+
     async_runtime::spawn(async move {
         let event_rx = match pairing_network.subscribe_events().await {
             Ok(rx) => rx,
@@ -1118,6 +1186,46 @@ pub fn start_background_tasks<R: Runtime>(
         .await;
         warn!("Pairing event loop stopped");
     });
+}
+
+fn new_sync_inbound_clipboard_usecase(deps: &AppDeps) -> SyncInboundClipboardUseCase {
+    SyncInboundClipboardUseCase::new(
+        deps.system_clipboard.clone(),
+        deps.clipboard_change_origin.clone(),
+        deps.encryption_session.clone(),
+        deps.encryption.clone(),
+        deps.device_identity.clone(),
+    )
+}
+
+async fn run_clipboard_receive_loop(
+    mut clipboard_rx: mpsc::Receiver<ClipboardMessage>,
+    usecase: SyncInboundClipboardUseCase,
+) {
+    while let Some(message) = clipboard_rx.recv().await {
+        let message_id = message.id.clone();
+        let origin_device_id = message.origin_device_id.clone();
+        let span = info_span!(
+            "loop.clipboard.receive_message",
+            message_id = %message_id,
+            origin_device_id = %origin_device_id
+        );
+
+        let result = async { usecase.execute(message).await }
+            .instrument(span)
+            .await;
+
+        if let Err(err) = result {
+            warn!(
+                error = %err,
+                message_id = %message_id,
+                origin_device_id = %origin_device_id,
+                "Failed to apply inbound clipboard message"
+            );
+        }
+    }
+
+    info!("Clipboard receive channel closed; stopping background receive loop");
 }
 
 #[derive(Clone)]
@@ -2178,6 +2286,29 @@ mod tests {
     use uc_core::network::{ConnectedPeer, DiscoveredPeer, PairingMessage};
     use uc_core::ports::{EncryptionSessionPort, NetworkPort};
     use uc_core::security::model::{EncryptionError, MasterKey};
+
+    static UC_PROFILE_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_uc_profile<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
+        let _guard = UC_PROFILE_ENV_LOCK
+            .lock()
+            .expect("lock UC_PROFILE test guard");
+        let previous = std::env::var("UC_PROFILE").ok();
+
+        match value {
+            Some(profile) => std::env::set_var("UC_PROFILE", profile),
+            None => std::env::remove_var("UC_PROFILE"),
+        }
+
+        let result = f();
+
+        match previous {
+            Some(profile) => std::env::set_var("UC_PROFILE", profile),
+            None => std::env::remove_var("UC_PROFILE"),
+        }
+
+        result
+    }
 
     #[test]
     fn test_wiring_error_display() {
@@ -4483,7 +4614,9 @@ The functionality is still validated in development mode when running the app wi
     fn derive_default_paths_from_empty_config_uses_single_app_data_root() {
         let config = AppConfig::empty();
 
-        let paths = derive_default_paths(&config).expect("derive_default_paths failed");
+        let paths = with_uc_profile(None, || {
+            derive_default_paths(&config).expect("derive_default_paths failed")
+        });
 
         assert!(paths.app_data_root.ends_with("uniclipboard"));
         assert_eq!(paths.db_path, paths.app_data_root.join("uniclipboard.db"));
@@ -4500,8 +4633,10 @@ The functionality is still validated in development mode when running the app wi
             app_data_root: std::path::PathBuf::from("/tmp/uniclipboard"),
             app_cache_root: std::path::PathBuf::from("/tmp/uniclipboard-cache"),
         };
-        let paths = derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
-            .expect("derive_default_paths_from_app_dirs failed");
+        let paths = with_uc_profile(None, || {
+            derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
+                .expect("derive_default_paths_from_app_dirs failed")
+        });
         assert!(paths.db_path.ends_with("uniclipboard.db"));
     }
 
@@ -4511,8 +4646,93 @@ The functionality is still validated in development mode when running the app wi
             app_data_root: PathBuf::from("/tmp/uniclipboard"),
             app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
         };
-        let paths = derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
-            .expect("derive_default_paths_from_app_dirs failed");
+        let paths = with_uc_profile(None, || {
+            derive_default_paths_from_app_dirs(&dirs, &AppConfig::empty())
+                .expect("derive_default_paths_from_app_dirs failed")
+        });
         assert_eq!(paths.cache_dir, PathBuf::from("/tmp/uniclipboard-cache"));
+    }
+
+    #[test]
+    fn derive_default_paths_uses_config_database_parent_as_app_data_root() {
+        let dirs = uc_core::app_dirs::AppDirs {
+            app_data_root: PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
+        };
+
+        let mut config = AppConfig::empty();
+        config.database_path = PathBuf::from("src-tauri/.app_data_a/uniclipboard.db");
+
+        let paths = with_uc_profile(None, || {
+            derive_default_paths_from_app_dirs(&dirs, &config)
+                .expect("derive_default_paths_from_app_dirs failed")
+        });
+
+        assert_eq!(paths.app_data_root, PathBuf::from("src-tauri/.app_data_a"));
+        assert_eq!(
+            paths.db_path,
+            PathBuf::from("src-tauri/.app_data_a/uniclipboard.db")
+        );
+        assert_eq!(
+            paths.vault_dir,
+            PathBuf::from("src-tauri/.app_data_a/vault")
+        );
+        assert_eq!(
+            paths.settings_path,
+            PathBuf::from("src-tauri/.app_data_a/settings.json")
+        );
+    }
+
+    #[test]
+    fn derive_default_paths_appends_profile_suffix_for_configured_root() {
+        let dirs = uc_core::app_dirs::AppDirs {
+            app_data_root: PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
+        };
+
+        let mut config = AppConfig::empty();
+        config.database_path = PathBuf::from("src-tauri/.app_data/uniclipboard.db");
+
+        let paths = with_uc_profile(Some("a"), || {
+            derive_default_paths_from_app_dirs(&dirs, &config)
+                .expect("derive_default_paths_from_app_dirs failed")
+        });
+
+        assert_eq!(paths.app_data_root, PathBuf::from("src-tauri/.app_data_a"));
+        assert_eq!(
+            paths.db_path,
+            PathBuf::from("src-tauri/.app_data_a/uniclipboard.db")
+        );
+        assert_eq!(
+            paths.vault_dir,
+            PathBuf::from("src-tauri/.app_data_a/vault")
+        );
+        assert_eq!(
+            paths.settings_path,
+            PathBuf::from("src-tauri/.app_data_a/settings.json")
+        );
+    }
+
+    #[test]
+    fn derive_default_paths_appends_profile_suffix_for_configured_vault_root() {
+        let dirs = uc_core::app_dirs::AppDirs {
+            app_data_root: PathBuf::from("/tmp/uniclipboard"),
+            app_cache_root: PathBuf::from("/tmp/uniclipboard-cache"),
+        };
+
+        let mut config = AppConfig::empty();
+        config.database_path = PathBuf::from("src-tauri/.app_data/uniclipboard.db");
+        config.vault_key_path = PathBuf::from("src-tauri/.app_data/vault/key");
+
+        let paths = with_uc_profile(Some("b"), || {
+            derive_default_paths_from_app_dirs(&dirs, &config)
+                .expect("derive_default_paths_from_app_dirs failed")
+        });
+
+        assert_eq!(paths.app_data_root, PathBuf::from("src-tauri/.app_data_b"));
+        assert_eq!(
+            paths.vault_dir,
+            PathBuf::from("src-tauri/.app_data_b/vault")
+        );
     }
 }

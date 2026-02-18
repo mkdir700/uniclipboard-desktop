@@ -1,6 +1,6 @@
 import { type LucideIcon, Check, Monitor, Moon, Sun } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Card, CardContent } from '@/components/ui/card'
+import { SettingCard } from './SettingCard'
 import { DEFAULT_THEME_COLOR, THEME_COLORS } from '@/constants/theme'
 import { useSetting, type Theme } from '@/hooks/useSetting'
 import { cn } from '@/lib/utils'
@@ -64,83 +64,75 @@ export default function AppearanceSection() {
     }
   }
 
+  const handleThemeColorChange = async (newThemeColor: string) => {
+    try {
+      await updateGeneralSetting({ theme_color: newThemeColor })
+    } catch (error) {
+      console.error('Failed to change theme color:', error)
+    }
+  }
+
   return (
     <>
-      <Card>
-        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
-          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-            {t('settings.sections.appearance.themeMode.title')}
-          </h3>
-          <div className="h-px flex-1 bg-border/50"></div>
+      <SettingCard title={t('settings.sections.appearance.themeMode.title')}>
+        <div className="grid grid-cols-3 gap-4">
+          <ThemeOption
+            value="light"
+            icon={Sun}
+            label={t('settings.sections.appearance.themeMode.light')}
+            theme={theme}
+            handleThemeChange={handleThemeChange}
+          />
+          <ThemeOption
+            value="dark"
+            icon={Moon}
+            label={t('settings.sections.appearance.themeMode.dark')}
+            theme={theme}
+            handleThemeChange={handleThemeChange}
+          />
+          <ThemeOption
+            value="system"
+            icon={Monitor}
+            label={t('settings.sections.appearance.themeMode.system')}
+            theme={theme}
+            handleThemeChange={handleThemeChange}
+          />
         </div>
-        <CardContent className="pt-0">
-          <div className="grid grid-cols-3 gap-4">
-            <ThemeOption
-              value="light"
-              icon={Sun}
-              label={t('settings.sections.appearance.themeMode.light')}
-              theme={theme}
-              handleThemeChange={handleThemeChange}
-            />
-            <ThemeOption
-              value="dark"
-              icon={Moon}
-              label={t('settings.sections.appearance.themeMode.dark')}
-              theme={theme}
-              handleThemeChange={handleThemeChange}
-            />
-            <ThemeOption
-              value="system"
-              icon={Monitor}
-              label={t('settings.sections.appearance.themeMode.system')}
-              theme={theme}
-              handleThemeChange={handleThemeChange}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      </SettingCard>
 
-      <Card>
-        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
-          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-            {t('settings.sections.appearance.themeColor.title')}
-          </h3>
-          <div className="h-px flex-1 bg-border/50"></div>
-        </div>
-        <CardContent className="pt-0">
-          <div className="grid grid-cols-5 gap-4">
-            {THEME_COLORS.map(item => (
+      <SettingCard title={t('settings.sections.appearance.themeColor.title')}>
+        <div className="grid grid-cols-5 gap-4">
+          {THEME_COLORS.map(item => (
+            <div
+              key={item.name}
+              onClick={() => {
+                void handleThemeColorChange(item.name)
+              }}
+              className={cn(
+                'cursor-pointer group relative flex flex-col items-center gap-2 p-2 rounded-xl border-2 transition-all hover:bg-muted/50',
+                setting?.general?.theme_color === item.name ||
+                  (item.name === DEFAULT_THEME_COLOR && !setting?.general?.theme_color)
+                  ? 'border-primary bg-primary/5'
+                  : 'border-transparent'
+              )}
+            >
               <div
-                key={item.name}
-                onClick={() => {
-                  updateGeneralSetting({ theme_color: item.name })
-                }}
-                className={cn(
-                  'cursor-pointer group relative flex flex-col items-center gap-2 p-2 rounded-xl border-2 transition-all hover:bg-muted/50',
-                  setting?.general?.theme_color === item.name ||
-                    (item.name === DEFAULT_THEME_COLOR && !setting?.general?.theme_color)
-                    ? 'border-primary bg-primary/5'
-                    : 'border-transparent'
-                )}
-              >
-                <div
-                  className="w-8 h-8 rounded-full shadow-sm"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-xs font-medium capitalize text-muted-foreground group-hover:text-foreground">
-                  {item.name}
-                </span>
-                {(setting?.general?.theme_color === item.name ||
-                  (item.name === DEFAULT_THEME_COLOR && !setting?.general?.theme_color)) && (
-                  <div className="absolute top-1 right-1 text-primary bg-background rounded-full p-0.5 shadow-sm">
-                    <Check className="w-3 h-3" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+                className="w-8 h-8 rounded-full shadow-sm"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="text-xs font-medium capitalize text-muted-foreground group-hover:text-foreground">
+                {item.name}
+              </span>
+              {(setting?.general?.theme_color === item.name ||
+                (item.name === DEFAULT_THEME_COLOR && !setting?.general?.theme_color)) && (
+                <div className="absolute top-1 right-1 text-primary bg-background rounded-full p-0.5 shadow-sm">
+                  <Check className="w-3 h-3" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </SettingCard>
     </>
   )
 }

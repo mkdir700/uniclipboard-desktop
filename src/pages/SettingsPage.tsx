@@ -1,20 +1,18 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import AboutSection from '@/components/setting/AboutSection'
-import AppearanceSection from '@/components/setting/AppearanceSection'
-import GeneralSection from '@/components/setting/GeneralSection'
-import NetworkSection from '@/components/setting/NetworkSection'
-import SecuritySection from '@/components/setting/SecuritySection'
+import {
+  DEFAULT_CATEGORY,
+  SETTINGS_CATEGORIES,
+  type SettingsCategory,
+} from '@/components/setting/settings-config'
 import SettingsSidebar from '@/components/setting/SettingsSidebar'
-import StorageSection from '@/components/setting/StorageSection'
-import SyncSection from '@/components/setting/SyncSection'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { SettingContentLayout } from '@/layouts'
 import { captureUserIntent } from '@/observability/breadcrumbs'
 
-const SettingsPage: React.FC = () => {
-  const [activeCategory, setActiveCategory] = useState('general')
+function SettingsPage() {
+  const [activeCategory, setActiveCategory] = useState(DEFAULT_CATEGORY)
   const navigate = useNavigate()
 
   // Handle ESC key to navigate back
@@ -34,74 +32,34 @@ const SettingsPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleEsc)
   }, [navigate])
 
-  // 处理类别点击事件
-  const handleCategoryClick = (category: string) => {
+  const handleCategoryChange = (category: string) => {
     setActiveCategory(category)
   }
 
-  // 根据选中的分类渲染对应的内容
-  const renderActiveSection = () => {
-    switch (activeCategory) {
-      case 'general':
-        return (
-          <SettingContentLayout>
-            <GeneralSection />
-          </SettingContentLayout>
-        )
-      case 'appearance':
-        return (
-          <SettingContentLayout>
-            <AppearanceSection />
-          </SettingContentLayout>
-        )
-      case 'sync':
-        return (
-          <SettingContentLayout>
-            <SyncSection />
-          </SettingContentLayout>
-        )
-      case 'security':
-        return (
-          <SettingContentLayout>
-            <SecuritySection />
-          </SettingContentLayout>
-        )
-      case 'network':
-        return (
-          <SettingContentLayout>
-            <NetworkSection />
-          </SettingContentLayout>
-        )
-      case 'storage':
-        return (
-          <SettingContentLayout>
-            <StorageSection />
-          </SettingContentLayout>
-        )
-      case 'about':
-        return (
-          <SettingContentLayout>
-            <AboutSection />
-          </SettingContentLayout>
-        )
-      default:
-        return null
-    }
-  }
+  const activeCategoryConfig = SETTINGS_CATEGORIES.find(
+    (cat: SettingsCategory) => cat.id === activeCategory
+  )
+  const ActiveSection = activeCategoryConfig?.Component
 
   return (
     <SidebarProvider
       style={
         {
-          '--sidebar-width': '20rem',
+          '--sidebar-width': '16rem',
         } as React.CSSProperties
       }
       className="min-h-0 h-full"
     >
-      <SettingsSidebar activeCategory={activeCategory} onCategoryChange={handleCategoryClick} />
+      <SettingsSidebar activeCategory={activeCategory} onCategoryChange={handleCategoryChange} />
       <SidebarInset>
         <ScrollArea className="flex-1">
-          <div className="flex-1 p-8">{renderActiveSection()}</div>
+          <div className="flex-1 p-6">
+            {ActiveSection && (
+              <SettingContentLayout>
+                <ActiveSection />
+              </SettingContentLayout>
+            )}
+          </div>
         </ScrollArea>
       </SidebarInset>
     </SidebarProvider>

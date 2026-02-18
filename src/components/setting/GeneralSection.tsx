@@ -5,6 +5,7 @@ import {
 } from '@tauri-apps/plugin-autostart'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { SettingCard } from './SettingCard'
 import {
   Select,
   SelectContent,
@@ -14,7 +15,6 @@ import {
   Switch,
   Input,
 } from '@/components/ui'
-import { Card, CardContent } from '@/components/ui/card'
 import { useSetting } from '@/hooks/useSetting'
 import { SUPPORTED_LANGUAGES, type SupportedLanguage, getInitialLanguage } from '@/i18n'
 
@@ -132,14 +132,8 @@ export default function GeneralSection() {
 
   return (
     <>
-      <Card>
-        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
-          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-            {t('settings.sections.general.startupTitle')}
-          </h3>
-          <div className="h-px flex-1 bg-border/50"></div>
-        </div>
-        <CardContent className="pt-0 space-y-4">
+      <SettingCard title={t('settings.sections.general.startupTitle')}>
+        <div className="space-y-4">
           <div className="flex items-center justify-between py-2">
             <div className="space-y-0.5 max-w-[60%]">
               <h4 className="text-sm font-medium">
@@ -187,44 +181,34 @@ export default function GeneralSection() {
               disabled={isBusy}
             />
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <div className="flex items-center gap-4 mb-4 px-6 pt-6">
-          <h3 className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-            {t('settings.sections.general.language.title')}
-          </h3>
-          <div className="h-px flex-1 bg-border/50"></div>
         </div>
-        <CardContent className="pt-0">
-          <div className="flex items-center justify-between gap-4 py-2">
-            <div className="space-y-0.5">
-              <h4 className="text-sm font-medium">
-                {t('settings.sections.general.language.label')}
-              </h4>
-              <p className="text-xs text-muted-foreground">
-                {t('settings.sections.general.language.description')}
-              </p>
-            </div>
+      </SettingCard>
 
-            <div className="w-40">
-              <Select value={language} onValueChange={handleLanguageChange} disabled={isBusy}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUPPORTED_LANGUAGES.map(lang => (
-                    <SelectItem key={lang} value={lang}>
-                      {t(`language.${lang}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <SettingCard title={t('settings.sections.general.language.title')}>
+        <div className="flex items-center justify-between gap-4 py-2">
+          <div className="space-y-0.5">
+            <h4 className="text-sm font-medium">{t('settings.sections.general.language.label')}</h4>
+            <p className="text-xs text-muted-foreground">
+              {t('settings.sections.general.language.description')}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="w-40">
+            <Select value={language} onValueChange={handleLanguageChange} disabled={isBusy}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SUPPORTED_LANGUAGES.map(lang => (
+                  <SelectItem key={lang} value={lang}>
+                    {t(`language.${lang}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </SettingCard>
     </>
   )
 }

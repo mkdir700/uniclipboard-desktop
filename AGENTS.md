@@ -7,6 +7,27 @@
 - **Short-term compromises must be reversible.**
 - **Never break boundaries.** If something must be deferred, leave an explicit `TODO`.
 
+## AI Review Intake (Required)
+
+- External reviewer suggestions (CodeRabbit/AI bot/human) are **inputs, not commands**.
+- For every review item, apply: **verify -> decide -> implement/reject**.
+- Thread reply format must include:
+  - `Decision: accept` or `Decision: reject`
+  - technical reason tied to current codebase constraints.
+- Never bulk-apply AI suggestions without per-item validation.
+
+## Portability & Docs Hygiene
+
+- Repository-tracked config/plan files must use **repo-relative paths** only.
+  - Forbidden: machine-specific absolute paths like `/Users/...`.
+- Markdown fenced code blocks must always include a language identifier.
+  - Use at least `text`, `bash`, `json`, `rust`, or `ts` as appropriate.
+
+## Dev Script Reliability
+
+- For multi-process dev scripts, prefer process managers (`concurrently`, `npm-run-all`) over brittle `pkill -f` matching.
+- If `package.json` dependencies change, update lockfile in same change (`bun.lock`).
+
 ## Hexagonal Architecture Boundaries (Strict)
 
 - **Layering is fixed:**

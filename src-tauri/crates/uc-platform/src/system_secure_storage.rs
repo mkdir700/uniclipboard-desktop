@@ -3,6 +3,13 @@ use uc_core::ports::{SecureStorageError, SecureStoragePort};
 
 const SERVICE_NAME: &str = "UniClipboard";
 
+fn resolve_service_name() -> String {
+    match std::env::var("UC_PROFILE") {
+        Ok(profile) if !profile.is_empty() => format!("{SERVICE_NAME}-{profile}"),
+        _ => SERVICE_NAME.to_string(),
+    }
+}
+
 /// System keychain-backed secure storage.
 ///
 /// 基于系统钥匙串的安全存储实现。
@@ -18,7 +25,8 @@ impl SystemSecureStorage {
     }
 
     fn entry_for_key(&self, key: &str) -> Result<Entry, SecureStorageError> {
-        Entry::new(SERVICE_NAME, key)
+        let service_name = resolve_service_name();
+        Entry::new(&service_name, key)
             .map_err(|e| SecureStorageError::Other(format!("failed to create keyring entry: {e}")))
     }
 }
@@ -59,5 +67,50 @@ impl SecureStoragePort for SystemSecureStorage {
                 "failed to delete secure storage: {err}"
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_service_name;
+    use std::sync::Mutex;
+
+    static UC_PROFILE_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_uc_profile<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
+        let _guard = UC_PROFILE_ENV_LOCK
+            .lock()
+            .expect("lock UC_PROFILE test guard");
+        let previous = std::env::var("UC_PROFILE").ok();
+
+        match value {
+            Some(profile) => std::env::set_var("UC_PROFILE", profile),
+            None => std::env::remove_var("UC_PROFILE"),
+        }
+
+        let result = f();
+
+        match previous {
+            Some(profile) => std::env::set_var("UC_PROFILE", profile),
+            None => std::env::remove_var("UC_PROFILE"),
+        }
+
+        result
+    }
+
+    #[test]
+    fn service_name_defaults_without_profile() {
+        let name = with_uc_profile(None, resolve_service_name);
+        assert_eq!(name, "UniClipboard");
+    }
+
+    #[test]
+    fn service_name_isolated_by_profile() {
+        let peer_a = with_uc_profile(Some("peerA"), resolve_service_name);
+        let peer_b = with_uc_profile(Some("peerB"), resolve_service_name);
+
+        assert_eq!(peer_a, "UniClipboard-peerA");
+        assert_eq!(peer_b, "UniClipboard-peerB");
+        assert_ne!(peer_a, peer_b);
     }
 }

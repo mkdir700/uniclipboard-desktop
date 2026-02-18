@@ -1,16 +1,8 @@
-import {
-  Settings,
-  Palette,
-  RefreshCw,
-  Shield,
-  Wifi,
-  HardDrive,
-  Info,
-  ArrowLeft,
-} from 'lucide-react'
-import React from 'react'
+import { ArrowLeft } from 'lucide-react'
+import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { SETTINGS_CATEGORIES } from '@/components/setting/settings-config'
 import {
   Sidebar,
   SidebarContent,
@@ -26,7 +18,7 @@ interface SettingsSidebarProps {
   onCategoryChange: (category: string) => void
 }
 
-const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeCategory, onCategoryChange }) => {
+const SettingsSidebar: FC<SettingsSidebarProps> = ({ activeCategory, onCategoryChange }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
 
@@ -38,51 +30,13 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeCategory, onCat
     }
   }
 
-  const settingsNavItems = [
-    {
-      id: 'general',
-      label: t('settings.categories.general'),
-      icon: Settings,
-    },
-    {
-      id: 'appearance',
-      label: t('settings.categories.appearance'),
-      icon: Palette,
-    },
-    {
-      id: 'sync',
-      label: t('settings.categories.sync'),
-      icon: RefreshCw,
-    },
-    {
-      id: 'security',
-      label: t('settings.categories.security'),
-      icon: Shield,
-    },
-    {
-      id: 'network',
-      label: t('settings.categories.network'),
-      icon: Wifi,
-    },
-    {
-      id: 'storage',
-      label: t('settings.categories.storage'),
-      icon: HardDrive,
-    },
-    {
-      id: 'about',
-      label: t('settings.categories.about'),
-      icon: Info,
-    },
-  ]
-
   return (
-    <Sidebar collapsible="none" className="min-w-[10.625rem] border-r border-border/50 bg-muted/30">
+    <Sidebar collapsible="none" className="border-r border-border/50 bg-muted/30">
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {settingsNavItems.map(item => {
+              {SETTINGS_CATEGORIES.map(item => {
                 const Icon = item.icon
                 const isActive = activeCategory === item.id
 
@@ -98,7 +52,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeCategory, onCat
                       }`}
                     >
                       <Icon className="h-4 w-4" />
-                      <span>{item.label}</span>
+                      <span>{t(`settings.categories.${item.id}`)}</span>
                     </button>
                   </SidebarMenuItem>
                 )

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { SettingSectionHeader } from './SettingSectionHeader'
 import { Card, CardContent } from '@/components/ui/card'
 
 /**
@@ -13,7 +14,8 @@ const NetworkSection: React.FC = () => {
 
   return (
     <Card>
-      <CardContent className="pt-6">
+      <SettingSectionHeader title={t('settings.categories.network')} />
+      <CardContent className="pt-0">
         <div className="text-center py-8">
           <p className="text-sm text-muted-foreground">
             {t('settings.sections.network.placeholder') || '网络设置功能暂未实现'}
