@@ -4,7 +4,6 @@ mod device_announce;
 mod heartbeat;
 mod pairing;
 mod protocol_message;
-mod space;
 
 pub use clipboard::ClipboardMessage;
 pub use clipboard_payload::ClipboardTextPayloadV1;
