@@ -7,6 +7,13 @@ use uc_core::{
 
 const APP_DIR_NAME: &str = "uniclipboard";
 
+fn resolved_app_dir_name() -> String {
+    match std::env::var("UC_PROFILE") {
+        Ok(profile) if !profile.is_empty() => format!("{APP_DIR_NAME}-{profile}"),
+        _ => APP_DIR_NAME.to_string(),
+    }
+}
+
 pub struct DirsAppDirsAdapter {
     base_data_local_dir_override: Option<PathBuf>,
 }
@@ -98,10 +105,11 @@ impl AppDirsPort for DirsAppDirsAdapter {
         let base_cache = self
             .base_cache_dir()
             .ok_or(AppDirsError::CacheDirUnavailable)?;
+        let app_dir_name = resolved_app_dir_name();
 
         Ok(AppDirs {
-            app_data_root: base_data.join(APP_DIR_NAME),
-            app_cache_root: base_cache.join(APP_DIR_NAME),
+            app_data_root: base_data.join(&app_dir_name),
+            app_cache_root: base_cache.join(&app_dir_name),
         })
     }
 }
@@ -109,7 +117,29 @@ impl AppDirsPort for DirsAppDirsAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use uc_core::ports::AppDirsPort;
+
+    static UC_PROFILE_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_uc_profile<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
+        let _guard = UC_PROFILE_ENV_LOCK.lock().unwrap();
+        let previous = std::env::var("UC_PROFILE").ok();
+
+        match value {
+            Some(profile) => std::env::set_var("UC_PROFILE", profile),
+            None => std::env::remove_var("UC_PROFILE"),
+        }
+
+        let result = f();
+
+        match previous {
+            Some(profile) => std::env::set_var("UC_PROFILE", profile),
+            None => std::env::remove_var("UC_PROFILE"),
+        }
+
+        result
+    }
 
     /// Verifies that the adapter appends the `uniclipboard` directory name to the base data directory.
     ///
@@ -122,19 +152,42 @@ mod tests {
     /// ```
     #[test]
     fn adapter_appends_uniclipboard_dir_name() {
-        let adapter =
-            DirsAppDirsAdapter::with_base_data_local_dir(std::path::PathBuf::from("/tmp"));
-        let dirs = adapter.get_app_dirs().unwrap();
-        assert_eq!(
-            dirs.app_data_root,
-            std::path::PathBuf::from("/tmp/uniclipboard")
-        );
+        with_uc_profile(None, || {
+            let adapter =
+                DirsAppDirsAdapter::with_base_data_local_dir(std::path::PathBuf::from("/tmp"));
+            let dirs = adapter.get_app_dirs().unwrap();
+            assert_eq!(
+                dirs.app_data_root,
+                std::path::PathBuf::from("/tmp/uniclipboard")
+            );
+        });
     }
 
     #[test]
     fn adapter_sets_cache_root() {
-        let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
-        let dirs = adapter.get_app_dirs().unwrap();
-        assert!(dirs.app_cache_root.ends_with("uniclipboard"));
+        with_uc_profile(None, || {
+            let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
+            let dirs = adapter.get_app_dirs().unwrap();
+            assert!(dirs.app_cache_root.ends_with("uniclipboard"));
+        });
+    }
+
+    #[test]
+    fn adapter_isolates_dirs_for_different_uc_profile_values() {
+        let dirs_a = with_uc_profile(Some("a"), || {
+            let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
+            adapter.get_app_dirs().unwrap()
+        });
+        let dirs_b = with_uc_profile(Some("b"), || {
+            let adapter = DirsAppDirsAdapter::with_base_data_local_dir(PathBuf::from("/tmp"));
+            adapter.get_app_dirs().unwrap()
+        });
+
+        assert_eq!(dirs_a.app_data_root, PathBuf::from("/tmp/uniclipboard-a"));
+        assert_eq!(dirs_b.app_data_root, PathBuf::from("/tmp/uniclipboard-b"));
+        assert_ne!(dirs_a.app_data_root, dirs_b.app_data_root);
+        assert_eq!(dirs_a.app_cache_root, PathBuf::from("/tmp/uniclipboard-a"));
+        assert_eq!(dirs_b.app_cache_root, PathBuf::from("/tmp/uniclipboard-b"));
+        assert_ne!(dirs_a.app_cache_root, dirs_b.app_cache_root);
     }
 }
