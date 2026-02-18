@@ -1819,6 +1819,105 @@ mod tests {
         }
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn libp2p_network_clipboard_wire_roundtrip_delivers_clipboard_message() {
+        let adapter_a = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter a");
+        let adapter_b = Libp2pNetworkAdapter::new(
+            Arc::new(TestIdentityStore::default()),
+            Arc::new(FakeResolver),
+        )
+        .expect("create adapter b");
+        adapter_a.spawn_swarm().expect("start swarm a");
+        adapter_b.spawn_swarm().expect("start swarm b");
+
+        let peer_a = adapter_a.local_peer_id();
+        let peer_b = adapter_b.local_peer_id();
+
+        let rx_a = adapter_a
+            .subscribe_events()
+            .await
+            .expect("subscribe events a");
+        let rx_b = adapter_b
+            .subscribe_events()
+            .await
+            .expect("subscribe events b");
+        let mut clipboard_rx_b = adapter_b
+            .subscribe_clipboard()
+            .await
+            .expect("subscribe clipboard b");
+
+        sleep(Duration::from_millis(200)).await;
+
+        let discovery = timeout(Duration::from_secs(15), async {
+            tokio::join!(
+                wait_for_discovery(rx_a, &peer_b),
+                wait_for_discovery(rx_b, &peer_a)
+            )
+        })
+        .await;
+
+        match discovery {
+            Ok((Some(_), Some(_))) => {}
+            Ok((left, right)) => panic!(
+                "mdns discovery incomplete: left={:?} right={:?}",
+                left.as_ref().map(|peer| peer.peer_id.as_str()),
+                right.as_ref().map(|peer| peer.peer_id.as_str())
+            ),
+            Err(_) => panic!("mdns discovery timed out"),
+        }
+
+        NetworkPort::open_pairing_session(
+            &adapter_a,
+            peer_b.clone(),
+            "wire-compat-session".to_string(),
+        )
+        .await
+        .expect("open pairing session before business clipboard send");
+        sleep(Duration::from_millis(300)).await;
+
+        let expected = ClipboardMessage {
+            id: "msg-wire-1".to_string(),
+            content_hash: "wire-hash-1".to_string(),
+            encrypted_content: vec![1, 2, 3, 4, 5],
+            timestamp: Utc::now(),
+            origin_device_id: "device-a".to_string(),
+            origin_device_name: "Adapter A".to_string(),
+        };
+        let payload = ProtocolMessage::Clipboard(expected.clone())
+            .to_bytes()
+            .expect("serialize clipboard protocol payload");
+
+        let mut received = None;
+        for _attempt in 0..20 {
+            NetworkPort::send_clipboard(&adapter_a, &peer_b, payload.clone())
+                .await
+                .expect("send clipboard protocol payload");
+
+            match timeout(Duration::from_millis(500), clipboard_rx_b.recv()).await {
+                Ok(Some(message)) => {
+                    received = Some(message);
+                    break;
+                }
+                Ok(None) => break,
+                Err(_) => {
+                    sleep(Duration::from_millis(100)).await;
+                }
+            }
+        }
+
+        let received = received.expect("clipboard payload from peer a");
+
+        assert_eq!(received.id, expected.id);
+        assert_eq!(received.content_hash, expected.content_hash);
+        assert_eq!(received.encrypted_content, expected.encrypted_content);
+        assert_eq!(received.origin_device_id, expected.origin_device_id);
+        assert_eq!(received.origin_device_name, expected.origin_device_name);
+    }
+
     #[test]
     fn try_send_event_reports_backpressure() {
         let (event_tx, _event_rx) = mpsc::channel(1);
