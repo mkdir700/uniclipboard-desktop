@@ -713,6 +713,7 @@ impl<'a> UseCases<'a> {
         &self,
     ) -> uc_app::usecases::clipboard::sync_outbound::SyncOutboundClipboardUseCase {
         uc_app::usecases::clipboard::sync_outbound::SyncOutboundClipboardUseCase::new(
+            self.runtime.deps.system_clipboard.clone(),
             self.runtime.deps.network.clone(),
             self.runtime.deps.encryption_session.clone(),
             self.runtime.deps.encryption.clone(),
