@@ -10,11 +10,13 @@ use uc_core::network::protocol::ClipboardTextPayloadV1;
 use uc_core::network::{ClipboardMessage, ProtocolMessage};
 use uc_core::ports::{
     DeviceIdentityPort, EncryptionPort, EncryptionSessionPort, NetworkPort, SettingsPort,
+    SystemClipboardPort,
 };
 use uc_core::security::{aad, model::EncryptionAlgo};
 use uc_core::{ClipboardChangeOrigin, SystemClipboardSnapshot};
 
 pub struct SyncOutboundClipboardUseCase {
+    local_clipboard: Arc<dyn SystemClipboardPort>,
     network: Arc<dyn NetworkPort>,
     encryption_session: Arc<dyn EncryptionSessionPort>,
     encryption: Arc<dyn EncryptionPort>,
@@ -24,6 +26,7 @@ pub struct SyncOutboundClipboardUseCase {
 
 impl SyncOutboundClipboardUseCase {
     pub fn new(
+        local_clipboard: Arc<dyn SystemClipboardPort>,
         network: Arc<dyn NetworkPort>,
         encryption_session: Arc<dyn EncryptionSessionPort>,
         encryption: Arc<dyn EncryptionPort>,
@@ -31,12 +34,21 @@ impl SyncOutboundClipboardUseCase {
         settings: Arc<dyn SettingsPort>,
     ) -> Self {
         Self {
+            local_clipboard,
             network,
             encryption_session,
             encryption,
             device_identity,
             settings,
         }
+    }
+
+    pub fn execute_current_snapshot(&self, origin: ClipboardChangeOrigin) -> Result<()> {
+        let snapshot = self
+            .local_clipboard
+            .read_snapshot()
+            .context("failed to read current clipboard snapshot for outbound sync")?;
+        self.execute(snapshot, origin)
     }
 
     pub fn execute(
@@ -180,8 +192,11 @@ impl SyncOutboundClipboardUseCase {
 
 fn is_text_plain_mime(mime: &str) -> bool {
     let normalized = mime.trim();
-    normalized.eq_ignore_ascii_case("text/plain")
-        || normalized.to_ascii_lowercase().starts_with("text/plain;")
+    let text_plain_with_params = format!("{};", ClipboardTextPayloadV1::MIME_TEXT_PLAIN);
+    normalized.eq_ignore_ascii_case(ClipboardTextPayloadV1::MIME_TEXT_PLAIN)
+        || normalized
+            .to_ascii_lowercase()
+            .starts_with(text_plain_with_params.as_str())
 }
 
 #[cfg(test)]
@@ -206,6 +221,20 @@ mod tests {
     };
     use uc_core::settings::model::Settings;
     use uc_core::{DeviceId, MimeType, ObservedClipboardRepresentation, SystemClipboardSnapshot};
+
+    struct TestSystemClipboard {
+        snapshot: SystemClipboardSnapshot,
+    }
+
+    impl SystemClipboardPort for TestSystemClipboard {
+        fn read_snapshot(&self) -> anyhow::Result<SystemClipboardSnapshot> {
+            Ok(self.snapshot.clone())
+        }
+
+        fn write_snapshot(&self, _snapshot: SystemClipboardSnapshot) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
 
     struct TestNetwork {
         connected_peers: Vec<ConnectedPeer>,
@@ -422,6 +451,9 @@ mod tests {
         let encrypt_calls = Arc::new(AtomicUsize::new(0));
 
         let usecase = SyncOutboundClipboardUseCase::new(
+            Arc::new(TestSystemClipboard {
+                snapshot: build_snapshot(),
+            }),
             Arc::new(TestNetwork {
                 connected_peers,
                 send_calls: send_calls.clone(),
@@ -504,6 +536,24 @@ mod tests {
         assert_eq!(send_calls.lock().expect("send calls lock").len(), 0);
         assert_eq!(get_connected_peers_calls.load(Ordering::SeqCst), 0);
         assert_eq!(encrypt_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn execute_current_snapshot_reads_from_clipboard() {
+        let (usecase, send_calls, _, _) = build_usecase(
+            vec![ConnectedPeer {
+                peer_id: "peer-1".to_string(),
+                device_name: "Desk".to_string(),
+                connected_at: Utc::now(),
+            }],
+            true,
+        );
+
+        usecase
+            .execute_current_snapshot(ClipboardChangeOrigin::LocalCapture)
+            .expect("execute current snapshot");
+
+        assert_eq!(send_calls.lock().expect("send calls lock").len(), 1);
     }
 
     #[test]

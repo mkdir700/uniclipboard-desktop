@@ -347,14 +347,21 @@ async fn clipboard_sync_e2e_dual_peer_in_process() -> Result<()> {
     });
 
     let outbound_a = SyncOutboundClipboardUseCase::new(
+        clipboard_a.clone(),
         network_a,
         session_a,
         encryption_a,
         identity_a,
         settings.clone(),
     );
-    let outbound_b =
-        SyncOutboundClipboardUseCase::new(network_b, session_b, encryption_b, identity_b, settings);
+    let outbound_b = SyncOutboundClipboardUseCase::new(
+        clipboard_b.clone(),
+        network_b,
+        session_b,
+        encryption_b,
+        identity_b,
+        settings,
+    );
 
     outbound_a.execute(
         text_snapshot("hello from device A", 1_713_000_000_001),
