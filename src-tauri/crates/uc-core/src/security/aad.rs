@@ -99,6 +99,10 @@ pub fn for_blob(blob_id: &BlobId) -> Vec<u8> {
     format!("{AAD_NAMESPACE}:blob:{AAD_VERSION}|{}", blob_id.as_ref()).into_bytes()
 }
 
+pub fn for_network_clipboard(message_id: &str) -> Vec<u8> {
+    format!("{AAD_NAMESPACE}:net_clipboard:{AAD_VERSION}|{message_id}").into_bytes()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,14 +214,56 @@ mod tests {
         let event_id = EventId::from("test");
         let rep_id = RepresentationId::from("test");
         let blob_id = BlobId::from("test");
+        let message_id = "test";
 
         let inline_aad = String::from_utf8(for_inline(&event_id, &rep_id)).unwrap();
         let blob_aad = String::from_utf8(for_blob(&blob_id)).unwrap();
+        let network_clipboard_aad = String::from_utf8(for_network_clipboard(message_id)).unwrap();
 
         assert!(
             inline_aad.contains(":v1|"),
             "Inline AAD should use v1 format"
         );
         assert!(blob_aad.contains(":v1|"), "Blob AAD should use v1 format");
+        assert!(
+            network_clipboard_aad.contains(":v1|"),
+            "Network clipboard AAD should use v1 format"
+        );
+    }
+
+    #[test]
+    fn test_for_network_clipboard_is_deterministic() {
+        let message_id = "msg-123";
+
+        let aad1 = for_network_clipboard(message_id);
+        let aad2 = for_network_clipboard(message_id);
+
+        assert_eq!(
+            aad1, aad2,
+            "Network clipboard AAD should be deterministic for same message ID"
+        );
+    }
+
+    #[test]
+    fn test_for_network_clipboard_includes_message_id_and_prefix() {
+        let message_id = "my-message-id";
+
+        let aad = String::from_utf8(for_network_clipboard(message_id)).unwrap();
+
+        assert_eq!(
+            aad, "uc:net_clipboard:v1|my-message-id",
+            "Network clipboard AAD should match expected format"
+        );
+    }
+
+    #[test]
+    fn test_for_network_clipboard_differs_by_message_id() {
+        let aad1 = for_network_clipboard("msg-1");
+        let aad2 = for_network_clipboard("msg-2");
+
+        assert_ne!(
+            aad1, aad2,
+            "Network clipboard AAD should differ for different message IDs"
+        );
     }
 }
